@@ -50,6 +50,12 @@
 			}
 		},
 		{
+			"path": "pages/breeding/birth-wizard",
+			"style": {
+				"navigationBarTitleText": "生产记录"
+			}
+		},
+		{
 			"path": "pages/record/breeding",
 			"style": {
 				"navigationBarTitleText": "繁育记录"
@@ -62,9 +68,87 @@
 			}
 		},
 		{
+			"path": "pages/finance/stats",
+			"style": {
+				"navigationBarTitleText": "财务统计"
+			}
+		},
+		{
+			"path": "pages/finance/expense-add",
+			"style": {
+				"navigationBarTitleText": "录入支出"
+			}
+		},
+		{
+			"path": "pages/finance/income-add",
+			"style": {
+				"navigationBarTitleText": "录入收入"
+			}
+		},
+		{
+			"path": "pages/sale/list",
+			"style": {
+				"navigationBarTitleText": "销售管理"
+			}
+		},
+		{
+			"path": "pages/sale/detail",
+			"style": {
+				"navigationBarTitleText": "销售详情"
+			}
+		},
+		{
+			"path": "pages/sale/create",
+			"style": {
+				"navigationBarTitleText": "创建销售"
+			}
+		},
+		{
 			"path": "pages/family/setup",
 			"style": {
 				"navigationBarTitleText": "创建家庭"
+			}
+		},
+		{
+			"path": "pages/family/invite",
+			"style": {
+				"navigationBarTitleText": "邀请成员"
+			}
+		},
+		{
+			"path": "pages/family/join",
+			"style": {
+				"navigationBarTitleText": "加入家庭"
+			}
+		},
+		{
+			"path": "pages/family/members",
+			"style": {
+				"navigationBarTitleText": "成员管理"
+			}
+		},
+		{
+			"path": "pages/health/medication-protocols",
+			"style": {
+				"navigationBarTitleText": "用药方案库"
+			}
+		},
+		{
+			"path": "pages/sale/agents",
+			"style": {
+				"navigationBarTitleText": "代理人管理"
+			}
+		},
+		{
+			"path": "pages/health/batch-weight",
+			"style": {
+				"navigationBarTitleText": "批量体重"
+			}
+		},
+		{
+			"path": "pages/profile/notifications",
+			"style": {
+				"navigationBarTitleText": "通知设置"
 			}
 		}
 	],

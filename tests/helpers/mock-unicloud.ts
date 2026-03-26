@@ -33,7 +33,9 @@ function createDbCommand() {
     pull: (val: any) => ({ $pull: val }),
     inc: (val: number) => ({ $inc: val }),
     set: (val: any) => ({ $set: val }),
+    lt: (val: any) => ({ $lt: val }),
     lte: (val: any) => ({ $lte: val }),
+    gt: (val: any) => ({ $gt: val }),
     gte: (val: any) => ({ $gte: val }),
     eq: (val: any) => ({ $eq: val }),
     neq: (val: any) => ({ $neq: val }),
@@ -63,8 +65,11 @@ function createQueryChain(collectionName: string) {
           for (const [key, val] of Object.entries(condition)) {
             // 支持嵌套点号路径查询，如 'members.user_id'
             const docVal = getNestedValue(doc, key)
-            if (val && typeof val === 'object' && '$lte' in (val as any)) {
-              if (docVal > (val as any).$lte) return false
+            if (val && typeof val === 'object' && ('$lte' in (val as any) || '$lt' in (val as any) || '$gte' in (val as any) || '$gt' in (val as any))) {
+              if ('$lt' in (val as any) && !(docVal < (val as any).$lt)) return false
+              if ('$lte' in (val as any) && !(docVal <= (val as any).$lte)) return false
+              if ('$gt' in (val as any) && !(docVal > (val as any).$gt)) return false
+              if ('$gte' in (val as any) && !(docVal >= (val as any).$gte)) return false
             } else if (val && typeof val === 'object' && '$in' in (val as any)) {
               if (!(val as any).$in.includes(docVal)) return false
             } else if (Array.isArray(docVal)) {

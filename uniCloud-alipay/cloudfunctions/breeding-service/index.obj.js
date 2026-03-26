@@ -126,7 +126,7 @@ module.exports = {
 
     // 如有费用 → 创建 expense
     if (data.cost && data.cost > 0) {
-      await this._createExpense(data, dog, cycleId)
+      await this._createExpense(data, dog, cycleId, recordId)
     }
 
     // 写入后校验（三层保障第二层）
@@ -400,6 +400,8 @@ module.exports = {
         linked_dog_ids: [cycle.dam_id],
         dog_names: [cycle.dam_name],
         dam_name: cycle.dam_name,
+        source_type: 'auto',
+        source_record_id: litterId,
         family_id: familyId,
         created_by: this.uid,
         deleted_at: null,
@@ -439,6 +441,27 @@ module.exports = {
         puppies,
       }
     }
+  },
+
+  /**
+   * 获取活跃窝列表（未断奶，含幼崽列表，给批量体重页面用）
+   */
+  async getActiveLitters() {
+    const { data: litters } = await db.collection('litters')
+      .where({ family_id: this.familyId, weaned_at: null })
+      .orderBy('birth_date', 'desc')
+      .get()
+
+    // 给每个窝带上幼崽列表
+    for (const litter of litters) {
+      const { data: puppies } = await db.collection('dogs')
+        .where({ origin_litter_id: litter._id, deleted_at: null })
+        .field({ _id: true, name: true, gender: true })
+        .get()
+      litter.puppies = puppies
+    }
+
+    return { data: litters }
   },
 
   /**
@@ -598,7 +621,7 @@ module.exports = {
   /**
    * 创建关联费用
    */
-  async _createExpense(data, dog, cycleId) {
+  async _createExpense(data, dog, cycleId, sourceRecordId) {
     const now = Date.now()
     const typeLabels = {
       heat: '发情', follicle_check: '卵泡检查', mating: '配种',
@@ -615,6 +638,8 @@ module.exports = {
       linked_dog_ids: [data.dog_id],
       dog_names: [dog.name],
       dam_name: dog.name,
+      source_type: 'auto',
+      source_record_id: sourceRecordId || null,
       family_id: this.familyId,
       created_by: this.uid,
       deleted_at: null,
