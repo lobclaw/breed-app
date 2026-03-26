@@ -282,7 +282,8 @@ db.collection('tasks')
   - health_records: type=vaccination 且 details.next_reminder_date 存在 → 应有疫苗提醒 task
   - health_records: type=deworming 且 details.next_reminder_date 存在 → 应有驱虫提醒 task
   - medication_tasks: status=active → 应有每日用药 task
-- 查询约束：只审计 `deleted_at == null` 的源记录
+  - **care_rules 审计（独立逻辑）：** 遍历 families.care_rules，对每条规则查询当前处于 status_trigger 状态的犬只，检查是否存在对应的 pending task（type=care_group）。护理任务无 source_record_id（模板驱动），审计通过 `dog_id + type=care_group + title 匹配规则描述` 来判断任务是否存在。
+- 查询约束：只审计活跃记录（非终态状态）
 - 幂等性保证：生成 task 前检查 `tasks.where({ source_record_id, source_collection }).count()`，已存在则跳过
 - 错误处理：审计失败时记录错误日志到 `audit_logs` 集合，不发送用户通知
 - 性能：30-50 只犬的数据量下，审计查询为毫秒级，无需分批
