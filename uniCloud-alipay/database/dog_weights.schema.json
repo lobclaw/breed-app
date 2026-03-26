@@ -1,6 +1,6 @@
 {
   "bsonType": "object",
-  "required": ["dog_id", "family_id", "weight", "measured_at"],
+  "required": ["dog_id", "family_id", "weight", "date"],
   "permission": {
     "read": true,
     "create": true,
@@ -25,9 +25,9 @@
       "bsonType": "number",
       "description": "体重（kg）"
     },
-    "measured_at": {
+    "date": {
       "bsonType": "number",
-      "description": "测量时间（时间戳毫秒）"
+      "description": "测量日期（时间戳毫秒）"
     },
     "created_at": {
       "bsonType": "number",

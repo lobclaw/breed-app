@@ -125,6 +125,11 @@ module.exports = {
 
     for (const taskId of taskIds) {
       try {
+        const { data: tasks } = await db.collection('tasks')
+          .where({ _id: taskId, family_id: this.familyId })
+          .get()
+        if (!tasks || tasks.length === 0) continue
+
         await db.collection('tasks').doc(taskId).update({
           status: 'completed',
           completed_by: this.uid,
