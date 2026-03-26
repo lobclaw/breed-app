@@ -1,0 +1,1335 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Breed App — Settings & Profile Pages</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+  background: #f0eaec;
+  display: flex;
+  justify-content: flex-start;
+  align-items: flex-start;
+  gap: 48px;
+  padding: 40px 20px;
+  min-height: 100vh;
+  overflow-x: auto;
+  flex-wrap: nowrap;
+}
+.frame-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+.frame-label {
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+  color: #6b6880;
+}
+.phone-frame {
+  width: 375px;
+  height: 812px;
+  border-radius: 44px;
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05);
+}
+.phone-screen {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  padding-bottom: 100px;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.phone-screen::-webkit-scrollbar { display: none; }
+
+/* ==================== LIGHT MODE ==================== */
+.light {
+  --primary: #ea3e77;
+  --primary-soft: #fff0f2;
+  --bg: #fdf8f9;
+  --card: #FFFFFF;
+  --card-dim: #FFF0E8;
+  --text-1: #1a1a2e;
+  --text-2: #8B7355;
+  --text-3: #B8A08A;
+  --text-4: #D8CBBD;
+  --amber: #e89b3e;
+  --amber-soft: #fff9f0;
+  --red: #e05252;
+  --red-soft: #fff0f0;
+  --green: #3dae6f;
+  --green-soft: #f0fff4;
+  --blue: #4a8dd4;
+  --blue-soft: #f0f7ff;
+  --plum: #8668b0;
+  --plum-soft: #f5f0ff;
+  --rose: #ea3e77;
+  --rose-soft: #fff0f2;
+  --teal: #3da8a0;
+  --teal-soft: #f0fffe;
+  --shadow: 0 2px 12px rgba(234, 62, 119, 0.06);
+  --shadow-lg: 0 6px 24px rgba(234, 62, 119, 0.1);
+  --nav-bg: rgba(255,255,255,0.85);
+  --nav-border: rgba(234, 62, 119, 0.08);
+  --status-bar-color: #1a1a2e;
+  background: var(--bg);
+}
+
+/* ==================== STATUS BAR ==================== */
+.status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 28px 0;
+  height: 50px;
+  color: var(--status-bar-color);
+  font-size: 15px;
+  font-weight: 600;
+}
+.status-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.status-bar-right .material-icons-round { font-size: 16px; }
+
+/* ==================== TOP BAR ==================== */
+.top-bar {
+  display: flex;
+  align-items: center;
+  padding: 8px 20px 12px;
+  gap: 12px;
+}
+.top-bar .back-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--card);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+.top-bar .back-btn:active { transform: scale(0.9); }
+.top-bar .back-btn .material-icons-round { font-size: 20px; color: var(--text-1); }
+.top-bar .page-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-1);
+}
+
+/* ==================== BOTTOM NAV ==================== */
+.bottom-nav {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 84px;
+  background: var(--nav-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 0.5px solid var(--nav-border);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-around;
+  padding-top: 8px;
+  z-index: 10;
+}
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 50px;
+  position: relative;
+  transition: transform 0.12s ease;
+  cursor: pointer;
+}
+.nav-item:active { transform: scale(0.85); }
+.nav-item .material-icons-round { font-size: 24px; color: var(--text-3); }
+.nav-item .nav-label { font-size: 10px; font-weight: 600; color: var(--text-3); }
+.nav-item.active .material-icons-round { color: var(--primary); }
+.nav-item.active .nav-label { color: var(--primary); }
+.fab {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ea3e77, #e89b3e);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: -10px;
+  box-shadow: 0 4px 16px rgba(234, 62, 119, 0.3);
+  position: relative;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  cursor: pointer;
+}
+.fab:active { transform: scale(0.88); box-shadow: 0 2px 8px rgba(234, 62, 119, 0.2); }
+.fab .material-icons-round { color: #fff; font-size: 28px; }
+
+/* ==================== PROFILE PAGE ==================== */
+.profile-header {
+  padding: 8px 20px 0;
+  text-align: center;
+}
+.profile-header h1 {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--text-1);
+}
+.profile-card {
+  margin: 16px 16px 0;
+  background: var(--card);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+.profile-info {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.profile-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ea3e77, #e89b3e);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.profile-avatar .material-icons-round { color: #fff; font-size: 32px; }
+.profile-name {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-1);
+}
+.profile-role {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+  background: var(--primary-soft);
+  padding: 2px 10px;
+  border-radius: 999px;
+  display: inline-block;
+  margin-top: 4px;
+}
+.profile-family {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--card-dim);
+}
+.profile-family-label {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.profile-family-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.profile-family-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.profile-family .material-icons-round {
+  font-size: 18px;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+/* ==================== MENU LIST ==================== */
+.menu-section {
+  padding: 0 16px;
+  margin-top: 20px;
+}
+.menu-group-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-3);
+  letter-spacing: 0.5px;
+  padding: 0 4px 8px;
+}
+.menu-group {
+  background: var(--card);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  padding: 14px 16px;
+  gap: 14px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.menu-item:not(:last-child) {
+  border-bottom: 0.5px solid var(--card-dim);
+}
+.menu-item:active {
+  background: var(--card-dim);
+}
+.menu-item .mi-icon {
+  font-size: 22px;
+  color: var(--text-3);
+  width: 24px;
+  text-align: center;
+}
+.menu-item .mi-label {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.menu-item .mi-label.red {
+  color: var(--red);
+}
+.menu-item .mi-arrow {
+  font-size: 18px;
+  color: var(--text-4);
+}
+
+/* ==================== FAMILY MANAGEMENT ==================== */
+.info-card {
+  margin: 0 16px 16px;
+  background: var(--card);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: var(--shadow);
+}
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+}
+.info-row:not(:last-child) {
+  border-bottom: 0.5px solid var(--card-dim);
+}
+.info-label {
+  font-size: 13px;
+  color: var(--text-3);
+}
+.info-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.info-value .material-icons-round {
+  font-size: 16px;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px 8px;
+}
+.section-header-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.section-header-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+
+.member-list {
+  padding: 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.member-item {
+  background: var(--card);
+  border-radius: 14px;
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.member-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ea3e77, #e89b3e);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.member-avatar .material-icons-round { color: #fff; font-size: 20px; }
+.member-info { flex: 1; }
+.member-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.member-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+.role-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.role-badge.primary { background: var(--primary-soft); color: var(--primary); }
+.role-badge.green { background: var(--green-soft); color: var(--green); }
+.role-badge.gray { background: var(--card-dim); color: var(--text-3); }
+.member-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.member-actions .material-icons-round {
+  font-size: 20px;
+  color: var(--text-4);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 50%;
+  transition: background 0.15s;
+}
+.member-actions .material-icons-round:hover { background: var(--card-dim); }
+.member-actions .material-icons-round.remove { color: var(--red); }
+
+.action-area {
+  padding: 20px 16px 0;
+}
+.btn-full {
+  width: 100%;
+  font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 14px;
+  border-radius: 999px;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.12s ease, opacity 0.2s;
+  text-align: center;
+}
+.btn-full:active { transform: scale(0.97); }
+.btn-full.filled-primary { background: var(--primary); color: #fff; }
+.btn-full.ghost {
+  background: transparent;
+  border: 1.5px solid var(--text-4);
+  color: var(--text-2);
+}
+.btn-full.ghost-dim {
+  background: transparent;
+  border: 1.5px solid var(--text-4);
+  color: var(--text-3);
+}
+.hint-text {
+  font-size: 12px;
+  color: var(--text-3);
+  text-align: center;
+  margin-top: 10px;
+  padding: 0 16px;
+}
+
+/* ==================== TOGGLE SWITCH ==================== */
+.toggle-group {
+  padding: 0 16px;
+  margin-bottom: 16px;
+}
+.toggle-group-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-3);
+  letter-spacing: 0.5px;
+  padding: 0 4px 8px;
+}
+.toggle-card {
+  background: var(--card);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.toggle-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  gap: 12px;
+}
+.toggle-item:not(:last-child) {
+  border-bottom: 0.5px solid var(--card-dim);
+}
+.toggle-label {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+  line-height: 1.4;
+}
+.toggle-label small {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+.switch {
+  width: 48px;
+  height: 28px;
+  border-radius: 14px;
+  background: var(--text-4);
+  position: relative;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.switch.on {
+  background: var(--primary);
+}
+.switch::after {
+  content: '';
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  transition: transform 0.2s ease;
+  box-shadow: 0 1px 4px rgba(234,62,119,0.06);
+}
+.switch.on::after {
+  transform: translateX(20px);
+}
+.time-picker {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--primary);
+  background: var(--primary-soft);
+  padding: 4px 12px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+/* ==================== EXPENSE CATEGORIES ==================== */
+.category-list {
+  padding: 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.category-item {
+  background: var(--card);
+  border-radius: 14px;
+  padding: 12px 14px;
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.drag-handle {
+  font-size: 18px;
+  color: var(--text-4);
+  cursor: grab;
+  user-select: none;
+  line-height: 1;
+}
+.category-name {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.category-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.category-actions .material-icons-round {
+  font-size: 20px;
+  padding: 4px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.category-actions .edit-icon { color: var(--text-3); }
+.category-actions .delete-icon { color: var(--red); }
+.category-actions .delete-icon.disabled { color: var(--text-4); cursor: default; opacity: 0.5; }
+.category-actions .material-icons-round:hover { background: var(--card-dim); }
+
+/* ==================== CARE RULES ==================== */
+.rule-card {
+  background: var(--card);
+  border-radius: 16px;
+  padding: 16px;
+  padding-left: 18px;
+  position: relative;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  border-left: 3.5px solid transparent;
+  margin-bottom: 12px;
+}
+.rule-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 100%;
+  pointer-events: none;
+}
+.rule-card.bar-rose { border-left-color: var(--rose); }
+.rule-card.bar-rose::before { background: linear-gradient(135deg, var(--rose-soft) 0%, transparent 40%); }
+.rule-card.bar-green { border-left-color: var(--green); }
+.rule-card.bar-green::before { background: linear-gradient(135deg, var(--green-soft) 0%, transparent 40%); }
+.rule-card > * { position: relative; z-index: 1; }
+.rule-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.rule-meta {
+  font-size: 12px;
+  color: var(--text-2);
+  margin-top: 4px;
+}
+.rule-desc {
+  font-size: 13px;
+  color: var(--text-1);
+  margin-top: 8px;
+  font-weight: 500;
+}
+
+.template-section {
+  padding: 16px 16px 0;
+}
+.template-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-3);
+  letter-spacing: 0.5px;
+  margin-bottom: 10px;
+}
+.template-card {
+  background: var(--card);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: var(--shadow);
+  border: 1.5px dashed var(--text-4);
+}
+.template-card .rule-title { color: var(--text-2); }
+.template-actions {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+.btn-enable {
+  font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 6px 16px;
+  border-radius: 999px;
+  border: 1.5px solid var(--primary);
+  background: transparent;
+  color: var(--primary);
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+.btn-enable:active { transform: scale(0.94); }
+
+/* ==================== BACKUP PAGE ==================== */
+.backup-status {
+  margin: 0 16px 16px;
+  background: var(--card);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: var(--shadow);
+}
+.backup-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+}
+.backup-row:not(:last-child) {
+  border-bottom: 0.5px solid var(--card-dim);
+}
+.backup-label {
+  font-size: 13px;
+  color: var(--text-3);
+}
+.backup-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.backup-value .material-icons-round.check { font-size: 16px; color: var(--green); }
+
+.backup-actions {
+  padding: 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.recycle-section {
+  margin: 24px 16px 0;
+  background: var(--card);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: var(--shadow);
+}
+.recycle-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+  margin-bottom: 6px;
+}
+.recycle-desc {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-bottom: 10px;
+}
+.recycle-link {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--primary);
+  cursor: pointer;
+}
+.warning-text {
+  font-size: 12px;
+  color: var(--text-3);
+  text-align: center;
+  margin-top: 20px;
+  padding: 0 32px;
+  line-height: 1.6;
+}
+
+/* ==================== ANIMATIONS ==================== */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-in {
+  animation: fadeInUp 0.35s ease forwards;
+}
+.delay-1 { animation-delay: 0.05s; opacity: 0; }
+.delay-2 { animation-delay: 0.1s; opacity: 0; }
+.delay-3 { animation-delay: 0.15s; opacity: 0; }
+.delay-4 { animation-delay: 0.2s; opacity: 0; }
+
+/* ==================== INTERACTIONS ==================== */
+.menu-item { transition: transform 0.12s ease; }
+.card-press { transition: transform 0.15s ease, box-shadow 0.15s ease; }
+.card-press:active { transform: scale(0.975); }
+</style>
+</head>
+<body>
+
+<!-- ============================================================ -->
+<!-- PAGE 1: 我的主页 (M-1) -->
+<!-- ============================================================ -->
+<div class="frame-wrapper">
+  <div class="frame-label">M-1 / 我的主页</div>
+  <div class="phone-frame">
+    <div class="phone-screen light">
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="status-bar-right">
+          <span class="material-icons-round">signal_cellular_alt</span>
+          <span class="material-icons-round">wifi</span>
+          <span class="material-icons-round">battery_full</span>
+        </div>
+      </div>
+
+      <!-- Header -->
+      <div class="profile-header">
+        <h1>我的</h1>
+      </div>
+
+      <!-- Profile Card -->
+      <div class="profile-card animate-in">
+        <div class="profile-info">
+          <div class="profile-avatar">
+            <span class="material-icons-round">person</span>
+          </div>
+          <div>
+            <div class="profile-name">小李</div>
+            <span class="profile-role">创建者</span>
+          </div>
+        </div>
+        <div class="profile-family">
+          <div>
+            <div class="profile-family-label">犬舍名称</div>
+            <div class="profile-family-row">
+              <span class="profile-family-name">花花犬舍</span>
+            </div>
+          </div>
+          <span class="material-icons-round" style="font-size: 20px; color: var(--text-3); cursor: pointer;">edit</span>
+        </div>
+      </div>
+
+      <!-- Menu Groups -->
+      <div class="menu-section">
+        <!-- 犬舍管理 -->
+        <div class="menu-group-label">犬舍管理</div>
+        <div class="menu-group animate-in delay-1">
+          <div class="menu-item">
+            <span class="material-icons-round mi-icon">group</span>
+            <span class="mi-label">家庭管理</span>
+            <span class="material-icons-round mi-arrow">chevron_right</span>
+          </div>
+          <div class="menu-item">
+            <span class="material-icons-round mi-icon">notifications</span>
+            <span class="mi-label">通知设置</span>
+            <span class="material-icons-round mi-arrow">chevron_right</span>
+          </div>
+          <div class="menu-item">
+            <span class="material-icons-round mi-icon">tune</span>
+            <span class="mi-label">默认参数</span>
+            <span class="material-icons-round mi-arrow">chevron_right</span>
+          </div>
+        </div>
+
+        <!-- 专业工具 -->
+        <div class="menu-group-label">专业工具</div>
+        <div class="menu-group animate-in delay-2">
+          <div class="menu-item">
+            <span class="material-icons-round mi-icon">medication</span>
+            <span class="mi-label">用药方案库</span>
+            <span class="material-icons-round mi-arrow">chevron_right</span>
+          </div>
+          <div class="menu-item">
+            <span class="material-icons-round mi-icon">handshake</span>
+            <span class="mi-label">合作代理人</span>
+            <span class="material-icons-round mi-arrow">chevron_right</span>
+          </div>
+          <div class="menu-item">
+            <span class="material-icons-round mi-icon">rule</span>
+            <span class="mi-label">护理规则</span>
+            <span class="material-icons-round mi-arrow">chevron_right</span>
+          </div>
+          <div class="menu-item">
+            <span class="material-icons-round mi-icon">category</span>
+            <span class="mi-label">支出分类管理</span>
+            <span class="material-icons-round mi-arrow">chevron_right</span>
+          </div>
+        </div>
+
+        <!-- 数据 -->
+        <div class="menu-group-label">数据</div>
+        <div class="menu-group animate-in delay-3">
+          <div class="menu-item">
+            <span class="material-icons-round mi-icon">backup</span>
+            <span class="mi-label">数据备份/导出</span>
+            <span class="material-icons-round mi-arrow">chevron_right</span>
+          </div>
+          <div class="menu-item">
+            <span class="material-icons-round mi-icon">delete_outline</span>
+            <span class="mi-label">回收站</span>
+            <span class="material-icons-round mi-arrow">chevron_right</span>
+          </div>
+        </div>
+
+        <!-- 其他 -->
+        <div class="menu-group-label">其他</div>
+        <div class="menu-group animate-in delay-4">
+          <div class="menu-item">
+            <span class="material-icons-round mi-icon">info</span>
+            <span class="mi-label">关于</span>
+            <span class="material-icons-round mi-arrow">chevron_right</span>
+          </div>
+          <div class="menu-item">
+            <span class="material-icons-round mi-icon" style="color: var(--red);">logout</span>
+            <span class="mi-label red">退出登录</span>
+            <span class="material-icons-round mi-arrow">chevron_right</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom Nav -->
+      <div class="bottom-nav">
+        <div class="nav-item">
+          <span class="material-icons-round">home</span>
+          <span class="nav-label">首页</span>
+        </div>
+        <div class="nav-item">
+          <span class="material-icons-round">pets</span>
+          <span class="nav-label">档案</span>
+        </div>
+        <div class="nav-item">
+          <div class="fab">
+            <span class="material-icons-round">add</span>
+          </div>
+        </div>
+        <div class="nav-item">
+          <span class="material-icons-round">account_balance_wallet</span>
+          <span class="nav-label">财务</span>
+        </div>
+        <div class="nav-item active">
+          <span class="material-icons-round">person</span>
+          <span class="nav-label">我的</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- PAGE 2: 家庭管理页 (M-2) -->
+<!-- ============================================================ -->
+<div class="frame-wrapper">
+  <div class="frame-label">M-2 / 家庭管理</div>
+  <div class="phone-frame">
+    <div class="phone-screen light">
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="status-bar-right">
+          <span class="material-icons-round">signal_cellular_alt</span>
+          <span class="material-icons-round">wifi</span>
+          <span class="material-icons-round">battery_full</span>
+        </div>
+      </div>
+
+      <!-- Top Bar -->
+      <div class="top-bar">
+        <div class="back-btn">
+          <span class="material-icons-round">arrow_back</span>
+        </div>
+        <span class="page-title">家庭管理</span>
+      </div>
+
+      <!-- Family Info Card -->
+      <div class="info-card animate-in">
+        <div class="info-row">
+          <span class="info-label">犬舍名称</span>
+          <div class="info-value">
+            花花犬舍
+            <span class="material-icons-round">edit</span>
+          </div>
+        </div>
+        <div class="info-row">
+          <span class="info-label">创建日期</span>
+          <div class="info-value">2025-01-10</div>
+        </div>
+      </div>
+
+      <!-- Members Section -->
+      <div class="section-header">
+        <span class="section-header-title">成员</span>
+        <span class="section-header-count">3人</span>
+      </div>
+
+      <div class="member-list">
+        <!-- Creator -->
+        <div class="member-item animate-in delay-1">
+          <div class="member-avatar">
+            <span class="material-icons-round">person</span>
+          </div>
+          <div class="member-info">
+            <div class="member-name">小李</div>
+            <div class="member-meta">
+              <span class="role-badge primary">创建者</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Admin -->
+        <div class="member-item animate-in delay-2">
+          <div class="member-avatar">
+            <span class="material-icons-round">person</span>
+          </div>
+          <div class="member-info">
+            <div class="member-name">小王</div>
+            <div class="member-meta">
+              <span class="role-badge green">管理员</span>
+            </div>
+          </div>
+          <div class="member-actions">
+            <span class="material-icons-round">more_horiz</span>
+            <span class="material-icons-round remove">remove_circle_outline</span>
+          </div>
+        </div>
+
+        <!-- Helper -->
+        <div class="member-item animate-in delay-3">
+          <div class="member-avatar">
+            <span class="material-icons-round">person</span>
+          </div>
+          <div class="member-info">
+            <div class="member-name">小张</div>
+            <div class="member-meta">
+              <span class="role-badge gray">协助者</span>
+            </div>
+          </div>
+          <div class="member-actions">
+            <span class="material-icons-round">more_horiz</span>
+            <span class="material-icons-round remove">remove_circle_outline</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Invite Button -->
+      <div class="action-area">
+        <button class="btn-full filled-primary">邀请新成员</button>
+      </div>
+      <div class="hint-text">生成邀请链接，对方点击后加入犬舍</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- PAGE 3: 通知设置页 (M-6) -->
+<!-- ============================================================ -->
+<div class="frame-wrapper">
+  <div class="frame-label">M-6 / 通知设置</div>
+  <div class="phone-frame">
+    <div class="phone-screen light">
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="status-bar-right">
+          <span class="material-icons-round">signal_cellular_alt</span>
+          <span class="material-icons-round">wifi</span>
+          <span class="material-icons-round">battery_full</span>
+        </div>
+      </div>
+
+      <!-- Top Bar -->
+      <div class="top-bar">
+        <div class="back-btn">
+          <span class="material-icons-round">arrow_back</span>
+        </div>
+        <span class="page-title">通知设置</span>
+      </div>
+
+      <!-- 推送总开关 -->
+      <div class="toggle-group animate-in">
+        <div class="toggle-group-label">推送总开关</div>
+        <div class="toggle-card">
+          <div class="toggle-item">
+            <span class="toggle-label">接收推送通知</span>
+            <div class="switch on"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 提醒类型 -->
+      <div class="toggle-group animate-in delay-1">
+        <div class="toggle-group-label">提醒类型</div>
+        <div class="toggle-card">
+          <div class="toggle-item">
+            <span class="toggle-label">繁育节点提醒
+              <small>配种 / 孕检 / 预产期</small>
+            </span>
+            <div class="switch on"></div>
+          </div>
+          <div class="toggle-item">
+            <span class="toggle-label">疫苗/驱虫提醒</span>
+            <div class="switch on"></div>
+          </div>
+          <div class="toggle-item">
+            <span class="toggle-label">每日用药提醒</span>
+            <div class="switch on"></div>
+          </div>
+          <div class="toggle-item">
+            <span class="toggle-label">护理群组提醒</span>
+            <div class="switch on"></div>
+          </div>
+          <div class="toggle-item">
+            <span class="toggle-label">逾期提醒
+              <small>不可关闭</small>
+            </span>
+            <div class="switch on" style="opacity: 0.6; pointer-events: none;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 晨间摘要 -->
+      <div class="toggle-group animate-in delay-2">
+        <div class="toggle-group-label">晨间摘要</div>
+        <div class="toggle-card">
+          <div class="toggle-item">
+            <span class="toggle-label">每日晨间摘要</span>
+            <div class="switch on"></div>
+          </div>
+          <div class="toggle-item">
+            <span class="toggle-label">推送时间</span>
+            <span class="time-picker">07:00</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- PAGE 4: 支出分类管理页 (M-13) -->
+<!-- ============================================================ -->
+<div class="frame-wrapper">
+  <div class="frame-label">M-13 / 支出分类管理</div>
+  <div class="phone-frame">
+    <div class="phone-screen light">
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="status-bar-right">
+          <span class="material-icons-round">signal_cellular_alt</span>
+          <span class="material-icons-round">wifi</span>
+          <span class="material-icons-round">battery_full</span>
+        </div>
+      </div>
+
+      <!-- Top Bar -->
+      <div class="top-bar">
+        <div class="back-btn">
+          <span class="material-icons-round">arrow_back</span>
+        </div>
+        <span class="page-title">支出分类管理</span>
+      </div>
+
+      <!-- Category List -->
+      <div class="category-list animate-in">
+        <div class="category-item">
+          <span class="drag-handle">≡</span>
+          <span class="category-name">食品</span>
+          <div class="category-actions">
+            <span class="material-icons-round edit-icon">edit</span>
+            <span class="material-icons-round delete-icon disabled">delete_outline</span>
+          </div>
+        </div>
+        <div class="category-item">
+          <span class="drag-handle">≡</span>
+          <span class="category-name">营养品</span>
+          <div class="category-actions">
+            <span class="material-icons-round edit-icon">edit</span>
+            <span class="material-icons-round delete-icon disabled">delete_outline</span>
+          </div>
+        </div>
+        <div class="category-item">
+          <span class="drag-handle">≡</span>
+          <span class="category-name">消耗品</span>
+          <div class="category-actions">
+            <span class="material-icons-round edit-icon">edit</span>
+            <span class="material-icons-round delete-icon disabled">delete_outline</span>
+          </div>
+        </div>
+        <div class="category-item">
+          <span class="drag-handle">≡</span>
+          <span class="category-name">日常用品</span>
+          <div class="category-actions">
+            <span class="material-icons-round edit-icon">edit</span>
+            <span class="material-icons-round delete-icon disabled">delete_outline</span>
+          </div>
+        </div>
+        <div class="category-item">
+          <span class="drag-handle">≡</span>
+          <span class="category-name">固定开销</span>
+          <div class="category-actions">
+            <span class="material-icons-round edit-icon">edit</span>
+            <span class="material-icons-round delete-icon disabled">delete_outline</span>
+          </div>
+        </div>
+        <div class="category-item">
+          <span class="drag-handle">≡</span>
+          <span class="category-name">交通</span>
+          <div class="category-actions">
+            <span class="material-icons-round edit-icon">edit</span>
+            <span class="material-icons-round delete-icon disabled">delete_outline</span>
+          </div>
+        </div>
+        <div class="category-item">
+          <span class="drag-handle">≡</span>
+          <span class="category-name">医疗</span>
+          <div class="category-actions">
+            <span class="material-icons-round edit-icon">edit</span>
+            <span class="material-icons-round delete-icon disabled">delete_outline</span>
+          </div>
+        </div>
+        <div class="category-item">
+          <span class="drag-handle">≡</span>
+          <span class="category-name">配种费</span>
+          <div class="category-actions">
+            <span class="material-icons-round edit-icon">edit</span>
+            <span class="material-icons-round delete-icon disabled">delete_outline</span>
+          </div>
+        </div>
+        <div class="category-item">
+          <span class="drag-handle">≡</span>
+          <span class="category-name">其他</span>
+          <div class="category-actions">
+            <span class="material-icons-round edit-icon">edit</span>
+            <span class="material-icons-round delete-icon disabled">delete_outline</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="hint-text" style="margin-top: 12px;">预设分类不可删除</div>
+
+      <!-- Add Button -->
+      <div class="action-area">
+        <button class="btn-full ghost">+ 添加自定义分类</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- PAGE 5: 护理规则列表页 (M-15) -->
+<!-- ============================================================ -->
+<div class="frame-wrapper">
+  <div class="frame-label">M-15 / 护理规则</div>
+  <div class="phone-frame">
+    <div class="phone-screen light">
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="status-bar-right">
+          <span class="material-icons-round">signal_cellular_alt</span>
+          <span class="material-icons-round">wifi</span>
+          <span class="material-icons-round">battery_full</span>
+        </div>
+      </div>
+
+      <!-- Top Bar -->
+      <div class="top-bar">
+        <div class="back-btn">
+          <span class="material-icons-round">arrow_back</span>
+        </div>
+        <span class="page-title">护理规则</span>
+      </div>
+
+      <!-- Existing Rules -->
+      <div style="padding: 0 16px;">
+        <div class="rule-card bar-rose animate-in card-press">
+          <div class="rule-title">孕期护理</div>
+          <div class="rule-meta">触发：怀孕中</div>
+          <div class="rule-desc">每日喂钙铁</div>
+        </div>
+
+        <div class="rule-card bar-green animate-in delay-1 card-press">
+          <div class="rule-title">哺乳期护理</div>
+          <div class="rule-meta">触发：哺乳中</div>
+          <div class="rule-desc">每日补充营养</div>
+        </div>
+      </div>
+
+      <!-- Templates Section -->
+      <div class="template-section animate-in delay-2">
+        <div class="template-label">推荐模板</div>
+        <div class="template-card">
+          <div class="rule-title">幼犬定期驱虫</div>
+          <div class="rule-meta">触发：新生 · 每14天</div>
+          <div class="template-actions">
+            <button class="btn-enable">+ 启用</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- New Rule Button -->
+      <div class="action-area" style="margin-top: 24px;">
+        <button class="btn-full filled-primary">+ 新建规则</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- PAGE 6: 数据备份/导出页 (M-18) -->
+<!-- ============================================================ -->
+<div class="frame-wrapper">
+  <div class="frame-label">M-18 / 数据备份</div>
+  <div class="phone-frame">
+    <div class="phone-screen light">
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="status-bar-right">
+          <span class="material-icons-round">signal_cellular_alt</span>
+          <span class="material-icons-round">wifi</span>
+          <span class="material-icons-round">battery_full</span>
+        </div>
+      </div>
+
+      <!-- Top Bar -->
+      <div class="top-bar">
+        <div class="back-btn">
+          <span class="material-icons-round">arrow_back</span>
+        </div>
+        <span class="page-title">数据备份</span>
+      </div>
+
+      <!-- Backup Status -->
+      <div class="backup-status animate-in">
+        <div class="backup-row">
+          <span class="backup-label">上次备份</span>
+          <div class="backup-value">
+            2026-03-20 07:00
+            <span class="material-icons-round check">check_circle</span>
+          </div>
+        </div>
+        <div class="backup-row">
+          <span class="backup-label">自动备份</span>
+          <div class="backup-value">
+            每周一次
+            <div class="switch on" style="width: 40px; height: 24px; border-radius: 12px;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="backup-actions animate-in delay-1">
+        <button class="btn-full filled-primary">立即备份</button>
+        <button class="btn-full ghost">导出到本地</button>
+        <button class="btn-full ghost-dim">数据修复</button>
+      </div>
+
+      <!-- Recycle Section -->
+      <div class="recycle-section animate-in delay-2">
+        <div class="recycle-title">回收站</div>
+        <div class="recycle-desc">30天内删除的犬只可恢复</div>
+        <span class="recycle-link">进入回收站 →</span>
+      </div>
+
+      <!-- Warning -->
+      <div class="warning-text animate-in delay-3">备份文件包含所有犬只、记录、财务数据</div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

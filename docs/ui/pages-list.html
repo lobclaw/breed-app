@@ -1,0 +1,1197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Breed App — List Pages (D-1, S-1, F-1)</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+  background: #f0eaec;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 48px;
+  padding: 40px 20px;
+  min-height: 100vh;
+  flex-wrap: wrap;
+}
+.frame-label {
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+  color: #6b6880;
+}
+.phone-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.phone-frame {
+  width: 375px;
+  height: 812px;
+  border-radius: 44px;
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05);
+}
+.phone-screen {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  padding-bottom: 100px;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.phone-screen::-webkit-scrollbar { display: none; }
+
+/* ==================== LIGHT MODE ==================== */
+.light {
+  --primary: #ea3e77;
+  --primary-soft: #fff0f2;
+  --bg: #fdf8f9;
+  --card: #FFFFFF;
+  --card-dim: #FFF0E8;
+  --text-1: #1a1a2e;
+  --text-2: #8B7355;
+  --text-3: #B8A08A;
+  --text-4: #D8CBBD;
+  --amber: #e89b3e;
+  --amber-soft: #fff9f0;
+  --red: #e05252;
+  --red-soft: #fff0f0;
+  --green: #3dae6f;
+  --green-soft: #f0fff4;
+  --blue: #4a8dd4;
+  --blue-soft: #f0f7ff;
+  --plum: #8668b0;
+  --plum-soft: #f5f0ff;
+  --rose: #ea3e77;
+  --rose-soft: #fff0f2;
+  --teal: #3da8a0;
+  --teal-soft: #f0fffe;
+  --shadow: 0 2px 12px rgba(234, 62, 119, 0.06);
+  --shadow-lg: 0 6px 24px rgba(234, 62, 119, 0.1);
+  --nav-bg: rgba(255,255,255,0.85);
+  --nav-border: rgba(234, 62, 119, 0.08);
+  --status-bar-color: #1a1a2e;
+  background: var(--bg);
+}
+
+/* ==================== STATUS BAR ==================== */
+.status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 28px 0;
+  height: 50px;
+  color: var(--status-bar-color);
+  font-size: 15px;
+  font-weight: 600;
+}
+.status-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.status-bar-right .material-icons-round { font-size: 16px; }
+
+/* ==================== PAGE HEADER ==================== */
+.page-header {
+  padding: 12px 20px 0;
+}
+.page-header h1 {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--text-1);
+  line-height: 1.3;
+}
+.page-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* ==================== SEARCH BAR ==================== */
+.search-bar {
+  margin: 12px 16px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--card);
+  border-radius: 999px;
+  padding: 10px 16px;
+  box-shadow: var(--shadow);
+}
+.search-bar .material-icons-round {
+  font-size: 20px;
+  color: var(--text-3);
+}
+.search-bar input {
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--text-1);
+  flex: 1;
+}
+.search-bar input::placeholder {
+  color: var(--text-3);
+}
+
+/* ==================== FILTER TABS ==================== */
+.filter-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 14px 16px 0;
+  overflow-x: auto;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.filter-tabs::-webkit-scrollbar { display: none; }
+.filter-tab {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 16px;
+  border-radius: 999px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: transform 0.12s ease;
+  background: var(--card);
+  color: var(--text-2);
+  border: 1.5px solid var(--text-4);
+}
+.filter-tab:active { transform: scale(0.94); }
+.filter-tab.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+/* ==================== CARDS (list items) ==================== */
+.card-feed {
+  padding: 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 14px;
+}
+.card {
+  background: var(--card);
+  border-radius: 16px;
+  padding: 16px;
+  padding-left: 18px;
+  position: relative;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  border-left: 3.5px solid transparent;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  cursor: pointer;
+}
+.card:active {
+  transform: scale(0.975);
+  box-shadow: 0 1px 4px rgba(45,27,20,0.08);
+}
+.card.bar-red { border-left-color: var(--red); }
+.card.bar-rose { border-left-color: var(--rose); }
+.card.bar-green { border-left-color: var(--green); }
+.card.bar-blue { border-left-color: var(--blue); }
+.card.bar-plum { border-left-color: var(--plum); }
+.card.bar-teal { border-left-color: var(--teal); }
+.card.bar-amber { border-left-color: var(--amber); }
+.card.bar-gray { border-left-color: var(--text-4); }
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 100%;
+  pointer-events: none;
+}
+.card.bar-red::before { background: linear-gradient(135deg, var(--red-soft) 0%, transparent 40%); }
+.card.bar-rose::before { background: linear-gradient(135deg, var(--rose-soft) 0%, transparent 40%); }
+.card.bar-green::before { background: linear-gradient(135deg, var(--green-soft) 0%, transparent 40%); }
+.card.bar-blue::before { background: linear-gradient(135deg, var(--blue-soft) 0%, transparent 40%); }
+.card.bar-plum::before { background: linear-gradient(135deg, var(--plum-soft) 0%, transparent 40%); }
+.card.bar-teal::before { background: linear-gradient(135deg, var(--teal-soft) 0%, transparent 40%); }
+.card.bar-amber::before { background: linear-gradient(135deg, var(--amber-soft) 0%, transparent 40%); }
+.card.bar-gray::before { background: linear-gradient(135deg, rgba(216,203,189,0.15) 0%, transparent 40%); }
+.card > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Card row layout */
+.card-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.card-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.card-icon.red { background: #FFD9D4; }
+.card-icon.rose { background: #FFD4DE; }
+.card-icon.green { background: #D0F0DC; }
+.card-icon.blue { background: #D4E8F8; }
+.card-icon.plum { background: #E4D8F4; }
+.card-icon.teal { background: #D0F0EC; }
+.card-icon.amber { background: #FFE8C8; }
+.card-icon.gray { background: #E8E0D8; }
+
+/* Status ring around icon */
+.card-icon.status-ring {
+  border: 2.5px solid transparent;
+}
+.card-icon.ring-green { border-color: var(--green); }
+.card-icon.ring-rose { border-color: var(--rose); }
+.card-icon.ring-amber { border-color: var(--amber); }
+.card-icon.ring-plum { border-color: var(--plum); }
+.card-icon.ring-red { border-color: var(--red); }
+.card-icon.ring-teal { border-color: var(--teal); }
+.card-icon.ring-gray { border-color: var(--text-4); }
+
+.card-middle {
+  flex: 1;
+  min-width: 0;
+}
+.card-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-1);
+  line-height: 1.3;
+}
+.card-sub {
+  font-size: 12px;
+  color: var(--text-2);
+  margin-top: 1px;
+}
+.card-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Tags */
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.tag {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+.tag-red { background: var(--red-soft); color: var(--red); }
+.tag-amber { background: var(--amber-soft); color: var(--amber); }
+.tag-green { background: var(--green-soft); color: var(--green); }
+.tag-rose { background: var(--rose-soft); color: var(--rose); }
+.tag-plum { background: var(--plum-soft); color: var(--plum); }
+.tag-teal { background: var(--teal-soft); color: var(--teal); }
+.tag-blue { background: var(--blue-soft); color: var(--blue); }
+.tag-gray { background: var(--card-dim); color: var(--text-3); }
+.tag-primary { background: var(--primary-soft); color: var(--primary); }
+
+/* Status labels at card bottom */
+.card-status-labels {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+/* ==================== BOTTOM NAV ==================== */
+.bottom-nav {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 84px;
+  background: var(--nav-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 0.5px solid var(--nav-border);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-around;
+  padding-top: 8px;
+  z-index: 10;
+}
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 50px;
+  position: relative;
+  transition: transform 0.12s ease;
+  cursor: pointer;
+}
+.nav-item:active { transform: scale(0.85); }
+.nav-item .material-icons-round { font-size: 24px; color: var(--text-3); }
+.nav-item .nav-label { font-size: 10px; font-weight: 600; color: var(--text-3); }
+.nav-item.active .material-icons-round { color: var(--primary); }
+.nav-item.active .nav-label { color: var(--primary); }
+.fab {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ea3e77, #e89b3e);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: -10px;
+  box-shadow: 0 4px 16px rgba(234, 62, 119, 0.3);
+  position: relative;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  cursor: pointer;
+}
+.fab:active {
+  transform: scale(0.88);
+  box-shadow: 0 2px 8px rgba(234, 62, 119, 0.2);
+}
+.fab .material-icons-round { font-size: 28px; color: #fff; }
+
+/* ==================== FAB BUTTON (page-level) ==================== */
+.page-fab {
+  position: absolute;
+  bottom: 100px;
+  right: 20px;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ea3e77, #e89b3e);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px rgba(234, 62, 119, 0.3);
+  z-index: 5;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.page-fab:active {
+  transform: scale(0.88);
+  box-shadow: 0 2px 8px rgba(234, 62, 119, 0.2);
+}
+.page-fab .material-icons-round { font-size: 28px; color: #fff; }
+
+/* ==================== SUMMARY CARD (Financial) ==================== */
+.summary-card {
+  margin: 14px 16px 0;
+  background: var(--card);
+  border-radius: 16px;
+  padding: 18px 20px;
+  box-shadow: var(--shadow);
+  display: flex;
+  justify-content: space-between;
+  position: relative;
+  overflow: hidden;
+  border-left: 3.5px solid var(--primary);
+}
+.summary-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 100%;
+  background: linear-gradient(135deg, var(--rose-soft) 0%, transparent 40%);
+  pointer-events: none;
+}
+.summary-card > * { position: relative; z-index: 1; }
+.summary-item {
+  text-align: center;
+  flex: 1;
+}
+.summary-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+  margin-bottom: 4px;
+}
+.summary-amount {
+  font-size: 18px;
+  font-weight: 800;
+}
+.summary-amount.income { color: var(--red); }
+.summary-amount.expense { color: var(--green); }
+.summary-amount.profit { color: var(--primary); }
+.summary-divider {
+  width: 1px;
+  background: var(--text-4);
+  opacity: 0.5;
+  margin: 0 8px;
+}
+
+/* ==================== MONTH SELECTOR ==================== */
+.month-selector {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 6px 0;
+}
+.month-selector .material-icons-round {
+  font-size: 20px;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+.month-selector .material-icons-round:active { transform: scale(0.85); }
+.month-text {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+/* ==================== FLOW LIST (Financial) ==================== */
+.flow-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.flow-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.flow-dot.income { background: var(--red); }
+.flow-dot.expense { background: var(--green); }
+.flow-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.flow-icon .material-icons-round { font-size: 18px; color: var(--text-1); }
+.flow-middle {
+  flex: 1;
+  min-width: 0;
+}
+.flow-desc {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.flow-dog {
+  font-size: 11px;
+  color: var(--text-2);
+  margin-top: 1px;
+}
+.flow-right {
+  text-align: right;
+  flex-shrink: 0;
+}
+.flow-amount {
+  font-size: 14px;
+  font-weight: 700;
+}
+.flow-amount.income { color: var(--red); }
+.flow-amount.expense { color: var(--green); }
+.flow-date {
+  font-size: 10px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+
+/* ==================== EMPTY STATE ==================== */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 32px 20px;
+  text-align: center;
+}
+.empty-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--card-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+.empty-icon .material-icons-round {
+  font-size: 28px;
+  color: var(--text-3);
+}
+.empty-text {
+  font-size: 13px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+.empty-btn {
+  margin-top: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 8px 18px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+}
+
+/* ==================== SALE LIST EXTRAS ==================== */
+.sale-price {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.sale-agent {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+.platform-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--card-dim);
+  color: var(--text-2);
+}
+
+/* ==================== SECTION LABEL ==================== */
+.section-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 20px 10px;
+}
+.section-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+.section-label span {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-3);
+  letter-spacing: 0.5px;
+}
+.section-badge {
+  background: var(--card-dim);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+/* ==================== INTERACTIONS ==================== */
+.filter-tab {
+  transition: transform 0.12s ease, filter 0.12s ease;
+}
+.filter-tab:active {
+  filter: brightness(0.95);
+}
+</style>
+</head>
+<body>
+
+<!-- ================================================================
+     PAGE 1: 犬只列表页 (D-1)
+     ================================================================ -->
+<div class="phone-wrapper">
+  <div class="frame-label">D-1 犬只列表页</div>
+  <div class="phone-frame">
+    <div class="phone-screen light">
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="status-bar-right">
+          <span class="material-icons-round">signal_cellular_alt</span>
+          <span class="material-icons-round">wifi</span>
+          <span class="material-icons-round">battery_full</span>
+        </div>
+      </div>
+
+      <!-- Page Header -->
+      <div class="page-header">
+        <div class="page-header-row">
+          <h1>档案</h1>
+          <span class="material-icons-round" style="font-size:24px; color:var(--text-2); cursor:pointer;">filter_list</span>
+        </div>
+      </div>
+
+      <!-- Search Bar -->
+      <div class="search-bar">
+        <span class="material-icons-round">search</span>
+        <input type="text" placeholder="搜索犬只..." readonly>
+      </div>
+
+      <!-- Filter Tabs -->
+      <div class="filter-tabs">
+        <div class="filter-tab active">全部</div>
+        <div class="filter-tab">种狗</div>
+        <div class="filter-tab">幼崽</div>
+        <div class="filter-tab">外部种公</div>
+      </div>
+
+      <!-- Dog Card List -->
+      <div class="card-feed">
+
+        <!-- Dog 1: 种母, 怀孕中 -->
+        <div class="card bar-rose">
+          <div class="card-row">
+            <div class="card-icon rose status-ring ring-rose">🐩</div>
+            <div class="card-middle">
+              <div class="card-name">小雪</div>
+              <div class="card-sub">马尔济斯 · 3岁</div>
+            </div>
+            <div class="card-right">
+              <span class="tag tag-rose">在养</span>
+              <span class="tag tag-primary" style="font-size:10px; padding:2px 8px;">种狗</span>
+            </div>
+          </div>
+          <div class="card-status-labels">
+            <span class="tag tag-rose">怀孕第45天</span>
+          </div>
+        </div>
+
+        <!-- Dog 2: 种母, 生病中 -->
+        <div class="card bar-plum">
+          <div class="card-row">
+            <div class="card-icon plum status-ring ring-plum">🐩</div>
+            <div class="card-middle">
+              <div class="card-name">杠上花</div>
+              <div class="card-sub">马尔济斯 · 4岁</div>
+            </div>
+            <div class="card-right">
+              <span class="tag tag-green">在养</span>
+              <span class="tag tag-primary" style="font-size:10px; padding:2px 8px;">种狗</span>
+            </div>
+          </div>
+          <div class="card-status-labels">
+            <span class="tag tag-plum">用药中 · 第3天</span>
+            <span class="tag tag-red">生病中</span>
+          </div>
+        </div>
+
+        <!-- Dog 3: 幼崽, 待售 -->
+        <div class="card bar-amber">
+          <div class="card-row">
+            <div class="card-icon amber status-ring ring-amber">🐶</div>
+            <div class="card-middle">
+              <div class="card-name">小雪3窝-1号</div>
+              <div class="card-sub">马尔济斯 · 62天</div>
+            </div>
+            <div class="card-right">
+              <span class="tag tag-amber">待售</span>
+              <span class="tag tag-gray" style="font-size:10px; padding:2px 8px;">幼崽</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dog 4: 种母, 正常 -->
+        <div class="card bar-green">
+          <div class="card-row">
+            <div class="card-icon green status-ring ring-green">🐩</div>
+            <div class="card-middle">
+              <div class="card-name">豆豆</div>
+              <div class="card-sub">马尔济斯 · 2岁</div>
+            </div>
+            <div class="card-right">
+              <span class="tag tag-green">在养</span>
+              <span class="tag tag-primary" style="font-size:10px; padding:2px 8px;">种狗</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dog 5: 外部种公 -->
+        <div class="card bar-blue">
+          <div class="card-row">
+            <div class="card-icon blue status-ring ring-blue">🐶</div>
+            <div class="card-middle">
+              <div class="card-name">旺财</div>
+              <div class="card-sub">马尔济斯 · 5岁</div>
+            </div>
+            <div class="card-right">
+              <span class="tag tag-blue">在养</span>
+              <span class="tag tag-gray" style="font-size:10px; padding:2px 8px;">外部种公</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section: Empty State hint -->
+        <div class="section-label">
+          <div class="section-dot" style="background:var(--text-3);"></div>
+          <span>空状态示例</span>
+        </div>
+        <div class="empty-state">
+          <div class="empty-icon">
+            <span class="material-icons-round">pets</span>
+          </div>
+          <div class="empty-text">还没有犬只档案<br>点击 + 创建第一只</div>
+          <button class="empty-btn">+ 添加犬只</button>
+        </div>
+
+      </div>
+
+      <!-- FAB -->
+      <div class="page-fab">
+        <span class="material-icons-round">add</span>
+      </div>
+
+      <!-- Bottom Nav -->
+      <div class="bottom-nav">
+        <div class="nav-item">
+          <span class="material-icons-round">home</span>
+          <span class="nav-label">首页</span>
+        </div>
+        <div class="nav-item active">
+          <span class="material-icons-round">folder_open</span>
+          <span class="nav-label">档案</span>
+        </div>
+        <div class="nav-item">
+          <div class="fab">
+            <span class="material-icons-round">add</span>
+          </div>
+          <span class="nav-label">快速记录</span>
+        </div>
+        <div class="nav-item">
+          <span class="material-icons-round">account_balance_wallet</span>
+          <span class="nav-label">财务</span>
+        </div>
+        <div class="nav-item">
+          <span class="material-icons-round">person</span>
+          <span class="nav-label">我的</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ================================================================
+     PAGE 2: 销售记录列表页 (S-1)
+     ================================================================ -->
+<div class="phone-wrapper">
+  <div class="frame-label">S-1 销售记录列表页</div>
+  <div class="phone-frame">
+    <div class="phone-screen light">
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="status-bar-right">
+          <span class="material-icons-round">signal_cellular_alt</span>
+          <span class="material-icons-round">wifi</span>
+          <span class="material-icons-round">battery_full</span>
+        </div>
+      </div>
+
+      <!-- Page Header -->
+      <div class="page-header">
+        <h1>销售管理</h1>
+      </div>
+
+      <!-- Filter Tabs -->
+      <div class="filter-tabs">
+        <div class="filter-tab active">全部</div>
+        <div class="filter-tab">待售</div>
+        <div class="filter-tab">已预定</div>
+        <div class="filter-tab">已成交</div>
+        <div class="filter-tab">已退款</div>
+        <div class="filter-tab">定金取消</div>
+      </div>
+
+      <!-- Sale List -->
+      <div class="card-feed">
+
+        <!-- Sale 1: 待售 -->
+        <div class="card bar-gray">
+          <div class="card-row">
+            <div class="card-icon gray">
+              <span class="material-icons-round" style="font-size:18px; color:var(--text-2);">storefront</span>
+            </div>
+            <div class="card-middle">
+              <div class="card-name">小雪3窝-1号</div>
+              <div class="card-sub">马尔济斯 · 母</div>
+            </div>
+            <div class="card-right">
+              <span class="tag tag-gray">待售</span>
+              <span class="sale-price">底价 ¥8,000</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sale 2: 已预定 -->
+        <div class="card bar-amber">
+          <div class="card-row">
+            <div class="card-icon amber">
+              <span class="material-icons-round" style="font-size:18px; color:var(--text-1);">bookmark</span>
+            </div>
+            <div class="card-middle">
+              <div class="card-name">小雪3窝-2号</div>
+              <div class="card-sub">马尔济斯 · 公</div>
+            </div>
+            <div class="card-right">
+              <span class="tag tag-amber">已预定</span>
+              <span class="sale-price">定金 ¥2,000</span>
+            </div>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+            <span class="sale-agent">代理人：张经理</span>
+            <span class="platform-badge">小红书</span>
+          </div>
+        </div>
+
+        <!-- Sale 3: 已成交 -->
+        <div class="card bar-green">
+          <div class="card-row">
+            <div class="card-icon green">
+              <span class="material-icons-round" style="font-size:18px; color:var(--text-1);">check_circle</span>
+            </div>
+            <div class="card-middle">
+              <div class="card-name">豆豆2窝-3号</div>
+              <div class="card-sub">马尔济斯 · 母</div>
+            </div>
+            <div class="card-right">
+              <span class="tag tag-green">已成交</span>
+              <span class="sale-price" style="color:var(--red);">到手 ¥12,000</span>
+            </div>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+            <span class="sale-agent">代理人：李姐</span>
+            <span class="platform-badge">微信</span>
+          </div>
+        </div>
+
+        <!-- Sale 4: 已退款 -->
+        <div class="card bar-red">
+          <div class="card-row">
+            <div class="card-icon red">
+              <span class="material-icons-round" style="font-size:18px; color:var(--text-1);">undo</span>
+            </div>
+            <div class="card-middle">
+              <div class="card-name">杠上花1窝-2号</div>
+              <div class="card-sub">马尔济斯 · 公</div>
+            </div>
+            <div class="card-right">
+              <span class="tag tag-red">已退款</span>
+              <span class="sale-price" style="color:var(--green);">退款 ¥9,500</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sale 5: 定金取消 -->
+        <div class="card bar-gray">
+          <div class="card-row">
+            <div class="card-icon gray">
+              <span class="material-icons-round" style="font-size:18px; color:var(--text-2);">cancel</span>
+            </div>
+            <div class="card-middle">
+              <div class="card-name">豆豆2窝-1号</div>
+              <div class="card-sub">马尔济斯 · 母</div>
+            </div>
+            <div class="card-right">
+              <span class="tag tag-gray">定金取消</span>
+              <span class="sale-price" style="color:var(--red);">保留 ¥1,000</span>
+            </div>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+            <span class="sale-agent"></span>
+            <span class="platform-badge">闲鱼</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Bottom Nav -->
+      <div class="bottom-nav">
+        <div class="nav-item">
+          <span class="material-icons-round">home</span>
+          <span class="nav-label">首页</span>
+        </div>
+        <div class="nav-item">
+          <span class="material-icons-round">folder_open</span>
+          <span class="nav-label">档案</span>
+        </div>
+        <div class="nav-item">
+          <div class="fab">
+            <span class="material-icons-round">add</span>
+          </div>
+          <span class="nav-label">快速记录</span>
+        </div>
+        <div class="nav-item">
+          <span class="material-icons-round">account_balance_wallet</span>
+          <span class="nav-label">财务</span>
+        </div>
+        <div class="nav-item">
+          <span class="material-icons-round">person</span>
+          <span class="nav-label">我的</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ================================================================
+     PAGE 3: 财务统一流水页 (F-1)
+     ================================================================ -->
+<div class="phone-wrapper">
+  <div class="frame-label">F-1 财务统一流水页</div>
+  <div class="phone-frame">
+    <div class="phone-screen light">
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="status-bar-right">
+          <span class="material-icons-round">signal_cellular_alt</span>
+          <span class="material-icons-round">wifi</span>
+          <span class="material-icons-round">battery_full</span>
+        </div>
+      </div>
+
+      <!-- Page Header -->
+      <div class="page-header">
+        <div class="page-header-row">
+          <h1>财务</h1>
+          <span class="material-icons-round" style="font-size:22px; color:var(--text-2); cursor:pointer;">bar_chart</span>
+        </div>
+        <!-- Month Selector -->
+        <div class="month-selector" style="margin-top:8px;">
+          <span class="material-icons-round">chevron_left</span>
+          <span class="month-text">2026年3月</span>
+          <span class="material-icons-round">chevron_right</span>
+        </div>
+      </div>
+
+      <!-- Summary Card -->
+      <div class="summary-card">
+        <div class="summary-item">
+          <div class="summary-label">本月收入</div>
+          <div class="summary-amount income">¥48,200</div>
+        </div>
+        <div class="summary-divider"></div>
+        <div class="summary-item">
+          <div class="summary-label">本月支出</div>
+          <div class="summary-amount expense">¥12,800</div>
+        </div>
+        <div class="summary-divider"></div>
+        <div class="summary-item">
+          <div class="summary-label">净利润</div>
+          <div class="summary-amount profit">¥35,400</div>
+        </div>
+      </div>
+
+      <!-- Filter Bar -->
+      <div class="filter-tabs" style="align-items:center;">
+        <div class="filter-tab active">全部</div>
+        <div class="filter-tab">收入</div>
+        <div class="filter-tab">支出</div>
+        <div style="margin-left:auto; padding-right:4px;">
+          <span class="material-icons-round" style="font-size:22px; color:var(--text-2); cursor:pointer;">tune</span>
+        </div>
+      </div>
+
+      <!-- Flow List -->
+      <div class="card-feed">
+
+        <!-- Flow 1: Income - Sale -->
+        <div class="card bar-red">
+          <div class="flow-item">
+            <div class="flow-dot income"></div>
+            <div class="flow-icon green">
+              <span class="material-icons-round">paid</span>
+            </div>
+            <div class="flow-middle">
+              <div class="flow-desc">幼犬销售</div>
+              <div class="flow-dog">豆豆2窝-3号</div>
+            </div>
+            <div class="flow-right">
+              <div class="flow-amount income">+¥12,000</div>
+              <div class="flow-date">3月22日</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Flow 2: Expense - Food -->
+        <div class="card bar-green">
+          <div class="flow-item">
+            <div class="flow-dot expense"></div>
+            <div class="flow-icon red">
+              <span class="material-icons-round">restaurant</span>
+            </div>
+            <div class="flow-middle">
+              <div class="flow-desc">狗粮采购</div>
+              <div class="flow-dog">共用开销</div>
+            </div>
+            <div class="flow-right">
+              <div class="flow-amount expense">-¥3,200</div>
+              <div class="flow-date">3月21日</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Flow 3: Income - Sale -->
+        <div class="card bar-red">
+          <div class="flow-item">
+            <div class="flow-dot income"></div>
+            <div class="flow-icon green">
+              <span class="material-icons-round">paid</span>
+            </div>
+            <div class="flow-middle">
+              <div class="flow-desc">幼犬销售</div>
+              <div class="flow-dog">小雪2窝-1号</div>
+            </div>
+            <div class="flow-right">
+              <div class="flow-amount income">+¥8,500</div>
+              <div class="flow-date">3月20日</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Flow 4: Expense - Medical -->
+        <div class="card bar-green">
+          <div class="flow-item">
+            <div class="flow-dot expense"></div>
+            <div class="flow-icon plum">
+              <span class="material-icons-round">medication</span>
+            </div>
+            <div class="flow-middle">
+              <div class="flow-desc">用药费用</div>
+              <div class="flow-dog">杠上花</div>
+            </div>
+            <div class="flow-right">
+              <div class="flow-amount expense">-¥680</div>
+              <div class="flow-date">3月19日</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Flow 5: Income - Deposit kept -->
+        <div class="card bar-red">
+          <div class="flow-item">
+            <div class="flow-dot income"></div>
+            <div class="flow-icon amber">
+              <span class="material-icons-round">savings</span>
+            </div>
+            <div class="flow-middle">
+              <div class="flow-desc">定金保留</div>
+              <div class="flow-dog">豆豆2窝-1号</div>
+            </div>
+            <div class="flow-right">
+              <div class="flow-amount income">+¥1,000</div>
+              <div class="flow-date">3月18日</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Flow 6: Expense - Breeding -->
+        <div class="card bar-green">
+          <div class="flow-item">
+            <div class="flow-dot expense"></div>
+            <div class="flow-icon rose">
+              <span class="material-icons-round">favorite</span>
+            </div>
+            <div class="flow-middle">
+              <div class="flow-desc">配种费</div>
+              <div class="flow-dog">小雪 × 旺财</div>
+            </div>
+            <div class="flow-right">
+              <div class="flow-amount expense">-¥3,000</div>
+              <div class="flow-date">3月16日</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Flow 7: Income - Sale -->
+        <div class="card bar-red">
+          <div class="flow-item">
+            <div class="flow-dot income"></div>
+            <div class="flow-icon green">
+              <span class="material-icons-round">paid</span>
+            </div>
+            <div class="flow-middle">
+              <div class="flow-desc">幼犬销售</div>
+              <div class="flow-dog">小雪2窝-4号</div>
+            </div>
+            <div class="flow-right">
+              <div class="flow-amount income">+¥9,800</div>
+              <div class="flow-date">3月14日</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Flow 8: Expense - Fixed -->
+        <div class="card bar-green">
+          <div class="flow-item">
+            <div class="flow-dot expense"></div>
+            <div class="flow-icon gray">
+              <span class="material-icons-round">home</span>
+            </div>
+            <div class="flow-middle">
+              <div class="flow-desc">场地租金</div>
+              <div class="flow-dog">固定开销</div>
+            </div>
+            <div class="flow-right">
+              <div class="flow-amount expense">-¥5,000</div>
+              <div class="flow-date">3月1日</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- FAB -->
+      <div class="page-fab">
+        <span class="material-icons-round">add</span>
+      </div>
+
+      <!-- Bottom Nav -->
+      <div class="bottom-nav">
+        <div class="nav-item">
+          <span class="material-icons-round">home</span>
+          <span class="nav-label">首页</span>
+        </div>
+        <div class="nav-item">
+          <span class="material-icons-round">folder_open</span>
+          <span class="nav-label">档案</span>
+        </div>
+        <div class="nav-item">
+          <div class="fab">
+            <span class="material-icons-round">add</span>
+          </div>
+          <span class="nav-label">快速记录</span>
+        </div>
+        <div class="nav-item active">
+          <span class="material-icons-round">account_balance_wallet</span>
+          <span class="nav-label">财务</span>
+        </div>
+        <div class="nav-item">
+          <span class="material-icons-round">person</span>
+          <span class="nav-label">我的</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

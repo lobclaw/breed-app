@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>快速监测日志 — R-19 发情观察</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+  background: #f0eaec;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 20px;
+  min-height: 100vh;
+  gap: 40px;
+}
+
+.phone-frame {
+  width: 375px;
+  height: 812px;
+  border-radius: 44px;
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05);
+}
+
+.phone-screen {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.phone-screen::-webkit-scrollbar { display: none; }
+
+/* ==================== LIGHT MODE ==================== */
+.light {
+  --primary: #ea3e77;
+  --primary-soft: #fff0f2;
+  --bg: #fdf8f9;
+  --card: #FFFFFF;
+  --card-dim: #FFF0E8;
+  --text-1: #1a1a2e;
+  --text-2: #8B7355;
+  --text-3: #B8A08A;
+  --text-4: #D8CBBD;
+  --amber: #e89b3e;
+  --amber-soft: #fff9f0;
+  --red: #e05252;
+  --red-soft: #fff0f0;
+  --green: #3dae6f;
+  --green-soft: #f0fff4;
+  --blue: #4a8dd4;
+  --blue-soft: #f0f7ff;
+  --plum: #8668b0;
+  --plum-soft: #f5f0ff;
+  --rose: #ea3e77;
+  --rose-soft: #fff0f2;
+  --teal: #3da8a0;
+  --teal-soft: #f0fffe;
+  --shadow: 0 2px 12px rgba(234, 62, 119, 0.06);
+  --shadow-lg: 0 6px 24px rgba(234, 62, 119, 0.1);
+  --nav-bg: rgba(255,255,255,0.85);
+  --nav-border: rgba(234, 62, 119, 0.08);
+  background: var(--bg);
+}
+
+/* ==================== STATUS BAR ==================== */
+.status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 28px 0;
+  height: 50px;
+  color: var(--text-1);
+  font-size: 15px;
+  font-weight: 600;
+}
+.status-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.status-bar-right .material-icons-round { font-size: 16px; }
+
+/* ==================== TOP BAR ==================== */
+.top-bar {
+  padding: 8px 20px 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.back-btn {
+  background: none;
+  border: none;
+  color: var(--text-1);
+  cursor: pointer;
+  padding: 4px 0 0 0;
+  display: flex;
+  align-items: center;
+  transition: transform 0.12s ease;
+}
+.back-btn:active { transform: scale(0.85); }
+.back-btn .material-icons-round { font-size: 24px; }
+.top-bar-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.top-bar-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-1);
+  line-height: 1.3;
+}
+.top-bar-subtitle {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-3);
+  line-height: 1.3;
+}
+
+/* ==================== DOG SELECT CARD ==================== */
+.dog-select-card {
+  margin: 0 20px 12px;
+  background: var(--card);
+  border-radius: 16px;
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  position: relative;
+  overflow: hidden;
+}
+.dog-select-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  border-radius: 16px;
+  pointer-events: none;
+}
+.dog-select-card.card-plum::before { background: linear-gradient(135deg, var(--plum-soft) 0%, transparent 40%); }
+.dog-select-card.card-rose::before { background: linear-gradient(135deg, var(--rose-soft) 0%, transparent 40%); }
+.dog-select-card > * { position: relative; z-index: 1; }
+.dog-select-card:active { transform: scale(0.975); box-shadow: 0 1px 6px rgba(234,62,119,0.04); }
+.dog-select-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.dog-select-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.dog-select-avatar.avatar-plum { background: linear-gradient(135deg, #8668b0, #ea3e77); }
+.dog-select-avatar.avatar-rose { background: linear-gradient(135deg, #ea3e77, #e89b3e); }
+.dog-select-avatar .material-icons-round { font-size: 22px; color: #fff; }
+.dog-select-detail { display: flex; flex-direction: column; gap: 2px; }
+.dog-select-name { font-size: 15px; font-weight: 700; color: var(--text-1); }
+.dog-select-meta { font-size: 12px; font-weight: 500; color: var(--text-3); }
+.dog-select-card .chevron {
+  color: var(--text-4);
+  font-size: 20px;
+}
+
+/* ==================== CONTENT ==================== */
+.content {
+  padding: 0 20px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ==================== SECTION LABEL ==================== */
+.section-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-3);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-label::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+/* Default dot color (rose) */
+.section-label::before { background: var(--rose); }
+/* Plum dot for medication page */
+.plum-dot::before { background: var(--plum) !important; }
+/* Rose dot for heat page */
+.rose-dot::before { background: var(--rose) !important; }
+
+/* ==================== CARD (generic) ==================== */
+.monitor-card {
+  background: var(--card);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: var(--shadow);
+  position: relative;
+  overflow: hidden;
+}
+.monitor-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 16px;
+  pointer-events: none;
+}
+.monitor-card > * {
+  position: relative;
+  z-index: 1;
+}
+.card-plum::before { background: linear-gradient(135deg, var(--plum-soft) 0%, transparent 40%); }
+.card-rose::before { background: linear-gradient(135deg, var(--rose-soft) 0%, transparent 40%); }
+
+/* ==================== PROGRESS RING ==================== */
+.progress-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.progress-ring-wrapper {
+  position: relative;
+  width: 80px;
+  height: 80px;
+}
+.progress-ring-wrapper svg {
+  width: 80px;
+  height: 80px;
+  transform: rotate(-90deg);
+}
+.progress-ring-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  line-height: 1;
+}
+.progress-ring-value {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--plum);
+}
+.progress-ring-unit {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-3);
+  display: block;
+  margin-top: 2px;
+}
+.progress-dates {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+
+/* ==================== MEDICATION CARD ==================== */
+.med-info-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.med-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.med-detail {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+.med-last {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-3);
+  margin-top: 6px;
+}
+.med-last .check-done {
+  color: var(--green);
+  font-size: 14px;
+}
+
+/* ==================== SYMPTOM GRID ==================== */
+.symptom-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.symptom-chip {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  border-radius: 14px;
+  background: var(--card-dim);
+  border: none;
+  cursor: pointer;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-2);
+  transition: all 0.12s ease;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.symptom-chip:active {
+  transform: scale(0.94);
+  filter: brightness(0.95);
+}
+.symptom-chip .check-icon {
+  display: none;
+  font-size: 16px;
+}
+.symptom-chip.selected {
+  font-weight: 600;
+}
+/* Plum selected */
+.symptom-chip.selected.sel-plum {
+  background: var(--plum-soft);
+  color: var(--plum);
+}
+.symptom-chip.selected.sel-plum .check-icon {
+  display: inline;
+  color: var(--plum);
+}
+/* Primary/rose selected */
+.symptom-chip.selected.sel-rose {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+.symptom-chip.selected.sel-rose .check-icon {
+  display: inline;
+  color: var(--primary);
+}
+
+/* ==================== SEGMENTED CONTROL ==================== */
+.segmented-control {
+  display: flex;
+  gap: 8px;
+}
+.segment-btn {
+  flex: 1;
+  height: 48px;
+  border-radius: 14px;
+  border: none;
+  cursor: pointer;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.15s ease;
+  background: var(--card-dim);
+  color: var(--text-2);
+  -webkit-tap-highlight-color: transparent;
+}
+.segment-btn:active {
+  transform: scale(0.94);
+  filter: brightness(0.95);
+}
+.segment-btn.active {
+  background: var(--rose);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(234, 62, 119, 0.25);
+}
+
+/* ==================== NOTES TEXTAREA ==================== */
+.notes-textarea {
+  width: 100%;
+  min-height: 60px;
+  padding: 12px 14px;
+  border: 1.5px solid var(--text-4);
+  border-radius: 14px;
+  background: var(--card);
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-1);
+  outline: none;
+  resize: vertical;
+  transition: border-color 0.15s ease;
+}
+.notes-textarea::placeholder {
+  color: var(--text-3);
+  font-weight: 400;
+}
+.notes-textarea:focus {
+  border-color: var(--primary);
+}
+
+/* ==================== BOTTOM AREA ==================== */
+.bottom-area {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 4px;
+}
+.save-btn {
+  width: 100%;
+  height: 48px;
+  border-radius: 999px;
+  color: #fff;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+.save-btn:active {
+  transform: scale(0.94);
+  opacity: 0.85;
+}
+.save-btn.btn-plum {
+  background: var(--plum);
+  box-shadow: 0 4px 16px rgba(134, 104, 176, 0.3);
+}
+.save-btn.btn-rose {
+  background: var(--rose);
+  box-shadow: 0 4px 16px rgba(234, 62, 119, 0.25);
+}
+
+.time-display {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: opacity 0.12s ease;
+}
+.time-display:active { opacity: 0.7; }
+.time-display .material-icons-round { font-size: 14px; }
+
+/* ==================== MINI TIMELINE (Medication) ==================== */
+.mini-timeline {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 0 0;
+}
+.timeline-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.timeline-day-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+.timeline-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--text-4);
+  background: transparent;
+}
+.timeline-dot.completed {
+  background: var(--green);
+  border-color: var(--green);
+}
+.timeline-dot.today {
+  border-color: var(--plum);
+  background: transparent;
+  box-shadow: 0 0 0 2px rgba(134, 104, 176, 0.2);
+}
+.timeline-dot.future {
+  border-color: var(--text-4);
+  background: transparent;
+}
+
+/* ==================== HEAT CONTEXT CARD ==================== */
+.heat-context {
+  background: var(--card);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  position: relative;
+}
+.heat-context::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: linear-gradient(135deg, var(--rose-soft) 0%, transparent 35%);
+  pointer-events: none;
+  border-radius: 16px;
+}
+.heat-context > * { position: relative; z-index: 1; }
+
+/* Top row: last observation */
+.heat-ctx-last {
+  padding: 14px 16px 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.heat-ctx-icon {
+  width: 34px; height: 34px; border-radius: 10px;
+  background: #FFD4DE;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.heat-ctx-icon .material-icons-round { font-size: 17px; color: var(--rose); }
+.heat-ctx-info { flex: 1; }
+.heat-ctx-label { font-size: 11px; font-weight: 600; color: var(--text-3); }
+.heat-ctx-value { font-size: 13px; font-weight: 600; color: var(--text-1); margin-top: 1px; }
+
+/* Timeline strip */
+.heat-strip {
+  padding: 8px 16px 10px;
+  display: flex;
+  align-items: flex-end;
+  gap: 0;
+}
+.heat-strip-day {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+.heat-strip-bar {
+  width: 100%;
+  height: 22px;
+  border-radius: 4px;
+  position: relative;
+  transition: all 0.2s ease;
+}
+.heat-strip-day:first-child .heat-strip-bar { border-radius: 4px 0 0 4px; }
+.heat-strip-day:last-child .heat-strip-bar { border-radius: 0 4px 4px 0; }
+.bar-bleed { background: rgba(224, 82, 82, 0.18); }
+.bar-transition { background: rgba(234, 62, 119, 0.15); }
+.bar-current {
+  background: linear-gradient(135deg, var(--rose), var(--amber));
+  box-shadow: 0 2px 8px rgba(234, 62, 119, 0.3);
+}
+.bar-current-dot {
+  position: absolute;
+  top: -3px; right: -3px;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--rose);
+}
+.heat-strip-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-4);
+}
+.heat-strip-day:last-child .heat-strip-label {
+  color: var(--rose);
+  font-weight: 700;
+}
+
+/* Legend row */
+.heat-legend {
+  padding: 0 16px 12px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.heat-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.heat-legend-dot {
+  width: 8px; height: 8px; border-radius: 2px;
+}
+.legend-bleed { background: rgba(224, 82, 82, 0.35); }
+.legend-transition { background: rgba(234, 62, 119, 0.3); }
+.legend-today { background: linear-gradient(135deg, var(--rose), var(--amber)); }
+
+/* Tip row */
+.heat-ctx-tip {
+  padding: 10px 16px;
+  border-top: 1px solid rgba(216, 203, 189, 0.15);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--amber);
+}
+
+/* ==================== INFO CARD ==================== */
+.info-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+.info-card.amber-card {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+</style>
+</head>
+<body>
+
+<!-- 用药打卡已删除：用药合规打卡通过首页 H-S4 连续用药卡片 + H-3 简单任务完成表单覆盖 -->
+
+<!-- ================================================================== -->
+<!-- R-19 发情期观察（快速监测日志模式）                                  -->
+<!-- ================================================================== -->
+<div class="phone-frame">
+  <div class="phone-screen light">
+
+    <!-- Status Bar -->
+    <div class="status-bar">
+      <span>14:30</span>
+      <div class="status-bar-right">
+        <span class="material-icons-round">signal_cellular_alt</span>
+        <span class="material-icons-round">wifi</span>
+        <span class="material-icons-round">battery_full</span>
+      </div>
+    </div>
+
+    <!-- Top Bar -->
+    <div class="top-bar">
+      <button class="back-btn">
+        <span class="material-icons-round">arrow_back_ios_new</span>
+      </button>
+      <div class="top-bar-text">
+        <div class="top-bar-title">录入发情观察</div>
+        <div class="top-bar-subtitle">发情第12天 · 2026-03-13 开始</div>
+      </div>
+    </div>
+
+    <!-- 犬只选择卡片（智能预填：当前发情中的犬，点击可切换） -->
+    <div class="dog-select-card card-rose" onclick="alert('切换犬只')">
+      <div class="dog-select-info">
+        <div class="dog-select-avatar avatar-rose">
+          <span class="material-icons-round">pets</span>
+        </div>
+        <div class="dog-select-detail">
+          <div class="dog-select-name">大米</div>
+          <div class="dog-select-meta">马尔济斯 · 种母 · 发情第12天</div>
+        </div>
+      </div>
+      <span class="material-icons-round chevron">chevron_right</span>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+
+      <!-- 发情上下文卡片：上次对比 + 时间线 + 配种提示 -->
+      <div class="heat-context">
+        <!-- 上次观察 -->
+        <div class="heat-ctx-last">
+          <div class="heat-ctx-icon">
+            <span class="material-icons-round">history</span>
+          </div>
+          <div class="heat-ctx-info">
+            <div class="heat-ctx-label">上次观察 · 昨天 08:00</div>
+            <div class="heat-ctx-value">外阴硬/肿胀 · 分泌物鲜红</div>
+          </div>
+        </div>
+
+        <!-- 时间线条形图 -->
+        <div class="heat-strip">
+          <div class="heat-strip-day">
+            <div class="heat-strip-bar bar-bleed"></div>
+            <span class="heat-strip-label">D8</span>
+          </div>
+          <div class="heat-strip-day">
+            <div class="heat-strip-bar bar-bleed"></div>
+            <span class="heat-strip-label">D9</span>
+          </div>
+          <div class="heat-strip-day">
+            <div class="heat-strip-bar bar-bleed"></div>
+            <span class="heat-strip-label">D10</span>
+          </div>
+          <div class="heat-strip-day">
+            <div class="heat-strip-bar bar-transition"></div>
+            <span class="heat-strip-label">D11</span>
+          </div>
+          <div class="heat-strip-day">
+            <div class="heat-strip-bar bar-current">
+              <div class="bar-current-dot"></div>
+            </div>
+            <span class="heat-strip-label">D12</span>
+          </div>
+        </div>
+
+        <!-- 图例 -->
+        <div class="heat-legend">
+          <div class="heat-legend-item">
+            <div class="heat-legend-dot legend-bleed"></div>
+            <span>出血期</span>
+          </div>
+          <div class="heat-legend-item">
+            <div class="heat-legend-dot legend-transition"></div>
+            <span>过渡期</span>
+          </div>
+          <div class="heat-legend-item">
+            <div class="heat-legend-dot legend-today"></div>
+            <span>今天</span>
+          </div>
+        </div>
+
+        <!-- 配种窗口提示 -->
+        <div class="heat-ctx-tip">
+          <span class="material-icons-round" style="font-size:16px">info_outline</span>
+          <span>发情第10-14天是最佳配种窗口</span>
+        </div>
+      </div>
+
+      <!-- Segmented Control: 外阴状态 -->
+      <div>
+        <div class="section-label rose-dot">外阴状态</div>
+        <div class="segmented-control">
+          <button class="segment-btn" onclick="selectSegment(this)">硬/肿胀</button>
+          <button class="segment-btn active" onclick="selectSegment(this)">开始软化</button>
+          <button class="segment-btn" onclick="selectSegment(this)">完全松软</button>
+        </div>
+      </div>
+
+      <!-- Symptom Checklist: 发情征兆 -->
+      <div>
+        <div class="section-label rose-dot">观察到的征兆</div>
+        <div class="symptom-grid">
+          <button class="symptom-chip sel-rose selected" onclick="toggleChip(this)">
+            <span class="material-icons-round check-icon">check</span>
+            <span>外阴肿胀</span>
+          </button>
+          <button class="symptom-chip sel-rose" onclick="toggleChip(this)">
+            <span class="material-icons-round check-icon">check</span>
+            <span>出血量增加</span>
+          </button>
+          <button class="symptom-chip sel-rose" onclick="toggleChip(this)">
+            <span class="material-icons-round check-icon">check</span>
+            <span>出血量减少</span>
+          </button>
+          <button class="symptom-chip sel-rose selected" onclick="toggleChip(this)">
+            <span class="material-icons-round check-icon">check</span>
+            <span>主动翘尾</span>
+          </button>
+          <button class="symptom-chip sel-rose" onclick="toggleChip(this)">
+            <span class="material-icons-round check-icon">check</span>
+            <span>接受爬跨</span>
+          </button>
+          <button class="symptom-chip sel-rose" onclick="toggleChip(this)">
+            <span class="material-icons-round check-icon">check</span>
+            <span>频繁排尿</span>
+          </button>
+          <button class="symptom-chip sel-rose" onclick="toggleChip(this)">
+            <span class="material-icons-round check-icon">check</span>
+            <span>行为烦躁</span>
+          </button>
+          <button class="symptom-chip sel-rose" onclick="toggleChip(this)">
+            <span class="material-icons-round check-icon">check</span>
+            <span>食欲变化</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Notes -->
+      <div>
+        <div class="section-label rose-dot">补充说明<span style="font-weight:400; color: var(--text-3); margin-left: 4px;">（选填）</span></div>
+        <textarea class="notes-textarea" placeholder="补充观察到的其他情况..."></textarea>
+      </div>
+
+      <!-- Bottom Area -->
+      <div class="bottom-area">
+        <button class="save-btn btn-rose">保存记录</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+function toggleChip(el) {
+  el.classList.toggle('selected');
+}
+
+function selectSegment(el) {
+  const siblings = el.parentElement.querySelectorAll('.segment-btn');
+  siblings.forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,63 @@
+{
+  "bsonType": "object",
+  "required": ["name", "creator_id"],
+  "permission": {
+    "read": true,
+    "create": true,
+    "update": true,
+    "delete": true
+  },
+  "properties": {
+    "_id": {
+      "description": "家庭ID"
+    },
+    "name": {
+      "bsonType": "string",
+      "description": "家庭名称"
+    },
+    "creator_id": {
+      "bsonType": "string",
+      "description": "创建人用户ID"
+    },
+    "members": {
+      "bsonType": "array",
+      "description": "成员列表",
+      "items": {
+        "bsonType": "object",
+        "properties": {
+          "user_id": {
+            "bsonType": "string",
+            "description": "成员用户ID"
+          },
+          "role": {
+            "bsonType": "string",
+            "description": "成员角色（owner/member/viewer）"
+          },
+          "joined_at": {
+            "bsonType": "number",
+            "description": "加入时间（时间戳毫秒）"
+          }
+        }
+      }
+    },
+    "care_rules": {
+      "bsonType": "array",
+      "description": "看护规则列表",
+      "items": {
+        "bsonType": "object"
+      }
+    },
+    "settings": {
+      "bsonType": "object",
+      "description": "家庭设置"
+    },
+    "created_at": {
+      "bsonType": "number",
+      "description": "创建时间（时间戳毫秒）"
+    },
+    "updated_at": {
+      "bsonType": "number",
+      "description": "更新时间（时间戳毫秒）"
+    }
+  }
+}

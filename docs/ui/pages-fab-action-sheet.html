@@ -1,0 +1,1231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Breed App — FAB Action Sheet</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: #f0eaec;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 48px;
+  padding: 40px 20px;
+  min-height: 100vh;
+}
+.frame-label {
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+  color: #6b6880;
+}
+
+.phone-frame {
+  width: 375px;
+  height: 812px;
+  border-radius: 44px;
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05);
+}
+
+.phone-screen {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ==================== LIGHT MODE ==================== */
+.light {
+  --primary: #ea3e77;
+  --primary-soft: #fff0f2;
+  --bg: #fdf8f9;
+  --card: #FFFFFF;
+  --card-dim: #FFF0E8;
+  --text-1: #1a1a2e;
+  --text-2: #8B7355;
+  --text-3: #B8A08A;
+  --text-4: #D8CBBD;
+  --amber: #e89b3e;
+  --amber-soft: #fff9f0;
+  --red: #e05252;
+  --red-soft: #fff0f0;
+  --green: #3dae6f;
+  --green-soft: #f0fff4;
+  --blue: #4a8dd4;
+  --blue-soft: #f0f7ff;
+  --plum: #8668b0;
+  --plum-soft: #f5f0ff;
+  --rose: #ea3e77;
+  --rose-soft: #fff0f2;
+  --teal: #3da8a0;
+  --teal-soft: #f0fffe;
+  --shadow: 0 2px 12px rgba(234, 62, 119, 0.06);
+  --shadow-lg: 0 6px 24px rgba(234, 62, 119, 0.1);
+  --nav-bg: rgba(255,255,255,0.85);
+  --nav-border: rgba(234, 62, 119, 0.08);
+  --status-bar-color: #1a1a2e;
+  background: var(--bg);
+}
+
+/* ==================== STATUS BAR ==================== */
+.status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 28px 0;
+  height: 50px;
+  color: var(--status-bar-color);
+  font-size: 15px;
+  font-weight: 600;
+}
+.status-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.status-bar-right .material-icons-round { font-size: 16px; }
+
+/* ==================== HEADER ==================== */
+.header {
+  padding: 12px 20px 0;
+}
+.header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.greeting-text h1 {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--text-1);
+  line-height: 1.3;
+}
+.greeting-sub {
+  font-size: 13px;
+  color: var(--text-2);
+  margin-top: 2px;
+}
+.avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ea3e77, #e89b3e);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.avatar .material-icons-round {
+  color: white;
+  font-size: 22px;
+}
+
+/* Summary pills */
+.summary-pills {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  padding-bottom: 16px;
+}
+.pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 16px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.pill .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.pill .num {
+  font-size: 18px;
+  font-weight: 800;
+}
+.pill-red { background: var(--red-soft); color: var(--red); }
+.pill-red .dot { background: var(--red); }
+.pill-amber { background: var(--amber-soft); color: var(--amber); }
+.pill-amber .dot { background: var(--amber); }
+.pill-dim { background: var(--card-dim); color: var(--text-3); }
+.pill-dim .dot { background: var(--text-3); }
+
+/* ==================== 7-DAY STRIP ==================== */
+.day-strip {
+  display: flex;
+  gap: 0;
+  padding: 0 20px 16px;
+  justify-content: space-between;
+}
+.day-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 40px;
+}
+.day-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+.day-num {
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.day-cell.today .day-num {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 3px 12px rgba(234, 62, 119, 0.3);
+}
+.day-cell.today .day-label { color: var(--primary); font-weight: 700; }
+.event-dots {
+  display: flex;
+  gap: 3px;
+  height: 6px;
+  align-items: center;
+}
+.event-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+}
+.event-dot.red { background: var(--red); }
+.event-dot.amber { background: var(--amber); }
+.event-dot.green { background: var(--green); }
+.event-dot.gray { background: var(--text-4); }
+
+/* ==================== BOTTOM NAV ==================== */
+.bottom-nav {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 84px;
+  background: var(--nav-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 0.5px solid var(--nav-border);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-around;
+  padding-top: 8px;
+  z-index: 10;
+}
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 50px;
+  position: relative;
+}
+.nav-item .material-icons-round { font-size: 24px; color: var(--text-3); }
+.nav-item .nav-label { font-size: 10px; font-weight: 600; color: var(--text-3); }
+.nav-item.active .material-icons-round { color: var(--primary); }
+.nav-item.active .nav-label { color: var(--primary); }
+.fab {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ea3e77, #e89b3e);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: -10px;
+  box-shadow: 0 4px 16px rgba(234, 62, 119, 0.3);
+  position: relative;
+}
+.fab .material-icons-round { font-size: 28px; color: #fff; }
+
+/* ==================== OVERLAY ==================== */
+.overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(26,26,46,.35);
+  z-index: 20;
+  cursor: pointer;
+}
+
+/* ==================== ACTION SHEET ==================== */
+.action-sheet {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--card);
+  border-radius: 24px 24px 0 0;
+  z-index: 30;
+  padding: 12px 20px 34px;
+  box-shadow: 0 -6px 30px rgba(234, 62, 119, 0.1);
+}
+
+.handle-bar {
+  width: 36px;
+  height: 4px;
+  background: var(--text-4);
+  border-radius: 2px;
+  margin: 4px auto 12px;
+}
+
+/* Section titles inside sheet */
+.sheet-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-3);
+  letter-spacing: 0.5px;
+  margin-bottom: 10px;
+}
+
+/* ==================== RECOMMENDATION CARDS ==================== */
+.rec-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-bottom: 20px;
+}
+
+.rec-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 0.5px solid var(--card-dim);
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.rec-card:last-child {
+  border-bottom: none;
+}
+.rec-card:active {
+  background: var(--bg);
+  border-radius: 12px;
+  margin: 0 -8px;
+  padding: 14px 8px;
+}
+
+/* Left icon circle */
+.rec-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.rec-icon .material-icons-round {
+  font-size: 20px;
+}
+.rec-icon.blue { background: #D4E8F8; }
+.rec-icon.blue .material-icons-round { color: var(--blue); }
+.rec-icon.green { background: #D0F0DC; }
+.rec-icon.green .material-icons-round { color: var(--green); }
+.rec-icon.teal { background: #D0F0EC; }
+.rec-icon.teal .material-icons-round { color: var(--teal); }
+.rec-icon.red { background: #FFD9D4; }
+.rec-icon.red .material-icons-round { color: var(--red); }
+
+/* Middle text */
+.rec-text {
+  flex: 1;
+  min-width: 0;
+}
+.rec-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+  line-height: 1.3;
+}
+.rec-sub {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+
+/* Right side: tag + chevron */
+.rec-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.rec-tag {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.rec-tag.amber { background: var(--amber-soft); color: var(--amber); }
+.rec-tag.dim { background: var(--card-dim); color: var(--text-3); }
+.rec-tag.green { background: var(--green-soft); color: var(--green); }
+.rec-chevron {
+  color: var(--text-4);
+  font-size: 20px;
+  line-height: 1;
+}
+
+/* Left border accent removed — icon color is sufficient */
+
+/* ==================== QUICK ACTION BUTTONS ==================== */
+.quick-actions {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.quick-action-btn {
+  flex: 1;
+  height: 76px;
+  background: var(--card-dim);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: transform 0.12s ease, filter 0.12s ease;
+}
+.quick-action-btn:active {
+  transform: scale(0.94);
+  filter: brightness(0.95);
+}
+.qa-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.qa-icon .material-icons-round {
+  font-size: 18px;
+}
+.qa-icon.green { background: #D0F0DC; }
+.qa-icon.green .material-icons-round { color: var(--green); }
+.qa-icon.blue { background: #D4E8F8; }
+.qa-icon.blue .material-icons-round { color: var(--blue); }
+.qa-icon.teal { background: #D0F0EC; }
+.qa-icon.teal .material-icons-round { color: var(--teal); }
+
+.qa-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+/* ==================== FOOTER LINK ==================== */
+.sheet-footer-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--primary);
+  cursor: pointer;
+  padding: 12px 0;
+  border: 1.5px solid var(--primary);
+  border-radius: 999px;
+  transition: all 0.12s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.sheet-footer-link:active {
+  transform: scale(0.96);
+  background: var(--primary-soft);
+}
+.sheet-footer-link .material-icons-round {
+  font-size: 16px;
+}
+
+/* ==================== FINANCE BACKGROUND ==================== */
+.finance-bg {
+  padding: 0 20px;
+}
+.finance-header {
+  padding: 12px 0 0;
+}
+.finance-header h1 {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--text-1);
+  line-height: 1.3;
+}
+.finance-sub {
+  font-size: 13px;
+  color: var(--text-2);
+  margin-top: 2px;
+}
+
+/* Finance summary card */
+.finance-summary {
+  background: var(--card);
+  border-radius: 16px;
+  padding: 18px;
+  margin-top: 16px;
+  box-shadow: var(--shadow);
+}
+.finance-total-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.finance-total-num {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--text-1);
+  margin-top: 4px;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+}
+.finance-row {
+  display: flex;
+  gap: 16px;
+  margin-top: 14px;
+}
+.finance-item {
+  flex: 1;
+  background: var(--card-dim);
+  border-radius: 12px;
+  padding: 10px 14px;
+}
+.finance-item-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.finance-item-num {
+  font-size: 16px;
+  font-weight: 800;
+  margin-top: 2px;
+}
+.finance-item-num.expense { color: var(--green); }
+.finance-item-num.income { color: var(--red); }
+
+/* Finance tabs */
+.finance-tabs {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+.finance-tab {
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-3);
+  background: transparent;
+}
+.finance-tab.active {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+/* Finance list items */
+.finance-list {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.finance-list-item {
+  background: var(--card);
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: var(--shadow);
+}
+.fl-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.fl-icon .material-icons-round { font-size: 18px; }
+.fl-icon.green { background: #D0F0DC; }
+.fl-icon.green .material-icons-round { color: var(--green); }
+.fl-text { flex: 1; }
+.fl-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.fl-sub {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 1px;
+}
+.fl-amount {
+  font-size: 15px;
+  font-weight: 800;
+}
+.fl-amount.expense { color: var(--green); }
+
+/* ==================== WRAPPER ==================== */
+.phone-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* ==================== SEPARATOR ==================== */
+.sheet-separator {
+  height: 0.5px;
+  background: var(--card-dim);
+  margin: 4px 0 16px;
+}
+</style>
+</head>
+<body>
+
+<!-- ==================== FRAME 1: HOME + ACTION SHEET ==================== -->
+<div class="phone-wrapper">
+  <div class="frame-label">FAB Action Sheet (Home)</div>
+  <div class="phone-frame light">
+    <div class="phone-screen">
+
+      <!-- ===== Background: Home Screen (dimmed) ===== -->
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="status-bar-right">
+          <span class="material-icons-round">signal_cellular_alt</span>
+          <span class="material-icons-round">wifi</span>
+          <span class="material-icons-round">battery_full</span>
+        </div>
+      </div>
+
+      <div class="header">
+        <div class="header-top">
+          <div class="greeting-text">
+            <h1>早上好，小李</h1>
+            <div class="greeting-sub">3月25日 · 周三</div>
+          </div>
+          <div class="avatar">
+            <span class="material-icons-round">pets</span>
+          </div>
+        </div>
+        <div class="summary-pills">
+          <div class="pill pill-red"><div class="dot"></div>需处理 <span class="num">2</span></div>
+          <div class="pill pill-amber"><div class="dot"></div>今日 <span class="num">7</span></div>
+          <div class="pill pill-dim"><div class="dot"></div>本周 <span class="num">12</span></div>
+        </div>
+      </div>
+
+      <div class="day-strip">
+        <div class="day-cell"><div class="day-label">日</div><div class="day-num">22</div><div class="event-dots"><div class="event-dot gray"></div></div></div>
+        <div class="day-cell"><div class="day-label">一</div><div class="day-num">23</div><div class="event-dots"><div class="event-dot amber"></div></div></div>
+        <div class="day-cell"><div class="day-label">二</div><div class="day-num">24</div><div class="event-dots"><div class="event-dot green"></div><div class="event-dot red"></div></div></div>
+        <div class="day-cell today"><div class="day-label">三</div><div class="day-num">25</div><div class="event-dots"><div class="event-dot red"></div><div class="event-dot amber"></div><div class="event-dot green"></div></div></div>
+        <div class="day-cell"><div class="day-label">四</div><div class="day-num">26</div><div class="event-dots"><div class="event-dot amber"></div></div></div>
+        <div class="day-cell"><div class="day-label">五</div><div class="day-num">27</div><div class="event-dots"><div class="event-dot gray"></div></div></div>
+        <div class="day-cell"><div class="day-label">六</div><div class="day-num">28</div><div class="event-dots"></div></div>
+      </div>
+
+      <!-- Bottom Nav (visible under overlay) -->
+      <div class="bottom-nav">
+        <div class="nav-item active">
+          <span class="material-icons-round">home</span>
+          <span class="nav-label">首页</span>
+        </div>
+        <div class="nav-item">
+          <span class="material-icons-round">pets</span>
+          <span class="nav-label">犬只</span>
+        </div>
+        <div class="nav-item">
+          <div class="fab">
+            <span class="material-icons-round">add</span>
+          </div>
+        </div>
+        <div class="nav-item">
+          <span class="material-icons-round">account_balance_wallet</span>
+          <span class="nav-label">财务</span>
+        </div>
+        <div class="nav-item">
+          <span class="material-icons-round">person</span>
+          <span class="nav-label">我的</span>
+        </div>
+      </div>
+
+      <!-- ===== Overlay ===== -->
+      <div class="overlay" onclick="toggleSheet('sheet1')"></div>
+
+      <!-- ===== Action Sheet ===== -->
+      <div class="action-sheet" id="sheet1">
+        <div class="handle-bar"></div>
+
+        <!-- Smart Recommendations -->
+        <div class="sheet-section-title">智能推荐</div>
+        <div class="rec-list">
+          <!-- Rec 1: Vaccine from today's todo -->
+          <div class="rec-card" onclick="alert('豆豆第3窝 · 第二针疫苗')">
+            <div class="rec-icon blue">
+              <span class="material-icons-round">vaccines</span>
+            </div>
+            <div class="rec-text">
+              <div class="rec-title">豆豆第3窝 · 第二针疫苗</div>
+              <div class="rec-sub">今日待办 · 点击直接录入</div>
+            </div>
+            <div class="rec-right">
+              <span class="rec-tag amber">待办</span>
+              <span class="material-icons-round rec-chevron">chevron_right</span>
+            </div>
+          </div>
+
+          <!-- Rec 2: Expense — most used -->
+          <div class="rec-card" onclick="alert('支出录入')">
+            <div class="rec-icon green">
+              <span class="material-icons-round">payments</span>
+            </div>
+            <div class="rec-text">
+              <div class="rec-title">支出录入</div>
+              <div class="rec-sub">最近常用</div>
+            </div>
+            <div class="rec-right">
+              <span class="rec-tag dim">常用</span>
+              <span class="material-icons-round rec-chevron">chevron_right</span>
+            </div>
+          </div>
+
+          <!-- Rec 3: Weight — 3 days ago -->
+          <div class="rec-card" onclick="alert('花花第3窝 · 记录体重')">
+            <div class="rec-icon teal">
+              <span class="material-icons-round">monitor_weight</span>
+            </div>
+            <div class="rec-text">
+              <div class="rec-title">花花第3窝 · 记录体重</div>
+              <div class="rec-sub">上次记录 3 天前</div>
+            </div>
+            <div class="rec-right">
+              <span class="rec-tag green">建议</span>
+              <span class="material-icons-round rec-chevron">chevron_right</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="sheet-separator"></div>
+
+        <!-- Quick Actions -->
+        <div class="sheet-section-title">常用录入</div>
+        <div class="quick-actions">
+          <div class="quick-action-btn" onclick="alert('支出录入')">
+            <div class="qa-icon green">
+              <span class="material-icons-round">payments</span>
+            </div>
+            <div class="qa-label">支出</div>
+          </div>
+          <div class="quick-action-btn" onclick="alert('疫苗记录')">
+            <div class="qa-icon blue">
+              <span class="material-icons-round">vaccines</span>
+            </div>
+            <div class="qa-label">疫苗</div>
+          </div>
+          <div class="quick-action-btn" onclick="alert('驱虫记录')">
+            <div class="qa-icon teal">
+              <span class="material-icons-round">shield</span>
+            </div>
+            <div class="qa-label">驱虫</div>
+          </div>
+          <div class="quick-action-btn" onclick="alert('体重记录')">
+            <div class="qa-icon teal">
+              <span class="material-icons-round">monitor_weight</span>
+            </div>
+            <div class="qa-label">体重</div>
+          </div>
+        </div>
+
+        <div class="sheet-separator"></div>
+
+        <!-- Footer link -->
+        <div class="sheet-footer-link" onclick="alert('切换到全部记录类型视图')">
+          全部记录类型
+          <span class="material-icons-round">arrow_forward</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ==================== FRAME 2: FINANCE + ACTION SHEET ==================== -->
+<div class="phone-wrapper">
+  <div class="frame-label">FAB Action Sheet (Finance)</div>
+  <div class="phone-frame light">
+    <div class="phone-screen">
+
+      <!-- ===== Background: Finance Page (dimmed) ===== -->
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="status-bar-right">
+          <span class="material-icons-round">signal_cellular_alt</span>
+          <span class="material-icons-round">wifi</span>
+          <span class="material-icons-round">battery_full</span>
+        </div>
+      </div>
+
+      <div class="finance-bg">
+        <div class="finance-header">
+          <h1>财务</h1>
+          <div class="finance-sub">2026年3月</div>
+        </div>
+
+        <div class="finance-summary">
+          <div class="finance-total-label">本月总支出</div>
+          <div class="finance-total-num">¥ 12,480</div>
+          <div class="finance-row">
+            <div class="finance-item">
+              <div class="finance-item-label">支出</div>
+              <div class="finance-item-num expense">-¥ 12,480</div>
+            </div>
+            <div class="finance-item">
+              <div class="finance-item-label">收入</div>
+              <div class="finance-item-num income">+¥ 8,600</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="finance-tabs">
+          <div class="finance-tab active">全部</div>
+          <div class="finance-tab">支出</div>
+          <div class="finance-tab">收入</div>
+        </div>
+
+        <div class="finance-list">
+          <div class="finance-list-item">
+            <div class="fl-icon green">
+              <span class="material-icons-round">vaccines</span>
+            </div>
+            <div class="fl-text">
+              <div class="fl-title">疫苗费用</div>
+              <div class="fl-sub">豆豆第3窝 · 3月24日</div>
+            </div>
+            <div class="fl-amount expense">-¥ 320</div>
+          </div>
+          <div class="finance-list-item">
+            <div class="fl-icon green">
+              <span class="material-icons-round">restaurant</span>
+            </div>
+            <div class="fl-text">
+              <div class="fl-title">狗粮采购</div>
+              <div class="fl-sub">皇家奶糕 · 3月23日</div>
+            </div>
+            <div class="fl-amount expense">-¥ 580</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom Nav -->
+      <div class="bottom-nav">
+        <div class="nav-item">
+          <span class="material-icons-round">home</span>
+          <span class="nav-label">首页</span>
+        </div>
+        <div class="nav-item">
+          <span class="material-icons-round">pets</span>
+          <span class="nav-label">犬只</span>
+        </div>
+        <div class="nav-item">
+          <div class="fab">
+            <span class="material-icons-round">add</span>
+          </div>
+        </div>
+        <div class="nav-item active">
+          <span class="material-icons-round">account_balance_wallet</span>
+          <span class="nav-label">财务</span>
+        </div>
+        <div class="nav-item">
+          <span class="material-icons-round">person</span>
+          <span class="nav-label">我的</span>
+        </div>
+      </div>
+
+      <!-- ===== Overlay ===== -->
+      <div class="overlay" onclick="toggleSheet('sheet2')"></div>
+
+      <!-- ===== Action Sheet (contextual for Finance) ===== -->
+      <div class="action-sheet" id="sheet2">
+        <div class="handle-bar"></div>
+
+        <!-- Smart Recommendations (finance-contextual) -->
+        <div class="sheet-section-title">智能推荐</div>
+        <div class="rec-list">
+          <!-- Rec 1: Expense — most relevant on finance tab -->
+          <div class="rec-card" onclick="alert('支出录入')">
+            <div class="rec-icon green">
+              <span class="material-icons-round">payments</span>
+            </div>
+            <div class="rec-text">
+              <div class="rec-title">支出录入</div>
+              <div class="rec-sub">记录一笔支出</div>
+            </div>
+            <div class="rec-right">
+              <span class="material-icons-round rec-chevron">chevron_right</span>
+            </div>
+          </div>
+
+          <!-- Rec 2: Income -->
+          <div class="rec-card" onclick="alert('收入录入')">
+            <div class="rec-icon red">
+              <span class="material-icons-round">savings</span>
+            </div>
+            <div class="rec-text">
+              <div class="rec-title">收入录入</div>
+              <div class="rec-sub">手动录入收入</div>
+            </div>
+            <div class="rec-right">
+              <span class="material-icons-round rec-chevron">chevron_right</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="sheet-separator"></div>
+
+        <!-- Quick Actions (same 4 buttons) -->
+        <div class="sheet-section-title">常用录入</div>
+        <div class="quick-actions">
+          <div class="quick-action-btn" onclick="alert('支出录入')">
+            <div class="qa-icon green">
+              <span class="material-icons-round">payments</span>
+            </div>
+            <div class="qa-label">支出</div>
+          </div>
+          <div class="quick-action-btn" onclick="alert('疫苗记录')">
+            <div class="qa-icon blue">
+              <span class="material-icons-round">vaccines</span>
+            </div>
+            <div class="qa-label">疫苗</div>
+          </div>
+          <div class="quick-action-btn" onclick="alert('驱虫记录')">
+            <div class="qa-icon teal">
+              <span class="material-icons-round">shield</span>
+            </div>
+            <div class="qa-label">驱虫</div>
+          </div>
+          <div class="quick-action-btn" onclick="alert('体重记录')">
+            <div class="qa-icon teal">
+              <span class="material-icons-round">monitor_weight</span>
+            </div>
+            <div class="qa-label">体重</div>
+          </div>
+        </div>
+
+        <div class="sheet-separator"></div>
+
+        <!-- Footer link -->
+        <div class="sheet-footer-link" onclick="alert('切换到全部记录类型视图')">
+          全部记录类型
+          <span class="material-icons-round">arrow_forward</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ==================== FRAME 3: ACTION SHEET → 全部记录类型 ==================== -->
+<div class="phone-wrapper">
+  <div class="frame-label">FAB Sheet → 全部记录类型</div>
+  <div class="phone-frame light">
+    <div class="phone-screen">
+
+      <!-- Background (dimmed) -->
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="status-bar-right">
+          <span class="material-icons-round">signal_cellular_alt</span>
+          <span class="material-icons-round">wifi</span>
+          <span class="material-icons-round">battery_full</span>
+        </div>
+      </div>
+
+      <div class="header" style="opacity:0.15;">
+        <div class="header-top">
+          <div class="greeting-text">
+            <h1>早上好，小李</h1>
+            <div class="greeting-sub">3月26日 · 周四</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom Nav (under overlay) -->
+      <div class="bottom-nav">
+        <div class="nav-item active">
+          <span class="material-icons-round">home</span>
+          <span class="nav-label">首页</span>
+        </div>
+        <div class="nav-item">
+          <span class="material-icons-round">pets</span>
+          <span class="nav-label">犬只</span>
+        </div>
+        <div class="nav-item">
+          <div class="fab">
+            <span class="material-icons-round">add</span>
+          </div>
+        </div>
+        <div class="nav-item">
+          <span class="material-icons-round">account_balance_wallet</span>
+          <span class="nav-label">财务</span>
+        </div>
+        <div class="nav-item">
+          <span class="material-icons-round">person</span>
+          <span class="nav-label">我的</span>
+        </div>
+      </div>
+
+      <!-- Overlay -->
+      <div class="overlay"></div>
+
+      <!-- Action Sheet: 全部记录类型 view -->
+      <div class="action-sheet" style="padding: 12px 0 34px;">
+        <div class="handle-bar"></div>
+
+        <!-- Header with back -->
+        <div style="display:flex;align-items:center;gap:8px;padding:0 20px 12px;">
+          <button class="sheet-back-btn" onclick="alert('返回推荐视图')">
+            <span class="material-icons-round">arrow_back_ios_new</span>
+          </button>
+          <span style="font-size:15px;font-weight:700;color:var(--text-1);">全部记录类型</span>
+        </div>
+
+        <!-- Category Cards (scrollable within sheet) -->
+        <div style="padding:0 16px;display:flex;flex-direction:column;gap:12px;max-height:580px;overflow-y:auto;">
+
+          <!-- 繁育记录 -->
+          <div class="cat-card cat-rose">
+            <div class="cat-header">
+              <div class="cat-dot" style="background:var(--rose)"></div>
+              <span class="cat-title">繁育记录</span>
+              <span class="cat-badge">8</span>
+            </div>
+            <div class="cat-grid">
+              <div class="cat-item" onclick="alert('发情')">
+                <div class="cat-icon" style="background:#FFD4DE"><span class="material-icons-round" style="color:var(--rose)">whatshot</span></div>
+                <span class="cat-label">发情</span>
+              </div>
+              <div class="cat-item" onclick="alert('卵泡')">
+                <div class="cat-icon" style="background:#D0F0EC"><span class="material-icons-round" style="color:var(--teal)">biotech</span></div>
+                <span class="cat-label">卵泡</span>
+              </div>
+              <div class="cat-item" onclick="alert('配种')">
+                <div class="cat-icon" style="background:#FFD4DE"><span class="material-icons-round" style="color:var(--rose)">favorite</span></div>
+                <span class="cat-label">配种</span>
+              </div>
+              <div class="cat-item" onclick="alert('孕检')">
+                <div class="cat-icon" style="background:#D0F0DC"><span class="material-icons-round" style="color:var(--green)">stethoscope</span></div>
+                <span class="cat-label">孕检</span>
+              </div>
+              <div class="cat-item" onclick="alert('产检')">
+                <div class="cat-icon" style="background:#D4E8F8"><span class="material-icons-round" style="color:var(--blue)">assignment</span></div>
+                <span class="cat-label">产检</span>
+              </div>
+              <div class="cat-item" onclick="alert('临产')">
+                <div class="cat-icon" style="background:#E4D8F4"><span class="material-icons-round" style="color:var(--plum)">thermostat</span></div>
+                <span class="cat-label">临产</span>
+              </div>
+              <div class="cat-item" onclick="alert('生产')">
+                <div class="cat-icon" style="background:#FFD4DE"><span class="material-icons-round" style="color:var(--rose)">child_friendly</span></div>
+                <span class="cat-label">生产</span>
+              </div>
+              <div class="cat-item" onclick="alert('异常终止')">
+                <div class="cat-icon" style="background:#FFD9D4"><span class="material-icons-round" style="color:var(--red)">warning</span></div>
+                <span class="cat-label">异常终止</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 健康记录 -->
+          <div class="cat-card cat-green">
+            <div class="cat-header">
+              <div class="cat-dot" style="background:var(--green)"></div>
+              <span class="cat-title">健康记录</span>
+              <span class="cat-badge">4</span>
+            </div>
+            <div class="cat-grid">
+              <div class="cat-item" onclick="alert('疫苗')">
+                <div class="cat-icon" style="background:#D4E8F8"><span class="material-icons-round" style="color:var(--blue)">vaccines</span></div>
+                <span class="cat-label">疫苗</span>
+              </div>
+              <div class="cat-item" onclick="alert('驱虫')">
+                <div class="cat-icon" style="background:#D0F0EC"><span class="material-icons-round" style="color:var(--teal)">shield</span></div>
+                <span class="cat-label">驱虫</span>
+              </div>
+              <div class="cat-item" onclick="alert('疾病')">
+                <div class="cat-icon" style="background:#E4D8F4"><span class="material-icons-round" style="color:var(--plum)">sick</span></div>
+                <span class="cat-label">疾病</span>
+              </div>
+              <div class="cat-item" onclick="alert('用药')">
+                <div class="cat-icon" style="background:#E4D8F4"><span class="material-icons-round" style="color:var(--plum)">medication</span></div>
+                <span class="cat-label">用药</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 财务记录 -->
+          <div class="cat-card cat-amber">
+            <div class="cat-header">
+              <div class="cat-dot" style="background:var(--amber)"></div>
+              <span class="cat-title">财务记录</span>
+            </div>
+            <div class="cat-grid">
+              <div class="cat-item" onclick="alert('支出')">
+                <div class="cat-icon" style="background:#D0F0DC"><span class="material-icons-round" style="color:var(--green)">payments</span></div>
+                <span class="cat-label">支出</span>
+              </div>
+              <div class="cat-item" onclick="alert('收入')">
+                <div class="cat-icon" style="background:#FFD9D4"><span class="material-icons-round" style="color:var(--red)">account_balance</span></div>
+                <span class="cat-label">收入</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 其他 -->
+          <div class="cat-card cat-teal">
+            <div class="cat-header">
+              <div class="cat-dot" style="background:var(--teal)"></div>
+              <span class="cat-title">其他</span>
+            </div>
+            <div class="cat-grid">
+              <div class="cat-item" onclick="alert('体重')">
+                <div class="cat-icon" style="background:#D0F0EC"><span class="material-icons-round" style="color:var(--teal)">monitor_weight</span></div>
+                <span class="cat-label">体重</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<style>
+/* ==================== CATEGORY CARDS (inside action sheet) ==================== */
+.cat-card {
+  background: var(--card);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  position: relative;
+  border-left: 3.5px solid transparent;
+}
+.cat-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  border-radius: 16px;
+  pointer-events: none;
+}
+.cat-card > * { position: relative; z-index: 1; }
+.cat-card.cat-rose { border-left-color: var(--rose); }
+.cat-card.cat-rose::before { background: linear-gradient(135deg, var(--rose-soft) 0%, transparent 35%); }
+.cat-card.cat-green { border-left-color: var(--green); }
+.cat-card.cat-green::before { background: linear-gradient(135deg, var(--green-soft) 0%, transparent 35%); }
+.cat-card.cat-amber { border-left-color: var(--amber); }
+.cat-card.cat-amber::before { background: linear-gradient(135deg, var(--amber-soft) 0%, transparent 35%); }
+.cat-card.cat-teal { border-left-color: var(--teal); }
+.cat-card.cat-teal::before { background: linear-gradient(135deg, var(--teal-soft) 0%, transparent 35%); }
+
+.cat-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px 6px;
+}
+.cat-dot {
+  width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+}
+.cat-title {
+  font-size: 12px; font-weight: 700; color: var(--text-3); letter-spacing: 0.3px;
+}
+.cat-badge {
+  background: var(--card-dim); color: var(--text-2);
+  font-size: 11px; font-weight: 800;
+  padding: 1px 8px; border-radius: 999px; margin-left: auto;
+}
+
+.cat-grid {
+  padding: 4px 10px 12px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 2px;
+}
+.cat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 4px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.cat-item:active {
+  transform: scale(0.90);
+  background: rgba(234, 62, 119, 0.04);
+}
+.cat-icon {
+  width: 38px; height: 38px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+}
+.cat-icon .material-icons-round { font-size: 20px; }
+.cat-label {
+  font-size: 11px; font-weight: 600; color: var(--text-1);
+  text-align: center; line-height: 1.2;
+}
+
+/* Sheet back button */
+.sheet-back-btn {
+  width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: none; cursor: pointer;
+  color: var(--text-1); transition: background 0.12s ease;
+}
+.sheet-back-btn:active { background: var(--card-dim); }
+.sheet-back-btn .material-icons-round { font-size: 20px; }
+</style>
+
+<script>
+function toggleSheet(sheetId) {
+  var sheet = document.getElementById(sheetId);
+  var overlay = sheet.previousElementSibling;
+  if (sheet.style.display === 'none') {
+    sheet.style.display = '';
+    overlay.style.display = '';
+  } else {
+    sheet.style.display = 'none';
+    overlay.style.display = 'none';
+  }
+}
+</script>
+
+</body>
+</html>

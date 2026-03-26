@@ -1,0 +1,67 @@
+{
+  "bsonType": "object",
+  "required": ["type", "amount", "date", "family_id"],
+  "permission": {
+    "read": true,
+    "create": true,
+    "update": true,
+    "delete": true
+  },
+  "properties": {
+    "_id": {
+      "description": "收入记录ID"
+    },
+    "type": {
+      "bsonType": "string",
+      "enum": ["销售", "定金", "定金保留", "退款", "领养费", "配种费收入"],
+      "description": "收入类型"
+    },
+    "amount": {
+      "bsonType": "number",
+      "description": "金额（元）"
+    },
+    "date": {
+      "bsonType": "number",
+      "description": "收入日期（时间戳毫秒）"
+    },
+    "family_id": {
+      "bsonType": "string",
+      "foreignKey": "families._id",
+      "description": "所属家庭ID"
+    },
+    "sale_record_id": {
+      "bsonType": "string",
+      "foreignKey": "sale_records._id",
+      "description": "关联销售记录ID"
+    },
+    "dog_id": {
+      "bsonType": "string",
+      "foreignKey": "dogs._id",
+      "description": "关联犬只ID"
+    },
+    "dog_name": {
+      "bsonType": "string",
+      "description": "犬只名称（冗余存储）"
+    },
+    "notes": {
+      "bsonType": "string",
+      "description": "备注"
+    },
+    "created_by": {
+      "bsonType": "string",
+      "description": "创建人用户ID"
+    },
+    "deleted_at": {
+      "bsonType": ["number", "null"],
+      "description": "软删除时间戳（毫秒），null 表示未删除"
+    },
+    "created_at": {
+      "bsonType": "number",
+      "description": "创建时间（时间戳毫秒）"
+    },
+    "updated_at": {
+      "bsonType": "number",
+      "description": "更新时间（时间戳毫秒）"
+    }
+  }
+}

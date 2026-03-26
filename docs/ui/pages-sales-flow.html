@@ -1,0 +1,1189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Breed App — Sales Flow Pages (S-2 ~ S-5)</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+  background: #f0eaec;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 48px;
+  padding: 40px 20px;
+  min-height: 100vh;
+  flex-wrap: wrap;
+}
+
+.frame-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+.frame-label {
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+  color: #6b6880;
+}
+
+.phone-frame {
+  width: 375px;
+  height: 812px;
+  border-radius: 44px;
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05);
+}
+
+.phone-screen {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  padding-bottom: 100px;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.phone-screen::-webkit-scrollbar { display: none; }
+
+/* ==================== LIGHT MODE ==================== */
+.light {
+  --primary: #ea3e77;
+  --primary-soft: #fff0f2;
+  --bg: #fdf8f9;
+  --card: #FFFFFF;
+  --card-dim: #FFF0E8;
+  --text-1: #1a1a2e;
+  --text-2: #8B7355;
+  --text-3: #B8A08A;
+  --text-4: #D8CBBD;
+  --amber: #e89b3e;
+  --amber-soft: #fff9f0;
+  --red: #e05252;
+  --red-soft: #fff0f0;
+  --green: #3dae6f;
+  --green-soft: #f0fff4;
+  --blue: #4a8dd4;
+  --blue-soft: #f0f7ff;
+  --plum: #8668b0;
+  --plum-soft: #f5f0ff;
+  --rose: #ea3e77;
+  --rose-soft: #fff0f2;
+  --teal: #3da8a0;
+  --teal-soft: #f0fffe;
+  --shadow: 0 2px 12px rgba(234, 62, 119, 0.06);
+  --shadow-lg: 0 6px 24px rgba(234, 62, 119, 0.1);
+  --nav-bg: rgba(255,255,255,0.85);
+  --nav-border: rgba(234, 62, 119, 0.08);
+  --status-bar-color: #1a1a2e;
+  background: var(--bg);
+}
+
+/* ==================== STATUS BAR ==================== */
+.status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 28px 0;
+  height: 50px;
+  color: var(--status-bar-color);
+  font-size: 15px;
+  font-weight: 600;
+}
+.status-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.status-bar-right .material-icons-round { font-size: 16px; }
+
+/* ==================== TOP BAR ==================== */
+.top-bar {
+  display: flex;
+  align-items: center;
+  padding: 8px 20px 12px;
+  gap: 12px;
+}
+.top-bar .back-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--card);
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.top-bar .back-btn .material-icons-round {
+  font-size: 20px;
+  color: var(--text-1);
+}
+.top-bar .page-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-1);
+  flex: 1;
+}
+.top-bar .status-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 999px;
+}
+.badge-green {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+/* ==================== DOG CARD (READ-ONLY) ==================== */
+.dog-card-readonly {
+  margin: 0 16px 16px;
+  background: var(--card);
+  border-radius: 16px;
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: relative;
+  overflow: hidden;
+  border-left: 3.5px solid var(--amber);
+}
+.dog-card-readonly::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 100%;
+  background: linear-gradient(135deg, var(--amber-soft) 0%, transparent 40%);
+  pointer-events: none;
+}
+.dog-card-readonly > * {
+  position: relative;
+  z-index: 1;
+}
+.dog-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ea3e77, #e89b3e);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.dog-avatar .material-icons-round {
+  color: white;
+  font-size: 22px;
+}
+.dog-info {
+  flex: 1;
+  min-width: 0;
+}
+.dog-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.dog-meta {
+  font-size: 12px;
+  color: var(--text-2);
+  margin-top: 2px;
+}
+.dog-status-tag {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+.tag-amber { background: var(--amber-soft); color: var(--amber); }
+.tag-green { background: var(--green-soft); color: var(--green); }
+.tag-blue { background: var(--blue-soft); color: var(--blue); }
+
+/* ==================== FORM STYLES ==================== */
+.form-section {
+  padding: 0 16px;
+}
+.form-card {
+  background: var(--card);
+  border-radius: 16px;
+  padding: 20px 16px;
+  box-shadow: var(--shadow);
+  margin-bottom: 16px;
+}
+.form-group {
+  margin-bottom: 18px;
+}
+.form-group:last-child {
+  margin-bottom: 0;
+}
+.form-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  margin-bottom: 8px;
+  display: block;
+}
+.form-label .optional {
+  font-weight: 500;
+  color: var(--text-3);
+  font-size: 11px;
+}
+.form-input {
+  width: 100%;
+  height: 44px;
+  border: 1.5px solid var(--text-4);
+  border-radius: 12px;
+  padding: 0 14px;
+  font-size: 15px;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+  color: var(--text-1);
+  background: var(--bg);
+  outline: none;
+  transition: border-color 0.2s;
+}
+.form-input:focus {
+  border-color: var(--primary);
+}
+.form-input::placeholder {
+  color: var(--text-3);
+  font-size: 14px;
+}
+
+/* Large price input */
+.price-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 1.5px solid var(--text-4);
+  border-radius: 14px;
+  padding: 0 16px;
+  height: 56px;
+  background: var(--bg);
+  transition: border-color 0.2s;
+}
+.price-input-wrapper:focus-within {
+  border-color: var(--primary);
+}
+.price-symbol {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--text-3);
+}
+.price-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--text-1);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  outline: none;
+}
+.price-input::placeholder {
+  color: var(--text-4);
+  font-weight: 600;
+  font-size: 20px;
+}
+
+/* Small price input */
+.price-input-sm {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 1.5px solid var(--text-4);
+  border-radius: 12px;
+  padding: 0 14px;
+  height: 44px;
+  background: var(--bg);
+  transition: border-color 0.2s;
+}
+.price-input-sm:focus-within {
+  border-color: var(--primary);
+}
+.price-input-sm .price-symbol {
+  font-size: 16px;
+  font-weight: 700;
+}
+.price-input-sm input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-1);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  outline: none;
+}
+.price-input-sm input::placeholder {
+  color: var(--text-4);
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.form-helper {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 8px;
+  line-height: 1.5;
+}
+
+.form-warning {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--red);
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.form-warning .material-icons-round {
+  font-size: 14px;
+}
+
+/* Textarea */
+.form-textarea {
+  width: 100%;
+  min-height: 72px;
+  border: 1.5px solid var(--text-4);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 14px;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+  color: var(--text-1);
+  background: var(--bg);
+  outline: none;
+  resize: none;
+  transition: border-color 0.2s;
+}
+.form-textarea:focus {
+  border-color: var(--primary);
+}
+.form-textarea::placeholder {
+  color: var(--text-3);
+}
+
+/* Platform pills (horizontal scroll) */
+.platform-pills {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.platform-pill {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--card-dim);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1.5px solid transparent;
+  white-space: nowrap;
+}
+.platform-pill.active {
+  background: var(--amber-soft);
+  color: var(--amber);
+  border-color: var(--amber);
+}
+.platform-pill:active {
+  transform: scale(0.94);
+}
+
+/* Picker / selector */
+.form-select {
+  width: 100%;
+  height: 44px;
+  border: 1.5px solid var(--text-4);
+  border-radius: 12px;
+  padding: 0 14px;
+  font-size: 14px;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+  color: var(--text-1);
+  background: var(--bg);
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24'%3E%3Cpath fill='%238B7355' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 16px;
+}
+
+/* ==================== SUBMIT BUTTON ==================== */
+.submit-area {
+  padding: 16px 16px 24px;
+}
+.submit-btn {
+  width: 100%;
+  height: 50px;
+  border-radius: 999px;
+  border: none;
+  font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+.submit-btn:active {
+  transform: scale(0.97);
+  opacity: 0.9;
+}
+.submit-btn.amber { background: var(--primary); box-shadow: 0 4px 16px rgba(234, 62, 119, 0.25); }
+.submit-btn.green { background: var(--primary); box-shadow: 0 4px 16px rgba(234, 62, 119, 0.25); }
+.submit-btn.red { background: var(--red); }
+
+.submit-note {
+  font-size: 12px;
+  color: var(--text-3);
+  text-align: center;
+  margin-top: 10px;
+  line-height: 1.4;
+}
+
+/* ==================== DETAIL PAGE STYLES ==================== */
+
+/* Status Timeline / Stepper */
+.timeline-section {
+  padding: 0 16px;
+  margin-bottom: 16px;
+}
+.timeline-card {
+  background: var(--card);
+  border-radius: 16px;
+  padding: 20px 16px;
+  box-shadow: var(--shadow);
+}
+.stepper {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  position: relative;
+  padding: 0 4px;
+}
+.stepper-line {
+  position: absolute;
+  top: 14px;
+  left: 32px;
+  right: 32px;
+  height: 3px;
+  background: var(--card-dim);
+  border-radius: 999px;
+  z-index: 0;
+}
+.stepper-line-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--green);
+}
+.stepper-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  z-index: 1;
+  flex: 1;
+}
+.stepper-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  background: var(--card-dim);
+  color: var(--text-3);
+}
+.stepper-dot.done {
+  background: var(--green);
+  color: #fff;
+}
+.stepper-dot.done .material-icons-round {
+  font-size: 16px;
+  color: #fff;
+}
+.stepper-dot.fail {
+  background: var(--red);
+  color: #fff;
+}
+.stepper-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+  text-align: center;
+  line-height: 1.3;
+}
+.stepper-label.done {
+  color: var(--green);
+}
+.stepper-amount {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-2);
+  text-align: center;
+}
+
+/* Detail card */
+.detail-section {
+  padding: 0 16px;
+  margin-bottom: 16px;
+}
+.detail-card {
+  background: var(--card);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: var(--shadow);
+}
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--card-dim);
+}
+.detail-row:last-child {
+  border-bottom: none;
+}
+.detail-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+.detail-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.detail-value.price {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--red);  /* 到手价 = 钱进来 = 红色 */
+}
+.detail-value.commission {
+  color: var(--green);  /* 佣金/差额 = 钱出去 = 绿色 */
+}
+.detail-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-3);
+  letter-spacing: 0.5px;
+  padding: 8px 0 4px;
+}
+
+/* Action buttons at bottom */
+.action-area {
+  padding: 12px 16px 24px;
+  display: flex;
+  gap: 10px;
+}
+.action-btn {
+  flex: 1;
+  height: 48px;
+  border-radius: 999px;
+  font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  border: none;
+}
+.action-btn:active {
+  transform: scale(0.97);
+  opacity: 0.9;
+}
+.action-btn.filled-green {
+  background: var(--green);
+  color: #fff;
+}
+.action-btn.ghost-red {
+  background: transparent;
+  border: 1.5px solid var(--red);
+  color: var(--red);
+}
+.action-btn.ghost {
+  background: transparent;
+  border: 1.5px solid var(--text-4);
+  color: var(--text-2);
+}
+
+/* ==================== BOTTOM NAV ==================== */
+.bottom-nav {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 84px;
+  background: var(--nav-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 0.5px solid var(--nav-border);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-around;
+  padding-top: 8px;
+  z-index: 10;
+}
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 50px;
+  position: relative;
+}
+.nav-item .material-icons-round { font-size: 24px; color: var(--text-3); }
+.nav-item .nav-label { font-size: 10px; font-weight: 600; color: var(--text-3); }
+.nav-item.active .material-icons-round { color: var(--primary); }
+.nav-item.active .nav-label { color: var(--primary); }
+.fab {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ea3e77, #e89b3e);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: -10px;
+  box-shadow: 0 4px 16px rgba(234, 62, 119, 0.3);
+  position: relative;
+}
+.fab .material-icons-round { font-size: 28px; color: white; }
+
+/* ==================== PRE-FILLED DISPLAY ==================== */
+.prefilled-value {
+  display: flex;
+  align-items: center;
+  height: 44px;
+  padding: 0 14px;
+  background: var(--card-dim);
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+/* ==================== DIVIDER ==================== */
+.form-divider {
+  height: 1px;
+  background: var(--card-dim);
+  margin: 4px 0 18px;
+}
+/* Date quick chips */
+.date-chips {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+.date-chip {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: var(--card-dim);
+  cursor: pointer;
+  border: none;
+  font-family: inherit;
+  transition: all 0.12s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.date-chip:active {
+  transform: scale(0.92);
+  filter: brightness(0.95);
+}
+.date-chip.active {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(234, 62, 119, 0.25);
+}
+</style>
+</head>
+<body>
+
+<!-- ============================================================ -->
+<!-- PAGE 1: 设定底价 (S-2)                                        -->
+<!-- ============================================================ -->
+<div class="frame-wrapper">
+  <div class="frame-label">S-2 设定底价</div>
+  <div class="phone-frame">
+    <div class="phone-screen light">
+
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="status-bar-right">
+          <span class="material-icons-round">signal_cellular_alt</span>
+          <span class="material-icons-round">wifi</span>
+          <span class="material-icons-round">battery_full</span>
+        </div>
+      </div>
+
+      <!-- Top Bar -->
+      <div class="top-bar">
+        <div class="back-btn"><span class="material-icons-round">arrow_back_ios_new</span></div>
+        <div class="page-title">设定底价</div>
+      </div>
+
+      <!-- Dog Card -->
+      <div class="dog-card-readonly">
+        <div class="dog-avatar">
+          <span class="material-icons-round">pets</span>
+        </div>
+        <div class="dog-info">
+          <div class="dog-name">花花3窝-1号</div>
+          <div class="dog-meta">马尔济斯 · 公 · 3月龄</div>
+        </div>
+        <div class="dog-status-tag tag-amber">在养</div>
+      </div>
+
+      <!-- Form -->
+      <div class="form-section">
+        <div class="form-card">
+          <div class="form-group">
+            <label class="form-label">底价</label>
+            <div class="price-input-wrapper">
+              <span class="price-symbol">¥</span>
+              <input type="text" class="price-input" placeholder="输入底价" value="8,000">
+            </div>
+            <div class="form-helper">底价是给代理人的最低出售价，实际到手价不应低于此值</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Submit -->
+      <div class="submit-area">
+        <button class="submit-btn amber">确认设定底价</button>
+        <div class="submit-note">设定后犬只状态变为「待售」</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- PAGE 2: 记录预定 (S-3)                                        -->
+<!-- ============================================================ -->
+<div class="frame-wrapper">
+  <div class="frame-label">S-3 记录预定</div>
+  <div class="phone-frame">
+    <div class="phone-screen light">
+
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="status-bar-right">
+          <span class="material-icons-round">signal_cellular_alt</span>
+          <span class="material-icons-round">wifi</span>
+          <span class="material-icons-round">battery_full</span>
+        </div>
+      </div>
+
+      <!-- Top Bar -->
+      <div class="top-bar">
+        <div class="back-btn"><span class="material-icons-round">arrow_back_ios_new</span></div>
+        <div class="page-title">记录预定</div>
+      </div>
+
+      <!-- Dog Card -->
+      <div class="dog-card-readonly">
+        <div class="dog-avatar">
+          <span class="material-icons-round">pets</span>
+        </div>
+        <div class="dog-info">
+          <div class="dog-name">花花3窝-1号</div>
+          <div class="dog-meta">马尔济斯 · 公 · 3月龄</div>
+        </div>
+        <div class="dog-status-tag tag-amber">待售 · 底价 ¥8,000</div>
+      </div>
+
+      <!-- Form -->
+      <div class="form-section">
+        <div class="form-card">
+          <!-- 定金金额 -->
+          <div class="form-group">
+            <label class="form-label">定金金额</label>
+            <div class="price-input-sm">
+              <span class="price-symbol">¥</span>
+              <input type="text" placeholder="输入定金金额" value="2,000">
+            </div>
+          </div>
+
+          <!-- 定金日期 -->
+          <div class="form-group">
+            <label class="form-label">定金日期</label>
+            <input type="text" class="form-input" value="2026-03-24" style="color:var(--text-1);">
+            <div class="date-chips">
+              <button class="date-chip active" onclick="selectDateChip(this)">今天</button>
+              <button class="date-chip" onclick="selectDateChip(this)">昨天</button>
+              <button class="date-chip" onclick="selectDateChip(this)">前天</button>
+            </div>
+          </div>
+
+          <!-- 买家信息 -->
+          <div class="form-group">
+            <label class="form-label">买家信息 <span class="optional">（选填）</span></label>
+            <input type="text" class="form-input" placeholder="姓名/联系方式">
+          </div>
+
+          <div class="form-divider"></div>
+
+          <!-- 成交价 -->
+          <div class="form-group">
+            <label class="form-label">已谈好的价格 <span class="optional">（选填）</span></label>
+            <div class="price-input-sm">
+              <span class="price-symbol">¥</span>
+              <input type="text" placeholder="成交价">
+            </div>
+          </div>
+
+          <!-- 到手价 -->
+          <div class="form-group">
+            <label class="form-label">到手价 <span class="optional">（选填）</span></label>
+            <div class="price-input-sm">
+              <span class="price-symbol">¥</span>
+              <input type="text" placeholder="到手价">
+            </div>
+          </div>
+
+          <!-- 卖出人 -->
+          <div class="form-group">
+            <label class="form-label">卖出人/代理人</label>
+            <select class="form-select">
+              <option value="">选择卖出人</option>
+              <option>自己卖出</option>
+              <option selected>老板</option>
+              <option>刘老板</option>
+              <option>庞先文</option>
+            </select>
+          </div>
+
+          <!-- 平台 -->
+          <div class="form-group">
+            <label class="form-label">平台</label>
+            <div class="platform-pills">
+              <div class="platform-pill" onclick="selectPlatform(this)">线下</div>
+              <div class="platform-pill" onclick="selectPlatform(this)">微信</div>
+              <div class="platform-pill active" onclick="selectPlatform(this)">小红书</div>
+              <div class="platform-pill" onclick="selectPlatform(this)">抖音</div>
+              <div class="platform-pill" onclick="selectPlatform(this)">快手</div>
+              <div class="platform-pill" onclick="selectPlatform(this)">闲鱼</div>
+              <div class="platform-pill" onclick="selectPlatform(this)" style="border:1.5px dashed var(--text-4);background:transparent;">+ 自定义</div>
+            </div>
+          </div>
+
+          <!-- 备注 -->
+          <div class="form-group">
+            <label class="form-label">备注 <span class="optional">（选填）</span></label>
+            <textarea class="form-textarea" placeholder="添加备注..."></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Submit -->
+      <div class="submit-area">
+        <button class="submit-btn amber">确认预定</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- PAGE 3: 完成交易 (S-4)                                        -->
+<!-- ============================================================ -->
+<div class="frame-wrapper">
+  <div class="frame-label">S-4 完成交易</div>
+  <div class="phone-frame">
+    <div class="phone-screen light">
+
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="status-bar-right">
+          <span class="material-icons-round">signal_cellular_alt</span>
+          <span class="material-icons-round">wifi</span>
+          <span class="material-icons-round">battery_full</span>
+        </div>
+      </div>
+
+      <!-- Top Bar -->
+      <div class="top-bar">
+        <div class="back-btn"><span class="material-icons-round">arrow_back_ios_new</span></div>
+        <div class="page-title">完成交易</div>
+      </div>
+
+      <!-- Dog Card -->
+      <div class="dog-card-readonly" style="border-left-color:var(--blue);">
+        <div class="dog-avatar">
+          <span class="material-icons-round">pets</span>
+        </div>
+        <div class="dog-info">
+          <div class="dog-name">花花3窝-1号</div>
+          <div class="dog-meta">马尔济斯 · 公 · 3月龄</div>
+        </div>
+        <div class="dog-status-tag tag-blue">已预定 · 定金 ¥2,000</div>
+      </div>
+
+      <!-- Form -->
+      <div class="form-section">
+        <div class="form-card">
+          <!-- 成交价 (pre-filled) -->
+          <div class="form-group">
+            <label class="form-label">成交价</label>
+            <div class="price-input-sm">
+              <span class="price-symbol">¥</span>
+              <input type="text" placeholder="成交价" value="13,000">
+            </div>
+          </div>
+
+          <!-- 到手价 (REQUIRED, large) -->
+          <div class="form-group">
+            <label class="form-label">到手价</label>
+            <div class="price-input-wrapper">
+              <span class="price-symbol">¥</span>
+              <input type="text" class="price-input" placeholder="到手价" value="6,500">
+            </div>
+            <div class="form-warning">
+              <span class="material-icons-round">warning</span>
+              低于底价 ¥8,000
+            </div>
+          </div>
+
+          <div class="form-divider"></div>
+
+          <!-- 卖出人 (pre-filled) -->
+          <div class="form-group">
+            <label class="form-label">卖出人</label>
+            <select class="form-select">
+              <option selected>老板</option>
+              <option>刘老板</option>
+              <option>庞先文</option>
+              <option>自己卖出</option>
+            </select>
+          </div>
+
+          <!-- 平台 (pre-filled) -->
+          <div class="form-group">
+            <label class="form-label">平台</label>
+            <div class="platform-pills">
+              <div class="platform-pill" onclick="selectPlatform(this)">线下</div>
+              <div class="platform-pill" onclick="selectPlatform(this)">微信</div>
+              <div class="platform-pill active" onclick="selectPlatform(this)">小红书</div>
+              <div class="platform-pill" onclick="selectPlatform(this)">抖音</div>
+              <div class="platform-pill" onclick="selectPlatform(this)">快手</div>
+              <div class="platform-pill" onclick="selectPlatform(this)">闲鱼</div>
+            </div>
+          </div>
+
+          <!-- 交付日期 -->
+          <div class="form-group">
+            <label class="form-label">交付日期</label>
+            <input type="text" class="form-input" value="2026-03-24" style="color:var(--text-1);">
+            <div class="date-chips">
+              <button class="date-chip active" onclick="selectDateChip(this)">今天</button>
+              <button class="date-chip" onclick="selectDateChip(this)">昨天</button>
+              <button class="date-chip" onclick="selectDateChip(this)">前天</button>
+            </div>
+          </div>
+
+          <!-- 备注 -->
+          <div class="form-group">
+            <label class="form-label">备注 <span class="optional">（选填）</span></label>
+            <textarea class="form-textarea" placeholder="添加备注..."></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Submit -->
+      <div class="submit-area">
+        <button class="submit-btn green">确认成交</button>
+        <div class="submit-note">成交后自动生成收入记录</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- PAGE 4: 销售详情页 (S-5)                                      -->
+<!-- ============================================================ -->
+<div class="frame-wrapper">
+  <div class="frame-label">S-5 销售详情</div>
+  <div class="phone-frame">
+    <div class="phone-screen light">
+
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="status-bar-right">
+          <span class="material-icons-round">signal_cellular_alt</span>
+          <span class="material-icons-round">wifi</span>
+          <span class="material-icons-round">battery_full</span>
+        </div>
+      </div>
+
+      <!-- Top Bar -->
+      <div class="top-bar">
+        <div class="back-btn"><span class="material-icons-round">arrow_back_ios_new</span></div>
+        <div class="page-title">销售详情</div>
+        <div class="status-badge badge-green">已成交</div>
+      </div>
+
+      <!-- Dog Card -->
+      <div class="dog-card-readonly" style="border-left-color:var(--green);">
+        <div class="dog-avatar">
+          <span class="material-icons-round">pets</span>
+        </div>
+        <div class="dog-info">
+          <div class="dog-name">花花3窝-1号</div>
+          <div class="dog-meta">马尔济斯 · 公 · 3月龄</div>
+        </div>
+      </div>
+
+      <!-- Status Timeline -->
+      <div class="timeline-section">
+        <div class="timeline-card">
+          <div class="stepper">
+            <div class="stepper-line">
+              <div class="stepper-line-fill" style="width:100%;"></div>
+            </div>
+            <!-- Step 1: 待售 -->
+            <div class="stepper-step">
+              <div class="stepper-dot done">
+                <span class="material-icons-round">check</span>
+              </div>
+              <div class="stepper-label done">待售</div>
+              <div class="stepper-amount">¥8,000</div>
+            </div>
+            <!-- Step 2: 已预定 -->
+            <div class="stepper-step">
+              <div class="stepper-dot done">
+                <span class="material-icons-round">check</span>
+              </div>
+              <div class="stepper-label done">已预定</div>
+              <div class="stepper-amount" style="color:var(--red);">定金 ¥2,000</div>
+            </div>
+            <!-- Step 3: 已成交 -->
+            <div class="stepper-step">
+              <div class="stepper-dot done">
+                <span class="material-icons-round">check</span>
+              </div>
+              <div class="stepper-label done">已成交</div>
+              <div class="stepper-amount" style="color:var(--red);">到手 ¥12,000</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Detail Card -->
+      <div class="detail-section">
+        <div class="detail-card">
+          <div class="detail-row">
+            <span class="detail-label">底价</span>
+            <span class="detail-value">¥8,000</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">定金</span>
+            <span class="detail-value" style="color:var(--red);">¥2,000 <span style="font-weight:500;font-size:12px;color:var(--text-3);">2026-02-15</span></span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">成交价</span>
+            <span class="detail-value price">¥13,000</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">到手价</span>
+            <span class="detail-value price">¥12,000</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">差额（佣金）</span>
+            <span class="detail-value commission">¥1,000</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="detail-section">
+        <div class="detail-card">
+          <div class="detail-row">
+            <span class="detail-label">卖出人</span>
+            <span class="detail-value">老板</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">平台</span>
+            <span class="detail-value">
+              <span style="display:inline-block;padding:3px 10px;border-radius:999px;background:var(--amber-soft);color:var(--amber);font-size:12px;font-weight:600;">小红书</span>
+            </span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">交付日期</span>
+            <span class="detail-value">2026-03-15</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">买家</span>
+            <span class="detail-value">张先生</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons (已成交 state: show 退款) -->
+      <div class="action-area">
+        <button class="action-btn ghost-red" onclick="alert('退款')">退款</button>
+      </div>
+
+      <!-- Bottom Nav -->
+      <div class="bottom-nav">
+        <div class="nav-item">
+          <span class="material-icons-round">home</span>
+          <span class="nav-label">首页</span>
+        </div>
+        <div class="nav-item">
+          <span class="material-icons-round">pets</span>
+          <span class="nav-label">犬只</span>
+        </div>
+        <div class="nav-item">
+          <div class="fab">
+            <span class="material-icons-round">add</span>
+          </div>
+        </div>
+        <div class="nav-item active">
+          <span class="material-icons-round">account_balance_wallet</span>
+          <span class="nav-label">财务</span>
+        </div>
+        <div class="nav-item">
+          <span class="material-icons-round">person</span>
+          <span class="nav-label">我的</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+function selectPlatform(el) {
+  el.parentElement.querySelectorAll('.platform-pill').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+}
+function selectDateChip(el) {
+  el.parentElement.querySelectorAll('.date-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,56 @@
+{
+  "bsonType": "object",
+  "required": ["name", "family_id"],
+  "permission": {
+    "read": true,
+    "create": true,
+    "update": true,
+    "delete": true
+  },
+  "properties": {
+    "_id": {
+      "description": "用药方案ID"
+    },
+    "name": {
+      "bsonType": "string",
+      "description": "方案名称"
+    },
+    "target_condition": {
+      "bsonType": "string",
+      "description": "适用病症"
+    },
+    "family_id": {
+      "bsonType": "string",
+      "foreignKey": "families._id",
+      "description": "所属家庭ID"
+    },
+    "weight_range": {
+      "bsonType": "string",
+      "description": "适用体重范围（如：2kg-4kg）"
+    },
+    "drugs": {
+      "bsonType": "array",
+      "description": "药物列表"
+    },
+    "duration_days": {
+      "bsonType": "number",
+      "description": "疗程天数"
+    },
+    "notes": {
+      "bsonType": "string",
+      "description": "备注"
+    },
+    "deleted_at": {
+      "bsonType": ["number", "null"],
+      "description": "软删除时间戳（毫秒），null 表示未删除"
+    },
+    "created_at": {
+      "bsonType": "number",
+      "description": "创建时间（时间戳毫秒）"
+    },
+    "updated_at": {
+      "bsonType": "number",
+      "description": "更新时间（时间戳毫秒）"
+    }
+  }
+}

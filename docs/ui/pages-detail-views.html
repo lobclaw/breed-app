@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Breed App — Detail / View Pages</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+  background: #f0eaec;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 48px;
+  padding: 40px 20px;
+  min-height: 100vh;
+  flex-wrap: wrap;
+}
+
+.frame-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+.frame-label {
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+  color: #6b6880;
+}
+
+.phone-frame {
+  width: 375px;
+  height: 812px;
+  border-radius: 44px;
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05);
+}
+
+.phone-screen {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  padding-bottom: 40px;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.phone-screen::-webkit-scrollbar { display: none; }
+
+/* ==================== LIGHT MODE ==================== */
+.light {
+  --primary: #ea3e77;
+  --primary-soft: #fff0f2;
+  --bg: #fdf8f9;
+  --card: #FFFFFF;
+  --card-dim: #FFF0E8;
+  --text-1: #1a1a2e;
+  --text-2: #8B7355;
+  --text-3: #B8A08A;
+  --text-4: #D8CBBD;
+  --amber: #e89b3e;
+  --amber-soft: #fff9f0;
+  --red: #e05252;
+  --red-soft: #fff0f0;
+  --green: #3dae6f;
+  --green-soft: #f0fff4;
+  --blue: #4a8dd4;
+  --blue-soft: #f0f7ff;
+  --plum: #8668b0;
+  --plum-soft: #f5f0ff;
+  --rose: #ea3e77;
+  --rose-soft: #fff0f2;
+  --teal: #3da8a0;
+  --teal-soft: #f0fffe;
+  --shadow: 0 2px 12px rgba(234, 62, 119, 0.06);
+  --shadow-lg: 0 6px 24px rgba(234, 62, 119, 0.1);
+  --nav-bg: rgba(255,255,255,0.85);
+  --nav-border: rgba(234, 62, 119, 0.08);
+  --status-bar-color: #1a1a2e;
+  background: var(--bg);
+}
+
+/* ==================== STATUS BAR ==================== */
+.status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 28px 0;
+  height: 50px;
+  color: var(--status-bar-color);
+  font-size: 15px;
+  font-weight: 600;
+}
+.status-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.status-bar-right .material-icons-round { font-size: 16px; }
+
+/* ==================== TOP BAR ==================== */
+.top-bar {
+  display: flex;
+  align-items: center;
+  padding: 8px 20px 12px;
+  gap: 12px;
+}
+.top-bar-back {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-1);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.top-bar-back:active { background: var(--card-dim); }
+.top-bar-back .material-icons-round { font-size: 24px; }
+.top-bar-title {
+  flex: 1;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-1);
+}
+.top-bar-action {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.top-bar-action:active { background: var(--card-dim); }
+.top-bar-action .material-icons-round { font-size: 22px; }
+
+/* ==================== CARDS ==================== */
+.card-feed {
+  padding: 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.card {
+  background: var(--card);
+  border-radius: 16px;
+  padding: 16px;
+  padding-left: 18px;
+  position: relative;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  border-left: 3.5px solid transparent;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.card:active {
+  transform: scale(0.975);
+  box-shadow: 0 1px 6px rgba(234, 62, 119, 0.04);
+}
+.card.no-press:active {
+  transform: none;
+  box-shadow: var(--shadow);
+}
+.card.bar-rose { border-left-color: var(--rose); }
+.card.bar-green { border-left-color: var(--green); }
+.card.bar-blue { border-left-color: var(--blue); }
+.card.bar-plum { border-left-color: var(--plum); }
+.card.bar-teal { border-left-color: var(--teal); }
+.card.bar-amber { border-left-color: var(--amber); }
+.card.bar-red { border-left-color: var(--red); }
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 100%;
+  pointer-events: none;
+}
+.card.bar-rose::before { background: linear-gradient(135deg, var(--rose-soft) 0%, transparent 40%); }
+.card.bar-green::before { background: linear-gradient(135deg, var(--green-soft) 0%, transparent 40%); }
+.card.bar-blue::before { background: linear-gradient(135deg, var(--blue-soft) 0%, transparent 40%); }
+.card.bar-plum::before { background: linear-gradient(135deg, var(--plum-soft) 0%, transparent 40%); }
+.card.bar-teal::before { background: linear-gradient(135deg, var(--teal-soft) 0%, transparent 40%); }
+.card.bar-amber::before { background: linear-gradient(135deg, var(--amber-soft) 0%, transparent 40%); }
+.card.bar-red::before { background: linear-gradient(135deg, var(--red-soft) 0%, transparent 40%); }
+.card > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ==================== SECTION LABEL ==================== */
+.section-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 20px 10px;
+}
+.section-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+.section-label span {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-3);
+  letter-spacing: 0.5px;
+}
+
+/* ==================== INFO ROWS ==================== */
+.info-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(216, 203, 189, 0.3);
+}
+.info-row:last-child { border-bottom: none; }
+.info-row-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+.info-row-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+  text-align: right;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ==================== TAGS ==================== */
+.tag {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+}
+.tag-rose { background: var(--rose-soft); color: var(--rose); }
+.tag-blue { background: var(--blue-soft); color: var(--blue); }
+.tag-green { background: var(--green-soft); color: var(--green); }
+.tag-plum { background: var(--plum-soft); color: var(--plum); }
+.tag-amber { background: var(--amber-soft); color: var(--amber); }
+.tag-red { background: var(--red-soft); color: var(--red); }
+.tag-gray { background: var(--card-dim); color: var(--text-3); }
+
+/* ==================== MINI AVATAR ==================== */
+.mini-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--rose), var(--amber));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.mini-avatar .material-icons-round {
+  color: white;
+  font-size: 14px;
+}
+
+/* ==================== LINK STYLE ==================== */
+.link-text {
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.link-text-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.link-text-row .material-icons-round {
+  font-size: 16px;
+  color: var(--primary);
+}
+
+/* ==================== ACTION BUTTONS ==================== */
+.action-area {
+  padding: 16px 16px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.btn {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 12px 18px;
+  border-radius: 999px;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.12s ease, opacity 0.12s ease;
+  text-align: center;
+}
+.btn:active {
+  transform: scale(0.94);
+  opacity: 0.85;
+}
+.btn-filled {
+  color: #fff;
+  width: 100%;
+}
+.btn-filled.plum { background: var(--plum); }
+.btn-filled.primary { background: var(--primary); }
+.btn-ghost {
+  background: transparent;
+  border: 1.5px solid var(--text-4);
+  color: var(--text-2);
+  flex: 1;
+}
+.btn-ghost.red {
+  border-color: var(--red);
+  color: var(--red);
+}
+.btn-row {
+  display: flex;
+  gap: 10px;
+}
+
+/* ==================== CREATED INFO ==================== */
+.created-info {
+  padding: 12px 16px 4px;
+  font-size: 11px;
+  color: var(--text-3);
+  text-align: center;
+}
+
+/* ==================== INFO BANNER ==================== */
+.info-banner {
+  margin: 0 16px 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.info-banner .material-icons-round {
+  font-size: 16px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.info-banner.amber {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+.info-banner.blue {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+/* ==================== STATUS BANNER ==================== */
+.status-banner {
+  margin: 4px 16px 12px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.status-banner-left {
+  font-size: 13px;
+  font-weight: 700;
+}
+.status-banner-right {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+/* ==================== PROGRESS BAR ==================== */
+.progress-bar-wrapper {
+  margin: 0 16px 16px;
+}
+.progress-track {
+  height: 5px;
+  background: var(--card-dim);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.6s ease 0.3s;
+}
+
+/* ==================== EXECUTION LOG ==================== */
+.exec-log {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.exec-log-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(216, 203, 189, 0.2);
+}
+.exec-log-item:last-child { border-bottom: none; }
+.exec-log-item.today {
+  background: var(--plum-soft);
+  margin: 0 -16px 0 -18px;
+  padding: 10px 16px 10px 18px;
+  border-radius: 10px;
+  border-bottom: none;
+}
+.exec-day {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-2);
+  min-width: 28px;
+}
+.exec-date {
+  font-size: 11px;
+  color: var(--text-3);
+  min-width: 40px;
+}
+.exec-status {
+  font-size: 16px;
+  flex-shrink: 0;
+  width: 22px;
+  text-align: center;
+}
+.exec-status.done { color: var(--green); }
+.exec-status.pending { color: var(--plum); }
+.exec-status.future { color: var(--text-4); }
+.exec-detail {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-2);
+  flex: 1;
+}
+.exec-detail.highlight {
+  color: var(--plum);
+  font-weight: 700;
+}
+
+/* ==================== AMOUNT CARD ==================== */
+.amount-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 16px 16px;
+}
+.amount-value {
+  font-size: 32px;
+  font-weight: 800;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+}
+.amount-value.expense { color: var(--green); }
+.amount-value.income { color: var(--red); }
+.amount-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+.amount-date {
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+/* ==================== IMAGE THUMBNAILS ==================== */
+.thumb-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+.thumb {
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+  background: var(--card-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.thumb .material-icons-round {
+  font-size: 22px;
+  color: var(--text-3);
+}
+
+/* ==================== ANIMATIONS ==================== */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.card-feed .card {
+  animation: fadeInUp 0.35s ease both;
+}
+.card-feed .card:nth-child(1) { animation-delay: 0.05s; }
+.card-feed .card:nth-child(2) { animation-delay: 0.10s; }
+.card-feed .card:nth-child(3) { animation-delay: 0.15s; }
+
+/* Bottom spacer */
+.bottom-spacer { height: 20px; }
+</style>
+</head>
+<body>
+
+<!-- ============================================================ -->
+<!-- PAGE 1: R-20 繁育记录详情页 (配种记录)                          -->
+<!-- ============================================================ -->
+<div class="frame-wrapper">
+  <div class="frame-label">R-20 繁育记录详情页</div>
+  <div class="phone-frame">
+    <div class="phone-screen light">
+
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="status-bar-right">
+          <span class="material-icons-round">signal_cellular_alt</span>
+          <span class="material-icons-round">wifi</span>
+          <span class="material-icons-round">battery_full</span>
+        </div>
+      </div>
+
+      <!-- Top Bar -->
+      <div class="top-bar">
+        <div class="top-bar-back">
+          <span class="material-icons-round">arrow_back</span>
+        </div>
+        <div class="top-bar-title">配种记录</div>
+        <div class="top-bar-action">
+          <span class="material-icons-round">edit</span>
+        </div>
+        <div class="top-bar-action">
+          <span class="material-icons-round">more_horiz</span>
+        </div>
+      </div>
+
+      <!-- Record Detail Card -->
+      <div class="card-feed">
+        <div class="card bar-rose no-press">
+          <div class="info-rows">
+            <div class="info-row">
+              <span class="info-row-label">记录类型</span>
+              <span class="info-row-value">
+                <span class="tag tag-rose">配种</span>
+              </span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">种母</span>
+              <span class="info-row-value">
+                <span class="mini-avatar"><span class="material-icons-round">pets</span></span>
+                花花
+              </span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">种公</span>
+              <span class="info-row-value">
+                <span class="mini-avatar"><span class="material-icons-round">pets</span></span>
+                旺财（外部种公）
+              </span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">配种日期</span>
+              <span class="info-row-value">2026-01-18</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">配种方式</span>
+              <span class="info-row-value">自然交配</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">第几次</span>
+              <span class="info-row-value">第2次</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">预计孕检日</span>
+              <span class="info-row-value">2026-02-12</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">预计预产期</span>
+              <span class="info-row-value">2026-03-22</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">费用</span>
+              <span class="info-row-value" style="color: var(--green);">¥3,000</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">备注</span>
+              <span class="info-row-value" style="color: var(--text-3);">—</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Related Info Card -->
+      <div class="section-label" style="margin-top: 8px;">
+        <div class="section-dot" style="background: var(--blue);"></div>
+        <span>关联信息</span>
+      </div>
+      <div class="card-feed">
+        <div class="card bar-blue no-press">
+          <div class="info-rows">
+            <div class="info-row">
+              <span class="info-row-label">所属周期</span>
+              <span class="info-row-value">
+                <span class="link-text-row">
+                  <span class="link-text">花花第3次繁育</span>
+                  <span class="material-icons-round">chevron_right</span>
+                </span>
+              </span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">创建人</span>
+              <span class="info-row-value">小李 · 2026-01-18 14:30</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="action-area">
+        <div class="btn-row">
+          <button class="btn btn-ghost">编辑</button>
+          <button class="btn btn-ghost red">删除</button>
+        </div>
+      </div>
+
+      <div class="bottom-spacer"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- PAGE 2: R-22 健康记录详情页 (疫苗记录)                          -->
+<!-- ============================================================ -->
+<div class="frame-wrapper">
+  <div class="frame-label">R-22 健康记录详情页</div>
+  <div class="phone-frame">
+    <div class="phone-screen light">
+
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="status-bar-right">
+          <span class="material-icons-round">signal_cellular_alt</span>
+          <span class="material-icons-round">wifi</span>
+          <span class="material-icons-round">battery_full</span>
+        </div>
+      </div>
+
+      <!-- Top Bar -->
+      <div class="top-bar">
+        <div class="top-bar-back">
+          <span class="material-icons-round">arrow_back</span>
+        </div>
+        <div class="top-bar-title">疫苗记录</div>
+        <div class="top-bar-action">
+          <span class="material-icons-round">edit</span>
+        </div>
+        <div class="top-bar-action">
+          <span class="material-icons-round">more_horiz</span>
+        </div>
+      </div>
+
+      <!-- Record Detail Card -->
+      <div class="card-feed">
+        <div class="card bar-blue no-press">
+          <div class="info-rows">
+            <div class="info-row">
+              <span class="info-row-label">记录类型</span>
+              <span class="info-row-value">
+                <span class="tag tag-blue">疫苗</span>
+              </span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">犬只</span>
+              <span class="info-row-value">
+                <span class="mini-avatar"><span class="material-icons-round">pets</span></span>
+                小白
+              </span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">疫苗类型</span>
+              <span class="info-row-value">卫佳8</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">接种日期</span>
+              <span class="info-row-value">2026-03-15</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">下次提醒</span>
+              <span class="info-row-value">2026-04-05</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">费用</span>
+              <span class="info-row-value" style="color: var(--green);">¥50</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">备注</span>
+              <span class="info-row-value" style="color: var(--text-3);">—</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Created Info -->
+      <div class="created-info">创建人: 小李 · 2026-03-15 10:20</div>
+
+      <!-- Action Buttons -->
+      <div class="action-area">
+        <div class="btn-row">
+          <button class="btn btn-ghost">编辑</button>
+          <button class="btn btn-ghost red">删除</button>
+        </div>
+      </div>
+
+      <div class="bottom-spacer"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- PAGE 3: R-24 用药任务详情页                                     -->
+<!-- ============================================================ -->
+<div class="frame-wrapper">
+  <div class="frame-label">R-24 用药任务详情页</div>
+  <div class="phone-frame">
+    <div class="phone-screen light">
+
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="status-bar-right">
+          <span class="material-icons-round">signal_cellular_alt</span>
+          <span class="material-icons-round">wifi</span>
+          <span class="material-icons-round">battery_full</span>
+        </div>
+      </div>
+
+      <!-- Top Bar -->
+      <div class="top-bar">
+        <div class="top-bar-back">
+          <span class="material-icons-round">arrow_back</span>
+        </div>
+        <div class="top-bar-title">用药任务详情</div>
+      </div>
+
+      <!-- Status Banner -->
+      <div class="status-banner" style="background: var(--plum-soft);">
+        <span class="status-banner-left" style="color: var(--plum);">进行中 · 第3天/共15天</span>
+        <span class="status-banner-right" style="color: var(--plum);">20%</span>
+      </div>
+
+      <!-- Progress Bar -->
+      <div class="progress-bar-wrapper">
+        <div class="progress-track">
+          <div class="progress-fill" style="width: 20%; background: linear-gradient(90deg, var(--plum), var(--rose));"></div>
+        </div>
+      </div>
+
+      <!-- Task Info Card -->
+      <div class="card-feed">
+        <div class="card bar-plum no-press">
+          <div class="info-rows">
+            <div class="info-row">
+              <span class="info-row-label">犬只</span>
+              <span class="info-row-value">
+                <span class="mini-avatar"><span class="material-icons-round">pets</span></span>
+                杠上花
+              </span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">药品</span>
+              <span class="info-row-value">黄体酮</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">剂量</span>
+              <span class="info-row-value">0.5毫升</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">方式</span>
+              <span class="info-row-value">注射</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">频率</span>
+              <span class="info-row-value">每日1次</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">开始日期</span>
+              <span class="info-row-value">2026-03-20</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">预计结束</span>
+              <span class="info-row-value">2026-04-03</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">来源方案</span>
+              <span class="info-row-value">
+                <span class="link-text-row">
+                  <span class="link-text">孕期保胎方案</span>
+                  <span class="material-icons-round">chevron_right</span>
+                </span>
+              </span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">注意事项</span>
+              <span class="info-row-value" style="font-weight: 500; color: var(--text-2); max-width: 180px; text-align: right; line-height: 1.4;">需要在每天同一时间注射</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Execution Log Section -->
+      <div class="section-label" style="margin-top: 8px;">
+        <div class="section-dot" style="background: var(--plum);"></div>
+        <span>执行记录</span>
+      </div>
+      <div class="card-feed">
+        <div class="card bar-plum no-press">
+          <div class="exec-log">
+            <div class="exec-log-item">
+              <span class="exec-day">第1天</span>
+              <span class="exec-date">03-20</span>
+              <span class="exec-status done">&#x2705;</span>
+              <span class="exec-detail">小李 14:30</span>
+            </div>
+            <div class="exec-log-item">
+              <span class="exec-day">第2天</span>
+              <span class="exec-date">03-21</span>
+              <span class="exec-status done">&#x2705;</span>
+              <span class="exec-detail">小王 09:15</span>
+            </div>
+            <div class="exec-log-item today">
+              <span class="exec-day" style="color: var(--plum);">第3天</span>
+              <span class="exec-date" style="color: var(--plum);">03-22</span>
+              <span class="exec-status pending" style="font-size: 14px;">&#x2B1C;</span>
+              <span class="exec-detail highlight">待完成</span>
+            </div>
+            <div class="exec-log-item">
+              <span class="exec-day">第4天</span>
+              <span class="exec-date">03-23</span>
+              <span class="exec-status future">&#x25CB;</span>
+              <span class="exec-detail" style="color: var(--text-4);">—</span>
+            </div>
+            <div class="exec-log-item">
+              <span class="exec-day">第5天</span>
+              <span class="exec-date">03-24</span>
+              <span class="exec-status future">&#x25CB;</span>
+              <span class="exec-detail" style="color: var(--text-4);">—</span>
+            </div>
+            <div class="exec-log-item">
+              <span class="exec-day">第6天</span>
+              <span class="exec-date">03-25</span>
+              <span class="exec-status future">&#x25CB;</span>
+              <span class="exec-detail" style="color: var(--text-4);">—</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="action-area">
+        <button class="btn btn-filled plum">标记今日完成</button>
+        <div class="btn-row">
+          <button class="btn btn-ghost">编辑</button>
+          <button class="btn btn-ghost red">取消用药</button>
+        </div>
+      </div>
+
+      <div class="bottom-spacer"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- PAGE 4: F-3 支出详情页                                         -->
+<!-- ============================================================ -->
+<div class="frame-wrapper">
+  <div class="frame-label">F-3 支出详情页</div>
+  <div class="phone-frame">
+    <div class="phone-screen light">
+
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="status-bar-right">
+          <span class="material-icons-round">signal_cellular_alt</span>
+          <span class="material-icons-round">wifi</span>
+          <span class="material-icons-round">battery_full</span>
+        </div>
+      </div>
+
+      <!-- Top Bar (auto-generated, no edit icon) -->
+      <div class="top-bar">
+        <div class="top-bar-back">
+          <span class="material-icons-round">arrow_back</span>
+        </div>
+        <div class="top-bar-title">支出详情</div>
+      </div>
+
+      <!-- Amount Card -->
+      <div class="amount-card">
+        <div class="amount-value expense">¥3,000</div>
+        <div class="amount-meta">
+          <span class="tag tag-green">配种费</span>
+          <span class="amount-date">2026-01-18</span>
+        </div>
+      </div>
+
+      <!-- Detail Card -->
+      <div class="card-feed">
+        <div class="card bar-green no-press">
+          <div class="info-rows">
+            <div class="info-row">
+              <span class="info-row-label">关联方式</span>
+              <span class="info-row-value" style="max-width: 200px; text-align: right; line-height: 1.4;">
+                繁育周期 — 花花第3次繁育
+              </span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">来源</span>
+              <span class="info-row-value">
+                <span class="tag tag-gray">自动生成（配种记录）</span>
+              </span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">图片凭证</span>
+              <span class="info-row-value" style="color: var(--text-3);">—</span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">备注</span>
+              <span class="info-row-value" style="color: var(--text-3);">—</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Created Info -->
+      <div class="created-info">创建人: 系统 · 2026-01-18 14:30</div>
+
+      <!-- Info Banner (auto-generated notice) -->
+      <div class="info-banner blue" style="margin-top: 8px;">
+        <span class="material-icons-round">info</span>
+        <span>此记录由系统自动生成，如需修改请在配种记录中操作</span>
+      </div>
+
+      <div class="bottom-spacer"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- PAGE 5: F-4 收入详情页                                         -->
+<!-- ============================================================ -->
+<div class="frame-wrapper">
+  <div class="frame-label">F-4 收入详情页</div>
+  <div class="phone-frame">
+    <div class="phone-screen light">
+
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="status-bar-right">
+          <span class="material-icons-round">signal_cellular_alt</span>
+          <span class="material-icons-round">wifi</span>
+          <span class="material-icons-round">battery_full</span>
+        </div>
+      </div>
+
+      <!-- Top Bar -->
+      <div class="top-bar">
+        <div class="top-bar-back">
+          <span class="material-icons-round">arrow_back</span>
+        </div>
+        <div class="top-bar-title">收入详情</div>
+      </div>
+
+      <!-- Amount Card -->
+      <div class="amount-card">
+        <div class="amount-value income">¥12,000</div>
+        <div class="amount-meta">
+          <span class="tag tag-red">销售</span>
+          <span class="amount-date">2026-03-15</span>
+        </div>
+      </div>
+
+      <!-- Detail Card -->
+      <div class="card-feed">
+        <div class="card bar-red no-press">
+          <div class="info-rows">
+            <div class="info-row">
+              <span class="info-row-label">关联犬只</span>
+              <span class="info-row-value">
+                <span class="mini-avatar"><span class="material-icons-round">pets</span></span>
+                花花3窝-1号
+              </span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">来源销售记录</span>
+              <span class="info-row-value">
+                <span class="link-text-row">
+                  <span class="link-text">查看销售详情</span>
+                  <span class="material-icons-round">chevron_right</span>
+                </span>
+              </span>
+            </div>
+            <div class="info-row">
+              <span class="info-row-label">来源</span>
+              <span class="info-row-value">
+                <span class="tag tag-gray">自动生成</span>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Created Info -->
+      <div class="created-info">创建人: 系统 · 2026-03-15 16:45</div>
+
+      <!-- Info Banner (auto-generated notice) -->
+      <div class="info-banner blue" style="margin-top: 8px;">
+        <span class="material-icons-round">info</span>
+        <span>此记录由系统自动生成，如需修改请在销售记录中操作</span>
+      </div>
+
+      <div class="bottom-spacer"></div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

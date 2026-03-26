@@ -1,0 +1,1337 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Breed App — Home V1 Final</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: #f0eaec;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 48px;
+  padding: 40px 20px;
+  min-height: 100vh;
+}
+.frame-label {
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+  color: #6b6880;
+}
+
+.phone-frame {
+  width: 375px;
+  height: 812px;
+  border-radius: 44px;
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05);
+}
+
+.phone-screen {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  padding-bottom: 100px;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.phone-screen::-webkit-scrollbar { display: none; }
+
+/* ==================== LIGHT MODE ==================== */
+.light {
+  --primary: #ea3e77;
+  --primary-soft: #fff0f2;
+  --bg: #fdf8f9;
+  --card: #FFFFFF;
+  --card-dim: #FFF0E8;
+  --text-1: #1a1a2e;
+  --text-2: #8B7355;
+  --text-3: #B8A08A;
+  --text-4: #D8CBBD;
+  --amber: #e89b3e;
+  --amber-soft: #fff9f0;
+  --red: #e05252;
+  --red-soft: #fff0f0;
+  --green: #3dae6f;
+  --green-soft: #f0fff4;
+  --blue: #4a8dd4;
+  --blue-soft: #f0f7ff;
+  --plum: #8668b0;
+  --plum-soft: #f5f0ff;
+  --rose: #ea3e77;
+  --rose-soft: #fff0f2;
+  --teal: #3da8a0;
+  --teal-soft: #f0fffe;
+  --shadow: 0 2px 12px rgba(234, 62, 119, 0.06);
+  --shadow-lg: 0 6px 24px rgba(234, 62, 119, 0.1);
+  --nav-bg: rgba(255,255,255,0.85);
+  --nav-border: rgba(234, 62, 119, 0.08);
+  --status-bar-color: #1a1a2e;
+  background: var(--bg);
+}
+
+/* ==================== DARK MODE ==================== */
+.dark {
+  --primary: #f05888;
+  --primary-soft: rgba(240,88,136,0.12);
+  --bg: #181210;
+  --card: #241E1A;
+  --card-dim: #2C2420;
+  --text-1: #F0E8E0;
+  --text-2: #A08868;
+  --text-3: #6B5A48;
+  --text-4: #3E3328;
+  --amber: #f0a84e;
+  --amber-soft: rgba(240,168,78,0.12);
+  --red: #f06666;
+  --red-soft: rgba(240,102,102,0.12);
+  --green: #4ec080;
+  --green-soft: rgba(78,192,128,0.12);
+  --blue: #5ea0e6;
+  --blue-soft: rgba(94,160,230,0.12);
+  --plum: #9a7ec4;
+  --plum-soft: rgba(154,126,196,0.12);
+  --rose: #f05888;
+  --rose-soft: rgba(240,88,136,0.12);
+  --teal: #4ebab2;
+  --teal-soft: rgba(78,186,178,0.12);
+  --shadow: 0 2px 12px rgba(234, 62, 119, 0.1);
+  --shadow-lg: 0 6px 24px rgba(234, 62, 119, 0.15);
+  --nav-bg: rgba(24,18,16,0.88);
+  --nav-border: rgba(240,88,136,0.1);
+  --status-bar-color: #f0e4e8;
+  background: var(--bg);
+}
+
+/* ==================== STATUS BAR ==================== */
+.status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 28px 0;
+  height: 50px;
+  color: var(--status-bar-color);
+  font-size: 15px;
+  font-weight: 600;
+}
+.status-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.status-bar-right .material-icons-round { font-size: 16px; }
+
+/* ==================== HEADER ==================== */
+.header {
+  padding: 12px 20px 0;
+}
+.header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.greeting-text h1 {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--text-1);
+  line-height: 1.3;
+}
+.greeting-sub {
+  font-size: 13px;
+  color: var(--text-2);
+  margin-top: 2px;
+}
+.avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ea3e77, #e89b3e);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.dark .avatar {
+  background: linear-gradient(135deg, #f05888, #f0a84e);
+}
+.avatar .material-icons-round {
+  color: white;
+  font-size: 22px;
+}
+
+/* Summary pills */
+.summary-pills {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  padding-bottom: 16px;
+}
+.pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 16px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.pill .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.pill .num {
+  font-size: 18px;
+  font-weight: 800;
+}
+.pill-red { background: var(--red-soft); color: var(--red); }
+.pill-red .dot { background: var(--red); }
+.pill-amber { background: var(--amber-soft); color: var(--amber); }
+.pill-amber .dot { background: var(--amber); }
+.pill-dim { background: var(--card-dim); color: var(--text-3); }
+.pill-dim .dot { background: var(--text-3); }
+
+/* ==================== 7-DAY STRIP ==================== */
+.day-strip {
+  display: flex;
+  gap: 0;
+  padding: 0 20px 16px;
+  justify-content: space-between;
+}
+.day-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 40px;
+}
+.day-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-3);
+  text-transform: uppercase;
+}
+.day-num {
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.day-cell.today .day-num {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 3px 12px rgba(234, 62, 119, 0.3);
+}
+.day-cell.today .day-label { color: var(--primary); font-weight: 700; }
+.event-dots {
+  display: flex;
+  gap: 3px;
+  height: 6px;
+  align-items: center;
+}
+.event-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+}
+.event-dot.red { background: var(--red); }
+.event-dot.amber { background: var(--amber); }
+.event-dot.green { background: var(--green); }
+.event-dot.gray { background: var(--text-4); }
+
+/* ==================== SECTION LABEL ==================== */
+.section-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 20px 10px;
+}
+.section-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+.section-label span {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-3);
+  letter-spacing: 0.5px;
+}
+.section-badge {
+  background: var(--card-dim);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+/* ==================== CARDS ==================== */
+.card-feed {
+  padding: 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.card {
+  background: var(--card);
+  border-radius: 16px;
+  padding: 16px;
+  padding-left: 18px;
+  position: relative;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  border-left: 3.5px solid transparent;
+}
+/* 左边框弧形跟随卡片圆角 */
+.card.bar-red { border-left-color: var(--red); }
+.card.bar-rose { border-left-color: var(--rose); }
+.card.bar-green { border-left-color: var(--green); }
+.card.bar-blue { border-left-color: var(--blue); }
+.card.bar-plum { border-left-color: var(--plum); }
+.card.bar-teal { border-left-color: var(--teal); }
+/* 左上角渐变色晕 — 和 home-screen.html 一致 */
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 100%;
+  pointer-events: none;
+}
+.card.bar-red::before { background: linear-gradient(135deg, var(--red-soft) 0%, transparent 40%); }
+.card.bar-rose::before { background: linear-gradient(135deg, var(--rose-soft) 0%, transparent 40%); }
+.card.bar-green::before { background: linear-gradient(135deg, var(--green-soft) 0%, transparent 40%); }
+.card.bar-blue::before { background: linear-gradient(135deg, var(--blue-soft) 0%, transparent 40%); }
+.card.bar-plum::before { background: linear-gradient(135deg, var(--plum-soft) 0%, transparent 40%); }
+.card.bar-teal::before { background: linear-gradient(135deg, var(--teal-soft) 0%, transparent 40%); }
+
+/* 卡片所有直接子元素浮在渐变层之上 */
+.card > * {
+  position: relative;
+  z-index: 1;
+}
+.card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.card-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.card-icon.red { background: #FFD9D4; }
+.card-icon.rose { background: #FFD4DE; }
+.card-icon.green { background: #D0F0DC; }
+.card-icon.blue { background: #D4E8F8; }
+.card-icon.plum { background: #E4D8F4; }
+.card-icon.teal { background: #D0F0EC; }
+
+/* 暗色模式 icon 背景加深 */
+.dark .card-icon.red { background: rgba(240,102,102,0.2); }
+.dark .card-icon.rose { background: rgba(240,88,136,0.2); }
+.dark .card-icon.green { background: rgba(78,192,128,0.2); }
+.dark .card-icon.blue { background: rgba(94,160,230,0.2); }
+.dark .card-icon.plum { background: rgba(154,126,196,0.2); }
+.dark .card-icon.teal { background: rgba(78,186,178,0.2); }
+
+.card-title-area {
+  flex: 1;
+  min-width: 0;
+}
+.card-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-1);
+  line-height: 1.3;
+}
+.card-sub {
+  font-size: 12px;
+  color: var(--text-2);
+  margin-top: 1px;
+}
+
+/* Tags */
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.tag {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+.tag-red { background: var(--red-soft); color: var(--red); }
+.tag-amber { background: var(--amber-soft); color: var(--amber); }
+.tag-green { background: var(--green-soft); color: var(--green); }
+.tag-rose { background: var(--rose-soft); color: var(--rose); }
+
+/* Buttons */
+.card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+.btn {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 8px 18px;
+  border-radius: 999px;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.btn:hover { opacity: 0.85; }
+.btn-filled { color: #fff; }
+.btn-red { background: var(--red); }
+.btn-rose { background: var(--rose); }
+.btn-green { background: var(--green); }
+.btn-blue { background: var(--blue); }
+.btn-plum { background: var(--plum); }
+.btn-primary { background: var(--primary); }
+.btn-teal { background: var(--teal); }
+.btn-ghost {
+  background: transparent;
+  border: 1.5px solid var(--text-4);
+  color: var(--text-2);
+}
+
+/* Group items */
+.group-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+.group-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--card-dim);
+  border-radius: 14px;
+  padding: 10px 14px;
+}
+.group-item-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.group-item-status {
+  font-size: 12px;
+  font-weight: 600;
+}
+.group-item-status.rose { color: var(--rose); }
+.group-item-status.amber { color: var(--amber); }
+
+/* Big status */
+.big-status {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--primary);
+  margin-top: 10px;
+  line-height: 1.2;
+}
+.big-status-sub {
+  font-size: 12px;
+  color: var(--text-2);
+  margin-top: 4px;
+}
+.chips {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.chip {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--card-dim);
+  color: var(--text-2);
+}
+
+/* Progress bar */
+.progress-area {
+  margin-top: 12px;
+}
+.progress-bar-track {
+  height: 5px;
+  background: var(--card-dim);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.progress-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+}
+.progress-bar-fill.plum { background: linear-gradient(90deg, var(--plum), var(--rose)); }
+.progress-bar-fill.primary { background: linear-gradient(90deg, var(--primary), var(--amber)); }
+.progress-label {
+  font-size: 12px;
+  font-weight: 800;
+  margin-top: 6px;
+}
+.progress-label.plum { color: var(--plum); }
+.progress-label.primary { color: var(--primary); }
+.progress-desc {
+  font-size: 12px;
+  color: var(--text-2);
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+/* Fraction badge */
+.fraction-badge {
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: 999px;
+  margin-left: 8px;
+}
+
+/* Checkboxes */
+.checkbox-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.checkbox-item.checked {
+  color: var(--text-3);
+  text-decoration: line-through;
+}
+.cb-box {
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+.cb-box.done {
+  background: var(--green);
+  color: #fff;
+}
+.cb-box.empty {
+  border: 2px solid var(--text-4);
+  background: transparent;
+}
+
+/* ==================== BOTTOM NAV ==================== */
+.bottom-nav {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 84px;
+  background: var(--nav-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 0.5px solid var(--nav-border);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-around;
+  padding-top: 8px;
+  z-index: 10;
+}
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 50px;
+  position: relative;
+}
+.nav-item .material-icons-round { font-size: 24px; color: var(--text-3); }
+.nav-item .nav-label { font-size: 10px; font-weight: 600; color: var(--text-3); }
+.nav-item.active .material-icons-round { color: var(--primary); }
+.nav-item.active .nav-label { color: var(--primary); }
+.fab {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ea3e77, #e89b3e);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: -10px;
+  box-shadow: 0 4px 16px rgba(234, 62, 119, 0.3);
+  position: relative;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  cursor: pointer;
+}
+.fab:active {
+  transform: scale(0.88);
+  box-shadow: 0 2px 8px rgba(234, 62, 119, 0.2);
+}
+.dark .fab {
+  background: linear-gradient(135deg, #f05888, #f0a84e);
+  box-shadow: 0 4px 16px rgba(240, 88, 136, 0.35);
+}
+.fab .material-icons-round { font-size: 28px; color: #fff; }
+
+/* ==================== WRAPPER ==================== */
+.phone-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+/* ==================== INTERACTIONS ==================== */
+
+/* 卡片按压 */
+.card {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  cursor: pointer;
+}
+.card:active {
+  transform: scale(0.975);
+  box-shadow: 0 1px 4px rgba(45,27,20,0.08);
+}
+
+/* 摘要 pill 按压 */
+.pill {
+  transition: transform 0.12s ease, filter 0.12s ease;
+  cursor: pointer;
+}
+.pill:active {
+  transform: scale(0.95);
+  filter: brightness(0.95);
+}
+
+/* 按钮按压 */
+.btn {
+  transition: transform 0.12s ease, opacity 0.12s ease, box-shadow 0.12s ease;
+  cursor: pointer;
+}
+.btn:active {
+  transform: scale(0.94);
+  opacity: 0.85;
+}
+.btn-filled:active {
+  box-shadow: 0 0 0 3px rgba(234,62,119,0.15);
+}
+
+/* 日期格子切换 */
+.day-cell {
+  transition: background 0.2s ease, transform 0.12s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+}
+.day-cell:active {
+  transform: scale(0.9);
+}
+
+/* 底部导航按压 */
+.nav-item {
+  transition: transform 0.12s ease;
+  cursor: pointer;
+}
+.nav-item:active {
+  transform: scale(0.85);
+}
+
+/* FAB 按压 + 呼吸光影 */
+.fab-btn {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  cursor: pointer;
+}
+.fab-btn:active {
+  transform: scale(0.88);
+  box-shadow: 0 2px 8px rgba(234,62,119,0.25);
+}
+
+/* Checkbox 切换 */
+.cb-box {
+  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  cursor: pointer;
+}
+.cb-box:active {
+  transform: scale(0.85);
+}
+.cb-box.empty:hover {
+  border-color: var(--text-3);
+}
+
+/* 群组行按压 */
+.group-item {
+  transition: background 0.12s ease;
+  cursor: pointer;
+}
+.group-item:active {
+  background: var(--card-dim);
+  filter: brightness(0.97);
+}
+
+/* 分区标题 badge 按压 */
+.section-badge {
+  transition: transform 0.12s ease;
+  cursor: pointer;
+}
+.section-badge:active {
+  transform: scale(0.9);
+}
+
+/* 任务 chips 按压 */
+.chip {
+  transition: transform 0.12s ease, background 0.12s ease;
+  cursor: pointer;
+}
+.chip:active {
+  transform: scale(0.94);
+  filter: brightness(0.95);
+}
+
+/* 卡片入场动画 */
+@keyframes cardSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.card-feed .card {
+  animation: cardSlideUp 0.35s ease both;
+}
+.card-feed .card:nth-child(1) { animation-delay: 0.05s; }
+.card-feed .card:nth-child(2) { animation-delay: 0.1s; }
+.card-feed .card:nth-child(3) { animation-delay: 0.15s; }
+.card-feed .card:nth-child(4) { animation-delay: 0.2s; }
+.card-feed .card:nth-child(5) { animation-delay: 0.25s; }
+.card-feed .card:nth-child(6) { animation-delay: 0.3s; }
+
+/* 摘要 pills 入场 */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.pills-row {
+  animation: fadeIn 0.3s ease both;
+}
+
+/* 进度条动画 */
+@keyframes progressGrow {
+  from { width: 0; }
+}
+.progress-bar-fill {
+  animation: progressGrow 0.6s ease 0.3s both;
+}
+
+/* 平滑滚动 */
+.scroll-content {
+  scroll-behavior: smooth;
+}
+</style>
+
+<script>
+// Checkbox 点击切换
+document.addEventListener('click', function(e) {
+  const cb = e.target.closest('.cb-box');
+  if (!cb) return;
+
+  const item = cb.closest('.checkbox-item');
+  if (!item) return;
+
+  if (cb.classList.contains('empty')) {
+    cb.classList.remove('empty');
+    cb.classList.add('done');
+    cb.textContent = '✓';
+    item.classList.add('checked');
+  } else {
+    cb.classList.remove('done');
+    cb.classList.add('empty');
+    cb.textContent = '';
+    item.classList.remove('checked');
+  }
+
+  // 更新分数
+  const card = cb.closest('.card');
+  if (card) {
+    const total = card.querySelectorAll('.cb-box').length;
+    const done = card.querySelectorAll('.cb-box.done').length;
+    const remaining = total - done;
+    const badge = card.querySelector('.fraction-badge');
+    if (badge) badge.textContent = remaining + '/' + total;
+
+    const fill = card.querySelector('.progress-bar-fill');
+    if (fill) fill.style.width = (done / total * 100) + '%';
+
+    const btn = card.querySelector('.btn-filled');
+    if (btn && remaining > 0) btn.textContent = '批量处理剩余' + remaining + '只';
+    if (btn && remaining === 0) {
+      btn.textContent = '全部完成 ✓';
+      btn.style.background = 'var(--green)';
+    }
+  }
+});
+
+// 日期格子点击切换
+document.addEventListener('click', function(e) {
+  const day = e.target.closest('.day-cell');
+  if (!day) return;
+
+  const strip = day.closest('.week-strip');
+  if (!strip) return;
+
+  strip.querySelectorAll('.day-cell').forEach(d => d.classList.remove('active'));
+  day.classList.add('active');
+});
+
+// 按钮点击反馈
+document.addEventListener('click', function(e) {
+  const btn = e.target.closest('.btn');
+  if (!btn) return;
+
+  // 涟漪效果
+  btn.style.transform = 'scale(0.94)';
+  setTimeout(() => {
+    btn.style.transform = '';
+  }, 150);
+});
+</script>
+</head>
+<body>
+
+<!-- ==================== LIGHT MODE ==================== -->
+<div class="phone-wrapper">
+  <div class="frame-label">Light Mode</div>
+  <div class="phone-frame light">
+    <div class="phone-screen">
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="status-bar-right">
+          <span class="material-icons-round">signal_cellular_alt</span>
+          <span class="material-icons-round">wifi</span>
+          <span class="material-icons-round">battery_full</span>
+        </div>
+      </div>
+
+      <!-- Header -->
+      <div class="header">
+        <div class="header-top">
+          <div class="greeting-text">
+            <h1>早上好，小李</h1>
+            <div class="greeting-sub">3月22日 周六 · 犬舍状态一览</div>
+          </div>
+          <div class="avatar">
+            <span class="material-icons-round">pets</span>
+          </div>
+        </div>
+        <div class="summary-pills">
+          <div class="pill pill-red"><span class="dot"></span>需处理 <span class="num">2</span></div>
+          <div class="pill pill-amber"><span class="dot"></span>今日 <span class="num">7</span></div>
+          <div class="pill pill-dim"><span class="dot"></span>本周 <span class="num">12</span></div>
+        </div>
+      </div>
+
+      <!-- 7-Day Strip -->
+      <div class="day-strip">
+        <div class="day-cell">
+          <span class="day-label">日</span>
+          <div class="day-num">16</div>
+          <div class="event-dots"><span class="event-dot gray"></span></div>
+        </div>
+        <div class="day-cell">
+          <span class="day-label">一</span>
+          <div class="day-num">17</div>
+          <div class="event-dots"><span class="event-dot amber"></span></div>
+        </div>
+        <div class="day-cell">
+          <span class="day-label">二</span>
+          <div class="day-num">18</div>
+          <div class="event-dots"><span class="event-dot green"></span></div>
+        </div>
+        <div class="day-cell">
+          <span class="day-label">三</span>
+          <div class="day-num">19</div>
+          <div class="event-dots"><span class="event-dot red"></span><span class="event-dot amber"></span></div>
+        </div>
+        <div class="day-cell">
+          <span class="day-label">四</span>
+          <div class="day-num">20</div>
+          <div class="event-dots"><span class="event-dot gray"></span></div>
+        </div>
+        <div class="day-cell">
+          <span class="day-label">五</span>
+          <div class="day-num">21</div>
+          <div class="event-dots"><span class="event-dot amber"></span><span class="event-dot green"></span></div>
+        </div>
+        <div class="day-cell today">
+          <span class="day-label">六</span>
+          <div class="day-num">22</div>
+          <div class="event-dots"><span class="event-dot red"></span><span class="event-dot amber"></span><span class="event-dot green"></span></div>
+        </div>
+      </div>
+
+      <!-- Section: 需立即处理 -->
+      <div class="section-label">
+        <span class="section-dot" style="background:var(--red)"></span>
+        <span>需立即处理</span>
+        <div class="section-badge">2</div>
+      </div>
+
+      <div class="card-feed">
+        <!-- Card 1: Overdue -->
+        <div class="card bar-red">
+          <div class="card-header">
+            <div class="card-icon red"><span class="material-icons-round" style="color:var(--red);font-size:20px;">pets</span></div>
+            <div class="card-title-area">
+              <div class="card-name">小白</div>
+              <div class="card-sub">马尔济斯 · 2岁</div>
+            </div>
+          </div>
+          <div class="tags">
+            <span class="tag tag-red">疫苗逾期 2天</span>
+            <span class="tag tag-amber">今日体检</span>
+          </div>
+          <div class="card-actions">
+            <button class="btn btn-filled btn-red">去处理疫苗</button>
+            <button class="btn btn-ghost">推迟</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: 今日任务 -->
+      <div class="section-label" style="margin-top:8px;">
+        <span class="section-dot" style="background:var(--amber)"></span>
+        <span>今日任务</span>
+        <div class="section-badge">5</div>
+      </div>
+
+      <div class="card-feed">
+        <!-- Card 2: Pregnancy Group -->
+        <div class="card bar-rose">
+          <div class="card-header">
+            <div class="card-icon rose">🤰</div>
+            <div class="card-title-area">
+              <div class="card-name">孕期护理 · 3只</div>
+              <div class="card-sub">每日喂钙铁</div>
+            </div>
+          </div>
+          <div class="group-items">
+            <div class="group-item">
+              <span class="group-item-name">杠上花</span>
+              <span class="group-item-status rose">怀孕第3天</span>
+            </div>
+            <div class="group-item">
+              <span class="group-item-name">安妮</span>
+              <span class="group-item-status rose">怀孕第18天</span>
+            </div>
+            <div class="group-item">
+              <span class="group-item-name">小乔</span>
+              <span class="group-item-status amber">第45天 · 距预产期18天</span>
+            </div>
+          </div>
+          <div class="card-actions">
+            <button class="btn btn-filled btn-primary">批量标记今日已完成</button>
+          </div>
+        </div>
+
+        <!-- Card 3: Individual Dog -->
+        <div class="card bar-green">
+          <div class="card-header">
+            <div class="card-icon green">🐩</div>
+            <div class="card-title-area">
+              <div class="card-name">花花</div>
+              <div class="card-sub">马尔济斯 · 种母</div>
+            </div>
+          </div>
+          <div class="big-status">孕期第58天</div>
+          <div class="big-status-sub">距预产期5天 · 注意观察临产征兆</div>
+          <div class="chips">
+            <span class="chip">🌡️ 量体温</span>
+            <span class="chip">👀 观察状态</span>
+          </div>
+          <div class="card-actions">
+            <button class="btn btn-filled btn-green">记录</button>
+          </div>
+        </div>
+
+        <!-- Card 4: Batch -->
+        <div class="card bar-blue">
+          <div class="card-header">
+            <div class="card-icon blue">💉</div>
+            <div class="card-title-area">
+              <div class="card-name">月度驱虫 · 今日</div>
+              <div class="card-sub">8只成犬</div>
+            </div>
+          </div>
+          <div class="progress-desc">小白、花花、豆豆、妞妞 等8只</div>
+          <div class="card-actions">
+            <button class="btn btn-filled btn-blue">批量处理全部</button>
+            <button class="btn btn-ghost">逐只查看</button>
+          </div>
+        </div>
+
+        <!-- Card 5: Medication -->
+        <div class="card bar-plum">
+          <div class="card-header">
+            <div class="card-icon plum">💊</div>
+            <div class="card-title-area">
+              <div class="card-name">每日用药</div>
+              <div class="card-sub">持续疗程</div>
+            </div>
+          </div>
+          <div class="progress-area">
+            <div class="progress-bar-track">
+              <div class="progress-bar-fill plum" style="width:20%"></div>
+            </div>
+            <div class="progress-label plum">3/15天</div>
+          </div>
+          <div class="progress-desc">杠上花 · 黄体酮<br>李拜六、莉莉娅 · 头孢曲松钠</div>
+          <div class="card-actions">
+            <button class="btn btn-filled btn-plum">批量标记今日已完成</button>
+          </div>
+        </div>
+
+        <!-- Card 6: Progress -->
+        <div class="card bar-teal">
+          <div class="card-header">
+            <div class="card-icon teal">🎯</div>
+            <div class="card-title-area">
+              <div style="display:flex;align-items:center;">
+                <div class="card-name">豆豆第3窝 · 首次驱虫</div>
+                <span class="fraction-badge">3/5</span>
+              </div>
+            </div>
+          </div>
+          <div class="progress-area">
+            <div class="progress-bar-track">
+              <div class="progress-bar-fill primary" style="width:40%"></div>
+            </div>
+          </div>
+          <div class="checkbox-list">
+            <span class="checkbox-item checked"><span class="cb-box done">✓</span>幼崽A</span>
+            <span class="checkbox-item checked"><span class="cb-box done">✓</span>幼崽B</span>
+            <span class="checkbox-item"><span class="cb-box empty"></span>幼崽C</span>
+            <span class="checkbox-item"><span class="cb-box empty"></span>幼崽D</span>
+            <span class="checkbox-item"><span class="cb-box empty"></span>幼崽E</span>
+          </div>
+          <div class="card-actions">
+            <button class="btn btn-filled btn-primary">批量处理剩余3只</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="height:40px"></div>
+    </div>
+
+    <!-- Bottom Nav -->
+    <div class="bottom-nav">
+      <div class="nav-item active">
+        <span class="material-icons-round">home</span>
+        <span class="nav-label">首页</span>
+      </div>
+      <div class="nav-item">
+        <span class="material-icons-round">pets</span>
+        <span class="nav-label">档案</span>
+      </div>
+      <div class="fab">
+        <span class="material-icons-round">add</span>
+      </div>
+      <div class="nav-item">
+        <span class="material-icons-round">account_balance_wallet</span>
+        <span class="nav-label">财务</span>
+      </div>
+      <div class="nav-item">
+        <span class="material-icons-round">person</span>
+        <span class="nav-label">我的</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== DARK MODE ==================== -->
+<div class="phone-wrapper">
+  <div class="frame-label">Dark Mode</div>
+  <div class="phone-frame dark">
+    <div class="phone-screen">
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="status-bar-right">
+          <span class="material-icons-round">signal_cellular_alt</span>
+          <span class="material-icons-round">wifi</span>
+          <span class="material-icons-round">battery_full</span>
+        </div>
+      </div>
+
+      <!-- Header -->
+      <div class="header">
+        <div class="header-top">
+          <div class="greeting-text">
+            <h1>早上好，小李</h1>
+            <div class="greeting-sub">3月22日 周六 · 犬舍状态一览</div>
+          </div>
+          <div class="avatar">
+            <span class="material-icons-round">pets</span>
+          </div>
+        </div>
+        <div class="summary-pills">
+          <div class="pill pill-red"><span class="dot"></span>需处理 <span class="num">2</span></div>
+          <div class="pill pill-amber"><span class="dot"></span>今日 <span class="num">7</span></div>
+          <div class="pill pill-dim"><span class="dot"></span>本周 <span class="num">12</span></div>
+        </div>
+      </div>
+
+      <!-- 7-Day Strip -->
+      <div class="day-strip">
+        <div class="day-cell">
+          <span class="day-label">日</span>
+          <div class="day-num">16</div>
+          <div class="event-dots"><span class="event-dot gray"></span></div>
+        </div>
+        <div class="day-cell">
+          <span class="day-label">一</span>
+          <div class="day-num">17</div>
+          <div class="event-dots"><span class="event-dot amber"></span></div>
+        </div>
+        <div class="day-cell">
+          <span class="day-label">二</span>
+          <div class="day-num">18</div>
+          <div class="event-dots"><span class="event-dot green"></span></div>
+        </div>
+        <div class="day-cell">
+          <span class="day-label">三</span>
+          <div class="day-num">19</div>
+          <div class="event-dots"><span class="event-dot red"></span><span class="event-dot amber"></span></div>
+        </div>
+        <div class="day-cell">
+          <span class="day-label">四</span>
+          <div class="day-num">20</div>
+          <div class="event-dots"><span class="event-dot gray"></span></div>
+        </div>
+        <div class="day-cell">
+          <span class="day-label">五</span>
+          <div class="day-num">21</div>
+          <div class="event-dots"><span class="event-dot amber"></span><span class="event-dot green"></span></div>
+        </div>
+        <div class="day-cell today">
+          <span class="day-label">六</span>
+          <div class="day-num">22</div>
+          <div class="event-dots"><span class="event-dot red"></span><span class="event-dot amber"></span><span class="event-dot green"></span></div>
+        </div>
+      </div>
+
+      <!-- Section: 需立即处理 -->
+      <div class="section-label">
+        <span class="section-dot" style="background:var(--red)"></span>
+        <span>需立即处理</span>
+        <div class="section-badge">2</div>
+      </div>
+
+      <div class="card-feed">
+        <!-- Card 1: Overdue -->
+        <div class="card bar-red">
+          <div class="card-header">
+            <div class="card-icon red"><span class="material-icons-round" style="color:var(--red);font-size:20px;">pets</span></div>
+            <div class="card-title-area">
+              <div class="card-name">小白</div>
+              <div class="card-sub">马尔济斯 · 2岁</div>
+            </div>
+          </div>
+          <div class="tags">
+            <span class="tag tag-red">疫苗逾期 2天</span>
+            <span class="tag tag-amber">今日体检</span>
+          </div>
+          <div class="card-actions">
+            <button class="btn btn-filled btn-red">去处理疫苗</button>
+            <button class="btn btn-ghost">推迟</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: 今日任务 -->
+      <div class="section-label" style="margin-top:8px;">
+        <span class="section-dot" style="background:var(--amber)"></span>
+        <span>今日任务</span>
+        <div class="section-badge">5</div>
+      </div>
+
+      <div class="card-feed">
+        <!-- Card 2: Pregnancy Group -->
+        <div class="card bar-rose">
+          <div class="card-header">
+            <div class="card-icon rose">🤰</div>
+            <div class="card-title-area">
+              <div class="card-name">孕期护理 · 3只</div>
+              <div class="card-sub">每日喂钙铁</div>
+            </div>
+          </div>
+          <div class="group-items">
+            <div class="group-item">
+              <span class="group-item-name">杠上花</span>
+              <span class="group-item-status rose">怀孕第3天</span>
+            </div>
+            <div class="group-item">
+              <span class="group-item-name">安妮</span>
+              <span class="group-item-status rose">怀孕第18天</span>
+            </div>
+            <div class="group-item">
+              <span class="group-item-name">小乔</span>
+              <span class="group-item-status amber">第45天 · 距预产期18天</span>
+            </div>
+          </div>
+          <div class="card-actions">
+            <button class="btn btn-filled btn-primary">批量标记今日已完成</button>
+          </div>
+        </div>
+
+        <!-- Card 3: Individual Dog -->
+        <div class="card bar-green">
+          <div class="card-header">
+            <div class="card-icon green">🐩</div>
+            <div class="card-title-area">
+              <div class="card-name">花花</div>
+              <div class="card-sub">马尔济斯 · 种母</div>
+            </div>
+          </div>
+          <div class="big-status">孕期第58天</div>
+          <div class="big-status-sub">距预产期5天 · 注意观察临产征兆</div>
+          <div class="chips">
+            <span class="chip">🌡️ 量体温</span>
+            <span class="chip">👀 观察状态</span>
+          </div>
+          <div class="card-actions">
+            <button class="btn btn-filled btn-green">记录</button>
+          </div>
+        </div>
+
+        <!-- Card 4: Batch -->
+        <div class="card bar-blue">
+          <div class="card-header">
+            <div class="card-icon blue">💉</div>
+            <div class="card-title-area">
+              <div class="card-name">月度驱虫 · 今日</div>
+              <div class="card-sub">8只成犬</div>
+            </div>
+          </div>
+          <div class="progress-desc">小白、花花、豆豆、妞妞 等8只</div>
+          <div class="card-actions">
+            <button class="btn btn-filled btn-blue">批量处理全部</button>
+            <button class="btn btn-ghost">逐只查看</button>
+          </div>
+        </div>
+
+        <!-- Card 5: Medication -->
+        <div class="card bar-plum">
+          <div class="card-header">
+            <div class="card-icon plum">💊</div>
+            <div class="card-title-area">
+              <div class="card-name">每日用药</div>
+              <div class="card-sub">持续疗程</div>
+            </div>
+          </div>
+          <div class="progress-area">
+            <div class="progress-bar-track">
+              <div class="progress-bar-fill plum" style="width:20%"></div>
+            </div>
+            <div class="progress-label plum">3/15天</div>
+          </div>
+          <div class="progress-desc">杠上花 · 黄体酮<br>李拜六、莉莉娅 · 头孢曲松钠</div>
+          <div class="card-actions">
+            <button class="btn btn-filled btn-plum">批量标记今日已完成</button>
+          </div>
+        </div>
+
+        <!-- Card 6: Progress -->
+        <div class="card bar-teal">
+          <div class="card-header">
+            <div class="card-icon teal">🎯</div>
+            <div class="card-title-area">
+              <div style="display:flex;align-items:center;">
+                <div class="card-name">豆豆第3窝 · 首次驱虫</div>
+                <span class="fraction-badge">3/5</span>
+              </div>
+            </div>
+          </div>
+          <div class="progress-area">
+            <div class="progress-bar-track">
+              <div class="progress-bar-fill primary" style="width:40%"></div>
+            </div>
+          </div>
+          <div class="checkbox-list">
+            <span class="checkbox-item checked"><span class="cb-box done">✓</span>幼崽A</span>
+            <span class="checkbox-item checked"><span class="cb-box done">✓</span>幼崽B</span>
+            <span class="checkbox-item"><span class="cb-box empty"></span>幼崽C</span>
+            <span class="checkbox-item"><span class="cb-box empty"></span>幼崽D</span>
+            <span class="checkbox-item"><span class="cb-box empty"></span>幼崽E</span>
+          </div>
+          <div class="card-actions">
+            <button class="btn btn-filled btn-primary">批量处理剩余3只</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="height:40px"></div>
+    </div>
+
+    <!-- Bottom Nav -->
+    <div class="bottom-nav">
+      <div class="nav-item active">
+        <span class="material-icons-round">home</span>
+        <span class="nav-label">首页</span>
+      </div>
+      <div class="nav-item">
+        <span class="material-icons-round">pets</span>
+        <span class="nav-label">档案</span>
+      </div>
+      <div class="fab">
+        <span class="material-icons-round">add</span>
+      </div>
+      <div class="nav-item">
+        <span class="material-icons-round">account_balance_wallet</span>
+        <span class="nav-label">财务</span>
+      </div>
+      <div class="nav-item">
+        <span class="material-icons-round">person</span>
+        <span class="nav-label">我的</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>D-2 犬只详情页</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+<style>
+/* ==================== RESET ==================== */
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'PingFang SC',sans-serif;
+  background:#f0eaec;
+  display:flex;
+  justify-content:center;
+  padding:40px 20px;
+  min-height:100vh;
+}
+
+/* ==================== FRAME ==================== */
+.phone-frame{
+  width:375px;height:812px;border-radius:44px;overflow:hidden;
+  position:relative;flex-shrink:0;
+  box-shadow:0 20px 60px rgba(0,0,0,.15),0 0 0 1px rgba(0,0,0,.05);
+}
+.phone-screen{
+  width:100%;height:100%;overflow:hidden;position:relative;
+  display:flex;flex-direction:column;
+  -ms-overflow-style:none;scrollbar-width:none;
+}
+.phone-screen::-webkit-scrollbar{display:none}
+
+/* ==================== DESIGN TOKENS ==================== */
+.light{
+  --primary:#ea3e77;--primary-soft:#fff0f2;
+  --bg:#fdf8f9;--card:#fff;--card-dim:#FFF0E8;
+  --text-1:#1a1a2e;--text-2:#8B7355;--text-3:#B8A08A;--text-4:#D8CBBD;
+  --red:#e05252;--red-soft:#fff0f0;
+  --amber:#e89b3e;--amber-soft:#fff9f0;
+  --green:#3dae6f;--green-soft:#f0fff4;
+  --blue:#4a8dd4;--blue-soft:#f0f7ff;
+  --plum:#8668b0;--plum-soft:#f5f0ff;
+  --rose:#ea3e77;--rose-soft:#fff0f2;
+  --teal:#3da8a0;--teal-soft:#f0fffe;
+  --shadow:0 2px 12px rgba(234,62,119,.06);
+  --shadow-lg:0 6px 24px rgba(234,62,119,.1);
+  background:var(--bg);
+}
+
+/* ==================== STATUS BAR ==================== */
+.status-bar{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:14px 28px 0;height:50px;flex-shrink:0;
+  color:var(--text-1);font-size:15px;font-weight:600;
+}
+.status-bar-right{display:flex;align-items:center;gap:6px}
+.status-bar-right .material-icons-round{font-size:16px}
+
+/* ==================== TOP BAR ==================== */
+.top-bar{
+  display:flex;align-items:center;padding:6px 16px 6px;gap:6px;flex-shrink:0;
+}
+.back-btn{
+  width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  color:var(--text-1);cursor:pointer;background:none;border:none;
+  transition:background .12s ease;
+}
+.back-btn:active{background:var(--card-dim)}
+.back-btn .material-icons-round{font-size:22px}
+.top-bar-title{flex:1;font-size:17px;font-weight:800;color:var(--text-1)}
+.top-bar-cta{
+  display:flex;align-items:center;gap:3px;padding:6px 14px 6px 10px;
+  border-radius:999px;background:var(--primary);color:#fff;
+  font-size:13px;font-weight:700;border:none;cursor:pointer;
+  font-family:inherit;transition:all .12s ease;
+  box-shadow:0 2px 10px rgba(234,62,119,.25);
+}
+.top-bar-cta:active{transform:scale(.92);opacity:.85}
+.top-bar-cta .material-icons-round{font-size:16px}
+.top-bar-more{
+  width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  color:var(--text-3);cursor:pointer;background:none;border:none;
+  transition:background .12s ease;
+}
+.top-bar-more:active{background:var(--card-dim)}
+.top-bar-more .material-icons-round{font-size:22px}
+
+/* ==================== COMPACT HERO ==================== */
+.hero-compact{
+  display:flex;align-items:center;gap:14px;padding:4px 20px 14px;flex-shrink:0;
+}
+.hero-avatar{
+  width:56px;height:56px;border-radius:50%;
+  background:linear-gradient(135deg,#ea3e77,#e89b3e);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  box-shadow:0 4px 14px rgba(234,62,119,.2);
+}
+.hero-avatar .material-icons-round{color:#fff;font-size:28px}
+.hero-info{flex:1;min-width:0}
+.hero-name{font-size:20px;font-weight:800;color:var(--text-1);line-height:1.2}
+.hero-sub{font-size:13px;font-weight:500;color:var(--text-2);margin-top:2px}
+.hero-tags{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.hero-tag{
+  font-size:11px;font-weight:700;padding:3px 8px 3px 10px;border-radius:999px;
+  cursor:pointer;transition:all .12s ease;display:flex;align-items:center;gap:2px;
+}
+.hero-tag:active{transform:scale(.92);opacity:.8}
+.tag-rose{background:var(--rose-soft);color:var(--rose)}
+.tag-plum{background:var(--plum-soft);color:var(--plum)}
+.tag-static{
+  background:transparent;border:1.5px solid var(--text-4);color:var(--text-3);
+  padding:3px 10px;cursor:default;
+}
+.tag-static:active{transform:none;opacity:1}
+.hero-tag .material-icons-round{font-size:12px}
+
+/* ==================== QUICK STATS ==================== */
+.stats-strip{
+  display:flex;margin:0 20px 10px;background:var(--card);border-radius:14px;
+  box-shadow:var(--shadow);overflow:hidden;flex-shrink:0;
+}
+.stat-item{
+  flex:1;display:flex;flex-direction:column;align-items:center;padding:10px 4px;gap:1px;
+}
+.stat-item+.stat-item{border-left:1px solid rgba(216,203,189,.2)}
+.stat-icon{font-size:15px;color:var(--text-3)}
+.stat-value{font-size:15px;font-weight:800;color:var(--text-1);line-height:1.3}
+.stat-label{font-size:10px;font-weight:600;color:var(--text-3)}
+
+/* ==================== TAB BAR ==================== */
+.tab-bar{
+  display:flex;padding:0 20px;border-bottom:1px solid rgba(216,203,189,.2);
+  position:sticky;top:0;background:var(--bg);z-index:5;flex-shrink:0;
+}
+.tab-item{
+  flex:1;text-align:center;padding:10px 0 11px;font-size:13px;font-weight:600;
+  color:var(--text-3);cursor:pointer;position:relative;
+  transition:color .15s ease;user-select:none;-webkit-tap-highlight-color:transparent;
+}
+.tab-item.active{color:var(--primary);font-weight:700}
+.tab-item.active::after{
+  content:'';position:absolute;bottom:-1px;left:20%;right:20%;
+  height:2.5px;border-radius:2px;background:var(--primary);
+}
+
+/* ==================== TAB CONTENT ==================== */
+.tab-content{
+  flex:1;overflow-y:auto;-ms-overflow-style:none;scrollbar-width:none;
+}
+.tab-content::-webkit-scrollbar{display:none}
+.tab-pane{
+  display:none;padding:16px 20px 32px;
+  flex-direction:column;gap:16px;
+}
+.tab-pane.active{display:flex}
+
+/* ==================== SECTION LABEL ==================== */
+.sec{display:flex;align-items:center;gap:8px;margin-bottom:-4px}
+.sec::before{content:'';width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.sec.s-rose::before{background:var(--rose)}
+.sec.s-green::before{background:var(--green)}
+.sec.s-teal::before{background:var(--teal)}
+.sec.s-blue::before{background:var(--blue)}
+.sec.s-amber::before{background:var(--amber)}
+.sec.s-plum::before{background:var(--plum)}
+.sec .s-text{font-size:12px;font-weight:700;color:var(--text-3);letter-spacing:.3px}
+.sec .s-badge{
+  background:var(--card-dim);color:var(--text-2);font-size:12px;font-weight:800;
+  padding:2px 8px;border-radius:999px;
+}
+.sec .s-link{
+  margin-left:auto;font-size:12px;font-weight:600;color:var(--primary);cursor:pointer;
+}
+
+/* ==================== MERGED STATUS CARD ==================== */
+.status-merged{
+  background:var(--card);border-radius:16px;box-shadow:var(--shadow);
+  overflow:hidden;position:relative;
+}
+.status-merged::before{
+  content:'';position:absolute;top:0;left:0;width:100%;height:100%;
+  background:linear-gradient(135deg,var(--rose-soft) 0%,transparent 30%);
+  pointer-events:none;border-radius:16px;
+}
+.status-merged>*{position:relative;z-index:1}
+.status-row{
+  padding:14px 16px 14px 18px;display:flex;flex-direction:column;gap:10px;
+  cursor:pointer;transition:background .12s ease;border-left:3.5px solid transparent;
+}
+.status-row:active{background:rgba(234,62,119,.03)}
+.status-row+.status-row{border-top:1px solid rgba(216,203,189,.18)}
+.status-row.br-rose{border-left-color:var(--rose)}
+.status-row.br-plum{border-left-color:var(--plum)}
+.status-row.br-red{border-left-color:var(--red)}
+
+.st-header{display:flex;align-items:center;justify-content:space-between}
+.st-left{display:flex;align-items:center;gap:10px}
+.st-icon{
+  width:34px;height:34px;border-radius:10px;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.st-icon .material-icons-round{font-size:18px}
+.st-icon.ic-rose{background:#FFD4DE}.st-icon.ic-rose .material-icons-round{color:var(--rose)}
+.st-icon.ic-plum{background:#E4D8F4}.st-icon.ic-plum .material-icons-round{color:var(--plum)}
+.st-title{font-size:14px;font-weight:700;color:var(--text-1)}
+.st-sub{font-size:12px;font-weight:500;color:var(--text-2);margin-top:1px}
+.st-chevron{color:var(--text-4);font-size:20px;flex-shrink:0}
+
+.progress-wrap{display:flex;align-items:center;gap:10px}
+.progress-track{flex:1;height:5px;border-radius:999px;background:var(--card-dim);overflow:hidden}
+.progress-fill{height:100%;border-radius:999px;transition:width .6s ease .2s}
+.fill-rose{background:linear-gradient(90deg,var(--rose),var(--amber))}
+.fill-plum{background:linear-gradient(90deg,var(--plum),var(--rose))}
+.progress-label{font-size:12px;font-weight:800;white-space:nowrap}
+.progress-label.c-rose{color:var(--rose)}
+.progress-label.c-plum{color:var(--plum)}
+
+.st-meta{display:flex;gap:14px}
+.st-meta-item{
+  font-size:11px;font-weight:500;color:var(--text-3);
+  display:flex;align-items:center;gap:3px;
+}
+.st-meta-item .material-icons-round{font-size:13px}
+
+/* ==================== RECORD LIST ==================== */
+.rec-list{background:var(--card);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
+.rec-item{
+  display:flex;align-items:center;gap:12px;padding:12px 14px 12px 16px;
+  cursor:pointer;transition:background .12s ease;
+}
+.rec-item:active{background:rgba(234,62,119,.03)}
+.rec-item+.rec-item{border-top:1px solid rgba(216,203,189,.12)}
+.rec-icon{
+  width:34px;height:34px;border-radius:10px;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.rec-icon .material-icons-round{font-size:17px}
+.rec-icon.i-blue{background:#D4E8F8}.rec-icon.i-blue .material-icons-round{color:var(--blue)}
+.rec-icon.i-teal{background:#D0F0EC}.rec-icon.i-teal .material-icons-round{color:var(--teal)}
+.rec-icon.i-plum{background:#E4D8F4}.rec-icon.i-plum .material-icons-round{color:var(--plum)}
+.rec-icon.i-rose{background:#FFD4DE}.rec-icon.i-rose .material-icons-round{color:var(--rose)}
+.rec-icon.i-green{background:#D0F0DC}.rec-icon.i-green .material-icons-round{color:var(--green)}
+.rec-icon.i-red{background:#FFD9D4}.rec-icon.i-red .material-icons-round{color:var(--red)}
+.rec-icon.i-amber{background:#FFE8C8}.rec-icon.i-amber .material-icons-round{color:var(--amber)}
+.rec-body{flex:1;min-width:0}
+.rec-title{font-size:13px;font-weight:600;color:var(--text-1)}
+.rec-title.muted{color:var(--text-3);text-decoration:line-through}
+.rec-sub{font-size:11px;font-weight:500;color:var(--text-3);margin-top:1px}
+.rec-right{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.rec-tag{font-size:11px;font-weight:600;padding:3px 8px;border-radius:999px}
+.rec-tag.t-rose{background:var(--rose-soft);color:var(--rose)}
+.rec-tag.t-green{background:var(--green-soft);color:var(--green)}
+.rec-tag.t-gray{background:var(--card-dim);color:var(--text-3);border:1px solid var(--text-4)}
+.rec-tag.t-amber{background:var(--amber-soft);color:var(--amber)}
+.rec-tag.t-plum{background:var(--plum-soft);color:var(--plum)}
+.rec-tag.t-red{background:var(--red-soft);color:var(--red)}
+.rec-chevron{color:var(--text-4);font-size:18px}
+
+/* ==================== WEIGHT CARD ==================== */
+.weight-card{background:var(--card);border-radius:16px;padding:16px;box-shadow:var(--shadow)}
+.weight-top{display:flex;align-items:baseline;gap:4px}
+.weight-num{font-size:22px;font-weight:800;color:var(--text-1)}
+.weight-unit{font-size:13px;font-weight:600;color:var(--text-2)}
+.weight-delta{font-size:12px;font-weight:700;margin-left:auto}
+.weight-delta.up{color:var(--red)}
+.weight-delta.down{color:var(--green)}
+.chart-svg{width:100%;height:80px;margin-top:8px}
+.weight-x{display:flex;justify-content:space-between;margin-top:4px}
+.weight-x span{font-size:10px;font-weight:500;color:var(--text-3)}
+.weight-x span.cur{color:var(--teal);font-weight:700}
+
+/* ==================== COLLAPSIBLE ==================== */
+.collapse-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 16px;background:var(--card);border-radius:14px;
+  box-shadow:var(--shadow);cursor:pointer;transition:all .12s ease;
+  user-select:none;-webkit-tap-highlight-color:transparent;
+}
+.collapse-head:active{transform:scale(.98)}
+.collapse-head.open{border-radius:14px 14px 0 0;box-shadow:none}
+.collapse-head-text{
+  font-size:13px;font-weight:600;color:var(--text-2);
+  display:flex;align-items:center;gap:6px;
+}
+.collapse-head-text .material-icons-round{font-size:18px;color:var(--text-3)}
+.collapse-arrow{color:var(--text-4);font-size:20px;transition:transform .2s ease}
+.collapse-head.open .collapse-arrow{transform:rotate(180deg)}
+.collapse-body{
+  background:var(--card);border-radius:0 0 14px 14px;padding:0 16px 12px;
+  box-shadow:var(--shadow);display:none;
+}
+.collapse-body.show{display:block}
+.info-row{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:9px 0;border-bottom:1px solid rgba(216,203,189,.18);
+}
+.info-row:last-child{border-bottom:none}
+.info-row-label{font-size:13px;font-weight:500;color:var(--text-3)}
+.info-row-value{font-size:13px;font-weight:600;color:var(--text-1)}
+
+/* ==================== BREED TIMELINE (繁育 Tab) ==================== */
+.timeline-card{
+  background:var(--card);border-radius:16px;box-shadow:var(--shadow);overflow:hidden;
+  position:relative;
+}
+.timeline-card::before{
+  content:'';position:absolute;top:0;left:0;width:100%;height:100%;
+  background:linear-gradient(135deg,var(--rose-soft) 0%,transparent 35%);
+  pointer-events:none;border-radius:16px;
+}
+.timeline-card>*{position:relative;z-index:1}
+.timeline-header{
+  padding:14px 16px 10px 18px;border-left:3.5px solid var(--rose);
+  display:flex;align-items:center;justify-content:space-between;
+}
+.tl-h-left{display:flex;align-items:center;gap:10px}
+.tl-cycle-num{
+  font-size:14px;font-weight:700;color:var(--text-1);
+}
+.tl-cycle-sub{font-size:12px;font-weight:500;color:var(--text-2);margin-top:1px}
+.timeline-body{padding:0 16px 14px 28px;display:flex;flex-direction:column;gap:0}
+.tl-node{display:flex;align-items:flex-start;gap:12px;position:relative;padding:8px 0}
+.tl-node::before{
+  content:'';position:absolute;left:5px;top:20px;bottom:-8px;
+  width:1.5px;background:var(--text-4);
+}
+.tl-node:last-child::before{display:none}
+.tl-dot{
+  width:11px;height:11px;border-radius:50%;flex-shrink:0;margin-top:3px;
+  border:2px solid var(--text-4);background:var(--card);position:relative;z-index:1;
+}
+.tl-dot.done{background:var(--green);border-color:var(--green)}
+.tl-dot.active{border-color:var(--rose);box-shadow:0 0 0 3px rgba(234,62,119,.15)}
+.tl-dot.fail{background:var(--text-4);border-color:var(--text-4)}
+.tl-content{flex:1;min-width:0}
+.tl-label{font-size:13px;font-weight:600;color:var(--text-1)}
+.tl-date{font-size:11px;font-weight:500;color:var(--text-3);margin-top:1px}
+
+/* Old cycle card (simple) */
+.cycle-card{
+  background:var(--card);border-radius:16px;padding:14px 16px 14px 18px;
+  box-shadow:var(--shadow);display:flex;align-items:center;gap:12px;
+  cursor:pointer;transition:transform .12s ease,box-shadow .12s ease;
+  border-left:3.5px solid transparent;
+}
+.cycle-card:active{transform:scale(.975);box-shadow:0 1px 6px rgba(234,62,119,.04)}
+.cycle-body{flex:1;min-width:0}
+.cycle-title{font-size:14px;font-weight:700;color:var(--text-1)}
+.cycle-sub{font-size:12px;font-weight:500;color:var(--text-2);margin-top:2px}
+
+/* Litter card */
+.litter-card{
+  background:var(--card);border-radius:16px;padding:14px 16px 14px 18px;
+  box-shadow:var(--shadow);cursor:pointer;transition:transform .12s ease,box-shadow .12s ease;
+  border-left:3.5px solid var(--teal);position:relative;overflow:hidden;
+}
+.litter-card:active{transform:scale(.975);box-shadow:0 1px 6px rgba(234,62,119,.04)}
+.litter-card::before{
+  content:'';position:absolute;top:0;left:0;width:100%;height:100%;
+  background:linear-gradient(135deg,var(--teal-soft) 0%,transparent 35%);
+  pointer-events:none;border-radius:16px;
+}
+.litter-card>*{position:relative;z-index:1}
+.litter-top{display:flex;align-items:center;justify-content:space-between}
+.litter-title{font-size:14px;font-weight:700;color:var(--text-1)}
+.litter-sub{font-size:12px;font-weight:500;color:var(--text-2);margin-top:3px}
+.litter-pups{
+  display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;
+}
+.pup-chip{
+  font-size:11px;font-weight:600;padding:3px 10px;border-radius:999px;
+  display:flex;align-items:center;gap:4px;
+}
+.pup-chip .material-icons-round{font-size:12px}
+.pup-chip.sold{background:var(--green-soft);color:var(--green)}
+.pup-chip.kept{background:var(--blue-soft);color:var(--blue)}
+.pup-chip.available{background:var(--amber-soft);color:var(--amber)}
+
+/* ==================== FINANCE (财务 Tab) ==================== */
+.fin-summary{
+  background:var(--card);border-radius:16px;padding:16px;box-shadow:var(--shadow);
+  position:relative;overflow:hidden;border-left:3.5px solid var(--amber);
+}
+.fin-summary::before{
+  content:'';position:absolute;top:0;left:0;width:100%;height:100%;
+  background:linear-gradient(135deg,var(--amber-soft) 0%,transparent 35%);
+  pointer-events:none;border-radius:16px;
+}
+.fin-summary>*{position:relative;z-index:1}
+.fin-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.fin-cell{background:rgba(255,240,232,.6);border-radius:12px;padding:12px}
+.fin-cell-label{font-size:11px;font-weight:500;color:var(--text-3)}
+.fin-cell-value{font-size:16px;font-weight:800;margin-top:3px}
+.fin-cell.full{grid-column:1/-1;text-align:center;background:rgba(234,62,119,.05);padding:14px}
+.fin-cell.full .fin-cell-value{font-size:22px;color:var(--primary)}
+.fin-cell-value.c-green{color:var(--green)}
+.fin-cell-value.c-red{color:var(--red)}
+
+.fin-list-card{
+  background:var(--card);border-radius:16px;box-shadow:var(--shadow);overflow:hidden;
+}
+.fin-item{
+  display:flex;align-items:center;gap:12px;padding:12px 14px 12px 16px;
+  cursor:pointer;transition:background .12s ease;
+}
+.fin-item:active{background:rgba(234,62,119,.03)}
+.fin-item+.fin-item{border-top:1px solid rgba(216,203,189,.12)}
+.fin-desc{flex:1;min-width:0}
+.fin-desc-title{font-size:13px;font-weight:600;color:var(--text-1)}
+.fin-desc-sub{font-size:11px;font-weight:500;color:var(--text-3);margin-top:1px}
+.fin-amount{font-size:14px;font-weight:700;flex-shrink:0}
+.fin-amount.expense{color:var(--green)}
+.fin-amount.income{color:var(--red)}
+
+/* ==================== EMPTY STATE ==================== */
+.empty-state{
+  display:flex;flex-direction:column;align-items:center;
+  padding:40px 20px;gap:8px;
+}
+.empty-state .material-icons-round{font-size:40px;color:var(--text-4)}
+.empty-state-text{font-size:14px;font-weight:600;color:var(--text-3);text-align:center}
+.empty-state-sub{font-size:12px;font-weight:500;color:var(--text-4);text-align:center}
+
+/* ==================== ANIMATIONS ==================== */
+@keyframes fadeInUp{
+  from{opacity:0;transform:translateY(12px)}
+  to{opacity:1;transform:translateY(0)}
+}
+.tab-pane.active>*{animation:fadeInUp .3s ease both}
+.tab-pane.active>*:nth-child(1){animation-delay:.03s}
+.tab-pane.active>*:nth-child(2){animation-delay:.06s}
+.tab-pane.active>*:nth-child(3){animation-delay:.09s}
+.tab-pane.active>*:nth-child(4){animation-delay:.12s}
+.tab-pane.active>*:nth-child(5){animation-delay:.15s}
+.tab-pane.active>*:nth-child(6){animation-delay:.18s}
+.tab-pane.active>*:nth-child(7){animation-delay:.21s}
+.tab-pane.active>*:nth-child(8){animation-delay:.24s}
+
+/* ==================== ACTION SHEET (More Menu) ==================== */
+.overlay{
+  position:absolute;top:0;left:0;right:0;bottom:0;z-index:20;
+  background:rgba(26,26,46,.35);opacity:0;pointer-events:none;
+  transition:opacity .2s ease;
+}
+.overlay.show{opacity:1;pointer-events:auto}
+.action-sheet{
+  position:absolute;bottom:0;left:0;right:0;z-index:21;
+  background:var(--card);border-radius:20px 20px 0 0;
+  padding:8px 0 34px;
+  transform:translateY(100%);transition:transform .28s cubic-bezier(.32,.72,0,1);
+}
+.action-sheet.show{transform:translateY(0)}
+.action-sheet-handle{
+  width:36px;height:4px;border-radius:2px;background:var(--text-4);
+  margin:4px auto 12px;
+}
+.action-sheet-item{
+  display:flex;align-items:center;gap:14px;padding:14px 24px;
+  cursor:pointer;transition:background .1s ease;
+  -webkit-tap-highlight-color:transparent;
+}
+.action-sheet-item:active{background:rgba(234,62,119,.04)}
+.action-sheet-icon{
+  width:36px;height:36px;border-radius:10px;
+  display:flex;align-items:center;justify-content:center;
+}
+.action-sheet-icon .material-icons-round{font-size:20px}
+.action-sheet-icon.as-blue{background:#D4E8F8}
+.action-sheet-icon.as-blue .material-icons-round{color:var(--blue)}
+.action-sheet-icon.as-amber{background:#FFE8C8}
+.action-sheet-icon.as-amber .material-icons-round{color:var(--amber)}
+.action-sheet-icon.as-teal{background:#D0F0EC}
+.action-sheet-icon.as-teal .material-icons-round{color:var(--teal)}
+.action-sheet-icon.as-red{background:#FFD9D4}
+.action-sheet-icon.as-red .material-icons-round{color:var(--red)}
+.action-sheet-text{flex:1}
+.action-sheet-title{font-size:15px;font-weight:600;color:var(--text-1)}
+.action-sheet-desc{font-size:12px;font-weight:500;color:var(--text-3);margin-top:1px}
+.action-sheet-sep{
+  height:1px;background:rgba(216,203,189,.2);margin:4px 24px;
+}
+</style>
+</head>
+<body>
+
+<div class="phone-frame">
+  <div class="phone-screen light">
+
+    <!-- Status Bar -->
+    <div class="status-bar">
+      <span>9:41</span>
+      <div class="status-bar-right">
+        <span class="material-icons-round">signal_cellular_alt</span>
+        <span class="material-icons-round">wifi</span>
+        <span class="material-icons-round">battery_full</span>
+      </div>
+    </div>
+
+    <!-- Top Bar -->
+    <div class="top-bar">
+      <button class="back-btn"><span class="material-icons-round">arrow_back_ios_new</span></button>
+      <div class="top-bar-title">花花</div>
+      <button class="top-bar-cta">
+        <span class="material-icons-round">add</span>
+        添加记录
+      </button>
+      <button class="top-bar-more" onclick="toggleMore()"><span class="material-icons-round">more_horiz</span></button>
+    </div>
+
+    <!-- Compact Hero -->
+    <div class="hero-compact">
+      <div class="hero-avatar"><span class="material-icons-round">pets</span></div>
+      <div class="hero-info">
+        <div class="hero-name">花花</div>
+        <div class="hero-sub">马尔济斯 · 母 · 2岁8月</div>
+        <div class="hero-tags">
+          <span class="hero-tag tag-rose">怀孕中 <span class="material-icons-round">chevron_right</span></span>
+          <span class="hero-tag tag-plum">用药中 <span class="material-icons-round">chevron_right</span></span>
+          <span class="hero-tag tag-static">种母</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="stats-strip">
+      <div class="stat-item">
+        <span class="material-icons-round stat-icon">cake</span>
+        <span class="stat-value">2岁8月</span>
+        <span class="stat-label">年龄</span>
+      </div>
+      <div class="stat-item">
+        <span class="material-icons-round stat-icon">monitor_weight</span>
+        <span class="stat-value">3.2kg</span>
+        <span class="stat-label">体重</span>
+      </div>
+      <div class="stat-item">
+        <span class="material-icons-round stat-icon">child_friendly</span>
+        <span class="stat-value">3窝</span>
+        <span class="stat-label">繁育</span>
+      </div>
+    </div>
+
+    <!-- Tab Bar -->
+    <div class="tab-bar">
+      <div class="tab-item active" data-tab="overview">概览</div>
+      <div class="tab-item" data-tab="breeding">繁育</div>
+      <div class="tab-item" data-tab="health">健康</div>
+      <div class="tab-item" data-tab="finance">财务</div>
+    </div>
+
+    <!-- Tab Content Container -->
+    <div class="tab-content">
+
+      <!-- ==================== 概览 Tab ==================== -->
+      <div class="tab-pane active" id="tab-overview">
+
+        <!-- 当前状态（合并卡片） -->
+        <div class="sec s-rose"><span class="s-text">当前状态</span></div>
+
+        <div class="status-merged">
+          <div class="status-row br-rose" onclick="switchTab('breeding')">
+            <div class="st-header">
+              <div class="st-left">
+                <div class="st-icon ic-rose"><span class="material-icons-round">favorite</span></div>
+                <div>
+                  <div class="st-title">怀孕中 · 第45天</div>
+                  <div class="st-sub">种公: 团团 · 配种3次</div>
+                </div>
+              </div>
+              <span class="material-icons-round st-chevron">chevron_right</span>
+            </div>
+            <div class="progress-wrap">
+              <div class="progress-track"><div class="progress-fill fill-rose" style="width:71%"></div></div>
+              <span class="progress-label c-rose">45/63天</span>
+            </div>
+            <div class="st-meta">
+              <span class="st-meta-item"><span class="material-icons-round">event</span>预产期 4月8日</span>
+              <span class="st-meta-item"><span class="material-icons-round">schedule</span>还有18天</span>
+            </div>
+          </div>
+
+          <div class="status-row br-plum">
+            <div class="st-header">
+              <div class="st-left">
+                <div class="st-icon ic-plum"><span class="material-icons-round">medication</span></div>
+                <div>
+                  <div class="st-title">黄体酮 · 第8天</div>
+                  <div class="st-sub">0.5ml · 每日1次 · 注射</div>
+                </div>
+              </div>
+              <span class="material-icons-round st-chevron">chevron_right</span>
+            </div>
+            <div class="progress-wrap">
+              <div class="progress-track"><div class="progress-fill fill-plum" style="width:53%"></div></div>
+              <span class="progress-label c-plum">8/15天</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 最近健康记录 -->
+        <div class="sec s-green">
+          <span class="s-text">最近健康记录</span>
+          <span class="s-link" onclick="switchTab('health')">查看全部</span>
+        </div>
+
+        <div class="rec-list">
+          <div class="rec-item">
+            <div class="rec-icon i-blue"><span class="material-icons-round">vaccines</span></div>
+            <div class="rec-body">
+              <div class="rec-title">疫苗 · 卫佳8</div>
+              <div class="rec-sub">2026.03.15</div>
+            </div>
+            <span class="material-icons-round rec-chevron">chevron_right</span>
+          </div>
+          <div class="rec-item">
+            <div class="rec-icon i-teal"><span class="material-icons-round">bug_report</span></div>
+            <div class="rec-body">
+              <div class="rec-title">驱虫 · 拜耳</div>
+              <div class="rec-sub">2026.03.01</div>
+            </div>
+            <span class="material-icons-round rec-chevron">chevron_right</span>
+          </div>
+          <div class="rec-item">
+            <div class="rec-icon i-plum"><span class="material-icons-round">healing</span></div>
+            <div class="rec-body">
+              <div class="rec-title muted">疾病 · 感冒 · 已康复</div>
+              <div class="rec-sub">2026.02.20</div>
+            </div>
+            <span class="material-icons-round rec-chevron">chevron_right</span>
+          </div>
+        </div>
+
+        <!-- 体重趋势 -->
+        <div class="sec s-teal"><span class="s-text">体重趋势</span></div>
+
+        <div class="weight-card">
+          <div class="weight-top">
+            <span class="weight-num">3.2</span>
+            <span class="weight-unit">kg</span>
+            <span class="weight-delta up">↑0.1kg</span>
+          </div>
+          <svg class="chart-svg" viewBox="0 0 300 80" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="areaG" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#3da8a0" stop-opacity=".15"/>
+                <stop offset="100%" stop-color="#3da8a0" stop-opacity=".02"/>
+              </linearGradient>
+            </defs>
+            <path d="M20,65 L95,45 L170,38 L245,28 L280,22 L280,75 L20,75Z" fill="url(#areaG)"/>
+            <polyline points="20,65 95,45 170,38 245,28 280,22" fill="none" stroke="#3da8a0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="20" cy="65" r="3" fill="#fff" stroke="#3da8a0" stroke-width="1.5"/>
+            <circle cx="95" cy="45" r="3" fill="#fff" stroke="#3da8a0" stroke-width="1.5"/>
+            <circle cx="170" cy="38" r="3" fill="#fff" stroke="#3da8a0" stroke-width="1.5"/>
+            <circle cx="245" cy="28" r="3" fill="#fff" stroke="#3da8a0" stroke-width="1.5"/>
+            <circle cx="280" cy="22" r="4.5" fill="#3da8a0" stroke="#fff" stroke-width="2"/>
+          </svg>
+          <div class="weight-x">
+            <span>12月</span><span>1月</span><span>2月</span><span class="cur">3月</span>
+          </div>
+        </div>
+
+        <!-- 详细信息 -->
+        <div>
+          <div class="collapse-head" onclick="toggleCollapse(this)">
+            <span class="collapse-head-text">
+              <span class="material-icons-round">info_outline</span>详细信息
+            </span>
+            <span class="material-icons-round collapse-arrow">expand_more</span>
+          </div>
+          <div class="collapse-body">
+            <div class="info-row"><span class="info-row-label">性别</span><span class="info-row-value">母</span></div>
+            <div class="info-row"><span class="info-row-label">品种</span><span class="info-row-value">马尔济斯</span></div>
+            <div class="info-row"><span class="info-row-label">出生日期</span><span class="info-row-value">2023-06-15</span></div>
+            <div class="info-row"><span class="info-row-label">购入日期</span><span class="info-row-value">2023-08-20</span></div>
+            <div class="info-row"><span class="info-row-label">购入价格</span><span class="info-row-value">¥15,000</span></div>
+            <div class="info-row"><span class="info-row-label">来源窝</span><span class="info-row-value" style="color:var(--text-3)">—</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== 繁育 Tab ==================== -->
+      <div class="tab-pane" id="tab-breeding">
+
+        <!-- 当前周期 -->
+        <div class="sec s-rose">
+          <span class="s-text">当前周期</span>
+          <span class="s-badge">第3次</span>
+        </div>
+
+        <div class="timeline-card">
+          <div class="timeline-header">
+            <div class="tl-h-left">
+              <div>
+                <div class="tl-cycle-num">第3次繁育周期</div>
+                <div class="tl-cycle-sub">种公: 团团 · 怀孕中</div>
+              </div>
+            </div>
+            <span class="rec-tag t-rose">进行中</span>
+          </div>
+          <div class="timeline-body">
+            <div class="tl-node">
+              <div class="tl-dot done"></div>
+              <div class="tl-content">
+                <div class="tl-label">发情记录</div>
+                <div class="tl-date">2026-01-15 · 发情开始</div>
+              </div>
+            </div>
+            <div class="tl-node">
+              <div class="tl-dot done"></div>
+              <div class="tl-content">
+                <div class="tl-label">卵泡检查</div>
+                <div class="tl-date">2026-01-22 · 左侧3个成熟卵泡</div>
+              </div>
+            </div>
+            <div class="tl-node">
+              <div class="tl-dot done"></div>
+              <div class="tl-content">
+                <div class="tl-label">配种 ×3</div>
+                <div class="tl-date">2026-01-23 / 01-25 / 01-27</div>
+              </div>
+            </div>
+            <div class="tl-node">
+              <div class="tl-dot done"></div>
+              <div class="tl-content">
+                <div class="tl-label">孕检确认</div>
+                <div class="tl-date">2026-02-20 · B超确认5只</div>
+              </div>
+            </div>
+            <div class="tl-node">
+              <div class="tl-dot active"></div>
+              <div class="tl-content">
+                <div class="tl-label" style="color:var(--rose)">怀孕中 · 第45天</div>
+                <div class="tl-date">预产期 2026-04-08</div>
+              </div>
+            </div>
+            <div class="tl-node">
+              <div class="tl-dot"></div>
+              <div class="tl-content">
+                <div class="tl-label" style="color:var(--text-3)">待生产</div>
+                <div class="tl-date" style="color:var(--text-4)">还有18天</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 历史周期 -->
+        <div class="sec s-rose">
+          <span class="s-text">历史周期</span>
+        </div>
+
+        <div class="cycle-card" style="border-left-color:var(--text-4)">
+          <div class="rec-icon" style="background:var(--card-dim)">
+            <span class="material-icons-round" style="color:var(--text-3)">close</span>
+          </div>
+          <div class="cycle-body">
+            <div class="cycle-title">第2次周期</div>
+            <div class="cycle-sub">2025.12 · 未成功受孕</div>
+          </div>
+          <span class="rec-tag t-gray">失败</span>
+          <span class="material-icons-round rec-chevron">chevron_right</span>
+        </div>
+
+        <div class="cycle-card" style="border-left-color:var(--green)">
+          <div class="rec-icon i-green">
+            <span class="material-icons-round">check_circle</span>
+          </div>
+          <div class="cycle-body">
+            <div class="cycle-title">第1次周期</div>
+            <div class="cycle-sub">2025.06 · 已生产</div>
+          </div>
+          <span class="rec-tag t-green">已生产</span>
+          <span class="material-icons-round rec-chevron">chevron_right</span>
+        </div>
+
+        <!-- 窝列表 -->
+        <div class="sec s-teal">
+          <span class="s-text">窝列表</span>
+          <span class="s-badge">1窝</span>
+        </div>
+
+        <div class="litter-card">
+          <div class="litter-top">
+            <div>
+              <div class="litter-title">花花第1窝</div>
+              <div class="litter-sub">2025.08.15 · 顺产 · 存活 4/5</div>
+            </div>
+            <span class="material-icons-round rec-chevron">chevron_right</span>
+          </div>
+          <div class="litter-pups">
+            <span class="pup-chip sold"><span class="material-icons-round">sell</span>已售 ×2</span>
+            <span class="pup-chip kept"><span class="material-icons-round">home</span>自留 ×1</span>
+            <span class="pup-chip available"><span class="material-icons-round">storefront</span>待售 ×1</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ==================== 健康 Tab ==================== -->
+      <div class="tab-pane" id="tab-health">
+
+        <!-- 用药中 -->
+        <div class="sec s-plum">
+          <span class="s-text">进行中的用药</span>
+        </div>
+
+        <div class="rec-list">
+          <div class="rec-item">
+            <div class="rec-icon i-plum"><span class="material-icons-round">medication</span></div>
+            <div class="rec-body">
+              <div class="rec-title">黄体酮 · 注射</div>
+              <div class="rec-sub">0.5ml/次 · 每日1次 · 第8天/共15天</div>
+            </div>
+            <div class="rec-right">
+              <span class="rec-tag t-plum">用药中</span>
+              <span class="material-icons-round rec-chevron">chevron_right</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 疫苗记录 -->
+        <div class="sec s-blue">
+          <span class="s-text">疫苗记录</span>
+          <span class="s-badge">3</span>
+        </div>
+
+        <div class="rec-list">
+          <div class="rec-item">
+            <div class="rec-icon i-blue"><span class="material-icons-round">vaccines</span></div>
+            <div class="rec-body">
+              <div class="rec-title">卫佳8</div>
+              <div class="rec-sub">2026.03.15 · 下次 2027.03.15</div>
+            </div>
+            <span class="material-icons-round rec-chevron">chevron_right</span>
+          </div>
+          <div class="rec-item">
+            <div class="rec-icon i-blue"><span class="material-icons-round">vaccines</span></div>
+            <div class="rec-body">
+              <div class="rec-title">狂犬疫苗</div>
+              <div class="rec-sub">2025.09.10 · 下次 2026.09.10</div>
+            </div>
+            <span class="material-icons-round rec-chevron">chevron_right</span>
+          </div>
+          <div class="rec-item">
+            <div class="rec-icon i-blue"><span class="material-icons-round">vaccines</span></div>
+            <div class="rec-body">
+              <div class="rec-title">卫佳8</div>
+              <div class="rec-sub">2025.03.15</div>
+            </div>
+            <span class="material-icons-round rec-chevron">chevron_right</span>
+          </div>
+        </div>
+
+        <!-- 驱虫记录 -->
+        <div class="sec s-teal">
+          <span class="s-text">驱虫记录</span>
+          <span class="s-badge">2</span>
+        </div>
+
+        <div class="rec-list">
+          <div class="rec-item">
+            <div class="rec-icon i-teal"><span class="material-icons-round">bug_report</span></div>
+            <div class="rec-body">
+              <div class="rec-title">拜耳 · 内驱</div>
+              <div class="rec-sub">2026.03.01 · 下次 2026.06.01</div>
+            </div>
+            <span class="material-icons-round rec-chevron">chevron_right</span>
+          </div>
+          <div class="rec-item">
+            <div class="rec-icon i-teal"><span class="material-icons-round">bug_report</span></div>
+            <div class="rec-body">
+              <div class="rec-title">福来恩 · 外驱</div>
+              <div class="rec-sub">2026.02.15 · 下次 2026.03.15</div>
+            </div>
+            <div class="rec-right">
+              <span class="rec-tag t-amber">即将到期</span>
+              <span class="material-icons-round rec-chevron">chevron_right</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 疾病记录 -->
+        <div class="sec s-red" style="--dot-c:var(--red)">
+          <span class="s-text">疾病记录</span>
+          <span class="s-badge">1</span>
+        </div>
+        <style>.s-red::before{background:var(--red)!important}</style>
+
+        <div class="rec-list">
+          <div class="rec-item">
+            <div class="rec-icon i-plum"><span class="material-icons-round">healing</span></div>
+            <div class="rec-body">
+              <div class="rec-title muted">感冒 · 已康复</div>
+              <div class="rec-sub">2026.02.20 — 2026.03.02</div>
+            </div>
+            <div class="rec-right">
+              <span class="rec-tag t-green">已康复</span>
+              <span class="material-icons-round rec-chevron">chevron_right</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ==================== 财务 Tab ==================== -->
+      <div class="tab-pane" id="tab-finance">
+
+        <!-- 投资回报摘要 -->
+        <div class="sec s-amber"><span class="s-text">投资回报</span></div>
+
+        <div class="fin-summary">
+          <div class="fin-grid">
+            <div class="fin-cell">
+              <div class="fin-cell-label">购入成本</div>
+              <div class="fin-cell-value c-green">¥15,000</div>
+            </div>
+            <div class="fin-cell">
+              <div class="fin-cell-label">繁育支出</div>
+              <div class="fin-cell-value c-green">¥8,500</div>
+            </div>
+            <div class="fin-cell">
+              <div class="fin-cell-label">个体费用</div>
+              <div class="fin-cell-value c-green">¥3,200</div>
+            </div>
+            <div class="fin-cell">
+              <div class="fin-cell-label">繁育收入</div>
+              <div class="fin-cell-value c-red">¥68,000</div>
+            </div>
+            <div class="fin-cell full">
+              <div class="fin-cell-label">累计净收益</div>
+              <div class="fin-cell-value">¥41,300</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 最近收支 -->
+        <div class="sec s-amber">
+          <span class="s-text">最近收支</span>
+          <span class="s-link">查看全部</span>
+        </div>
+
+        <div class="fin-list-card">
+          <div class="fin-item">
+            <div class="rec-icon i-green"><span class="material-icons-round">account_balance_wallet</span></div>
+            <div class="fin-desc">
+              <div class="fin-desc-title">孕检费</div>
+              <div class="fin-desc-sub">2026.02.20 · 繁育周期3</div>
+            </div>
+            <span class="fin-amount expense">-¥350</span>
+          </div>
+          <div class="fin-item">
+            <div class="rec-icon i-green"><span class="material-icons-round">account_balance_wallet</span></div>
+            <div class="fin-desc">
+              <div class="fin-desc-title">配种费</div>
+              <div class="fin-desc-sub">2026.01.23 · 繁育周期3</div>
+            </div>
+            <span class="fin-amount expense">-¥2,000</span>
+          </div>
+          <div class="fin-item">
+            <div class="rec-icon i-red"><span class="material-icons-round">payments</span></div>
+            <div class="fin-desc">
+              <div class="fin-desc-title">幼犬销售 · 花花1窝-3号</div>
+              <div class="fin-desc-sub">2025.11.20 · 已成交</div>
+            </div>
+            <span class="fin-amount income">+¥18,000</span>
+          </div>
+          <div class="fin-item">
+            <div class="rec-icon i-red"><span class="material-icons-round">payments</span></div>
+            <div class="fin-desc">
+              <div class="fin-desc-title">幼犬销售 · 花花1窝-1号</div>
+              <div class="fin-desc-sub">2025.10.15 · 已成交</div>
+            </div>
+            <span class="fin-amount income">+¥22,000</span>
+          </div>
+          <div class="fin-item">
+            <div class="rec-icon i-green"><span class="material-icons-round">account_balance_wallet</span></div>
+            <div class="fin-desc">
+              <div class="fin-desc-title">疫苗 · 卫佳8</div>
+              <div class="fin-desc-sub">2025.09.10 · 个体费用</div>
+            </div>
+            <span class="fin-amount expense">-¥200</span>
+          </div>
+        </div>
+
+      </div>
+
+    </div><!-- /tab-content -->
+
+    <!-- Overlay -->
+    <div class="overlay" onclick="toggleMore()"></div>
+
+    <!-- Action Sheet -->
+    <div class="action-sheet" id="actionSheet">
+      <div class="action-sheet-handle"></div>
+      <div class="action-sheet-item" onclick="toggleMore()">
+        <div class="action-sheet-icon as-blue"><span class="material-icons-round">edit</span></div>
+        <div class="action-sheet-text">
+          <div class="action-sheet-title">编辑信息</div>
+          <div class="action-sheet-desc">修改犬只基础信息</div>
+        </div>
+      </div>
+      <div class="action-sheet-item" onclick="toggleMore()">
+        <div class="action-sheet-icon as-amber"><span class="material-icons-round">flag</span></div>
+        <div class="action-sheet-text">
+          <div class="action-sheet-title">标记状态</div>
+          <div class="action-sheet-desc">生病、康复等状态变更</div>
+        </div>
+      </div>
+      <div class="action-sheet-item" onclick="toggleMore()">
+        <div class="action-sheet-icon as-teal"><span class="material-icons-round">elderly</span></div>
+        <div class="action-sheet-text">
+          <div class="action-sheet-title">标记退休</div>
+          <div class="action-sheet-desc">退出繁育，保留档案</div>
+        </div>
+      </div>
+      <div class="action-sheet-sep"></div>
+      <div class="action-sheet-item" onclick="toggleMore()">
+        <div class="action-sheet-icon as-red"><span class="material-icons-round">delete_outline</span></div>
+        <div class="action-sheet-text">
+          <div class="action-sheet-title" style="color:var(--red)">删除犬只</div>
+          <div class="action-sheet-desc">移入回收站，30天内可恢复</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* Tab Switching */
+document.querySelectorAll('.tab-item').forEach(tab => {
+  tab.addEventListener('click', () => switchTab(tab.dataset.tab));
+});
+
+function switchTab(name) {
+  document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.tab-item[data-tab="${name}"]`).classList.add('active');
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+}
+
+/* Collapse */
+function toggleCollapse(el) {
+  el.classList.toggle('open');
+  el.nextElementSibling.classList.toggle('show');
+}
+
+/* More Action Sheet */
+function toggleMore() {
+  const overlay = document.querySelector('.overlay');
+  const sheet = document.getElementById('actionSheet');
+  const isOpen = sheet.classList.contains('show');
+  if (isOpen) {
+    sheet.classList.remove('show');
+    overlay.classList.remove('show');
+  } else {
+    overlay.classList.add('show');
+    sheet.classList.add('show');
+  }
+}
+</script>
+
+</body>
+</html>

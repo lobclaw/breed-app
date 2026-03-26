@@ -1,0 +1,102 @@
+{
+  "bsonType": "object",
+  "required": ["card_type", "family_id", "title", "due_date", "status"],
+  "permission": {
+    "read": true,
+    "create": true,
+    "update": true,
+    "delete": true
+  },
+  "properties": {
+    "_id": {
+      "description": "任务ID"
+    },
+    "card_type": {
+      "bsonType": "string",
+      "enum": ["breeding", "health", "medication", "care"],
+      "description": "卡片类型"
+    },
+    "dog_id": {
+      "bsonType": "string",
+      "foreignKey": "dogs._id",
+      "description": "关联犬只ID"
+    },
+    "dog_name": {
+      "bsonType": "string",
+      "description": "犬只名称（冗余存储）"
+    },
+    "litter_id": {
+      "bsonType": "string",
+      "foreignKey": "litters._id",
+      "description": "关联窝ID"
+    },
+    "cycle_id": {
+      "bsonType": "string",
+      "foreignKey": "breeding_cycles._id",
+      "description": "关联繁育周期ID"
+    },
+    "family_id": {
+      "bsonType": "string",
+      "foreignKey": "families._id",
+      "description": "所属家庭ID"
+    },
+    "title": {
+      "bsonType": "string",
+      "description": "任务标题"
+    },
+    "description": {
+      "bsonType": "string",
+      "description": "任务描述"
+    },
+    "due_date": {
+      "bsonType": "number",
+      "description": "截止日期（时间戳毫秒）"
+    },
+    "status": {
+      "bsonType": "string",
+      "enum": ["pending", "completed", "cancelled", "postponed"],
+      "description": "任务状态"
+    },
+    "urgency": {
+      "bsonType": "string",
+      "enum": ["normal", "urgent", "overdue"],
+      "description": "紧急程度"
+    },
+    "source_type": {
+      "bsonType": "string",
+      "description": "来源类型"
+    },
+    "source_record_id": {
+      "bsonType": "string",
+      "description": "来源记录ID"
+    },
+    "completed_at": {
+      "bsonType": "number",
+      "description": "完成时间（时间戳毫秒）"
+    },
+    "completed_by": {
+      "bsonType": "string",
+      "description": "完成人用户ID"
+    },
+    "postponed_count": {
+      "bsonType": "number",
+      "description": "推迟次数"
+    },
+    "postpone_reason": {
+      "bsonType": "string",
+      "description": "推迟原因"
+    },
+    "batch_key": {
+      "bsonType": "string",
+      "description": "批次键（用于批量操作）"
+    },
+    "created_at": {
+      "bsonType": "number",
+      "description": "创建时间（时间戳毫秒）"
+    },
+    "updated_at": {
+      "bsonType": "number",
+      "description": "更新时间（时间戳毫秒）"
+    }
+  }
+}

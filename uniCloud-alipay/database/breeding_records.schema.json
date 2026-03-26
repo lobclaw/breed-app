@@ -1,0 +1,70 @@
+{
+  "bsonType": "object",
+  "required": ["type", "cycle_id", "dog_id", "family_id", "date"],
+  "permission": {
+    "read": true,
+    "create": true,
+    "update": true,
+    "delete": true
+  },
+  "properties": {
+    "_id": {
+      "description": "繁育记录ID"
+    },
+    "type": {
+      "bsonType": "string",
+      "enum": ["heat", "follicle_check", "mating", "pregnancy_check", "prenatal_check", "pre_labor", "birth", "abnormal_termination"],
+      "description": "记录类型"
+    },
+    "cycle_id": {
+      "bsonType": "string",
+      "foreignKey": "breeding_cycles._id",
+      "description": "所属繁育周期ID"
+    },
+    "dog_id": {
+      "bsonType": "string",
+      "foreignKey": "dogs._id",
+      "description": "关联犬只ID"
+    },
+    "family_id": {
+      "bsonType": "string",
+      "foreignKey": "families._id",
+      "description": "所属家庭ID"
+    },
+    "date": {
+      "bsonType": "number",
+      "description": "记录日期（时间戳毫秒）"
+    },
+    "cost": {
+      "bsonType": "number",
+      "description": "花费金额（元）"
+    },
+    "images": {
+      "bsonType": "array",
+      "items": {
+        "bsonType": "string"
+      },
+      "description": "图片URL列表"
+    },
+    "notes": {
+      "bsonType": "string",
+      "description": "备注"
+    },
+    "details": {
+      "bsonType": "object",
+      "description": "各类型专属详情字段"
+    },
+    "created_by": {
+      "bsonType": "string",
+      "description": "创建人用户ID"
+    },
+    "created_at": {
+      "bsonType": "number",
+      "description": "创建时间（时间戳毫秒）"
+    },
+    "updated_at": {
+      "bsonType": "number",
+      "description": "更新时间（时间戳毫秒）"
+    }
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "bsonType": "object",
+  "required": ["cycle_id", "dam_id", "family_id", "birth_date", "total_born", "born_alive", "born_dead"],
+  "permission": {
+    "read": true,
+    "create": true,
+    "update": true,
+    "delete": true
+  },
+  "properties": {
+    "_id": {
+      "description": "窝ID"
+    },
+    "cycle_id": {
+      "bsonType": "string",
+      "foreignKey": "breeding_cycles._id",
+      "description": "所属繁育周期ID"
+    },
+    "dam_id": {
+      "bsonType": "string",
+      "foreignKey": "dogs._id",
+      "description": "母犬ID"
+    },
+    "dam_name": {
+      "bsonType": "string",
+      "description": "母犬名称（冗余存储）"
+    },
+    "sire_id": {
+      "bsonType": "string",
+      "foreignKey": "dogs._id",
+      "description": "父犬ID"
+    },
+    "sire_name": {
+      "bsonType": "string",
+      "description": "父犬名称（冗余存储）"
+    },
+    "family_id": {
+      "bsonType": "string",
+      "foreignKey": "families._id",
+      "description": "所属家庭ID"
+    },
+    "birth_date": {
+      "bsonType": "number",
+      "description": "出生日期（时间戳毫秒）"
+    },
+    "total_born": {
+      "bsonType": "number",
+      "description": "总出生数"
+    },
+    "born_alive": {
+      "bsonType": "number",
+      "description": "活产数"
+    },
+    "born_dead": {
+      "bsonType": "number",
+      "description": "死产数"
+    },
+    "birth_type": {
+      "bsonType": "string",
+      "description": "生产方式（自然分娩/剖腹产等）"
+    },
+    "birth_notes": {
+      "bsonType": "string",
+      "description": "生产备注"
+    },
+    "weaned_at": {
+      "bsonType": ["number", "null"],
+      "description": "断奶时间（时间戳毫秒），null 表示未断奶"
+    },
+    "created_by": {
+      "bsonType": "string",
+      "description": "创建人用户ID"
+    },
+    "created_at": {
+      "bsonType": "number",
+      "description": "创建时间（时间戳毫秒）"
+    },
+    "updated_at": {
+      "bsonType": "number",
+      "description": "更新时间（时间戳毫秒）"
+    }
+  }
+}

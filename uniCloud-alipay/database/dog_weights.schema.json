@@ -1,0 +1,41 @@
+{
+  "bsonType": "object",
+  "required": ["dog_id", "family_id", "weight", "measured_at"],
+  "permission": {
+    "read": true,
+    "create": true,
+    "update": true,
+    "delete": true
+  },
+  "properties": {
+    "_id": {
+      "description": "体重记录ID"
+    },
+    "dog_id": {
+      "bsonType": "string",
+      "foreignKey": "dogs._id",
+      "description": "关联犬只ID"
+    },
+    "family_id": {
+      "bsonType": "string",
+      "foreignKey": "families._id",
+      "description": "所属家庭ID"
+    },
+    "weight": {
+      "bsonType": "number",
+      "description": "体重（kg）"
+    },
+    "measured_at": {
+      "bsonType": "number",
+      "description": "测量时间（时间戳毫秒）"
+    },
+    "created_at": {
+      "bsonType": "number",
+      "description": "创建时间（时间戳毫秒）"
+    },
+    "updated_at": {
+      "bsonType": "number",
+      "description": "更新时间（时间戳毫秒）"
+    }
+  }
+}

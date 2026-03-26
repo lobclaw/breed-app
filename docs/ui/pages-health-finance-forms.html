@@ -1,0 +1,1174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Breed App — Health & Finance Forms</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+  background: #f0eaec;
+  display: flex;
+  justify-content: flex-start;
+  align-items: flex-start;
+  gap: 40px;
+  padding: 40px 20px;
+  min-height: 100vh;
+  overflow-x: auto;
+  flex-wrap: nowrap;
+}
+.frame-wrapper {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.frame-label {
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+  color: #6b6880;
+}
+.frame-label small {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #9b95a8;
+  margin-top: 4px;
+}
+
+.phone-frame {
+  width: 375px;
+  height: 812px;
+  border-radius: 44px;
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05);
+}
+
+.phone-screen {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  padding-bottom: 40px;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.phone-screen::-webkit-scrollbar { display: none; }
+
+/* ==================== LIGHT MODE ==================== */
+.light {
+  --primary: #ea3e77;
+  --primary-soft: #fff0f2;
+  --bg: #fdf8f9;
+  --card: #FFFFFF;
+  --card-dim: #FFF0E8;
+  --text-1: #1a1a2e;
+  --text-2: #8B7355;
+  --text-3: #B8A08A;
+  --text-4: #D8CBBD;
+  --amber: #e89b3e;
+  --amber-soft: #fff9f0;
+  --red: #e05252;
+  --red-soft: #fff0f0;
+  --green: #3dae6f;
+  --green-soft: #f0fff4;
+  --blue: #4a8dd4;
+  --blue-soft: #f0f7ff;
+  --plum: #8668b0;
+  --plum-soft: #f5f0ff;
+  --rose: #ea3e77;
+  --rose-soft: #fff0f2;
+  --teal: #3da8a0;
+  --teal-soft: #f0fffe;
+  --shadow: 0 2px 12px rgba(234, 62, 119, 0.06);
+  --shadow-lg: 0 6px 24px rgba(234, 62, 119, 0.1);
+  --nav-bg: rgba(255,255,255,0.85);
+  --nav-border: rgba(234, 62, 119, 0.08);
+  --status-bar-color: #1a1a2e;
+  background: var(--bg);
+}
+
+/* ==================== STATUS BAR ==================== */
+.status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 28px 0;
+  height: 50px;
+  color: var(--status-bar-color);
+  font-size: 15px;
+  font-weight: 600;
+}
+.status-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.status-bar-right .material-icons-round { font-size: 16px; }
+
+/* ==================== TOP NAV BAR ==================== */
+.top-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px 12px;
+}
+.top-nav .back-btn {
+  font-size: 20px;
+  color: var(--text-1);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  background: none;
+  border: none;
+  padding: 0;
+}
+.top-nav .back-btn .material-icons-round {
+  font-size: 20px;
+  color: var(--text-1);
+}
+.top-nav .page-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-1);
+  flex: 1;
+}
+.top-nav .top-right-link {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary);
+  cursor: pointer;
+}
+
+/* ==================== FORM STYLES ==================== */
+.form-body {
+  padding: 0 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.form-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.form-input {
+  height: 48px;
+  border-radius: 14px;
+  border: 1px solid var(--text-4);
+  background: var(--card);
+  padding: 0 16px;
+  font-size: 14px;
+  color: var(--text-1);
+  font-family: inherit;
+  outline: none;
+  display: flex;
+  align-items: center;
+}
+.form-input.placeholder {
+  color: var(--text-3);
+}
+.form-input .material-icons-round {
+  margin-left: auto;
+  font-size: 18px;
+  color: var(--text-3);
+}
+
+/* Textarea */
+.form-textarea {
+  border-radius: 14px;
+  border: 1px solid var(--text-4);
+  background: var(--card);
+  padding: 14px 16px;
+  font-size: 14px;
+  color: var(--text-1);
+  font-family: inherit;
+  outline: none;
+  resize: none;
+  min-height: 80px;
+  line-height: 1.5;
+}
+.form-textarea.placeholder-text {
+  color: var(--text-3);
+}
+
+/* Readonly inputs */
+textarea[readonly], input[readonly] {
+  background: var(--card-dim);
+  color: var(--text-2);
+  cursor: default;
+  border-color: transparent;
+}
+
+/* Amount input large */
+.amount-input-large {
+  height: 64px;
+  border-radius: 14px;
+  border: 1px solid var(--text-4);
+  background: var(--card);
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.amount-input-large .yen {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--text-3);
+}
+.amount-input-large .amount-value {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--text-1);
+}
+.amount-input-large .amount-placeholder {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--text-4);
+}
+
+/* Money input small */
+.money-input {
+  height: 48px;
+  border-radius: 14px;
+  border: 1px solid var(--text-4);
+  background: var(--card);
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.money-input .yen {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-3);
+}
+.money-input .money-value {
+  font-size: 14px;
+  color: var(--text-3);
+}
+
+/* Dog picker chips */
+.dog-chips-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 0;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.dog-chips-row::-webkit-scrollbar { display: none; }
+
+.dog-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px 6px 6px;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.dog-chip .chip-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ea3e77, #e89b3e);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dog-chip .chip-avatar .material-icons-round {
+  color: white;
+  font-size: 14px;
+}
+.dog-chip .chip-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary);
+}
+.dog-chip .chip-close {
+  font-size: 16px;
+  color: var(--primary);
+  opacity: 0.5;
+  cursor: pointer;
+  margin-left: 2px;
+}
+
+/* Add dog trigger */
+.add-dog-trigger {
+  height: 48px;
+  border-radius: 14px;
+  border: 1px dashed var(--text-4);
+  background: var(--card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.add-dog-trigger .material-icons-round {
+  font-size: 18px;
+}
+
+/* Segmented control */
+.segmented-control {
+  display: flex;
+  gap: 0;
+  border-radius: 999px;
+  background: var(--card-dim);
+  padding: 3px;
+  overflow: hidden;
+}
+.seg-option {
+  flex: 1;
+  text-align: center;
+  padding: 10px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+.seg-option.active {
+  background: var(--primary);
+  color: white;
+  box-shadow: 0 2px 8px rgba(234, 62, 119, 0.2);
+}
+
+/* Disease pills / selectable pills */
+.pill-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.pill-option {
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--card-dim);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.pill-option.active {
+  background: var(--primary);
+  color: white;
+}
+.pill-add {
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary);
+  background: transparent;
+  border: 1.5px dashed var(--primary);
+  cursor: pointer;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.12s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+/* Date quick chips (below input) */
+.date-chips {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+.date-chip {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: var(--card-dim);
+  cursor: pointer;
+  border: none;
+  font-family: inherit;
+  transition: all 0.12s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.date-chip:active {
+  transform: scale(0.92);
+  filter: brightness(0.95);
+}
+.date-chip.active {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(234, 62, 119, 0.25);
+}
+
+.pill-add:active {
+  transform: scale(0.92);
+  opacity: 0.7;
+}
+.pill-add .material-icons-round { font-size: 15px; }
+
+/* Inline row */
+.inline-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+}
+.inline-row > .form-group {
+  flex: 1;
+}
+.inline-row > .form-group.shrink {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+/* Number input compact */
+.number-input {
+  height: 48px;
+  border-radius: 14px;
+  border: 1px solid var(--text-4);
+  background: var(--card);
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  color: var(--text-1);
+}
+.number-input.placeholder {
+  color: var(--text-3);
+}
+
+/* Expandable section */
+.expandable-section {
+  border-radius: 14px;
+  border: 1px solid var(--text-4);
+  background: var(--card);
+  overflow: hidden;
+}
+.expandable-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  cursor: pointer;
+}
+.expandable-header .label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.expandable-header .material-icons-round {
+  font-size: 20px;
+  color: var(--text-3);
+}
+.expandable-body {
+  padding: 0 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Radio options */
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.radio-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--text-1);
+  cursor: pointer;
+}
+.radio-circle {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--text-4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.radio-circle.active {
+  border-color: var(--primary);
+}
+.radio-circle.active::after {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+
+/* Image upload slots */
+.image-upload-row {
+  display: flex;
+  gap: 10px;
+}
+.image-slot {
+  width: 80px;
+  height: 80px;
+  border-radius: 14px;
+  border: 1.5px dashed var(--text-4);
+  background: var(--card);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  gap: 4px;
+}
+.image-slot .material-icons-round {
+  font-size: 24px;
+  color: var(--text-4);
+}
+.image-slot .slot-text {
+  font-size: 10px;
+  color: var(--text-4);
+  font-weight: 500;
+}
+.image-slot.has-image {
+  border-style: solid;
+  border-color: var(--green);
+  background: var(--green-soft);
+  position: relative;
+  overflow: hidden;
+}
+.image-slot.has-image .placeholder-icon {
+  display: none;
+}
+.image-slot.has-image .img-preview {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.image-slot.has-image .img-preview .material-icons-round {
+  font-size: 32px;
+  color: var(--green);
+}
+
+/* Checkbox row */
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+.checkbox-box {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 2px solid var(--text-4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.checkbox-box.checked {
+  background: var(--green);
+  border-color: var(--green);
+}
+.checkbox-box.checked .material-icons-round {
+  color: white;
+  font-size: 14px;
+}
+.checkbox-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+/* Submit button */
+.submit-area {
+  padding: 8px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.submit-btn {
+  height: 50px;
+  border-radius: 999px;
+  border: none;
+  font-size: 15px;
+  font-weight: 700;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.12s ease;
+  font-family: inherit;
+}
+.submit-btn:active {
+  transform: scale(0.94);
+  opacity: 0.85;
+}
+.submit-btn.primary-btn {
+  background: var(--primary);
+  box-shadow: 0 4px 16px rgba(234, 62, 119, 0.25);
+}
+.submit-btn.red-btn {
+  background: var(--red);
+  box-shadow: 0 4px 16px rgba(224, 82, 82, 0.25);
+}
+
+/* Divider */
+.form-divider {
+  height: 1px;
+  background: var(--text-4);
+  opacity: 0.4;
+  margin: 4px 0;
+}
+
+/* Helper text */
+.helper-text {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-3);
+  margin-top: -4px;
+}
+
+/* Linked sub-section */
+.linked-sub {
+  padding: 12px 0 0;
+}
+</style>
+</head>
+<body>
+
+<!-- ===================== FORM 1: 疫苗记录 R-10 ===================== -->
+<div class="frame-wrapper">
+  <div class="frame-label">R-10<small>疫苗记录</small></div>
+  <div class="phone-frame">
+    <div class="phone-screen light">
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="status-bar-right">
+          <span class="material-icons-round">signal_cellular_alt</span>
+          <span class="material-icons-round">wifi</span>
+          <span class="material-icons-round">battery_full</span>
+        </div>
+      </div>
+
+      <!-- Top Nav -->
+      <div class="top-nav">
+        <div class="back-btn">
+          <span class="material-icons-round">arrow_back_ios_new</span>
+        </div>
+        <div class="page-title">录入疫苗记录</div>
+      </div>
+
+      <!-- Form Body -->
+      <div class="form-body">
+        <!-- 选择犬只 -->
+        <div class="form-group">
+          <div class="form-label">选择犬只</div>
+          <div class="dog-chips-row">
+            <div class="dog-chip">
+              <div class="chip-avatar"><span class="material-icons-round">pets</span></div>
+              <span class="chip-name">小白</span>
+              <span class="material-icons-round chip-close">close</span>
+            </div>
+            <div class="dog-chip">
+              <div class="chip-avatar"><span class="material-icons-round">pets</span></div>
+              <span class="chip-name">花花</span>
+              <span class="material-icons-round chip-close">close</span>
+            </div>
+            <div class="dog-chip">
+              <div class="chip-avatar"><span class="material-icons-round">pets</span></div>
+              <span class="chip-name">豆豆</span>
+              <span class="material-icons-round chip-close">close</span>
+            </div>
+          </div>
+          <div class="add-dog-trigger">
+            <span class="material-icons-round">add</span>
+            点击添加犬只
+          </div>
+        </div>
+
+        <!-- 疫苗类型 -->
+        <div class="form-group">
+          <div class="form-label">疫苗类型</div>
+          <div class="pill-options">
+            <div class="pill-option active" onclick="selectPill(this)">卫佳5</div>
+            <div class="pill-option" onclick="selectPill(this)">卫佳8</div>
+            <div class="pill-option" onclick="selectPill(this)">卫佳10</div>
+            <div class="pill-option" onclick="selectPill(this)">狂犬</div>
+            <button class="pill-add" onclick="alert('输入自定义疫苗名称')">
+              <span class="material-icons-round">add</span>自定义
+            </button>
+          </div>
+        </div>
+
+        <!-- 接种日期 -->
+        <div class="form-group">
+          <div class="form-label">接种日期</div>
+          <div class="form-input">
+            <span>2026-03-26</span>
+            <span class="material-icons-round">calendar_today</span>
+          </div>
+          <div class="date-chips">
+            <button class="date-chip active" onclick="selectDateChip(this)">今天</button>
+            <button class="date-chip" onclick="selectDateChip(this)">昨天</button>
+            <button class="date-chip" onclick="selectDateChip(this)">前天</button>
+          </div>
+        </div>
+
+        <!-- 下次提醒日期 -->
+        <div class="form-group">
+          <div class="form-label">下次提醒日期</div>
+          <div class="form-input">
+            <span>2026-04-14</span>
+            <span class="material-icons-round">calendar_today</span>
+          </div>
+          <div class="helper-text">自动计算：接种日期 + 21天，可手动修改</div>
+        </div>
+
+        <!-- 费用 -->
+        <div class="form-group">
+          <div class="form-label">费用 <span style="color:var(--text-3);font-weight:400;font-size:12px;">（选填）</span></div>
+          <div class="money-input">
+            <span class="yen">¥</span>
+            <span class="money-value">请输入金额</span>
+          </div>
+        </div>
+
+        <!-- 备注 -->
+        <div class="form-group">
+          <div class="form-label">备注 <span style="color:var(--text-3);font-weight:400;font-size:12px;">（选填）</span></div>
+          <textarea class="form-textarea" placeholder="输入备注信息..."></textarea>
+        </div>
+      </div>
+
+      <!-- Submit -->
+      <div class="submit-area">
+        <button class="submit-btn primary-btn">保存记录</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== FORM 2: 驱虫记录 R-11 ===================== -->
+<div class="frame-wrapper">
+  <div class="frame-label">R-11<small>驱虫记录</small></div>
+  <div class="phone-frame">
+    <div class="phone-screen light">
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="status-bar-right">
+          <span class="material-icons-round">signal_cellular_alt</span>
+          <span class="material-icons-round">wifi</span>
+          <span class="material-icons-round">battery_full</span>
+        </div>
+      </div>
+
+      <!-- Top Nav -->
+      <div class="top-nav">
+        <div class="back-btn">
+          <span class="material-icons-round">arrow_back_ios_new</span>
+        </div>
+        <div class="page-title">录入驱虫记录</div>
+      </div>
+
+      <!-- Form Body -->
+      <div class="form-body">
+        <!-- 选择犬只 -->
+        <div class="form-group">
+          <div class="form-label">选择犬只</div>
+          <div class="dog-chips-row">
+            <div class="dog-chip">
+              <div class="chip-avatar"><span class="material-icons-round">pets</span></div>
+              <span class="chip-name">小白</span>
+              <span class="material-icons-round chip-close">close</span>
+            </div>
+            <div class="dog-chip">
+              <div class="chip-avatar"><span class="material-icons-round">pets</span></div>
+              <span class="chip-name">杠上花</span>
+              <span class="material-icons-round chip-close">close</span>
+            </div>
+          </div>
+          <div class="add-dog-trigger">
+            <span class="material-icons-round">add</span>
+            点击添加犬只
+          </div>
+        </div>
+
+        <!-- 驱虫类型 -->
+        <div class="form-group">
+          <div class="form-label">驱虫类型</div>
+          <div class="segmented-control">
+            <div class="seg-option active" onclick="switchDewormType(this, 'internal')">内驱</div>
+            <div class="seg-option" onclick="switchDewormType(this, 'external')">外驱</div>
+            <div class="seg-option" onclick="switchDewormType(this, 'combo')">内外同驱</div>
+          </div>
+        </div>
+
+        <!-- 驱虫药品（根据类型联动） -->
+        <div class="form-group">
+          <div class="form-label">驱虫药品</div>
+          <div class="pill-options" id="dewormDrugs">
+            <div class="pill-option active" onclick="selectPill(this)">拜宠清</div>
+            <div class="pill-option" onclick="selectPill(this)">海乐妙</div>
+            <div class="pill-option" onclick="selectPill(this)">犬心保</div>
+            <button class="pill-add" onclick="alert('输入自定义药品名称')">
+              <span class="material-icons-round">add</span>自定义
+            </button>
+          </div>
+        </div>
+
+        <!-- 日期 -->
+        <div class="form-group">
+          <div class="form-label">日期</div>
+          <div class="form-input">
+            <span>2026-03-26</span>
+            <span class="material-icons-round">calendar_today</span>
+          </div>
+          <div class="date-chips">
+            <button class="date-chip active" onclick="selectDateChip(this)">今天</button>
+            <button class="date-chip" onclick="selectDateChip(this)">昨天</button>
+            <button class="date-chip" onclick="selectDateChip(this)">前天</button>
+          </div>
+        </div>
+
+        <!-- 下次提醒日期 -->
+        <div class="form-group">
+          <div class="form-label">下次提醒日期</div>
+          <div class="form-input">
+            <span>2026-06-23</span>
+            <span class="material-icons-round">calendar_today</span>
+          </div>
+          <div class="helper-text">成犬自动 +90天 / 幼犬自动 +14天，可手动修改</div>
+        </div>
+
+        <!-- 费用 -->
+        <div class="form-group">
+          <div class="form-label">费用 <span style="color:var(--text-3);font-weight:400;font-size:12px;">（选填）</span></div>
+          <div class="money-input">
+            <span class="yen">¥</span>
+            <span class="money-value">请输入金额</span>
+          </div>
+        </div>
+
+        <!-- 备注 -->
+        <div class="form-group">
+          <div class="form-label">备注 <span style="color:var(--text-3);font-weight:400;font-size:12px;">（选填）</span></div>
+          <textarea class="form-textarea" placeholder="输入备注信息..."></textarea>
+        </div>
+      </div>
+
+      <!-- Submit -->
+      <div class="submit-area">
+        <button class="submit-btn primary-btn">保存记录</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== FORM 3: 疾病记录 R-12 ===================== -->
+<div class="frame-wrapper">
+  <div class="frame-label">R-12<small>疾病记录</small></div>
+  <div class="phone-frame">
+    <div class="phone-screen light">
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="status-bar-right">
+          <span class="material-icons-round">signal_cellular_alt</span>
+          <span class="material-icons-round">wifi</span>
+          <span class="material-icons-round">battery_full</span>
+        </div>
+      </div>
+
+      <!-- Top Nav -->
+      <div class="top-nav">
+        <div class="back-btn">
+          <span class="material-icons-round">arrow_back_ios_new</span>
+        </div>
+        <div class="page-title">录入疾病记录</div>
+      </div>
+
+      <!-- Form Body -->
+      <div class="form-body">
+        <!-- 选择犬只 (single) -->
+        <div class="form-group">
+          <div class="form-label">选择犬只</div>
+          <div class="dog-chips-row">
+            <div class="dog-chip">
+              <div class="chip-avatar"><span class="material-icons-round">pets</span></div>
+              <span class="chip-name">豆豆</span>
+              <span class="material-icons-round chip-close">close</span>
+            </div>
+          </div>
+          <div class="add-dog-trigger">
+            <span class="material-icons-round">add</span>
+            选择一只犬
+          </div>
+        </div>
+
+        <!-- 病症类型 -->
+        <div class="form-group">
+          <div class="form-label">病症类型</div>
+          <div class="pill-options">
+            <div class="pill-option" onclick="selectPill(this)">感冒</div>
+            <div class="pill-option active" onclick="selectPill(this)">腹泻</div>
+            <div class="pill-option" onclick="selectPill(this)">寄生虫</div>
+            <div class="pill-option" onclick="selectPill(this)">皮肤病</div>
+            <div class="pill-option" onclick="selectPill(this)">眼部</div>
+            <div class="pill-option" onclick="selectPill(this)">骨骼</div>
+            <div class="pill-option" onclick="selectPill(this)">犬瘟</div>
+            <div class="pill-option" onclick="selectPill(this)">细小</div>
+            <div class="pill-option" onclick="selectPill(this)">其他</div>
+          </div>
+        </div>
+
+        <!-- 严重程度 -->
+        <div class="form-group">
+          <div class="form-label">严重程度</div>
+          <div class="segmented-control">
+            <div class="seg-option active">轻微</div>
+            <div class="seg-option">中等</div>
+            <div class="seg-option">严重</div>
+          </div>
+        </div>
+
+        <!-- 发病日期 -->
+        <div class="form-group">
+          <div class="form-label">发病日期</div>
+          <div class="form-input">
+            <span>2026-03-26</span>
+            <span class="material-icons-round">calendar_today</span>
+          </div>
+          <div class="date-chips">
+            <button class="date-chip active" onclick="selectDateChip(this)">今天</button>
+            <button class="date-chip" onclick="selectDateChip(this)">昨天</button>
+            <button class="date-chip" onclick="selectDateChip(this)">前天</button>
+          </div>
+        </div>
+
+        <!-- 治疗状态 -->
+        <div class="form-group">
+          <div class="form-label">治疗状态</div>
+          <div class="segmented-control">
+            <div class="seg-option active">治疗中</div>
+            <div class="seg-option">已康复</div>
+            <div class="seg-option">慢性管理</div>
+          </div>
+        </div>
+
+        <!-- 费用 -->
+        <div class="form-group">
+          <div class="form-label">费用 <span style="color:var(--text-3);font-weight:400;font-size:12px;">（选填）</span></div>
+          <div class="money-input">
+            <span class="yen">¥</span>
+            <span class="money-value">请输入金额</span>
+          </div>
+        </div>
+
+        <!-- 备注 -->
+        <div class="form-group">
+          <div class="form-label">备注 <span style="color:var(--text-3);font-weight:400;font-size:12px;">（选填）</span></div>
+          <textarea class="form-textarea" placeholder="描述症状详情..."></textarea>
+        </div>
+      </div>
+
+      <!-- Submit -->
+      <div class="submit-area">
+        <button class="submit-btn primary-btn">保存记录</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== FORM 4: 用药任务 R-13 ===================== -->
+<div class="frame-wrapper">
+  <div class="frame-label">R-13<small>用药任务</small></div>
+  <div class="phone-frame">
+    <div class="phone-screen light">
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="status-bar-right">
+          <span class="material-icons-round">signal_cellular_alt</span>
+          <span class="material-icons-round">wifi</span>
+          <span class="material-icons-round">battery_full</span>
+        </div>
+      </div>
+
+      <!-- Top Nav -->
+      <div class="top-nav">
+        <div class="back-btn">
+          <span class="material-icons-round">arrow_back_ios_new</span>
+        </div>
+        <div class="page-title">创建用药任务</div>
+        <div class="top-right-link" onclick="alert('打开用药方案库选择')">从方案库选择</div>
+      </div>
+
+      <!-- Form Body -->
+      <div class="form-body">
+        <!-- 选择犬只 -->
+        <div class="form-group">
+          <div class="form-label">选择犬只</div>
+          <div class="dog-chips-row">
+            <div class="dog-chip">
+              <div class="chip-avatar"><span class="material-icons-round">pets</span></div>
+              <span class="chip-name">豆豆</span>
+              <span class="material-icons-round chip-close">close</span>
+            </div>
+          </div>
+          <div class="add-dog-trigger">
+            <span class="material-icons-round">add</span>
+            点击添加犬只
+          </div>
+        </div>
+
+        <!-- 药品名称 -->
+        <div class="form-group">
+          <div class="form-label">药品名称</div>
+          <div class="form-input">
+            <span>阿莫西林</span>
+          </div>
+        </div>
+
+        <!-- 剂量 + 单位 -->
+        <div class="form-group">
+          <div class="form-label">剂量与单位</div>
+          <div class="inline-row">
+            <div class="form-group" style="flex: 1;">
+              <div class="number-input">2.5</div>
+            </div>
+            <div class="form-group" style="flex: 2;">
+              <div class="segmented-control">
+                <div class="seg-option">毫升</div>
+                <div class="seg-option active">毫克</div>
+                <div class="seg-option">片</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 给药方式 -->
+        <div class="form-group">
+          <div class="form-label">给药方式</div>
+          <div class="segmented-control">
+            <div class="seg-option active">口服</div>
+            <div class="seg-option">注射</div>
+          </div>
+        </div>
+
+        <!-- 频率 -->
+        <div class="form-group">
+          <div class="form-label">频率</div>
+          <div class="segmented-control">
+            <div class="seg-option">每日1次</div>
+            <div class="seg-option active">每日2次</div>
+            <div class="seg-option">每日3次</div>
+          </div>
+        </div>
+
+        <!-- 持续天数 -->
+        <div class="form-group">
+          <div class="form-label">持续天数</div>
+          <div class="form-input">
+            <span>7</span>
+            <span style="font-size: 13px; color: var(--text-3); margin-left: 4px;">天</span>
+          </div>
+        </div>
+
+        <!-- 开始日期 -->
+        <div class="form-group">
+          <div class="form-label">开始日期</div>
+          <div class="form-input">
+            <span>2026-03-26</span>
+            <span class="material-icons-round">calendar_today</span>
+          </div>
+          <div class="date-chips">
+            <button class="date-chip active" onclick="selectDateChip(this)">今天</button>
+            <button class="date-chip" onclick="selectDateChip(this)">昨天</button>
+            <button class="date-chip" onclick="selectDateChip(this)">前天</button>
+          </div>
+        </div>
+
+        <!-- 注意事项 -->
+        <div class="form-group">
+          <div class="form-label">注意事项 <span style="color:var(--text-3);font-weight:400;font-size:12px;">（选填）</span></div>
+          <textarea class="form-textarea" placeholder="用药注意事项...">两个头孢分早晚不能一起用</textarea>
+        </div>
+      </div>
+
+      <!-- Submit area with checkbox -->
+      <div class="submit-area">
+        <div class="checkbox-row">
+          <div class="checkbox-box checked">
+            <span class="material-icons-round">check</span>
+          </div>
+          <span class="checkbox-text">保存为常用方案</span>
+        </div>
+        <button class="submit-btn primary-btn">创建用药任务</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<script>
+function selectPill(el) {
+  el.parentElement.querySelectorAll('.pill-option').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function selectDateChip(el) {
+  el.parentElement.querySelectorAll('.date-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+}
+
+/* 驱虫类型切换联动药品列表 */
+const dewormDrugs = {
+  internal: ['拜宠清', '海乐妙', '犬心保'],
+  external: ['福来恩', '大宠爱'],
+  combo: ['超可信', '博来恩']
+};
+
+function switchDewormType(el, type) {
+  el.parentElement.querySelectorAll('.seg-option').forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+  const container = document.getElementById('dewormDrugs');
+  const drugs = dewormDrugs[type];
+  container.innerHTML = drugs.map((d, i) =>
+    `<div class="pill-option${i === 0 ? ' active' : ''}" onclick="selectPill(this)">${d}</div>`
+  ).join('') +
+    `<button class="pill-add" onclick="alert('输入自定义药品名称')"><span class="material-icons-round">add</span>自定义</button>`;
+}
+</script>
+
+</body>
+</html>

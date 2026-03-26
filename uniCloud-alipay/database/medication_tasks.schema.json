@@ -1,0 +1,70 @@
+{
+  "bsonType": "object",
+  "required": ["dog_id", "family_id", "drug_name", "start_date", "end_date", "status"],
+  "permission": {
+    "read": true,
+    "create": true,
+    "update": true,
+    "delete": true
+  },
+  "properties": {
+    "_id": {
+      "description": "用药任务ID"
+    },
+    "dog_id": {
+      "bsonType": "string",
+      "foreignKey": "dogs._id",
+      "description": "关联犬只ID"
+    },
+    "dog_name": {
+      "bsonType": "string",
+      "description": "犬只名称（冗余存储）"
+    },
+    "family_id": {
+      "bsonType": "string",
+      "foreignKey": "families._id",
+      "description": "所属家庭ID"
+    },
+    "source_record_id": {
+      "bsonType": "string",
+      "description": "来源健康记录ID"
+    },
+    "drug_name": {
+      "bsonType": "string",
+      "description": "药物名称"
+    },
+    "dosage": {
+      "bsonType": "string",
+      "description": "用药剂量"
+    },
+    "frequency": {
+      "bsonType": "number",
+      "description": "用药频率（次/天）"
+    },
+    "start_date": {
+      "bsonType": "number",
+      "description": "开始日期（时间戳毫秒）"
+    },
+    "end_date": {
+      "bsonType": "number",
+      "description": "结束日期（时间戳毫秒）"
+    },
+    "status": {
+      "bsonType": "string",
+      "enum": ["进行中", "已完成", "已取消"],
+      "description": "任务状态"
+    },
+    "notes": {
+      "bsonType": "string",
+      "description": "备注"
+    },
+    "created_at": {
+      "bsonType": "number",
+      "description": "创建时间（时间戳毫秒）"
+    },
+    "updated_at": {
+      "bsonType": "number",
+      "description": "更新时间（时间戳毫秒）"
+    }
+  }
+}

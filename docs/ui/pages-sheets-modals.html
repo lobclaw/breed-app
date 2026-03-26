@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Breed App — Bottom Sheets & Modals</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+  background: #f0eaec;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 48px;
+  padding: 40px 20px;
+  min-height: 100vh;
+}
+
+.frame-label {
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+  color: #6b6880;
+}
+.frame-label small {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #9a95a8;
+  margin-top: 4px;
+}
+
+.phone-frame {
+  width: 375px;
+  height: 812px;
+  border-radius: 44px;
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05);
+}
+
+.phone-screen {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ==================== LIGHT MODE ==================== */
+.light {
+  --primary: #ea3e77;
+  --primary-soft: #fff0f2;
+  --bg: #fdf8f9;
+  --card: #FFFFFF;
+  --card-dim: #FFF0E8;
+  --text-1: #1a1a2e;
+  --text-2: #8B7355;
+  --text-3: #B8A08A;
+  --text-4: #D8CBBD;
+  --amber: #e89b3e;
+  --amber-soft: #fff9f0;
+  --red: #e05252;
+  --red-soft: #fff0f0;
+  --green: #3dae6f;
+  --green-soft: #f0fff4;
+  --blue: #4a8dd4;
+  --blue-soft: #f0f7ff;
+  --plum: #8668b0;
+  --plum-soft: #f5f0ff;
+  --rose: #ea3e77;
+  --rose-soft: #fff0f2;
+  --teal: #3da8a0;
+  --teal-soft: #f0fffe;
+  --shadow: 0 2px 12px rgba(234, 62, 119, 0.06);
+  --shadow-lg: 0 6px 24px rgba(234, 62, 119, 0.1);
+  --nav-bg: rgba(255,255,255,0.85);
+  --nav-border: rgba(234, 62, 119, 0.08);
+  --status-bar-color: #1a1a2e;
+  background: var(--bg);
+}
+
+/* ==================== STATUS BAR ==================== */
+.status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 28px 0;
+  height: 50px;
+  color: var(--status-bar-color);
+  font-size: 15px;
+  font-weight: 600;
+}
+.status-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.status-bar-right .material-icons-round { font-size: 16px; }
+
+/* ==================== DIMMED CONTENT ==================== */
+.dimmed-content {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+.dimmed-content .page-placeholder {
+  padding: 60px 20px 20px;
+  opacity: 0.4;
+}
+.dimmed-content .page-placeholder .fake-header {
+  height: 24px;
+  width: 60%;
+  background: var(--text-4);
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+.dimmed-content .page-placeholder .fake-pills {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.dimmed-content .page-placeholder .fake-pill {
+  height: 32px;
+  width: 80px;
+  background: var(--card-dim);
+  border-radius: 16px;
+}
+.dimmed-content .page-placeholder .fake-card {
+  height: 100px;
+  background: var(--card);
+  border-radius: 16px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow);
+}
+
+/* ==================== OVERLAY ==================== */
+.overlay-dim {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.3);
+  z-index: 10;
+}
+
+/* ==================== BOTTOM SHEET ==================== */
+.bottom-sheet {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background: var(--card);
+  border-radius: 24px 24px 0 0;
+  z-index: 20;
+  padding: 12px 20px 34px;
+}
+.sheet-handle {
+  width: 40px;
+  height: 4px;
+  background: var(--text-4);
+  border-radius: 999px;
+  margin: 0 auto 16px;
+}
+.sheet-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-1);
+  margin-bottom: 16px;
+}
+.sheet-dog-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text-2);
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  background: var(--card-dim);
+  border-radius: 14px;
+}
+.sheet-dog-info .dog-emoji {
+  font-size: 18px;
+}
+
+/* ==================== FORM ELEMENTS ==================== */
+.form-group {
+  margin-bottom: 14px;
+}
+.form-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-3);
+  margin-bottom: 6px;
+  display: block;
+}
+.form-input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1.5px solid var(--text-4);
+  border-radius: 12px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--text-1);
+  background: var(--card);
+  outline: none;
+  transition: border-color 0.2s;
+}
+.form-input:focus {
+  border-color: var(--primary);
+}
+.form-input::placeholder {
+  color: var(--text-3);
+}
+textarea.form-input {
+  resize: none;
+  min-height: 60px;
+}
+.form-input-prefix {
+  position: relative;
+}
+.form-input-prefix .prefix {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  color: var(--text-3);
+  font-weight: 600;
+}
+.form-input-prefix .form-input {
+  padding-left: 30px;
+}
+
+/* ==================== BUTTONS ==================== */
+.sheet-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 18px;
+}
+.btn {
+  padding: 10px 22px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.12s ease;
+  flex: 1;
+  text-align: center;
+}
+.btn:active {
+  transform: scale(0.94);
+  opacity: 0.85;
+}
+.btn-filled {
+  color: white;
+}
+.btn-green { background: var(--green); }
+.btn-amber { background: var(--amber); }
+.btn-primary { background: var(--primary); }
+.btn-red { background: var(--red); }
+.btn-ghost {
+  background: transparent;
+  border: 1.5px solid var(--text-4);
+  color: var(--text-2);
+}
+
+/* ==================== TASK INFO LINE ==================== */
+.task-info-line {
+  font-size: 13px;
+  color: var(--text-2);
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  background: var(--card-dim);
+  border-radius: 14px;
+}
+.task-info-line .overdue-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--red-soft);
+  color: var(--red);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: 6px;
+}
+
+/* ==================== CALENDAR ==================== */
+.calendar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.calendar-header .sheet-title {
+  margin-bottom: 0;
+}
+.cal-nav {
+  display: flex;
+  gap: 4px;
+}
+.cal-nav-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: 1.5px solid var(--text-4);
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-2);
+}
+.cal-nav-btn .material-icons-round { font-size: 18px; }
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  margin-bottom: 16px;
+}
+.cal-weekday {
+  text-align: center;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-3);
+  padding: 4px 0 8px;
+}
+.cal-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 0;
+  min-height: 44px;
+}
+.cal-num {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.cal-cell.today .cal-num {
+  background: var(--primary);
+  color: white;
+  box-shadow: 0 3px 12px rgba(234, 62, 119, 0.3);
+}
+.cal-cell.other-month .cal-num {
+  color: var(--text-4);
+}
+.cal-dots {
+  display: flex;
+  gap: 3px;
+  margin-top: 2px;
+  height: 4px;
+}
+.cal-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+}
+.cal-dot.dot-red { background: var(--red); }
+.cal-dot.dot-amber { background: var(--amber); }
+.cal-dot.dot-green { background: var(--green); }
+.cal-dot.dot-rose { background: var(--rose); }
+.cal-dot.dot-plum { background: var(--plum); }
+.cal-dot.dot-teal { background: var(--teal); }
+.cal-dot.dot-blue { background: var(--blue); }
+
+.cal-today-btn {
+  display: block;
+  margin: 0 auto;
+  padding: 8px 28px;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+/* ==================== FILTER PILLS ==================== */
+.filter-section {
+  margin-bottom: 16px;
+}
+.filter-section-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-3);
+  margin-bottom: 8px;
+}
+.filter-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.filter-pill {
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1.5px solid var(--text-4);
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.12s ease;
+}
+.filter-pill:active {
+  transform: scale(0.94);
+}
+.filter-pill.active {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+.filter-pill.active-soft {
+  background: var(--primary-soft);
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+/* ==================== STATUS CARDS ==================== */
+.status-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.status-card {
+  padding: 14px;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+.status-card:active {
+  transform: scale(0.96);
+}
+.status-card .status-emoji {
+  font-size: 24px;
+  margin-bottom: 6px;
+}
+.status-card .status-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+  margin-bottom: 6px;
+}
+.status-card .sub-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.status-card .sub-pill {
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  background: rgba(255,255,255,0.7);
+  color: var(--text-2);
+}
+.status-card.card-red-soft { background: var(--red-soft); }
+.status-card.card-plum-soft { background: var(--plum-soft); }
+.status-card.card-green-soft { background: var(--green-soft); }
+.status-card.card-amber-soft { background: var(--amber-soft); }
+
+.cancel-link {
+  display: block;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-3);
+  cursor: pointer;
+  padding: 8px;
+  margin-top: 4px;
+}
+
+/* ==================== CENTER MODAL ==================== */
+.center-modal {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 280px;
+  max-width: 300px;
+  background: var(--card);
+  border-radius: 20px;
+  padding: 28px 24px 22px;
+  z-index: 20;
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+}
+.modal-icon {
+  font-size: 36px;
+  margin-bottom: 10px;
+}
+.modal-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-1);
+  margin-bottom: 8px;
+}
+.modal-text {
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 1.6;
+  margin-bottom: 18px;
+}
+.modal-buttons {
+  display: flex;
+  gap: 8px;
+}
+.modal-buttons .btn {
+  flex: 1;
+}
+.modal-form-group {
+  margin-bottom: 12px;
+  text-align: left;
+}
+.modal-form-group .form-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-3);
+  margin-bottom: 6px;
+}
+.modal-form-group .form-input {
+  font-size: 13px;
+  padding: 9px 12px;
+}
+</style>
+</head>
+<body>
+
+<!-- ============================================================ -->
+<!-- SHEET 1: 任务完成表单 H-3 -->
+<!-- ============================================================ -->
+<div>
+  <div class="frame-label">Sheet 1 &mdash; H-3<small>任务完成表单</small></div>
+  <div class="phone-frame">
+    <div class="phone-screen light">
+      <!-- Dimmed background page -->
+      <div class="dimmed-content">
+        <div class="status-bar">
+          <span>9:41</span>
+          <div class="status-bar-right">
+            <span class="material-icons-round">signal_cellular_alt</span>
+            <span class="material-icons-round">wifi</span>
+            <span class="material-icons-round">battery_full</span>
+          </div>
+        </div>
+        <div class="page-placeholder">
+          <div class="fake-header"></div>
+          <div class="fake-pills"><div class="fake-pill"></div><div class="fake-pill"></div><div class="fake-pill"></div></div>
+          <div class="fake-card"></div>
+          <div class="fake-card"></div>
+          <div class="fake-card"></div>
+        </div>
+      </div>
+      <!-- Overlay -->
+      <div class="overlay-dim"></div>
+      <!-- Bottom Sheet -->
+      <div class="bottom-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-title">完成疫苗接种</div>
+        <div class="sheet-dog-info">
+          <span class="dog-emoji">&#x1F436;</span>
+          <span style="font-weight:600; color:var(--text-1);">小白</span>
+          <span style="color:var(--text-3);">&middot;</span>
+          <span>马尔济斯</span>
+        </div>
+        <div class="form-group">
+          <label class="form-label">疫苗类型</label>
+          <input class="form-input" type="text" value="卫佳8">
+        </div>
+        <div class="form-group">
+          <label class="form-label">费用（可选）</label>
+          <div class="form-input-prefix">
+            <span class="prefix">&yen;</span>
+            <input class="form-input" type="text" placeholder="0.00">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">备注（可选）</label>
+          <textarea class="form-input" placeholder="补充说明..."></textarea>
+        </div>
+        <div class="sheet-buttons">
+          <button class="btn btn-filled btn-green">确认完成</button>
+          <button class="btn btn-ghost">取消</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SHEET 2: 推迟任务 H-4 -->
+<!-- ============================================================ -->
+<div>
+  <div class="frame-label">Sheet 2 &mdash; H-4<small>推迟任务</small></div>
+  <div class="phone-frame">
+    <div class="phone-screen light">
+      <div class="dimmed-content">
+        <div class="status-bar">
+          <span>9:41</span>
+          <div class="status-bar-right">
+            <span class="material-icons-round">signal_cellular_alt</span>
+            <span class="material-icons-round">wifi</span>
+            <span class="material-icons-round">battery_full</span>
+          </div>
+        </div>
+        <div class="page-placeholder">
+          <div class="fake-header"></div>
+          <div class="fake-pills"><div class="fake-pill"></div><div class="fake-pill"></div><div class="fake-pill"></div></div>
+          <div class="fake-card"></div>
+          <div class="fake-card"></div>
+          <div class="fake-card"></div>
+        </div>
+      </div>
+      <div class="overlay-dim"></div>
+      <div class="bottom-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-title">推迟任务</div>
+        <div class="task-info-line">
+          小白 &middot; 疫苗接种
+          <span class="overdue-tag">逾期2天</span>
+        </div>
+        <div class="form-group">
+          <label class="form-label">新日期 *</label>
+          <input class="form-input" type="date" value="2026-03-25">
+        </div>
+        <div class="form-group">
+          <label class="form-label">推迟原因（可选）</label>
+          <textarea class="form-input" placeholder="如：等兽医回复"></textarea>
+        </div>
+        <div class="sheet-buttons">
+          <button class="btn btn-filled btn-amber">确认推迟</button>
+          <button class="btn btn-ghost">取消</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SHEET 3: 月历展开 H-7 -->
+<!-- ============================================================ -->
+<div>
+  <div class="frame-label">Sheet 3 &mdash; H-7<small>月历展开</small></div>
+  <div class="phone-frame">
+    <div class="phone-screen light">
+      <div class="dimmed-content">
+        <div class="status-bar">
+          <span>9:41</span>
+          <div class="status-bar-right">
+            <span class="material-icons-round">signal_cellular_alt</span>
+            <span class="material-icons-round">wifi</span>
+            <span class="material-icons-round">battery_full</span>
+          </div>
+        </div>
+        <div class="page-placeholder">
+          <div class="fake-header"></div>
+          <div class="fake-pills"><div class="fake-pill"></div><div class="fake-pill"></div><div class="fake-pill"></div></div>
+          <div class="fake-card"></div>
+          <div class="fake-card"></div>
+        </div>
+      </div>
+      <div class="overlay-dim"></div>
+      <div class="bottom-sheet" style="height: 60%;">
+        <div class="sheet-handle"></div>
+        <div class="calendar-header">
+          <div class="sheet-title">2026年3月</div>
+          <div class="cal-nav">
+            <button class="cal-nav-btn"><span class="material-icons-round">chevron_left</span></button>
+            <button class="cal-nav-btn"><span class="material-icons-round">chevron_right</span></button>
+          </div>
+        </div>
+        <div class="cal-grid">
+          <!-- Weekday headers -->
+          <div class="cal-weekday">日</div>
+          <div class="cal-weekday">一</div>
+          <div class="cal-weekday">二</div>
+          <div class="cal-weekday">三</div>
+          <div class="cal-weekday">四</div>
+          <div class="cal-weekday">五</div>
+          <div class="cal-weekday">六</div>
+          <!-- Week 1: Mar 2026 starts on Sunday -->
+          <div class="cal-cell"><div class="cal-num">1</div><div class="cal-dots"><span class="cal-dot dot-green"></span></div></div>
+          <div class="cal-cell"><div class="cal-num">2</div><div class="cal-dots"></div></div>
+          <div class="cal-cell"><div class="cal-num">3</div><div class="cal-dots"><span class="cal-dot dot-rose"></span><span class="cal-dot dot-plum"></span></div></div>
+          <div class="cal-cell"><div class="cal-num">4</div><div class="cal-dots"></div></div>
+          <div class="cal-cell"><div class="cal-num">5</div><div class="cal-dots"><span class="cal-dot dot-amber"></span></div></div>
+          <div class="cal-cell"><div class="cal-num">6</div><div class="cal-dots"></div></div>
+          <div class="cal-cell"><div class="cal-num">7</div><div class="cal-dots"><span class="cal-dot dot-teal"></span></div></div>
+          <!-- Week 2 -->
+          <div class="cal-cell"><div class="cal-num">8</div><div class="cal-dots"></div></div>
+          <div class="cal-cell"><div class="cal-num">9</div><div class="cal-dots"><span class="cal-dot dot-red"></span></div></div>
+          <div class="cal-cell"><div class="cal-num">10</div><div class="cal-dots"><span class="cal-dot dot-green"></span><span class="cal-dot dot-rose"></span></div></div>
+          <div class="cal-cell"><div class="cal-num">11</div><div class="cal-dots"></div></div>
+          <div class="cal-cell"><div class="cal-num">12</div><div class="cal-dots"><span class="cal-dot dot-plum"></span></div></div>
+          <div class="cal-cell"><div class="cal-num">13</div><div class="cal-dots"></div></div>
+          <div class="cal-cell"><div class="cal-num">14</div><div class="cal-dots"><span class="cal-dot dot-amber"></span><span class="cal-dot dot-green"></span></div></div>
+          <!-- Week 3 -->
+          <div class="cal-cell"><div class="cal-num">15</div><div class="cal-dots"><span class="cal-dot dot-rose"></span></div></div>
+          <div class="cal-cell"><div class="cal-num">16</div><div class="cal-dots"></div></div>
+          <div class="cal-cell"><div class="cal-num">17</div><div class="cal-dots"><span class="cal-dot dot-teal"></span></div></div>
+          <div class="cal-cell"><div class="cal-num">18</div><div class="cal-dots"><span class="cal-dot dot-red"></span><span class="cal-dot dot-plum"></span></div></div>
+          <div class="cal-cell"><div class="cal-num">19</div><div class="cal-dots"></div></div>
+          <div class="cal-cell"><div class="cal-num">20</div><div class="cal-dots"><span class="cal-dot dot-green"></span></div></div>
+          <div class="cal-cell"><div class="cal-num">21</div><div class="cal-dots"></div></div>
+          <!-- Week 4 -->
+          <div class="cal-cell today"><div class="cal-num">22</div><div class="cal-dots"><span class="cal-dot dot-red"></span><span class="cal-dot dot-amber"></span></div></div>
+          <div class="cal-cell"><div class="cal-num">23</div><div class="cal-dots"><span class="cal-dot dot-green"></span></div></div>
+          <div class="cal-cell"><div class="cal-num">24</div><div class="cal-dots"><span class="cal-dot dot-rose"></span></div></div>
+          <div class="cal-cell"><div class="cal-num">25</div><div class="cal-dots"><span class="cal-dot dot-plum"></span><span class="cal-dot dot-teal"></span></div></div>
+          <div class="cal-cell"><div class="cal-num">26</div><div class="cal-dots"></div></div>
+          <div class="cal-cell"><div class="cal-num">27</div><div class="cal-dots"><span class="cal-dot dot-amber"></span></div></div>
+          <div class="cal-cell"><div class="cal-num">28</div><div class="cal-dots"><span class="cal-dot dot-green"></span></div></div>
+          <!-- Week 5 -->
+          <div class="cal-cell"><div class="cal-num">29</div><div class="cal-dots"><span class="cal-dot dot-rose"></span></div></div>
+          <div class="cal-cell"><div class="cal-num">30</div><div class="cal-dots"></div></div>
+          <div class="cal-cell"><div class="cal-num">31</div><div class="cal-dots"><span class="cal-dot dot-red"></span></div></div>
+          <div class="cal-cell other-month"><div class="cal-num">1</div><div class="cal-dots"></div></div>
+          <div class="cal-cell other-month"><div class="cal-num">2</div><div class="cal-dots"></div></div>
+          <div class="cal-cell other-month"><div class="cal-num">3</div><div class="cal-dots"></div></div>
+          <div class="cal-cell other-month"><div class="cal-num">4</div><div class="cal-dots"></div></div>
+        </div>
+        <button class="cal-today-btn">今天</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SHEET 4: 筛选面板 F-2 -->
+<!-- ============================================================ -->
+<div>
+  <div class="frame-label">Sheet 4 &mdash; F-2<small>筛选面板</small></div>
+  <div class="phone-frame">
+    <div class="phone-screen light">
+      <div class="dimmed-content">
+        <div class="status-bar">
+          <span>9:41</span>
+          <div class="status-bar-right">
+            <span class="material-icons-round">signal_cellular_alt</span>
+            <span class="material-icons-round">wifi</span>
+            <span class="material-icons-round">battery_full</span>
+          </div>
+        </div>
+        <div class="page-placeholder">
+          <div class="fake-header"></div>
+          <div class="fake-pills"><div class="fake-pill"></div><div class="fake-pill"></div><div class="fake-pill"></div></div>
+          <div class="fake-card"></div>
+          <div class="fake-card"></div>
+          <div class="fake-card"></div>
+        </div>
+      </div>
+      <div class="overlay-dim"></div>
+      <div class="bottom-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-title">筛选</div>
+        <div class="filter-section">
+          <div class="filter-section-label">时间范围</div>
+          <div class="filter-pills">
+            <button class="filter-pill active">本月</button>
+            <button class="filter-pill">本季度</button>
+            <button class="filter-pill">本年</button>
+            <button class="filter-pill">自定义</button>
+          </div>
+        </div>
+        <div class="filter-section">
+          <div class="filter-section-label">分类</div>
+          <div class="filter-pills">
+            <button class="filter-pill active">全部</button>
+            <button class="filter-pill active-soft">食品</button>
+            <button class="filter-pill active-soft">医疗</button>
+            <button class="filter-pill">配种费</button>
+            <button class="filter-pill">美容</button>
+            <button class="filter-pill">用品</button>
+            <button class="filter-pill">其他</button>
+          </div>
+        </div>
+        <div class="filter-section">
+          <div class="filter-section-label">关联犬只（可选）</div>
+          <div class="form-input-prefix" style="position:relative;">
+            <span class="prefix" style="left:12px;top:50%;transform:translateY(-50%);position:absolute;"><span class="material-icons-round" style="font-size:16px;color:var(--text-3);">search</span></span>
+            <input class="form-input" type="text" placeholder="搜索犬只名称..." style="padding-left:34px;">
+          </div>
+        </div>
+        <div class="sheet-buttons">
+          <button class="btn btn-filled btn-primary">应用筛选</button>
+          <button class="btn btn-ghost">重置</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- SHEET 5: 快速标记状态 D-6 -->
+<!-- ============================================================ -->
+<div>
+  <div class="frame-label">Sheet 5 &mdash; D-6<small>快速标记状态</small></div>
+  <div class="phone-frame">
+    <div class="phone-screen light">
+      <div class="dimmed-content">
+        <div class="status-bar">
+          <span>9:41</span>
+          <div class="status-bar-right">
+            <span class="material-icons-round">signal_cellular_alt</span>
+            <span class="material-icons-round">wifi</span>
+            <span class="material-icons-round">battery_full</span>
+          </div>
+        </div>
+        <div class="page-placeholder">
+          <div class="fake-header"></div>
+          <div class="fake-pills"><div class="fake-pill"></div><div class="fake-pill"></div><div class="fake-pill"></div></div>
+          <div class="fake-card"></div>
+          <div class="fake-card"></div>
+          <div class="fake-card"></div>
+        </div>
+      </div>
+      <div class="overlay-dim"></div>
+      <div class="bottom-sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-title">标记状态</div>
+        <div class="sheet-dog-info">
+          <span class="dog-emoji">&#x1F436;</span>
+          <span style="font-weight:600; color:var(--text-1);">花花</span>
+        </div>
+        <div class="status-grid">
+          <div class="status-card card-red-soft">
+            <div class="status-emoji">&#x1F912;</div>
+            <div class="status-label">生病</div>
+            <div class="sub-pills">
+              <span class="sub-pill">感冒</span>
+              <span class="sub-pill">腹泻</span>
+              <span class="sub-pill">皮肤病</span>
+              <span class="sub-pill">其他</span>
+            </div>
+          </div>
+          <div class="status-card card-plum-soft">
+            <div class="status-emoji">&#x1F48A;</div>
+            <div class="status-label">开始用药</div>
+          </div>
+          <div class="status-card card-green-soft">
+            <div class="status-emoji">&#x2705;</div>
+            <div class="status-label">标记康复</div>
+          </div>
+          <div class="status-card card-amber-soft">
+            <div class="status-emoji">&#x1F3E5;</div>
+            <div class="status-label">退休</div>
+          </div>
+        </div>
+        <div class="cancel-link">取消</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- MODAL 1: 删除确认 GM-1 -->
+<!-- ============================================================ -->
+<div>
+  <div class="frame-label">Modal 1 &mdash; GM-1<small>删除确认</small></div>
+  <div class="phone-frame">
+    <div class="phone-screen light">
+      <div class="dimmed-content">
+        <div class="status-bar">
+          <span>9:41</span>
+          <div class="status-bar-right">
+            <span class="material-icons-round">signal_cellular_alt</span>
+            <span class="material-icons-round">wifi</span>
+            <span class="material-icons-round">battery_full</span>
+          </div>
+        </div>
+        <div class="page-placeholder">
+          <div class="fake-header"></div>
+          <div class="fake-pills"><div class="fake-pill"></div><div class="fake-pill"></div><div class="fake-pill"></div></div>
+          <div class="fake-card"></div>
+          <div class="fake-card"></div>
+          <div class="fake-card"></div>
+        </div>
+      </div>
+      <div class="overlay-dim"></div>
+      <div class="center-modal">
+        <div class="modal-icon">&#x26A0;&#xFE0F;</div>
+        <div class="modal-title">确认删除</div>
+        <div class="modal-text">删除后配种记录将移入回收站，关联的费用记录也将删除。</div>
+        <div class="modal-buttons">
+          <button class="btn btn-filled btn-red">删除</button>
+          <button class="btn btn-ghost">取消</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- MODAL 2: 确认断奶 D-17 -->
+<!-- ============================================================ -->
+<div>
+  <div class="frame-label">Modal 2 &mdash; D-17<small>确认断奶</small></div>
+  <div class="phone-frame">
+    <div class="phone-screen light">
+      <div class="dimmed-content">
+        <div class="status-bar">
+          <span>9:41</span>
+          <div class="status-bar-right">
+            <span class="material-icons-round">signal_cellular_alt</span>
+            <span class="material-icons-round">wifi</span>
+            <span class="material-icons-round">battery_full</span>
+          </div>
+        </div>
+        <div class="page-placeholder">
+          <div class="fake-header"></div>
+          <div class="fake-pills"><div class="fake-pill"></div><div class="fake-pill"></div><div class="fake-pill"></div></div>
+          <div class="fake-card"></div>
+          <div class="fake-card"></div>
+          <div class="fake-card"></div>
+        </div>
+      </div>
+      <div class="overlay-dim"></div>
+      <div class="center-modal">
+        <div class="modal-icon">&#x1F37C;</div>
+        <div class="modal-title">确认断奶</div>
+        <div class="modal-text">确认花花第3窝已完成断奶？确认后母犬将退出哺乳状态。</div>
+        <div class="modal-form-group">
+          <label class="form-label">断奶日期</label>
+          <input class="form-input" type="date" value="2026-03-24">
+        </div>
+        <div class="modal-buttons">
+          <button class="btn btn-filled btn-amber">确认断奶</button>
+          <button class="btn btn-ghost">取消</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- MODAL 3: 确认死亡 D-8 -->
+<!-- ============================================================ -->
+<div>
+  <div class="frame-label">Modal 3 &mdash; D-8<small>标记已故</small></div>
+  <div class="phone-frame">
+    <div class="phone-screen light">
+      <div class="dimmed-content">
+        <div class="status-bar">
+          <span>9:41</span>
+          <div class="status-bar-right">
+            <span class="material-icons-round">signal_cellular_alt</span>
+            <span class="material-icons-round">wifi</span>
+            <span class="material-icons-round">battery_full</span>
+          </div>
+        </div>
+        <div class="page-placeholder">
+          <div class="fake-header"></div>
+          <div class="fake-pills"><div class="fake-pill"></div><div class="fake-pill"></div><div class="fake-pill"></div></div>
+          <div class="fake-card"></div>
+          <div class="fake-card"></div>
+          <div class="fake-card"></div>
+        </div>
+      </div>
+      <div class="overlay-dim"></div>
+      <div class="center-modal">
+        <div class="modal-icon" style="font-size: 28px; color: var(--text-3);">
+          <span class="material-icons-round" style="font-size: 36px;">sentiment_very_dissatisfied</span>
+        </div>
+        <div class="modal-title">标记已故</div>
+        <div class="modal-text">此操作将取消所有未完成的提醒任务。</div>
+        <div class="modal-form-group">
+          <label class="form-label">日期 *</label>
+          <input class="form-input" type="date" value="2026-03-24">
+        </div>
+        <div class="modal-form-group">
+          <label class="form-label">备注（可选）</label>
+          <input class="form-input" type="text" placeholder="死因等信息">
+        </div>
+        <div class="modal-buttons">
+          <button class="btn btn-filled btn-red">确认</button>
+          <button class="btn btn-ghost">取消</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- ERROR STATE 1: 网络错误 -->
+<!-- ============================================================ -->
+<div>
+  <div class="frame-label">Error State 1<small>网络错误</small></div>
+  <div class="phone-frame">
+    <div class="phone-screen light" style="display:flex;flex-direction:column;">
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="status-bar-right">
+          <span class="material-icons-round">signal_cellular_alt</span>
+          <span class="material-icons-round">wifi</span>
+          <span class="material-icons-round">battery_full</span>
+        </div>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:0 40px;">
+        <span class="material-icons-round" style="font-size:48px;color:var(--text-3);opacity:0.7;">wifi_off</span>
+        <span style="font-size:16px;font-weight:700;color:var(--text-1);">网络连接失败</span>
+        <span style="font-size:13px;color:var(--text-2);text-align:center;">请检查网络设置后重试</span>
+        <button style="margin-top:8px;width:120px;padding:10px 0;border-radius:999px;border:1.5px solid var(--primary);background:transparent;color:var(--primary);font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;">重试</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- ERROR STATE 2: 加载失败 -->
+<!-- ============================================================ -->
+<div>
+  <div class="frame-label">Error State 2<small>加载失败</small></div>
+  <div class="phone-frame">
+    <div class="phone-screen light" style="display:flex;flex-direction:column;">
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="status-bar-right">
+          <span class="material-icons-round">signal_cellular_alt</span>
+          <span class="material-icons-round">wifi</span>
+          <span class="material-icons-round">battery_full</span>
+        </div>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:0 40px;">
+        <span class="material-icons-round" style="font-size:48px;color:var(--amber);">error_outline</span>
+        <span style="font-size:16px;font-weight:700;color:var(--text-1);">加载失败</span>
+        <span style="font-size:13px;color:var(--primary);cursor:pointer;font-weight:600;">点击重试</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- ERROR STATE 3: 权限不足 -->
+<!-- ============================================================ -->
+<div>
+  <div class="frame-label">Error State 3<small>权限不足</small></div>
+  <div class="phone-frame">
+    <div class="phone-screen light" style="display:flex;flex-direction:column;">
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="status-bar-right">
+          <span class="material-icons-round">signal_cellular_alt</span>
+          <span class="material-icons-round">wifi</span>
+          <span class="material-icons-round">battery_full</span>
+        </div>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:0 40px;">
+        <span class="material-icons-round" style="font-size:48px;color:var(--text-3);">lock</span>
+        <span style="font-size:16px;font-weight:700;color:var(--text-1);">无权访问</span>
+        <span style="font-size:13px;color:var(--text-2);text-align:center;">此功能仅管理员可用</span>
+        <button style="margin-top:8px;padding:10px 24px;border-radius:999px;border:1.5px solid var(--text-4);background:transparent;color:var(--text-2);font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;">返回首页</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

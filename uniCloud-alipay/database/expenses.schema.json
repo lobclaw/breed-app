@@ -1,0 +1,100 @@
+{
+  "bsonType": "object",
+  "required": ["total_amount", "category", "date", "family_id"],
+  "permission": {
+    "read": true,
+    "create": true,
+    "update": true,
+    "delete": true
+  },
+  "properties": {
+    "_id": {
+      "description": "费用记录ID"
+    },
+    "total_amount": {
+      "bsonType": "number",
+      "description": "总金额（元）"
+    },
+    "category": {
+      "bsonType": "string",
+      "description": "费用分类"
+    },
+    "date": {
+      "bsonType": "number",
+      "description": "费用日期（时间戳毫秒）"
+    },
+    "family_id": {
+      "bsonType": "string",
+      "foreignKey": "families._id",
+      "description": "所属家庭ID"
+    },
+    "linked_cycle_id": {
+      "bsonType": "string",
+      "foreignKey": "breeding_cycles._id",
+      "description": "关联繁育周期ID"
+    },
+    "linked_litter_id": {
+      "bsonType": "string",
+      "foreignKey": "litters._id",
+      "description": "关联窝ID"
+    },
+    "linked_dog_ids": {
+      "bsonType": "array",
+      "items": {
+        "bsonType": "string"
+      },
+      "description": "关联犬只ID列表"
+    },
+    "source_type": {
+      "bsonType": "string",
+      "enum": ["manual", "auto"],
+      "description": "来源类型：手动录入/自动生成"
+    },
+    "source_record_id": {
+      "bsonType": "string",
+      "description": "来源记录ID"
+    },
+    "images": {
+      "bsonType": "array",
+      "items": {
+        "bsonType": "string"
+      },
+      "description": "凭证图片URL列表"
+    },
+    "dam_name": {
+      "bsonType": "string",
+      "description": "母犬名称（冗余存储）"
+    },
+    "dog_names": {
+      "bsonType": "array",
+      "items": {
+        "bsonType": "string"
+      },
+      "description": "关联犬只名称列表（冗余存储）"
+    },
+    "litter_number": {
+      "bsonType": "number",
+      "description": "窝次编号"
+    },
+    "notes": {
+      "bsonType": "string",
+      "description": "备注"
+    },
+    "created_by": {
+      "bsonType": "string",
+      "description": "创建人用户ID"
+    },
+    "deleted_at": {
+      "bsonType": ["number", "null"],
+      "description": "软删除时间戳（毫秒），null 表示未删除"
+    },
+    "created_at": {
+      "bsonType": "number",
+      "description": "创建时间（时间戳毫秒）"
+    },
+    "updated_at": {
+      "bsonType": "number",
+      "description": "更新时间（时间戳毫秒）"
+    }
+  }
+}

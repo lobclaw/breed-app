@@ -1,0 +1,52 @@
+{
+  "bsonType": "object",
+  "required": ["name", "family_id"],
+  "permission": {
+    "read": true,
+    "create": true,
+    "update": true,
+    "delete": true
+  },
+  "properties": {
+    "_id": {
+      "description": "代理人ID"
+    },
+    "name": {
+      "bsonType": "string",
+      "description": "代理人姓名"
+    },
+    "family_id": {
+      "bsonType": "string",
+      "foreignKey": "families._id",
+      "description": "所属家庭ID"
+    },
+    "phone": {
+      "bsonType": "string",
+      "description": "联系电话"
+    },
+    "wechat": {
+      "bsonType": "string",
+      "description": "微信号"
+    },
+    "commission_rate": {
+      "bsonType": "number",
+      "description": "佣金比例（0~1，如 0.1 表示 10%）"
+    },
+    "notes": {
+      "bsonType": "string",
+      "description": "备注"
+    },
+    "deleted_at": {
+      "bsonType": ["number", "null"],
+      "description": "软删除时间戳（毫秒），null 表示未删除"
+    },
+    "created_at": {
+      "bsonType": "number",
+      "description": "创建时间（时间戳毫秒）"
+    },
+    "updated_at": {
+      "bsonType": "number",
+      "description": "更新时间（时间戳毫秒）"
+    }
+  }
+}

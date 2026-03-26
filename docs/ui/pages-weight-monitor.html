@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>幼犬体重记录 — 快速监测日志</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+  background: #f0eaec;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 40px 20px;
+  min-height: 100vh;
+}
+
+.phone-frame {
+  width: 375px;
+  height: 812px;
+  border-radius: 44px;
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05);
+}
+
+.phone-screen {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.phone-screen::-webkit-scrollbar { display: none; }
+
+/* ==================== LIGHT MODE ==================== */
+.light {
+  --primary: #ea3e77;
+  --primary-soft: #fff0f2;
+  --bg: #fdf8f9;
+  --card: #FFFFFF;
+  --card-dim: #FFF0E8;
+  --text-1: #1a1a2e;
+  --text-2: #8B7355;
+  --text-3: #B8A08A;
+  --text-4: #D8CBBD;
+  --amber: #e89b3e;
+  --amber-soft: #fff9f0;
+  --red: #e05252;
+  --red-soft: #fff0f0;
+  --green: #3dae6f;
+  --green-soft: #f0fff4;
+  --blue: #4a8dd4;
+  --blue-soft: #f0f7ff;
+  --plum: #8668b0;
+  --plum-soft: #f5f0ff;
+  --rose: #ea3e77;
+  --rose-soft: #fff0f2;
+  --teal: #3da8a0;
+  --teal-soft: #f0fffe;
+  --shadow: 0 2px 12px rgba(234, 62, 119, 0.06);
+  --shadow-lg: 0 6px 24px rgba(234, 62, 119, 0.1);
+  --nav-bg: rgba(255,255,255,0.85);
+  --nav-border: rgba(234, 62, 119, 0.08);
+  background: var(--bg);
+}
+
+/* ==================== STATUS BAR ==================== */
+.status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 28px 0;
+  height: 50px;
+  color: var(--text-1);
+  font-size: 15px;
+  font-weight: 600;
+}
+.status-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.status-bar-right .material-icons-round { font-size: 16px; }
+
+/* ==================== TOP BAR ==================== */
+.top-bar {
+  padding: 8px 20px 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.back-btn {
+  background: none;
+  border: none;
+  color: var(--text-1);
+  cursor: pointer;
+  padding: 4px 0 0 0;
+  display: flex;
+  align-items: center;
+  transition: transform 0.12s ease;
+}
+.back-btn:active { transform: scale(0.85); }
+.back-btn .material-icons-round { font-size: 24px; }
+.top-bar-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.top-bar-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-1);
+  line-height: 1.3;
+}
+.top-bar-subtitle {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-3);
+  line-height: 1.3;
+}
+
+/* ==================== CONTENT ==================== */
+.content {
+  padding: 0 20px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ==================== SECTION LABEL ==================== */
+.section-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-3);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-label::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.section-label.teal::before { background: var(--teal); }
+.section-label.rose::before { background: var(--rose); }
+
+/* ==================== LITTER SUMMARY CARD ==================== */
+.litter-card {
+  background: var(--card);
+  border-radius: 16px;
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  position: relative;
+  overflow: hidden;
+}
+.litter-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: linear-gradient(135deg, var(--rose-soft) 0%, transparent 40%);
+  border-radius: 16px;
+  pointer-events: none;
+}
+.litter-card > * { position: relative; z-index: 1; }
+.litter-card:active { transform: scale(0.975); box-shadow: 0 1px 6px rgba(234,62,119,0.04); }
+.litter-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.litter-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ea3e77, #e89b3e);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.litter-avatar .material-icons-round { font-size: 22px; color: #fff; }
+.litter-detail { display: flex; flex-direction: column; gap: 2px; }
+.litter-name { font-size: 15px; font-weight: 700; color: var(--text-1); }
+.litter-meta { font-size: 12px; font-weight: 500; color: var(--text-3); }
+.litter-card .chevron {
+  color: var(--text-4);
+  font-size: 20px;
+}
+
+/* ==================== PUPPY WEIGHT CARD ==================== */
+.puppy-card {
+  background: var(--card);
+  border-radius: 16px;
+  padding: 16px 16px 16px 18px;
+  box-shadow: var(--shadow);
+  position: relative;
+  overflow: hidden;
+  border-left: 3.5px solid var(--blue);
+  animation: fadeInUp 0.35s ease both;
+}
+.puppy-card.male { border-left-color: var(--blue); }
+.puppy-card.female { border-left-color: var(--rose); }
+
+.puppy-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+}
+.puppy-card.male::before {
+  background: linear-gradient(135deg, var(--blue-soft) 0%, transparent 40%);
+}
+.puppy-card.female::before {
+  background: linear-gradient(135deg, var(--rose-soft) 0%, transparent 40%);
+}
+.puppy-card > * { position: relative; z-index: 1; }
+
+.puppy-card:nth-child(2) { animation-delay: 0.05s; }
+.puppy-card:nth-child(3) { animation-delay: 0.10s; }
+.puppy-card:nth-child(4) { animation-delay: 0.15s; }
+.puppy-card:nth-child(5) { animation-delay: 0.20s; }
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.puppy-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.puppy-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.puppy-gender {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.puppy-gender.male {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+.puppy-gender.female {
+  background: var(--rose-soft);
+  color: var(--rose);
+}
+
+.puppy-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.weight-input-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.weight-input {
+  width: 72px;
+  height: 48px;
+  border: 1.5px solid var(--text-4);
+  border-radius: 14px;
+  background: var(--card);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text-1);
+  text-align: center;
+  outline: none;
+  caret-color: var(--primary);
+  transition: border-color 0.15s ease;
+}
+.weight-input:focus {
+  border-color: var(--primary);
+}
+.weight-input::placeholder {
+  color: var(--text-4);
+  font-weight: 600;
+}
+.weight-unit {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+
+.weight-detail {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.weight-comparison {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+.weight-delta {
+  font-size: 13px;
+  font-weight: 700;
+}
+.weight-delta.positive { color: var(--red); }    /* 红涨：增长=红 */
+.weight-delta.negative { color: var(--green); }  /* 绿跌：下降=绿 */
+
+.mini-trend {
+  flex-shrink: 0;
+  width: 60px;
+  height: 30px;
+}
+
+/* ==================== SUMMARY BAR ==================== */
+.summary-bar {
+  background: var(--card);
+  border-radius: 16px;
+  padding: 12px 16px;
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.summary-item {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+.summary-label {
+  color: var(--text-3);
+  font-weight: 500;
+}
+.summary-value {
+  font-weight: 800;
+  color: var(--text-1);
+}
+.summary-value.warning {
+  color: var(--red);
+}
+.summary-divider {
+  width: 1px;
+  height: 14px;
+  background: var(--text-4);
+  flex-shrink: 0;
+}
+
+/* ==================== BOTTOM AREA ==================== */
+.bottom-area {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 4px;
+}
+.save-btn {
+  width: 100%;
+  height: 48px;
+  border-radius: 999px;
+  background: var(--teal);
+  color: #fff;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  box-shadow: 0 4px 16px rgba(61, 168, 160, 0.25);
+}
+.save-btn:active {
+  transform: scale(0.94);
+  opacity: 0.85;
+}
+
+.time-display {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: opacity 0.12s ease;
+}
+.time-display:active { opacity: 0.7; }
+.time-display .material-icons-round {
+  font-size: 14px;
+}
+</style>
+</head>
+<body>
+
+<div class="phone-frame">
+  <div class="phone-screen light">
+
+    <!-- Status Bar -->
+    <div class="status-bar">
+      <span>9:41</span>
+      <div class="status-bar-right">
+        <span class="material-icons-round">signal_cellular_alt</span>
+        <span class="material-icons-round">wifi</span>
+        <span class="material-icons-round">battery_full</span>
+      </div>
+    </div>
+
+    <!-- Top Bar -->
+    <div class="top-bar">
+      <button class="back-btn">
+        <span class="material-icons-round">arrow_back_ios_new</span>
+      </button>
+      <div class="top-bar-text">
+        <div class="top-bar-title">花花第3窝 · 体重记录</div>
+        <div class="top-bar-subtitle">出生第14天 · 4只存活</div>
+      </div>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+
+      <!-- Litter Summary Card -->
+      <div class="litter-card" onclick="alert('切换窝次')">
+        <div class="litter-info">
+          <div class="litter-avatar">
+            <span class="material-icons-round">pets</span>
+          </div>
+          <div class="litter-detail">
+            <div class="litter-name">花花第3窝</div>
+            <div class="litter-meta">出生日期 2026-03-11 · 存活 4/5</div>
+          </div>
+        </div>
+        <span class="material-icons-round chevron">chevron_right</span>
+      </div>
+
+      <!-- Section: Weight Entries -->
+      <div>
+        <div class="section-label teal">逐只体重录入</div>
+
+        <!-- Puppy 1: Male -->
+        <div class="puppy-card male" style="margin-bottom: 12px;">
+          <div class="puppy-header">
+            <span class="puppy-name">花花3窝-1号</span>
+            <span class="puppy-gender male">公</span>
+          </div>
+          <div class="puppy-input-row">
+            <div class="weight-input-group">
+              <input class="weight-input" type="text" inputmode="numeric" value="295" data-index="0">
+              <span class="weight-unit">g</span>
+            </div>
+            <div class="weight-detail">
+              <span class="weight-comparison">上次: 279g · 昨天</span>
+              <span class="weight-delta positive">↑16g</span>
+            </div>
+            <svg class="mini-trend" viewBox="0 0 60 30" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="trendUp1" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#e05252" stop-opacity="0.25"/>
+                  <stop offset="100%" stop-color="#e05252" stop-opacity="0.03"/>
+                </linearGradient>
+              </defs>
+              <!-- 220→245→258→279→295, range 220-295=75. y = 28 - ((v-220)/75)*24 -->
+              <!-- 220→28, 245→20, 258→15.8, 279→9, 295→4 -->
+              <path d="M4,28 L17,20 L30,15.8 L43,9 L56,4 L56,30 L4,30 Z" fill="url(#trendUp1)"/>
+              <polyline points="4,28 17,20 30,15.8 43,9 56,4"
+                fill="none" stroke="#e05252" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle cx="4" cy="28" r="2" fill="#e05252"/>
+              <circle cx="17" cy="20" r="2" fill="#e05252"/>
+              <circle cx="30" cy="15.8" r="2" fill="#e05252"/>
+              <circle cx="43" cy="9" r="2" fill="#e05252"/>
+              <circle cx="56" cy="4" r="2.5" fill="#e05252"/>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Puppy 2: Female -->
+        <div class="puppy-card female" style="margin-bottom: 12px;">
+          <div class="puppy-header">
+            <span class="puppy-name">花花3窝-2号</span>
+            <span class="puppy-gender female">母</span>
+          </div>
+          <div class="puppy-input-row">
+            <div class="weight-input-group">
+              <input class="weight-input" type="text" inputmode="numeric" value="172" data-index="1">
+              <span class="weight-unit">g</span>
+            </div>
+            <div class="weight-detail">
+              <span class="weight-comparison">上次: 178g · 昨天</span>
+              <span class="weight-delta negative">↓6g &#9888;&#65039;</span>
+            </div>
+            <svg class="mini-trend" viewBox="0 0 60 30" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="trendDown2" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#3dae6f" stop-opacity="0.25"/>
+                  <stop offset="100%" stop-color="#3dae6f" stop-opacity="0.03"/>
+                </linearGradient>
+              </defs>
+              <!-- 150→160→170→178→172, range 150-178=28. y = 28 - ((v-150)/28)*24 -->
+              <!-- 150→28, 160→19.4, 170→10.9, 178→4, 172→9.1 -->
+              <path d="M4,28 L17,19.4 L30,10.9 L43,4 L56,9.1 L56,30 L4,30 Z" fill="url(#trendDown2)"/>
+              <polyline points="4,28 17,19.4 30,10.9 43,4 56,9.1"
+                fill="none" stroke="#3dae6f" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle cx="4" cy="28" r="2" fill="#3dae6f"/>
+              <circle cx="17" cy="19.4" r="2" fill="#3dae6f"/>
+              <circle cx="30" cy="10.9" r="2" fill="#3dae6f"/>
+              <circle cx="43" cy="4" r="2" fill="#3dae6f"/>
+              <circle cx="56" cy="9.1" r="2.5" fill="#3dae6f"/>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Puppy 3: Male -->
+        <div class="puppy-card male" style="margin-bottom: 12px;">
+          <div class="puppy-header">
+            <span class="puppy-name">小黑点</span>
+            <span class="puppy-gender male">公</span>
+          </div>
+          <div class="puppy-input-row">
+            <div class="weight-input-group">
+              <input class="weight-input" type="text" inputmode="numeric" value="238" data-index="2">
+              <span class="weight-unit">g</span>
+            </div>
+            <div class="weight-detail">
+              <span class="weight-comparison">上次: 223g · 昨天</span>
+              <span class="weight-delta positive">↑15g</span>
+            </div>
+            <svg class="mini-trend" viewBox="0 0 60 30" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="trendUp3" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#e05252" stop-opacity="0.25"/>
+                  <stop offset="100%" stop-color="#e05252" stop-opacity="0.03"/>
+                </linearGradient>
+              </defs>
+              <!-- 185→200→213→223→238, range 185-238=53. y = 28 - ((v-185)/53)*24 -->
+              <!-- 185→28, 200→21.2, 213→15.3, 223→10.8, 238→4 -->
+              <path d="M4,28 L17,21.2 L30,15.3 L43,10.8 L56,4 L56,30 L4,30 Z" fill="url(#trendUp3)"/>
+              <polyline points="4,28 17,21.2 30,15.3 43,10.8 56,4"
+                fill="none" stroke="#e05252" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle cx="4" cy="28" r="2" fill="#e05252"/>
+              <circle cx="17" cy="21.2" r="2" fill="#e05252"/>
+              <circle cx="30" cy="15.3" r="2" fill="#e05252"/>
+              <circle cx="43" cy="10.8" r="2" fill="#e05252"/>
+              <circle cx="56" cy="4" r="2.5" fill="#e05252"/>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Puppy 4: Female (empty) -->
+        <div class="puppy-card female">
+          <div class="puppy-header">
+            <span class="puppy-name">花花3窝-4号</span>
+            <span class="puppy-gender female">母</span>
+          </div>
+          <div class="puppy-input-row">
+            <div class="weight-input-group" style="border-style: dashed; border-width: 1.5px; border-color: var(--text-4); border-radius: 14px;">
+              <input class="weight-input" type="text" inputmode="numeric" placeholder="输入体重" data-index="3" style="border: none;">
+              <span class="weight-unit">g</span>
+            </div>
+            <div class="weight-detail">
+              <span class="weight-comparison">上次: 215g · 昨天</span>
+            </div>
+            <svg class="mini-trend" viewBox="0 0 60 30" preserveAspectRatio="none" style="opacity: 0.35;">
+              <defs>
+                <linearGradient id="trendUp4" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#B8A08A" stop-opacity="0.2"/>
+                  <stop offset="100%" stop-color="#B8A08A" stop-opacity="0.03"/>
+                </linearGradient>
+              </defs>
+              <!-- 170→185→198→215, range 170-215=45. y = 28 - ((v-170)/45)*24 -->
+              <!-- 170→28, 185→20, 198→13.1, 215→4 -->
+              <path d="M8,28 L25,20 L42,13.1 L56,4 L56,30 L8,30 Z" fill="url(#trendUp4)"/>
+              <polyline points="8,28 25,20 42,13.1 56,4"
+                fill="none" stroke="#B8A08A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle cx="8" cy="28" r="2" fill="#B8A08A"/>
+              <circle cx="25" cy="20" r="2" fill="#B8A08A"/>
+              <circle cx="42" cy="13.1" r="2" fill="#B8A08A"/>
+              <circle cx="56" cy="4" r="2" fill="#B8A08A"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- Summary Bar -->
+      <div class="summary-bar">
+        <div class="summary-item">
+          <span class="summary-label">平均:</span>
+          <span class="summary-value">235g</span>
+        </div>
+        <div class="summary-divider"></div>
+        <div class="summary-item">
+          <span class="summary-label">最重:</span>
+          <span class="summary-value">295g</span>
+        </div>
+        <div class="summary-divider"></div>
+        <div class="summary-item">
+          <span class="summary-label">最轻:</span>
+          <span class="summary-value warning">172g&#9888;&#65039;</span>
+        </div>
+        <div class="summary-divider"></div>
+        <div class="summary-item">
+          <span class="summary-label">已录:</span>
+          <span class="summary-value">3/4</span>
+        </div>
+      </div>
+
+      <!-- Bottom Area -->
+      <div class="bottom-area">
+        <button class="save-btn">保存全部</button>
+        <div class="time-display">
+          <span class="material-icons-round">schedule</span>
+          <span>记录时间</span>
+          <input type="time" value="08:30" style="
+            font-family: inherit;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-2);
+            background: transparent;
+            border: none;
+            outline: none;
+            cursor: pointer;
+            text-align: center;
+          ">
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+// Auto-jump: after entering weight, press Enter or after 3 digits, jump to next input
+const inputs = document.querySelectorAll('.weight-input');
+
+inputs.forEach((input, i) => {
+  // Jump on Enter key
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const next = inputs[i + 1];
+      if (next) {
+        next.focus();
+        next.select();
+      }
+    }
+  });
+
+  // Auto-jump after 3 digits (typical puppy weight is 100-999g)
+  input.addEventListener('input', (e) => {
+    const val = e.target.value.replace(/\D/g, '');
+    e.target.value = val;
+    if (val.length >= 3) {
+      const next = inputs[i + 1];
+      if (next) {
+        setTimeout(() => {
+          next.focus();
+          next.select();
+        }, 150);
+      }
+    }
+  });
+
+  // Select all text on focus for easy replacement
+  input.addEventListener('focus', () => {
+    setTimeout(() => input.select(), 50);
+  });
+});
+</script>
+
+</body>
+</html>

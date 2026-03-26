@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>R-7 临产监测 — 快速监测日志</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+  background: #f0eaec;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 40px 20px;
+  min-height: 100vh;
+}
+
+.phone-frame {
+  width: 375px;
+  height: 812px;
+  border-radius: 44px;
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05);
+}
+
+.phone-screen {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.phone-screen::-webkit-scrollbar { display: none; }
+
+/* ==================== LIGHT MODE ==================== */
+.light {
+  --primary: #ea3e77;
+  --primary-soft: #fff0f2;
+  --bg: #fdf8f9;
+  --card: #FFFFFF;
+  --card-dim: #FFF0E8;
+  --text-1: #1a1a2e;
+  --text-2: #8B7355;
+  --text-3: #B8A08A;
+  --text-4: #D8CBBD;
+  --amber: #e89b3e;
+  --amber-soft: #fff9f0;
+  --red: #e05252;
+  --red-soft: #fff0f0;
+  --green: #3dae6f;
+  --green-soft: #f0fff4;
+  --blue: #4a8dd4;
+  --blue-soft: #f0f7ff;
+  --plum: #8668b0;
+  --plum-soft: #f5f0ff;
+  --rose: #ea3e77;
+  --rose-soft: #fff0f2;
+  --teal: #3da8a0;
+  --teal-soft: #f0fffe;
+  --shadow: 0 2px 12px rgba(234, 62, 119, 0.06);
+  --shadow-lg: 0 6px 24px rgba(234, 62, 119, 0.1);
+  --nav-bg: rgba(255,255,255,0.85);
+  --nav-border: rgba(234, 62, 119, 0.08);
+  background: var(--bg);
+}
+
+/* ==================== STATUS BAR ==================== */
+.status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 28px 0;
+  height: 50px;
+  color: var(--text-1);
+  font-size: 15px;
+  font-weight: 600;
+}
+.status-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.status-bar-right .material-icons-round { font-size: 16px; }
+
+/* ==================== TOP BAR ==================== */
+.top-bar {
+  padding: 8px 20px 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.back-btn {
+  background: none;
+  border: none;
+  color: var(--text-1);
+  cursor: pointer;
+  padding: 4px 0 0 0;
+  display: flex;
+  align-items: center;
+  transition: transform 0.12s ease;
+}
+.back-btn:active { transform: scale(0.85); }
+.back-btn .material-icons-round { font-size: 24px; }
+.top-bar-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.top-bar-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-1);
+  line-height: 1.3;
+}
+.top-bar-subtitle {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-3);
+  line-height: 1.3;
+}
+
+/* 犬只选择卡片（与体重记录页统一样式） */
+.dog-select-card {
+  margin: 0 20px 12px;
+  background: var(--card);
+  border-radius: 16px;
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  position: relative;
+  overflow: hidden;
+}
+.dog-select-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: linear-gradient(135deg, var(--rose-soft) 0%, transparent 40%);
+  border-radius: 16px;
+  pointer-events: none;
+}
+.dog-select-card > * { position: relative; z-index: 1; }
+.dog-select-card:active { transform: scale(0.975); box-shadow: 0 1px 6px rgba(234,62,119,0.04); }
+.dog-select-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.dog-select-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ea3e77, #e89b3e);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.dog-select-avatar .material-icons-round { font-size: 22px; color: #fff; }
+.dog-select-detail { display: flex; flex-direction: column; gap: 2px; }
+.dog-select-name { font-size: 15px; font-weight: 700; color: var(--text-1); }
+.dog-select-meta { font-size: 12px; font-weight: 500; color: var(--text-3); }
+.dog-select-card .chevron {
+  color: var(--text-4);
+  font-size: 20px;
+}
+
+/* ==================== CONTENT ==================== */
+.content {
+  padding: 0 20px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ==================== SECTION LABEL ==================== */
+.section-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-3);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-label::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--rose);
+  flex-shrink: 0;
+}
+
+/* ==================== LABOR CONTEXT CARD ==================== */
+.labor-context {
+  background: var(--card);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  position: relative;
+}
+.labor-context::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: linear-gradient(135deg, var(--rose-soft) 0%, transparent 35%);
+  pointer-events: none;
+  border-radius: 16px;
+}
+.labor-context > * { position: relative; z-index: 1; }
+
+/* Last record row */
+.labor-ctx-last {
+  padding: 14px 16px 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.labor-ctx-icon {
+  width: 34px; height: 34px; border-radius: 10px;
+  background: #FFD4DE;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.labor-ctx-icon .material-icons-round { font-size: 17px; color: var(--rose); }
+.labor-ctx-info { flex: 1; }
+.labor-ctx-label { font-size: 11px; font-weight: 600; color: var(--text-3); }
+.labor-ctx-value { font-size: 13px; font-weight: 600; color: var(--text-1); margin-top: 1px; }
+
+/* Temperature trend strip */
+.temp-trend-strip {
+  padding: 10px 16px 8px;
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+.temp-trend-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.temp-trend-num {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-2);
+}
+.temp-trend-num.current {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--rose);
+}
+.temp-trend-num.danger {
+  color: var(--red);
+}
+.temp-trend-bar {
+  width: 100%;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  min-height: 4px;
+}
+.temp-trend-item:first-child .temp-trend-bar { border-radius: 4px 0 0 4px; }
+.temp-trend-item:last-child .temp-trend-bar { border-radius: 0 4px 4px 0; }
+.temp-trend-bar.level-high { background: rgba(61, 174, 111, 0.2); }
+.temp-trend-bar.level-mid { background: rgba(232, 155, 62, 0.2); }
+.temp-trend-bar.level-low {
+  background: linear-gradient(135deg, var(--rose), var(--red));
+  box-shadow: 0 2px 8px rgba(224, 82, 82, 0.25);
+}
+.temp-trend-time {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-4);
+}
+.temp-trend-item:last-child .temp-trend-time {
+  color: var(--rose);
+  font-weight: 700;
+}
+/* Arrow connectors */
+.temp-trend-arrow {
+  color: var(--text-4);
+  font-size: 14px;
+  flex-shrink: 0;
+  align-self: center;
+  margin-bottom: 18px;
+}
+
+/* Alert row */
+.labor-ctx-alert {
+  padding: 10px 16px;
+  border-top: 1px solid rgba(216, 203, 189, 0.15);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--red);
+}
+.labor-ctx-alert .material-icons-round { font-size: 16px; }
+.labor-ctx-alert.warning {
+  color: var(--amber);
+}
+
+/* ==================== TEMPERATURE INPUT (simplified) ==================== */
+.temp-input-card {
+  background: var(--card);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.temp-input-left {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.temp-value {
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--text-1);
+  width: 90px;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  caret-color: var(--primary);
+}
+.temp-value::placeholder { color: var(--text-4); }
+.temp-unit {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.temp-input-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+.temp-time-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+.temp-time-input {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+  background: transparent;
+  border: none;
+  outline: none;
+  cursor: pointer;
+  text-align: right;
+  width: 60px;
+}
+
+/* ==================== SECTION: SYMPTOMS ==================== */
+.symptoms-section {}
+
+.symptom-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.symptom-chip {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  border-radius: 14px;
+  background: var(--card-dim);
+  border: none;
+  cursor: pointer;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-2);
+  transition: all 0.12s ease;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.symptom-chip:active {
+  transform: scale(0.94);
+  filter: brightness(0.95);
+}
+.symptom-chip .check-icon {
+  display: none;
+  font-size: 16px;
+  color: var(--primary);
+}
+.symptom-chip.selected {
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-weight: 600;
+}
+.symptom-chip.selected .check-icon {
+  display: inline;
+}
+
+/* ==================== SECTION: NOTES ==================== */
+.notes-section {}
+
+.notes-textarea {
+  width: 100%;
+  min-height: 60px;
+  padding: 12px 14px;
+  border: 1.5px solid var(--text-4);
+  border-radius: 14px;
+  background: var(--card);
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-1);
+  outline: none;
+  resize: vertical;
+  transition: border-color 0.15s ease;
+}
+.notes-textarea::placeholder {
+  color: var(--text-3);
+  font-weight: 400;
+}
+.notes-textarea:focus {
+  border-color: var(--primary);
+}
+
+/* ==================== BOTTOM AREA ==================== */
+.bottom-area {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 4px;
+}
+.save-btn {
+  width: 100%;
+  height: 48px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: #fff;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  box-shadow: 0 4px 16px rgba(234, 62, 119, 0.25);
+}
+.save-btn:active {
+  transform: scale(0.94);
+  opacity: 0.85;
+}
+
+</style>
+</head>
+<body>
+
+<div class="phone-frame">
+  <div class="phone-screen light">
+
+    <!-- Status Bar -->
+    <div class="status-bar">
+      <span>9:41</span>
+      <div class="status-bar-right">
+        <span class="material-icons-round">signal_cellular_alt</span>
+        <span class="material-icons-round">wifi</span>
+        <span class="material-icons-round">battery_full</span>
+      </div>
+    </div>
+
+    <!-- Top Bar -->
+    <div class="top-bar">
+      <button class="back-btn">
+        <span class="material-icons-round">arrow_back_ios_new</span>
+      </button>
+      <div class="top-bar-text">
+        <div class="top-bar-title">录入临产监测</div>
+        <div class="top-bar-subtitle">预产期 3月28日 · 还有3天</div>
+      </div>
+    </div>
+
+    <!-- 犬只选择卡片（智能预填：距预产期最近的犬，点击可切换） -->
+    <div class="dog-select-card" onclick="alert('切换犬只')">
+      <div class="dog-select-info">
+        <div class="dog-select-avatar">
+          <span class="material-icons-round">pets</span>
+        </div>
+        <div class="dog-select-detail">
+          <div class="dog-select-name">杠上花</div>
+          <div class="dog-select-meta">马尔济斯 · 种母 · 距预产期3天</div>
+        </div>
+      </div>
+      <span class="material-icons-round chevron">chevron_right</span>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+
+      <!-- 产前上下文卡片 -->
+      <div class="labor-context">
+        <!-- 上次监测 -->
+        <div class="labor-ctx-last">
+          <div class="labor-ctx-icon">
+            <span class="material-icons-round">history</span>
+          </div>
+          <div class="labor-ctx-info">
+            <div class="labor-ctx-label">上次监测 · 今早 06:30</div>
+            <div class="labor-ctx-value">37.5°C · 食欲减退 / 刨窝</div>
+          </div>
+        </div>
+
+        <!-- 体温趋势数字序列 -->
+        <div class="temp-trend-strip">
+          <div class="temp-trend-item">
+            <div class="temp-trend-num">38.0</div>
+            <div class="temp-trend-bar level-high" style="height:22px"></div>
+            <div class="temp-trend-time">昨早</div>
+          </div>
+          <span class="material-icons-round temp-trend-arrow">trending_down</span>
+          <div class="temp-trend-item">
+            <div class="temp-trend-num">37.8</div>
+            <div class="temp-trend-bar level-high" style="height:18px"></div>
+            <div class="temp-trend-time">昨晚</div>
+          </div>
+          <span class="material-icons-round temp-trend-arrow">trending_down</span>
+          <div class="temp-trend-item">
+            <div class="temp-trend-num">37.5</div>
+            <div class="temp-trend-bar level-mid" style="height:14px"></div>
+            <div class="temp-trend-time">今早</div>
+          </div>
+          <span class="material-icons-round temp-trend-arrow">trending_down</span>
+          <div class="temp-trend-item">
+            <div class="temp-trend-num current danger">36.9</div>
+            <div class="temp-trend-bar level-low" style="height:10px"></div>
+            <div class="temp-trend-time">现在</div>
+          </div>
+        </div>
+
+        <!-- 临产警告 -->
+        <div class="labor-ctx-alert">
+          <span class="material-icons-round">warning</span>
+          <span>体温持续下降至37.2°C以下，可能24小时内生产</span>
+        </div>
+      </div>
+
+      <!-- 体温输入 -->
+      <div>
+        <div class="section-label">本次体温</div>
+        <div class="temp-input-card">
+          <div class="temp-input-left">
+            <input class="temp-value" type="text" value="36.9" inputmode="decimal">
+            <span class="temp-unit">°C</span>
+          </div>
+          <div class="temp-input-right">
+            <span class="temp-time-label">测量时间</span>
+            <input type="time" class="temp-time-input" value="14:30">
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Symptoms -->
+      <div class="symptoms-section">
+        <div class="section-label">观察到的征兆</div>
+        <div class="symptom-grid">
+          <button class="symptom-chip selected" onclick="toggleSymptom(this)">
+            <span class="material-icons-round check-icon">check</span>
+            <span>刨窝/做窝</span>
+          </button>
+          <button class="symptom-chip" onclick="toggleSymptom(this)">
+            <span class="material-icons-round check-icon">check</span>
+            <span>焦躁不安</span>
+          </button>
+          <button class="symptom-chip" onclick="toggleSymptom(this)">
+            <span class="material-icons-round check-icon">check</span>
+            <span>食欲减退</span>
+          </button>
+          <button class="symptom-chip" onclick="toggleSymptom(this)">
+            <span class="material-icons-round check-icon">check</span>
+            <span>喘气加快</span>
+          </button>
+          <button class="symptom-chip" onclick="toggleSymptom(this)">
+            <span class="material-icons-round check-icon">check</span>
+            <span>阴道分泌物</span>
+          </button>
+          <button class="symptom-chip" onclick="toggleSymptom(this)">
+            <span class="material-icons-round check-icon">check</span>
+            <span>可见宫缩</span>
+          </button>
+          <button class="symptom-chip" onclick="toggleSymptom(this)">
+            <span class="material-icons-round check-icon">check</span>
+            <span>乳汁分泌</span>
+          </button>
+          <button class="symptom-chip" onclick="toggleSymptom(this)">
+            <span class="material-icons-round check-icon">check</span>
+            <span>拒食</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Section 3: Notes -->
+      <div class="notes-section">
+        <div class="section-label">补充说明<span style="font-weight:400; color: var(--text-3); margin-left: 4px;">（选填）</span></div>
+        <textarea class="notes-textarea" placeholder="补充观察到的其他情况..."></textarea>
+      </div>
+
+      <!-- Bottom Area -->
+      <div class="bottom-area">
+        <button class="save-btn">保存记录</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+function toggleSymptom(el) {
+  el.classList.toggle('selected');
+}
+</script>
+
+</body>
+</html>

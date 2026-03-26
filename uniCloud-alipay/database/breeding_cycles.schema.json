@@ -1,0 +1,51 @@
+{
+  "bsonType": "object",
+  "required": ["dam_id", "family_id", "status"],
+  "permission": {
+    "read": true,
+    "create": true,
+    "update": true,
+    "delete": true
+  },
+  "properties": {
+    "_id": {
+      "description": "繁育周期ID"
+    },
+    "dam_id": {
+      "bsonType": "string",
+      "foreignKey": "dogs._id",
+      "description": "母犬ID"
+    },
+    "dam_name": {
+      "bsonType": "string",
+      "description": "母犬名称（冗余存储）"
+    },
+    "sire_id": {
+      "bsonType": "string",
+      "foreignKey": "dogs._id",
+      "description": "父犬ID"
+    },
+    "sire_name": {
+      "bsonType": "string",
+      "description": "父犬名称（冗余存储）"
+    },
+    "family_id": {
+      "bsonType": "string",
+      "foreignKey": "families._id",
+      "description": "所属家庭ID"
+    },
+    "status": {
+      "bsonType": "string",
+      "enum": ["发情中", "怀孕中", "已生产", "失败", "放弃"],
+      "description": "繁育周期状态"
+    },
+    "created_at": {
+      "bsonType": "number",
+      "description": "创建时间（时间戳毫秒）"
+    },
+    "updated_at": {
+      "bsonType": "number",
+      "description": "更新时间（时间戳毫秒）"
+    }
+  }
+}

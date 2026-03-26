@@ -1,0 +1,69 @@
+{
+  "bsonType": "object",
+  "required": ["type", "dog_id", "family_id", "date"],
+  "permission": {
+    "read": true,
+    "create": true,
+    "update": true,
+    "delete": true
+  },
+  "properties": {
+    "_id": {
+      "description": "健康记录ID"
+    },
+    "type": {
+      "bsonType": "string",
+      "enum": ["vaccination", "deworming", "illness"],
+      "description": "记录类型：疫苗/驱虫/病历"
+    },
+    "dog_id": {
+      "bsonType": "string",
+      "foreignKey": "dogs._id",
+      "description": "关联犬只ID"
+    },
+    "dog_name": {
+      "bsonType": "string",
+      "description": "犬只名称（冗余存储）"
+    },
+    "family_id": {
+      "bsonType": "string",
+      "foreignKey": "families._id",
+      "description": "所属家庭ID"
+    },
+    "date": {
+      "bsonType": "number",
+      "description": "记录日期（时间戳毫秒）"
+    },
+    "cost": {
+      "bsonType": "number",
+      "description": "花费金额（元）"
+    },
+    "images": {
+      "bsonType": "array",
+      "items": {
+        "bsonType": "string"
+      },
+      "description": "图片URL列表"
+    },
+    "notes": {
+      "bsonType": "string",
+      "description": "备注"
+    },
+    "details": {
+      "bsonType": "object",
+      "description": "各类型专属详情字段"
+    },
+    "created_by": {
+      "bsonType": "string",
+      "description": "创建人用户ID"
+    },
+    "created_at": {
+      "bsonType": "number",
+      "description": "创建时间（时间戳毫秒）"
+    },
+    "updated_at": {
+      "bsonType": "number",
+      "description": "更新时间（时间戳毫秒）"
+    }
+  }
+}

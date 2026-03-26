@@ -1,0 +1,98 @@
+{
+  "bsonType": "object",
+  "required": ["name", "family_id"],
+  "permission": {
+    "read": true,
+    "create": true,
+    "update": true,
+    "delete": true
+  },
+  "properties": {
+    "_id": {
+      "description": "犬只ID"
+    },
+    "name": {
+      "bsonType": "string",
+      "description": "犬只名称"
+    },
+    "gender": {
+      "bsonType": "string",
+      "enum": ["公", "母"],
+      "description": "性别"
+    },
+    "birth_date": {
+      "bsonType": ["number", "null"],
+      "description": "出生日期（时间戳毫秒）"
+    },
+    "color": {
+      "bsonType": "string",
+      "description": "毛色"
+    },
+    "microchip_id": {
+      "bsonType": "string",
+      "description": "芯片号"
+    },
+    "dam_id": {
+      "bsonType": "string",
+      "foreignKey": "dogs._id",
+      "description": "母犬ID"
+    },
+    "dam_name": {
+      "bsonType": "string",
+      "description": "母犬名称（冗余存储）"
+    },
+    "sire_id": {
+      "bsonType": "string",
+      "foreignKey": "dogs._id",
+      "description": "父犬ID"
+    },
+    "sire_name": {
+      "bsonType": "string",
+      "description": "父犬名称（冗余存储）"
+    },
+    "avatar": {
+      "bsonType": "string",
+      "description": "头像图片URL"
+    },
+    "disposition": {
+      "bsonType": "string",
+      "enum": ["在养", "已故", "已售", "已领养", "已赠送", "已退休"],
+      "defaultValue": "在养",
+      "description": "处置状态"
+    },
+    "is_external_sire": {
+      "bsonType": "bool",
+      "defaultValue": false,
+      "description": "是否为外部种公（非本繁殖场）"
+    },
+    "owner_info": {
+      "bsonType": "string",
+      "description": "外部种公主人信息"
+    },
+    "disposition_date": {
+      "bsonType": "number",
+      "description": "处置日期（时间戳毫秒）"
+    },
+    "disposition_notes": {
+      "bsonType": "string",
+      "description": "处置备注"
+    },
+    "family_id": {
+      "bsonType": "string",
+      "foreignKey": "families._id",
+      "description": "所属家庭ID"
+    },
+    "deleted_at": {
+      "bsonType": ["number", "null"],
+      "description": "软删除时间戳（毫秒），null 表示未删除"
+    },
+    "created_at": {
+      "bsonType": "number",
+      "description": "创建时间（时间戳毫秒）"
+    },
+    "updated_at": {
+      "bsonType": "number",
+      "description": "更新时间（时间戳毫秒）"
+    }
+  }
+}

@@ -1,0 +1,1300 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Breed App — Birth Wizard & New Dog</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+  background: #f0eaec;
+  display: flex;
+  justify-content: flex-start;
+  align-items: flex-start;
+  gap: 32px;
+  padding: 40px 20px;
+  min-height: 100vh;
+  overflow-x: auto;
+  flex-wrap: nowrap;
+}
+.frame-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+.frame-label {
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  margin-bottom: 14px;
+  color: #6b6880;
+}
+
+.phone-frame {
+  width: 375px;
+  height: 812px;
+  border-radius: 44px;
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05);
+}
+
+.phone-screen {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  padding-bottom: 40px;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.phone-screen::-webkit-scrollbar { display: none; }
+
+/* ==================== LIGHT MODE ==================== */
+.light {
+  --primary: #ea3e77;
+  --primary-soft: #fff0f2;
+  --bg: #fdf8f9;
+  --card: #FFFFFF;
+  --card-dim: #FFF0E8;
+  --text-1: #1a1a2e;
+  --text-2: #8B7355;
+  --text-3: #B8A08A;
+  --text-4: #D8CBBD;
+  --amber: #e89b3e;
+  --amber-soft: #fff9f0;
+  --red: #e05252;
+  --red-soft: #fff0f0;
+  --green: #3dae6f;
+  --green-soft: #f0fff4;
+  --blue: #4a8dd4;
+  --blue-soft: #f0f7ff;
+  --plum: #8668b0;
+  --plum-soft: #f5f0ff;
+  --rose: #ea3e77;
+  --rose-soft: #fff0f2;
+  --teal: #3da8a0;
+  --teal-soft: #f0fffe;
+  --shadow: 0 2px 12px rgba(234, 62, 119, 0.06);
+  --shadow-lg: 0 6px 24px rgba(234, 62, 119, 0.1);
+  --nav-bg: rgba(255,255,255,0.85);
+  --nav-border: rgba(234, 62, 119, 0.08);
+  background: var(--bg);
+}
+
+/* ==================== STATUS BAR ==================== */
+.status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 28px 0;
+  height: 50px;
+  color: var(--text-1);
+  font-size: 15px;
+  font-weight: 600;
+}
+.status-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.status-bar-right .material-icons-round { font-size: 16px; }
+
+/* ==================== PAGE HEADER (WIZARD) ==================== */
+.page-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 20px 12px;
+  gap: 12px;
+}
+.page-header .back-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.12s ease;
+}
+.page-header .back-btn:active { transform: scale(0.9); }
+.page-header .back-btn .material-icons-round {
+  font-size: 20px;
+  color: var(--text-1);
+}
+.page-header .page-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-1);
+  flex: 1;
+}
+
+/* Step indicator */
+.step-dots {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.step-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-4);
+  transition: all 0.2s ease;
+}
+.step-dot.active {
+  background: var(--primary);
+  width: 20px;
+  border-radius: 999px;
+}
+.step-dot.done {
+  background: var(--primary);
+}
+
+/* ==================== FORM STYLES ==================== */
+.form-section {
+  padding: 0 20px;
+  margin-bottom: 16px;
+}
+.form-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-3);
+  letter-spacing: 0.5px;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.form-section-title .section-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+.form-section-title .count-badge {
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 2px 10px;
+  border-radius: 999px;
+  margin-left: auto;
+}
+
+/* Dog info card (read-only) */
+.dog-info-card {
+  background: var(--card-dim);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+}
+.dog-info-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.dog-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ea3e77, #e89b3e);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.dog-avatar .material-icons-round {
+  color: white;
+  font-size: 22px;
+}
+.dog-info-text {
+  flex: 1;
+}
+.dog-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.dog-breed {
+  font-size: 12px;
+  color: var(--text-2);
+  margin-top: 1px;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.info-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.info-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+/* Form fields */
+.form-field {
+  margin-bottom: 14px;
+}
+.field-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-2);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.field-label .optional {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+.field-input {
+  width: 100%;
+  height: 44px;
+  border-radius: 12px;
+  border: 1.5px solid var(--text-4);
+  background: var(--card);
+  padding: 0 14px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+  outline: none;
+  transition: border-color 0.2s;
+}
+.field-input:focus {
+  border-color: var(--primary);
+}
+.field-input::placeholder {
+  color: var(--text-3);
+  font-weight: 500;
+}
+.field-input.with-prefix {
+  padding-left: 32px;
+}
+.field-wrapper {
+  position: relative;
+}
+.field-prefix {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+/* Segmented control */
+.segmented {
+  display: flex;
+  background: var(--card-dim);
+  border-radius: 12px;
+  padding: 3px;
+  gap: 2px;
+}
+.seg-option {
+  flex: 1;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.seg-option.active {
+  background: var(--card);
+  color: var(--primary);
+  font-weight: 700;
+  box-shadow: var(--shadow);
+}
+.seg-option.locked {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Toggle switch */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.toggle-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.toggle {
+  width: 46px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--primary);
+  position: relative;
+  cursor: pointer;
+}
+.toggle.off {
+  background: var(--text-4);
+}
+.toggle-knob {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  box-shadow: 0 1px 4px rgba(234,62,119,0.06);
+  transition: all 0.2s ease;
+}
+.toggle.off .toggle-knob {
+  right: auto;
+  left: 2px;
+}
+
+/* Full-width primary button */
+.btn-full {
+  width: 100%;
+  height: 50px;
+  border-radius: 999px;
+  border: none;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.btn-full:active { transform: scale(0.97); opacity: 0.9; }
+.btn-full.primary { background: var(--primary); }
+.btn-full.green { background: var(--primary); box-shadow: 0 4px 16px rgba(234, 62, 119, 0.25); }
+
+.btn-footer {
+  padding: 16px 20px 0;
+}
+.btn-footer .note {
+  font-size: 11px;
+  color: var(--text-3);
+  text-align: center;
+  margin-top: 10px;
+  line-height: 1.5;
+}
+
+/* ==================== PUPPY CARD ==================== */
+.puppy-card {
+  background: var(--card);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: var(--shadow);
+  margin-bottom: 10px;
+  position: relative;
+  overflow: hidden;
+  border-left: 3.5px solid var(--rose);
+}
+.puppy-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 100%;
+  background: linear-gradient(135deg, var(--rose-soft) 0%, transparent 40%);
+  pointer-events: none;
+}
+.puppy-card > * {
+  position: relative;
+  z-index: 1;
+}
+.puppy-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.puppy-number {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.puppy-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.puppy-delete {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  color: var(--text-4);
+}
+.puppy-delete:active {
+  transform: scale(0.85);
+  color: var(--red);
+  background: var(--red-soft);
+}
+.puppy-delete .material-icons-round { font-size: 18px; }
+
+/* Date quick chips */
+.date-chips {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+.date-chip {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: var(--card-dim);
+  cursor: pointer;
+  border: none;
+  font-family: inherit;
+  transition: all 0.12s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.date-chip:active {
+  transform: scale(0.92);
+  filter: brightness(0.95);
+}
+.date-chip.active {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(234, 62, 119, 0.25);
+}
+input[type="date"].field-input {
+  color: var(--text-1);
+  padding-right: 40px;
+}
+input[type="date"].field-input::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  position: absolute;
+  right: 0;
+  width: 40px;
+  height: 100%;
+  cursor: pointer;
+}
+.puppy-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.puppy-fields .form-field {
+  margin-bottom: 0;
+}
+.puppy-fields .form-field.full-width {
+  grid-column: 1 / -1;
+}
+
+/* Add puppy dashed card */
+.add-puppy-card {
+  border: 2px dashed var(--text-4);
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  margin-bottom: 10px;
+  transition: all 0.15s ease;
+}
+.add-puppy-card:active { transform: scale(0.98); }
+.add-puppy-card .material-icons-round {
+  font-size: 22px;
+  color: var(--primary);
+}
+.add-puppy-card span {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+/* ==================== SUMMARY CARD ==================== */
+.summary-card {
+  background: var(--card-dim);
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+}
+.summary-row:not(:last-child) {
+  border-bottom: 1px solid rgba(216, 203, 189, 0.3);
+}
+.summary-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.summary-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.summary-value.highlight {
+  color: var(--primary);
+}
+
+/* Puppy summary list */
+.puppy-summary-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--card);
+  border-radius: 12px;
+  margin-bottom: 6px;
+  box-shadow: var(--shadow);
+}
+.puppy-summary-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--rose-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.puppy-summary-text {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.puppy-summary-check {
+  font-size: 16px;
+  color: var(--primary);
+}
+
+/* Textarea */
+.field-textarea {
+  width: 100%;
+  height: 80px;
+  border-radius: 12px;
+  border: 1.5px solid var(--text-4);
+  background: var(--card);
+  padding: 12px 14px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-1);
+  outline: none;
+  resize: none;
+  transition: border-color 0.2s;
+}
+.field-textarea:focus { border-color: var(--primary); }
+.field-textarea::placeholder {
+  color: var(--text-3);
+  font-weight: 500;
+}
+
+/* ==================== ROLE SELECTOR (PROMINENT) ==================== */
+.role-selector {
+  display: flex;
+  background: var(--card-dim);
+  border-radius: 14px;
+  padding: 4px;
+  gap: 3px;
+  margin: 0 20px 16px;
+}
+.role-option {
+  flex: 1;
+  height: 42px;
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.role-option.active {
+  background: var(--primary);
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(234, 62, 119, 0.25);
+}
+
+/* Hint text */
+.hint-box {
+  background: var(--amber-soft);
+  border-radius: 12px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.hint-box .material-icons-round {
+  font-size: 18px;
+  color: var(--amber);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.hint-box span {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+
+/* ==================== QUICK RECORD GRID ==================== */
+.record-section-label {
+  padding: 4px 20px 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.record-section-label .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+.record-section-label span {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-3);
+  letter-spacing: 0.5px;
+}
+
+.record-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 0 16px;
+  margin-bottom: 14px;
+}
+.record-card {
+  background: var(--card);
+  border-radius: 14px;
+  padding: 16px 14px;
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+.record-card:active { transform: scale(0.96); }
+.record-card-icon {
+  font-size: 22px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.record-card-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.record-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.record-icon .material-icons-round { font-size: 20px; color: var(--text-1); }
+.record-icon.rose { background: #FFD4DE; }
+.record-icon.teal { background: #D0F0EC; }
+.record-icon.green { background: #D0F0DC; }
+.record-icon.blue { background: #D4E8F8; }
+.record-icon.plum { background: #E4D8F4; }
+.record-icon.red { background: #FFD9D4; }
+
+/* ==================== BOTTOM NAV ==================== */
+.bottom-nav {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 84px;
+  background: var(--nav-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 0.5px solid var(--nav-border);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-around;
+  padding-top: 8px;
+  z-index: 10;
+}
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 50px;
+  position: relative;
+}
+.nav-item .material-icons-round { font-size: 24px; color: var(--text-3); }
+.nav-item .nav-label { font-size: 10px; font-weight: 600; color: var(--text-3); }
+.nav-item.active .material-icons-round { color: var(--primary); }
+.nav-item.active .nav-label { color: var(--primary); }
+.fab {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ea3e77, #e89b3e);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: -10px;
+  box-shadow: 0 4px 16px rgba(234, 62, 119, 0.3);
+  position: relative;
+}
+.fab .material-icons-round {
+  color: #fff;
+  font-size: 28px;
+}
+
+/* ==================== ANIMATIONS ==================== */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.form-section, .puppy-card, .summary-card, .puppy-summary-item, .record-card, .dog-info-card, .add-puppy-card, .hint-box, .btn-footer {
+  animation: fadeInUp 0.35s ease both;
+}
+.form-section:nth-child(1) { animation-delay: 0.05s; }
+.form-section:nth-child(2) { animation-delay: 0.1s; }
+.form-section:nth-child(3) { animation-delay: 0.15s; }
+.puppy-card:nth-child(1) { animation-delay: 0.05s; }
+.puppy-card:nth-child(2) { animation-delay: 0.1s; }
+.puppy-card:nth-child(3) { animation-delay: 0.15s; }
+</style>
+</head>
+<body>
+
+<!-- ==================== PAGE 1: BIRTH WIZARD STEP 1 (R-8a) ==================== -->
+<div class="frame-wrapper">
+  <div class="frame-label">R-8a 生产记录 Step 1</div>
+  <div class="phone-frame">
+    <div class="phone-screen light">
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="status-bar-right">
+          <span class="material-icons-round">signal_cellular_alt</span>
+          <span class="material-icons-round">wifi</span>
+          <span class="material-icons-round">battery_full</span>
+        </div>
+      </div>
+
+      <!-- Page Header -->
+      <div class="page-header">
+        <div class="back-btn"><span class="material-icons-round">arrow_back_ios_new</span></div>
+        <span class="page-title">记录生产</span>
+        <div class="step-dots">
+          <div class="step-dot active"></div>
+          <div class="step-dot"></div>
+          <div class="step-dot"></div>
+        </div>
+      </div>
+
+      <!-- Mother Dog Info -->
+      <div class="form-section">
+        <div class="form-section-title">
+          <div class="section-dot" style="background: var(--rose);"></div>
+          母犬信息
+        </div>
+        <div class="dog-info-card">
+          <div class="dog-info-row">
+            <div class="dog-avatar">
+              <span class="material-icons-round">pets</span>
+            </div>
+            <div class="dog-info-text">
+              <div class="dog-name">花花</div>
+              <div class="dog-breed">马尔济斯 · 种母</div>
+            </div>
+          </div>
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">种公</span>
+              <span class="info-value">旺财（外部种公）</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">配种日期</span>
+              <span class="info-value">2026-01-15</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Editable Fields -->
+      <div class="form-section">
+        <div class="form-section-title">
+          <div class="section-dot" style="background: var(--primary);"></div>
+          生产信息
+        </div>
+
+        <div class="form-field">
+          <div class="field-label">实际生产日期</div>
+          <div style="position:relative;">
+            <input type="date" class="field-input" value="2026-03-26">
+            <span class="material-icons-round" style="position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:18px;color:var(--text-3);pointer-events:none;">calendar_today</span>
+          </div>
+          <div class="date-chips">
+            <button class="date-chip active" onclick="selectDateChip(this)">今天</button>
+            <button class="date-chip" onclick="selectDateChip(this)">昨天</button>
+            <button class="date-chip" onclick="selectDateChip(this)">前天</button>
+          </div>
+        </div>
+
+        <div class="form-field">
+          <div class="field-label">生产方式</div>
+          <div class="segmented">
+            <div class="seg-option active">顺产</div>
+            <div class="seg-option">助产</div>
+            <div class="seg-option">剖腹产</div>
+          </div>
+        </div>
+
+        <div class="form-field">
+          <div class="field-label">费用 <span class="optional">（选填）</span></div>
+          <div class="field-wrapper">
+            <span class="field-prefix">¥</span>
+            <input type="text" class="field-input with-prefix" placeholder="如剖腹产费用">
+          </div>
+        </div>
+      </div>
+
+      <!-- Next Button -->
+      <div class="btn-footer">
+        <button class="btn-full primary">
+          下一步：录入幼崽
+          <span class="material-icons-round" style="font-size: 18px;">arrow_forward</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== PAGE 2: BIRTH WIZARD STEP 2 (R-8b) ==================== -->
+<div class="frame-wrapper">
+  <div class="frame-label">R-8b 生产记录 Step 2</div>
+  <div class="phone-frame">
+    <div class="phone-screen light">
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="status-bar-right">
+          <span class="material-icons-round">signal_cellular_alt</span>
+          <span class="material-icons-round">wifi</span>
+          <span class="material-icons-round">battery_full</span>
+        </div>
+      </div>
+
+      <!-- Page Header -->
+      <div class="page-header">
+        <div class="back-btn"><span class="material-icons-round">arrow_back_ios_new</span></div>
+        <span class="page-title">记录生产</span>
+        <div class="step-dots">
+          <div class="step-dot done"></div>
+          <div class="step-dot active"></div>
+          <div class="step-dot"></div>
+        </div>
+      </div>
+
+      <!-- Puppy Entry Section -->
+      <div class="form-section">
+        <div class="form-section-title">
+          <div class="section-dot" style="background: var(--rose);"></div>
+          幼崽录入
+          <span class="count-badge">已添加 3 只</span>
+        </div>
+
+        <!-- Puppy 1 -->
+        <div class="puppy-card">
+          <div class="puppy-card-header">
+            <span class="puppy-number">幼崽 1</span>
+            <div class="puppy-header-right">
+              <div class="toggle-row">
+                <span class="toggle-label" style="margin-right: 8px; font-size: 12px;">存活</span>
+                <div class="toggle">
+                  <div class="toggle-knob"></div>
+                </div>
+              </div>
+              <button class="puppy-delete" onclick="alert('删除该幼崽')">
+                <span class="material-icons-round">close</span>
+              </button>
+            </div>
+          </div>
+          <div class="puppy-fields">
+            <div class="form-field">
+              <div class="field-label">性别</div>
+              <div class="segmented">
+                <div class="seg-option active">公</div>
+                <div class="seg-option">母</div>
+              </div>
+            </div>
+            <div class="form-field">
+              <div class="field-label">出生体重</div>
+              <div class="field-wrapper">
+                <input type="text" class="field-input" value="279" style="padding-right: 32px;">
+                <span class="field-prefix" style="left: auto; right: 14px;">g</span>
+              </div>
+            </div>
+            <div class="form-field full-width">
+              <div class="field-label">标识/昵称 <span class="optional">（选填）</span></div>
+              <input type="text" class="field-input" placeholder="花花3窝-1号">
+            </div>
+          </div>
+        </div>
+
+        <!-- Puppy 2 -->
+        <div class="puppy-card">
+          <div class="puppy-card-header">
+            <span class="puppy-number">幼崽 2</span>
+            <div class="puppy-header-right">
+              <div class="toggle-row">
+                <span class="toggle-label" style="margin-right: 8px; font-size: 12px;">存活</span>
+                <div class="toggle">
+                  <div class="toggle-knob"></div>
+                </div>
+              </div>
+              <button class="puppy-delete" onclick="alert('删除该幼崽')">
+                <span class="material-icons-round">close</span>
+              </button>
+            </div>
+          </div>
+          <div class="puppy-fields">
+            <div class="form-field">
+              <div class="field-label">性别</div>
+              <div class="segmented">
+                <div class="seg-option">公</div>
+                <div class="seg-option active">母</div>
+              </div>
+            </div>
+            <div class="form-field">
+              <div class="field-label">出生体重</div>
+              <div class="field-wrapper">
+                <input type="text" class="field-input" value="215" style="padding-right: 32px;">
+                <span class="field-prefix" style="left: auto; right: 14px;">g</span>
+              </div>
+            </div>
+            <div class="form-field full-width">
+              <div class="field-label">标识/昵称 <span class="optional">（选填）</span></div>
+              <input type="text" class="field-input" placeholder="花花3窝-2号">
+            </div>
+          </div>
+        </div>
+
+        <!-- Puppy 3 -->
+        <div class="puppy-card">
+          <div class="puppy-card-header">
+            <span class="puppy-number">幼崽 3</span>
+            <div class="puppy-header-right">
+              <div class="toggle-row">
+                <span class="toggle-label" style="margin-right: 8px; font-size: 12px;">存活</span>
+                <div class="toggle">
+                  <div class="toggle-knob"></div>
+                </div>
+              </div>
+              <button class="puppy-delete" onclick="alert('删除该幼崽')">
+                <span class="material-icons-round">close</span>
+              </button>
+            </div>
+          </div>
+          <div class="puppy-fields">
+            <div class="form-field">
+              <div class="field-label">性别</div>
+              <div class="segmented">
+                <div class="seg-option active">公</div>
+                <div class="seg-option">母</div>
+              </div>
+            </div>
+            <div class="form-field">
+              <div class="field-label">出生体重</div>
+              <div class="field-wrapper">
+                <input type="text" class="field-input" value="198" style="padding-right: 32px;">
+                <span class="field-prefix" style="left: auto; right: 14px;">g</span>
+              </div>
+            </div>
+            <div class="form-field full-width">
+              <div class="field-label">标识/昵称 <span class="optional">（选填）</span></div>
+              <input type="text" class="field-input" value="小黑点">
+            </div>
+          </div>
+        </div>
+
+        <!-- Add Puppy -->
+        <div class="add-puppy-card">
+          <span class="material-icons-round">add</span>
+          <span>添加下一只</span>
+        </div>
+      </div>
+
+      <!-- Next Button -->
+      <div class="btn-footer">
+        <button class="btn-full primary">
+          下一步：确认
+          <span class="material-icons-round" style="font-size: 18px;">arrow_forward</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== PAGE 3: BIRTH WIZARD STEP 3 (R-8c) ==================== -->
+<div class="frame-wrapper">
+  <div class="frame-label">R-8c 生产记录 Step 3</div>
+  <div class="phone-frame">
+    <div class="phone-screen light">
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="status-bar-right">
+          <span class="material-icons-round">signal_cellular_alt</span>
+          <span class="material-icons-round">wifi</span>
+          <span class="material-icons-round">battery_full</span>
+        </div>
+      </div>
+
+      <!-- Page Header -->
+      <div class="page-header">
+        <div class="back-btn"><span class="material-icons-round">arrow_back_ios_new</span></div>
+        <span class="page-title">记录生产</span>
+        <div class="step-dots">
+          <div class="step-dot done"></div>
+          <div class="step-dot done"></div>
+          <div class="step-dot active"></div>
+        </div>
+      </div>
+
+      <!-- Summary Card -->
+      <div class="form-section">
+        <div class="form-section-title">
+          <div class="section-dot" style="background: var(--rose);"></div>
+          生产摘要
+        </div>
+        <div class="summary-card">
+          <div class="summary-row">
+            <span class="summary-label">母犬</span>
+            <span class="summary-value">花花</span>
+          </div>
+          <div class="summary-row">
+            <span class="summary-label">种公</span>
+            <span class="summary-value">旺财</span>
+          </div>
+          <div class="summary-row">
+            <span class="summary-label">生产日期</span>
+            <span class="summary-value">2026-03-22</span>
+          </div>
+          <div class="summary-row">
+            <span class="summary-label">生产方式</span>
+            <span class="summary-value">顺产</span>
+          </div>
+          <div class="summary-row">
+            <span class="summary-label">幼崽</span>
+            <span class="summary-value highlight">共 3 只（2公1母）· 存活 3 只</span>
+          </div>
+          <div class="summary-row">
+            <span class="summary-label">费用</span>
+            <span class="summary-value">¥0</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Puppy Summary List -->
+      <div class="form-section">
+        <div class="form-section-title">
+          <div class="section-dot" style="background: var(--green);"></div>
+          幼崽详情
+        </div>
+
+        <div class="puppy-summary-item">
+          <div class="puppy-summary-icon" style="background:linear-gradient(135deg,#ea3e77,#e89b3e);">
+            <span class="material-icons-round" style="font-size:14px;color:#fff;">pets</span>
+          </div>
+          <span class="puppy-summary-text">花花3窝-1号 · 公 · 279g</span>
+          <span class="material-icons-round puppy-summary-check">check_circle</span>
+        </div>
+        <div class="puppy-summary-item">
+          <div class="puppy-summary-icon" style="background:linear-gradient(135deg,#ea3e77,#e89b3e);">
+            <span class="material-icons-round" style="font-size:14px;color:#fff;">pets</span>
+          </div>
+          <span class="puppy-summary-text">花花3窝-2号 · 母 · 215g</span>
+          <span class="material-icons-round puppy-summary-check">check_circle</span>
+        </div>
+        <div class="puppy-summary-item">
+          <div class="puppy-summary-icon" style="background:linear-gradient(135deg,#ea3e77,#e89b3e);">
+            <span class="material-icons-round" style="font-size:14px;color:#fff;">pets</span>
+          </div>
+          <span class="puppy-summary-text">小黑点 · 公 · 198g</span>
+          <span class="material-icons-round puppy-summary-check">check_circle</span>
+        </div>
+      </div>
+
+      <!-- Notes -->
+      <div class="form-section">
+        <div class="form-field">
+          <div class="field-label">经验心得 <span class="optional">（选填）</span></div>
+          <textarea class="field-textarea" placeholder="记录本次生产经验..."></textarea>
+        </div>
+      </div>
+
+      <!-- Confirm Button -->
+      <div class="btn-footer">
+        <button class="btn-full green">
+          <span class="material-icons-round" style="font-size: 20px;">check_circle</span>
+          确认创建
+        </button>
+        <div class="note">创建后将自动生成首次驱虫和疫苗提醒</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== PAGE 4: NEW DOG (D-3) ==================== -->
+<div class="frame-wrapper">
+  <div class="frame-label">D-3 新建犬只</div>
+  <div class="phone-frame">
+    <div class="phone-screen light">
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <span>9:41</span>
+        <div class="status-bar-right">
+          <span class="material-icons-round">signal_cellular_alt</span>
+          <span class="material-icons-round">wifi</span>
+          <span class="material-icons-round">battery_full</span>
+        </div>
+      </div>
+
+      <!-- Page Header -->
+      <div class="page-header">
+        <div class="back-btn"><span class="material-icons-round">arrow_back_ios_new</span></div>
+        <span class="page-title">新建犬只</span>
+      </div>
+
+      <!-- Role Selector -->
+      <div class="role-selector">
+        <div class="role-option" onclick="selectRole(this)">种狗</div>
+        <div class="role-option active" onclick="selectRole(this)">幼崽</div>
+        <div class="role-option" onclick="selectRole(this)">外部种公</div>
+      </div>
+
+      <!-- Hint for puppy -->
+      <div class="form-section">
+        <div class="hint-box">
+          <span class="material-icons-round">info</span>
+          <span>如果是刚出生的幼崽，建议通过「生产记录」创建，可自动关联母犬和窝信息</span>
+        </div>
+      </div>
+
+      <!-- Form Fields -->
+      <div class="form-section">
+        <div class="form-field">
+          <div class="field-label">昵称 <span class="optional">（选填）</span></div>
+          <input type="text" class="field-input" placeholder="选填，可稍后设置">
+        </div>
+
+        <div class="form-field">
+          <div class="field-label">性别</div>
+          <div class="segmented">
+            <div class="seg-option active">公</div>
+            <div class="seg-option">母</div>
+          </div>
+        </div>
+
+        <div class="form-field">
+          <div class="field-label">品种</div>
+          <input type="text" class="field-input" value="马尔济斯">
+        </div>
+
+        <div class="form-field">
+          <div class="field-label">出生日期</div>
+          <div style="position:relative;">
+            <input type="date" class="field-input" placeholder="请选择日期">
+            <span class="material-icons-round" style="position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:18px;color:var(--text-3);pointer-events:none;">calendar_today</span>
+          </div>
+        </div>
+
+        <div class="form-field">
+          <div class="field-label">购入日期 <span class="optional">（选填）</span></div>
+          <div style="position:relative;">
+            <input type="date" class="field-input" placeholder="请选择日期">
+            <span class="material-icons-round" style="position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:18px;color:var(--text-3);pointer-events:none;">calendar_today</span>
+          </div>
+        </div>
+
+        <div class="form-field">
+          <div class="field-label">购入价格 <span class="optional">（选填）</span></div>
+          <div class="field-wrapper">
+            <span class="field-prefix">¥</span>
+            <input type="text" class="field-input with-prefix" placeholder="0">
+          </div>
+        </div>
+      </div>
+
+      <!-- Submit -->
+      <div class="btn-footer">
+        <button class="btn-full primary">
+          <span class="material-icons-round" style="font-size: 20px;">add_circle</span>
+          创建犬只
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- R-1 快速记录已移至 pages-fab-action-sheet.html（作为 FAB Sheet 的第二屏） -->
+
+<script>
+function selectDateChip(el) {
+  el.parentElement.querySelectorAll('.date-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+}
+function selectRole(el) {
+  el.parentElement.querySelectorAll('.role-option').forEach(r => r.classList.remove('active'));
+  el.classList.add('active');
+}
+</script>
+
+</body>
+</html>
