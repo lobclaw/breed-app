@@ -6,39 +6,50 @@ import type { BaseDocument, SoftDeletable } from './index'
 // 犬只性别
 export type DogGender = '公' | '母'
 
+// 犬只角色
+export type DogRole = '种狗' | '幼崽' | '外部种公'
+
 // 犬只处置状态
-export type DogDisposition = '在养' | '已故' | '已售' | '已领养' | '已赠送' | '已退休'
+export type DogDisposition = '在养' | '待售' | '已预定' | '已售' | '已领养' | '已赠送' | '自留' | '已退休' | '已故'
+
+// 派生状态类型
+export type DeriveStatusType = '发情中' | '怀孕中' | '哺乳中' | '生病中' | '用药中' | '正常'
 
 // 犬只档案
 export interface Dog extends BaseDocument, SoftDeletable {
   name: string
   gender: DogGender
-  birth_date: number | null     // timestamp 毫秒数
-  color: string
-  microchip_id?: string
-  dam_id?: string               // 母犬
-  dam_name?: string             // 冗余
-  sire_id?: string              // 父犬
-  sire_name?: string            // 冗余
-  avatar?: string               // 云存储 fileID
+  role: DogRole
   disposition: DogDisposition
-  is_external_sire: boolean     // 外部种公标记
-  owner_info?: string           // 外部种公主人信息
-  disposition_date?: number
-  disposition_notes?: string
+  species: string
+  breed: string
+  birth_date: number | null
+  purchase_date: number | null
+  purchase_price: number | null
+  latest_weight: number | null
+  origin_litter_id: string | null
+  owner_info: string | null
+  avatar?: string
+  disposition_date: number | null
+  disposition_notes: string | null
 }
 
-// 犬只状态（实时派生，不存储）
-export interface DogStatus {
-  breeding?: string             // 如：发情中、怀孕中、已生产
-  health?: string[]             // 如：用药中、待疫苗
-  age?: string                  // 如：3月龄、2岁
-  pregnancy_day?: number        // 如：孕期第58天
+// 实时派生状态
+export interface DeriveStatus {
+  type: DeriveStatusType
+  cycleId?: string
+  recordId?: string
+  taskId?: string
+}
+
+// 列表项（Dog + 派生状态）
+export interface DogWithStatus extends Dog {
+  statuses: DeriveStatus[]
 }
 
 // 体重记录
 export interface DogWeight extends BaseDocument {
   dog_id: string
-  weight: number                // 克（g）
+  weight: number
   measured_at: number
 }

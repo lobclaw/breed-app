@@ -1,16 +1,109 @@
 {
-	"pages": [ //pages数组中第一项表示应用启动页，参考：https://uniapp.dcloud.io/collocation/pages
+	"pages": [
 		{
-			"path": "pages/index/index",
+			"path": "pages/home/index",
 			"style": {
-				"navigationBarTitleText": "uni-app"
+				"navigationBarTitleText": "首页",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/dog/list",
+			"style": {
+				"navigationBarTitleText": "犬只档案"
+			}
+		},
+		{
+			"path": "pages/dog/detail",
+			"style": {
+				"navigationBarTitleText": "犬只详情"
+			}
+		},
+		{
+			"path": "pages/dog/add",
+			"style": {
+				"navigationBarTitleText": "添加犬只"
+			}
+		},
+		{
+			"path": "pages/finance/index",
+			"style": {
+				"navigationBarTitleText": "财务"
+			}
+		},
+		{
+			"path": "pages/profile/index",
+			"style": {
+				"navigationBarTitleText": "我的"
+			}
+		},
+		{
+			"path": "pages/breeding/cycle",
+			"style": {
+				"navigationBarTitleText": "繁育周期"
+			}
+		},
+		{
+			"path": "pages/breeding/litter",
+			"style": {
+				"navigationBarTitleText": "窝详情"
+			}
+		},
+		{
+			"path": "pages/record/breeding",
+			"style": {
+				"navigationBarTitleText": "繁育记录"
+			}
+		},
+		{
+			"path": "pages/record/health",
+			"style": {
+				"navigationBarTitleText": "健康记录"
+			}
+		},
+		{
+			"path": "pages/family/setup",
+			"style": {
+				"navigationBarTitleText": "创建家庭"
 			}
 		}
 	],
 	"globalStyle": {
 		"navigationBarTextStyle": "black",
-		"navigationBarTitleText": "uni-app",
-		"navigationBarBackgroundColor": "#F8F8F8",
-		"backgroundColor": "#F8F8F8"
+		"navigationBarTitleText": "繁育管理",
+		"navigationBarBackgroundColor": "#FFFFFF",
+		"backgroundColor": "#F5F5F5"
+	},
+	"tabBar": {
+		"color": "#999999",
+		"selectedColor": "#007AFF",
+		"backgroundColor": "#FFFFFF",
+		"borderStyle": "white",
+		"list": [
+			{
+				"pagePath": "pages/home/index",
+				"text": "首页",
+				"iconPath": "static/tab/home.png",
+				"selectedIconPath": "static/tab/home-active.png"
+			},
+			{
+				"pagePath": "pages/dog/list",
+				"text": "档案",
+				"iconPath": "static/tab/dog.png",
+				"selectedIconPath": "static/tab/dog-active.png"
+			},
+			{
+				"pagePath": "pages/finance/index",
+				"text": "财务",
+				"iconPath": "static/tab/finance.png",
+				"selectedIconPath": "static/tab/finance-active.png"
+			},
+			{
+				"pagePath": "pages/profile/index",
+				"text": "我的",
+				"iconPath": "static/tab/profile.png",
+				"selectedIconPath": "static/tab/profile-active.png"
+			}
+		]
 	}
 }
