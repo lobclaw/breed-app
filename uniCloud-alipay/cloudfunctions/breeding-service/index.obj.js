@@ -310,7 +310,7 @@ module.exports = {
           dog_id: id,
           family_id: familyId,
           weight: puppy.weight,
-          measured_at: data.birth_date,
+          date: data.birth_date,
           created_at: now,
           updated_at: now,
         })

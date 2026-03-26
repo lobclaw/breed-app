@@ -45,6 +45,6 @@ function copyCode() {
 .invite__desc { font-size: 28rpx; color: #666; display: block; margin-bottom: 40rpx; }
 .invite__code-wrap { display: flex; align-items: center; justify-content: center; gap: 16rpx; margin-bottom: 40rpx; }
 .invite__code { font-size: 56rpx; font-weight: 700; color: #007AFF; letter-spacing: 8rpx; }
-.invite__copy { font-size: 24rpx !important; }
+.invite__copy { font-size: 24rpx; }
 .invite__btn { width: 100%; height: 88rpx; border-radius: 44rpx; background: #007AFF; color: #fff; font-size: 32rpx; }
 </style>

@@ -344,6 +344,11 @@ module.exports = {
   async removeMedicationProtocol(id) {
     if (!id) throw new Error('缺少方案 ID')
 
+    const { data: protocols } = await db.collection('medication_protocols')
+      .where({ _id: id, family_id: this.familyId })
+      .get()
+    if (!protocols || protocols.length === 0) throw new Error('方案不存在')
+
     await db.collection('medication_protocols').doc(id).update({
       deleted_at: Date.now(),
     })

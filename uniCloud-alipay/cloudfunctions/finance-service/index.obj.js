@@ -150,6 +150,11 @@ module.exports = {
   async softDeleteIncome(id) {
     if (!id) throw new Error('缺少记录 ID')
 
+    const { data: incomes } = await db.collection('incomes')
+      .where({ _id: id, family_id: this.familyId })
+      .get()
+    if (!incomes || incomes.length === 0) throw new Error('记录不存在')
+
     await db.collection('incomes').doc(id).update({
       deleted_at: Date.now(),
       updated_at: Date.now(),
@@ -705,6 +710,11 @@ module.exports = {
    */
   async removeAgent(id) {
     if (!id) throw new Error('缺少中间商 ID')
+
+    const { data: agents } = await db.collection('agents')
+      .where({ _id: id, family_id: this.familyId })
+      .get()
+    if (!agents || agents.length === 0) throw new Error('中间商不存在')
 
     await db.collection('agents').doc(id).update({
       deleted_at: Date.now(),

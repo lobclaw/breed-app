@@ -406,7 +406,7 @@ module.exports = {
     const consumed = new Set()
 
     // 第 1 轮：用药卡片（medication_daily 类型合并）
-    const medTasks = tasks.filter(t => t.type === 'medication_daily')
+    const medTasks = tasks.filter(t => t.type === 'medication')
     if (medTasks.length > 0) {
       medTasks.forEach(t => consumed.add(t._id))
       // 按犬只分组，收集药品信息
