@@ -1,41 +1,96 @@
 <template>
-  <view class="income-add">
-    <view class="income-add__section">
-      <view class="income-add__field">
-        <text class="income-add__label">金额(¥)</text>
-        <input v-model="amountInput" class="income-add__input income-add__input--big" type="digit" placeholder="0.00" />
+  <view class="page">
+    <BPageHeader title="录入收入" />
+
+    <view class="form-body">
+      <!-- 金额输入（大字） -->
+      <view class="amount-section">
+        <view class="amount-value">
+          <text class="amount-value__currency">¥</text>
+          <input
+            v-model="amountInput"
+            class="amount-value__input"
+            type="digit"
+            placeholder="0.00"
+          />
+        </view>
+        <view class="amount-underline" />
       </view>
 
-      <view class="income-add__field">
-        <text class="income-add__label">收入类型</text>
-        <view class="income-add__types">
-          <view
-            v-for="t in incomeTypes"
-            :key="t"
-            class="income-add__type"
-            :class="{ 'income-add__type--active': form.type === t }"
-            @click="form.type = t"
-          >
-            <text>{{ t }}</text>
+      <!-- 收入类型 -->
+      <view class="form-row" @click="showTypeSheet = true">
+        <text class="form-label">类型</text>
+        <view class="form-right">
+          <view class="category-tag">
+            <text class="material-icons-round" style="font-size:16px;color:var(--text-1);">{{ typeIcon }}</text>
+            <text>{{ form.type }}</text>
+            <text class="material-icons-round" style="font-size:14px;color:var(--text-3);">expand_more</text>
           </view>
         </view>
       </view>
 
-      <view class="income-add__field">
-        <text class="income-add__label">日期</text>
-        <picker mode="date" :value="dateStr" @change="onDateChange">
-          <text class="income-add__picker">{{ dateStr }}</text>
-        </picker>
+      <!-- 日期 -->
+      <view class="date-row-wrap">
+        <view class="date-main">
+          <text class="form-label">日期</text>
+          <picker mode="date" :value="dateStr" @change="onDateChange">
+            <view class="form-right">
+              <text>{{ dateStr }}</text>
+              <text class="material-icons-round" style="font-size:18px;color:var(--text-3);">calendar_today</text>
+            </view>
+          </picker>
+        </view>
+        <view class="date-chips">
+          <text
+            class="date-chip"
+            :class="{ active: dateChipActive === 'today' }"
+            @click="setDateChip('today')"
+          >今天</text>
+          <text
+            class="date-chip"
+            :class="{ active: dateChipActive === 'yesterday' }"
+            @click="setDateChip('yesterday')"
+          >昨天</text>
+          <text
+            class="date-chip"
+            :class="{ active: dateChipActive === 'dayBefore' }"
+            @click="setDateChip('dayBefore')"
+          >前天</text>
+        </view>
       </view>
 
-      <view class="income-add__field">
-        <text class="income-add__label">备注</text>
-        <input v-model="form.notes" class="income-add__input" placeholder="选填" />
+      <!-- 关联 -->
+      <view class="form-row">
+        <text class="form-label">关联</text>
+        <view class="form-right" @click="pickLink">
+          <text class="material-icons-round" style="font-size:18px;color:var(--text-3);">link</text>
+          <text style="color:var(--text-3);font-size:14px;">点击选择关联</text>
+        </view>
       </view>
-    </view>
 
-    <view class="income-add__footer">
-      <button class="income-add__submit" :loading="submitting" :disabled="!canSubmit" @click="submit">
+      <!-- 拍照 -->
+      <view class="photo-row" @click="addPhoto">
+        <text class="material-icons-round">photo_camera</text>
+        <text>添加图片凭证（选填）</text>
+      </view>
+
+      <!-- 备注 -->
+      <view class="note-section">
+        <text class="note-label">备注（选填）</text>
+        <textarea
+          v-model="form.notes"
+          class="note-textarea"
+          placeholder="添加备注信息..."
+        />
+      </view>
+
+      <!-- 提交按钮 -->
+      <button
+        class="submit-btn"
+        :loading="submitting"
+        :disabled="!canSubmit"
+        @click="submit"
+      >
         保存收入
       </button>
     </view>
@@ -46,9 +101,12 @@
 import { ref, reactive, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import BPageHeader from '@/components/layout/BPageHeader.vue'
 
 const amountInput = ref('')
 const submitting = ref(false)
+const showTypeSheet = ref(false)
+const dateChipActive = ref('today')
 
 const form = reactive({
   type: '其他',
@@ -57,6 +115,15 @@ const form = reactive({
 })
 
 const incomeTypes = ['销售', '定金保留', '领养', '其他']
+
+const typeIcons: Record<string, string> = {
+  '销售': 'sell',
+  '定金保留': 'savings',
+  '领养': 'volunteer_activism',
+  '其他': 'more_horiz',
+}
+
+const typeIcon = computed(() => typeIcons[form.type] || 'more_horiz')
 
 const dateStr = computed(() => {
   const d = new Date(form.date)
@@ -68,8 +135,26 @@ const canSubmit = computed(() => {
   return amount > 0 && form.type
 })
 
+function setDateChip(chip: string) {
+  dateChipActive.value = chip
+  const now = new Date()
+  now.setHours(0, 0, 0, 0)
+  if (chip === 'yesterday') now.setDate(now.getDate() - 1)
+  if (chip === 'dayBefore') now.setDate(now.getDate() - 2)
+  form.date = now.getTime()
+}
+
 function onDateChange(e: any) {
   form.date = new Date(e.detail.value + 'T00:00:00+08:00').getTime()
+  dateChipActive.value = ''
+}
+
+function pickLink() {
+  // 关联选择器 placeholder
+}
+
+function addPhoto() {
+  // 拍照/相册 placeholder
 }
 
 const { run: addIncome } = useCloudCall('finance-service', 'addIncome', {
@@ -100,98 +185,200 @@ onLoad(() => {
 </script>
 
 <style lang="scss" scoped>
-.income-add {
+.page {
   min-height: 100vh;
   background: var(--bg);
-  padding-bottom: 70px;
+  padding-bottom: 40px;
 }
 
-.income-add__section {
-  background: var(--card);
-  margin: 8px 16px;
-  border-radius: var(--radius-card);
-  padding: 12px;
-  box-shadow: var(--shadow);
+.form-body {
+  padding: 8px 24px 24px;
 }
 
-.income-add__field {
-  padding: 10px 0;
-  border-bottom: 1px solid var(--bg);
+/* ---- Amount section ---- */
+.amount-section {
+  padding: 16px 0 20px;
 }
 
-.income-add__field:last-child {
-  border-bottom: none;
-}
-
-.income-add__label {
-  font-size: 14px;
-  color: var(--text-1);
-  margin-bottom: 6px;
-  display: block;
-}
-
-.income-add__input {
-  font-size: 14px;
-  color: var(--text-1);
-}
-
-.income-add__input--big {
-  font-size: 24px;
-  font-weight: 700;
-  font-family: var(--font-display);
+.amount-value {
+  font-size: 28px;
+  font-weight: 800;
   color: var(--red);
-}
-
-.income-add__types {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  align-items: baseline;
+  gap: 4px;
+
+  &__currency {
+    font-size: 20px;
+    font-weight: 700;
+  }
+
+  &__input {
+    flex: 1;
+    font-size: 28px;
+    font-weight: 800;
+    font-family: var(--font-display);
+    color: var(--red);
+    background: transparent;
+    border: none;
+    outline: none;
+  }
 }
 
-.income-add__type {
-  padding: 5px 12px;
-  border-radius: var(--radius-pill);
-  background: var(--bg);
-  font-size: 13px;
-  color: var(--text-2);
-  transition: transform 0.15s ease;
-  &:active { transform: scale(0.975); }
+.amount-underline {
+  height: 2px;
+  margin-top: 8px;
+  border-radius: 1px;
+  background: linear-gradient(90deg, var(--red), transparent);
 }
 
-.income-add__type--active {
-  background: var(--red);
-  color: var(--card);
+/* ---- Form rows ---- */
+.form-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
 }
 
-.income-add__picker {
+.form-label {
   font-size: 14px;
+  font-weight: 600;
+  color: var(--text-2);
+  flex-shrink: 0;
+}
+
+.form-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--text-1);
+  font-weight: 500;
+}
+
+/* ---- Category tag ---- */
+.category-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--card-dim);
+  border-radius: 14px;
+  padding: 6px 14px;
+  font-size: 14px;
+  font-weight: 600;
   color: var(--text-1);
 }
 
-.income-add__footer {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: 10px 16px;
-  background: var(--card);
-  padding-bottom: calc(10px + env(safe-area-inset-bottom));
-  box-shadow: var(--shadow);
+/* ---- Date row ---- */
+.date-row-wrap {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  padding: 14px 0;
 }
 
-.income-add__submit {
-  width: 100%;
-  height: 44px;
+.date-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.date-chips {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.date-chip {
+  padding: 4px 12px;
   border-radius: var(--radius-btn);
-  background: var(--red);
-  color: var(--card);
-  font-size: 16px;
-  font-family: var(--font-display);
-  transition: transform 0.15s ease;
-  &:active { transform: scale(0.975); }
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--card-dim);
+  color: var(--text-2);
+  transition: all 0.12s ease;
+
+  &:active {
+    transform: scale(0.92);
+  }
+
+  &.active {
+    background: var(--primary);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(234, 62, 119, 0.25);
+  }
 }
 
-.income-add__submit[disabled] {
-  opacity: 0.5;
+/* ---- Photo row ---- */
+.photo-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  font-size: 14px;
+  color: var(--text-3);
+  font-weight: 500;
+
+  .material-icons-round {
+    font-size: 20px;
+    color: var(--text-3);
+  }
+}
+
+/* ---- Note section ---- */
+.note-section {
+  padding: 14px 0 4px;
+}
+
+.note-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-2);
+  margin-bottom: 10px;
+}
+
+.note-textarea {
+  width: 100%;
+  min-height: 72px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 14px;
+  font-family: var(--font-body);
+  color: var(--text-1);
+  background: var(--card);
+  resize: none;
+  outline: none;
+
+  &::placeholder {
+    color: var(--text-4);
+  }
+}
+
+/* ---- Submit button ---- */
+.submit-btn {
+  display: block;
+  width: 100%;
+  margin-top: 24px;
+  padding: 16px;
+  border: none;
+  border-radius: 16px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--red);
+  box-shadow: 0 4px 16px rgba(224, 82, 82, 0.25);
+  text-align: center;
+  font-family: var(--font-display);
+  transition: transform 0.12s ease, opacity 0.12s ease;
+
+  &:active {
+    transform: scale(0.94);
+    opacity: 0.85;
+  }
+
+  &[disabled] {
+    opacity: 0.4;
+  }
 }
 </style>

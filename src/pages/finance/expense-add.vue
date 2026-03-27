@@ -1,41 +1,96 @@
 <template>
-  <view class="expense-add">
-    <view class="expense-add__section">
-      <view class="expense-add__field">
-        <text class="expense-add__label">金额(¥)</text>
-        <input v-model="amountInput" class="expense-add__input expense-add__input--big" type="digit" placeholder="0.00" />
+  <view class="page">
+    <BPageHeader title="录入支出" />
+
+    <view class="form-body">
+      <!-- 金额输入（大字） -->
+      <view class="amount-section">
+        <view class="amount-value">
+          <text class="amount-value__currency">¥</text>
+          <input
+            v-model="amountInput"
+            class="amount-value__input"
+            type="digit"
+            placeholder="0.00"
+          />
+        </view>
+        <view class="amount-underline" />
       </view>
 
-      <view class="expense-add__field">
-        <text class="expense-add__label">分类</text>
-        <view class="expense-add__categories">
-          <view
-            v-for="cat in categories"
-            :key="cat"
-            class="expense-add__cat"
-            :class="{ 'expense-add__cat--active': form.category === cat }"
-            @click="form.category = cat"
-          >
-            <text>{{ cat }}</text>
+      <!-- 分类 -->
+      <view class="form-row" @click="showCategorySheet = true">
+        <text class="form-label">分类</text>
+        <view class="form-right">
+          <view class="category-tag">
+            <text class="material-icons-round" style="font-size:16px;color:var(--text-1);">{{ categoryIcon }}</text>
+            <text>{{ form.category }}</text>
+            <text class="material-icons-round" style="font-size:14px;color:var(--text-3);">expand_more</text>
           </view>
         </view>
       </view>
 
-      <view class="expense-add__field">
-        <text class="expense-add__label">日期</text>
-        <picker mode="date" :value="dateStr" @change="onDateChange">
-          <text class="expense-add__picker">{{ dateStr }}</text>
-        </picker>
+      <!-- 日期 -->
+      <view class="date-row-wrap">
+        <view class="date-main">
+          <text class="form-label">日期</text>
+          <picker mode="date" :value="dateStr" @change="onDateChange">
+            <view class="form-right">
+              <text>{{ dateStr }}</text>
+              <text class="material-icons-round" style="font-size:18px;color:var(--text-3);">calendar_today</text>
+            </view>
+          </picker>
+        </view>
+        <view class="date-chips">
+          <text
+            class="date-chip"
+            :class="{ active: dateChipActive === 'today' }"
+            @click="setDateChip('today')"
+          >今天</text>
+          <text
+            class="date-chip"
+            :class="{ active: dateChipActive === 'yesterday' }"
+            @click="setDateChip('yesterday')"
+          >昨天</text>
+          <text
+            class="date-chip"
+            :class="{ active: dateChipActive === 'dayBefore' }"
+            @click="setDateChip('dayBefore')"
+          >前天</text>
+        </view>
       </view>
 
-      <view class="expense-add__field">
-        <text class="expense-add__label">备注</text>
-        <input v-model="form.notes" class="expense-add__input" placeholder="选填" />
+      <!-- 关联 -->
+      <view class="form-row">
+        <text class="form-label">关联</text>
+        <view class="form-right" @click="pickLink">
+          <text class="material-icons-round" style="font-size:18px;color:var(--text-3);">link</text>
+          <text style="color:var(--text-3);font-size:14px;">点击选择关联</text>
+        </view>
       </view>
-    </view>
 
-    <view class="expense-add__footer">
-      <button class="expense-add__submit" :loading="submitting" :disabled="!canSubmit" @click="submit">
+      <!-- 拍照 -->
+      <view class="photo-row" @click="addPhoto">
+        <text class="material-icons-round">photo_camera</text>
+        <text>添加图片凭证（选填）</text>
+      </view>
+
+      <!-- 备注 -->
+      <view class="note-section">
+        <text class="note-label">备注（选填）</text>
+        <textarea
+          v-model="form.notes"
+          class="note-textarea"
+          placeholder="添加备注信息..."
+        />
+      </view>
+
+      <!-- 提交按钮 -->
+      <button
+        class="submit-btn"
+        :loading="submitting"
+        :disabled="!canSubmit"
+        @click="submit"
+      >
         保存支出
       </button>
     </view>
@@ -46,9 +101,12 @@
 import { ref, reactive, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import BPageHeader from '@/components/layout/BPageHeader.vue'
 
 const amountInput = ref('')
 const submitting = ref(false)
+const showCategorySheet = ref(false)
+const dateChipActive = ref('today')
 
 const form = reactive({
   category: '食品',
@@ -57,6 +115,20 @@ const form = reactive({
 })
 
 const categories = ['食品', '营养品', '消耗品', '日常用品', '固定开销', '交通', '医疗', '配种费', '其他']
+
+const categoryIcons: Record<string, string> = {
+  '食品': 'restaurant',
+  '营养品': 'medication',
+  '消耗品': 'shopping_bag',
+  '日常用品': 'home',
+  '固定开销': 'pin_drop',
+  '交通': 'directions_car',
+  '医疗': 'local_hospital',
+  '配种费': 'favorite',
+  '其他': 'more_horiz',
+}
+
+const categoryIcon = computed(() => categoryIcons[form.category] || 'more_horiz')
 
 const dateStr = computed(() => {
   const d = new Date(form.date)
@@ -68,8 +140,26 @@ const canSubmit = computed(() => {
   return amount > 0 && form.category
 })
 
+function setDateChip(chip: string) {
+  dateChipActive.value = chip
+  const now = new Date()
+  now.setHours(0, 0, 0, 0)
+  if (chip === 'yesterday') now.setDate(now.getDate() - 1)
+  if (chip === 'dayBefore') now.setDate(now.getDate() - 2)
+  form.date = now.getTime()
+}
+
 function onDateChange(e: any) {
   form.date = new Date(e.detail.value + 'T00:00:00+08:00').getTime()
+  dateChipActive.value = ''
+}
+
+function pickLink() {
+  // 关联选择器 placeholder
+}
+
+function addPhoto() {
+  // 拍照/相册 placeholder
 }
 
 const { run: addExpense } = useCloudCall('finance-service', 'addExpense', {
@@ -100,98 +190,200 @@ onLoad(() => {
 </script>
 
 <style lang="scss" scoped>
-.expense-add {
+.page {
   min-height: 100vh;
   background: var(--bg);
-  padding-bottom: 70px;
+  padding-bottom: 40px;
 }
 
-.expense-add__section {
-  background: var(--card);
-  margin: 8px 16px;
-  border-radius: var(--radius-card);
-  padding: 12px;
-  box-shadow: var(--shadow);
+.form-body {
+  padding: 8px 24px 24px;
 }
 
-.expense-add__field {
-  padding: 10px 0;
-  border-bottom: 1px solid var(--bg);
+/* ---- Amount section ---- */
+.amount-section {
+  padding: 16px 0 20px;
 }
 
-.expense-add__field:last-child {
-  border-bottom: none;
-}
-
-.expense-add__label {
-  font-size: 14px;
-  color: var(--text-1);
-  margin-bottom: 6px;
-  display: block;
-}
-
-.expense-add__input {
-  font-size: 14px;
-  color: var(--text-1);
-}
-
-.expense-add__input--big {
-  font-size: 24px;
-  font-weight: 700;
-  font-family: var(--font-display);
+.amount-value {
+  font-size: 28px;
+  font-weight: 800;
   color: var(--green);
-}
-
-.expense-add__categories {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  align-items: baseline;
+  gap: 4px;
+
+  &__currency {
+    font-size: 20px;
+    font-weight: 700;
+  }
+
+  &__input {
+    flex: 1;
+    font-size: 28px;
+    font-weight: 800;
+    font-family: var(--font-display);
+    color: var(--green);
+    background: transparent;
+    border: none;
+    outline: none;
+  }
 }
 
-.expense-add__cat {
-  padding: 5px 12px;
-  border-radius: var(--radius-pill);
-  background: var(--bg);
-  font-size: 13px;
-  color: var(--text-2);
-  transition: transform 0.15s ease;
-  &:active { transform: scale(0.975); }
+.amount-underline {
+  height: 2px;
+  margin-top: 8px;
+  border-radius: 1px;
+  background: linear-gradient(90deg, var(--green), transparent);
 }
 
-.expense-add__cat--active {
-  background: var(--green);
-  color: var(--card);
+/* ---- Form rows ---- */
+.form-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
 }
 
-.expense-add__picker {
+.form-label {
   font-size: 14px;
+  font-weight: 600;
+  color: var(--text-2);
+  flex-shrink: 0;
+}
+
+.form-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--text-1);
+  font-weight: 500;
+}
+
+/* ---- Category tag ---- */
+.category-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--card-dim);
+  border-radius: 14px;
+  padding: 6px 14px;
+  font-size: 14px;
+  font-weight: 600;
   color: var(--text-1);
 }
 
-.expense-add__footer {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: 10px 16px;
-  background: var(--card);
-  padding-bottom: calc(10px + env(safe-area-inset-bottom));
-  box-shadow: var(--shadow);
+/* ---- Date row ---- */
+.date-row-wrap {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  padding: 14px 0;
 }
 
-.expense-add__submit {
-  width: 100%;
-  height: 44px;
+.date-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.date-chips {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.date-chip {
+  padding: 4px 12px;
   border-radius: var(--radius-btn);
-  background: var(--green);
-  color: var(--card);
-  font-size: 16px;
-  font-family: var(--font-display);
-  transition: transform 0.15s ease;
-  &:active { transform: scale(0.975); }
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--card-dim);
+  color: var(--text-2);
+  transition: all 0.12s ease;
+
+  &:active {
+    transform: scale(0.92);
+  }
+
+  &.active {
+    background: var(--primary);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(234, 62, 119, 0.25);
+  }
 }
 
-.expense-add__submit[disabled] {
-  opacity: 0.5;
+/* ---- Photo row ---- */
+.photo-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  font-size: 14px;
+  color: var(--text-3);
+  font-weight: 500;
+
+  .material-icons-round {
+    font-size: 20px;
+    color: var(--text-3);
+  }
+}
+
+/* ---- Note section ---- */
+.note-section {
+  padding: 14px 0 4px;
+}
+
+.note-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-2);
+  margin-bottom: 10px;
+}
+
+.note-textarea {
+  width: 100%;
+  min-height: 72px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 14px;
+  font-family: var(--font-body);
+  color: var(--text-1);
+  background: var(--card);
+  resize: none;
+  outline: none;
+
+  &::placeholder {
+    color: var(--text-4);
+  }
+}
+
+/* ---- Submit button ---- */
+.submit-btn {
+  display: block;
+  width: 100%;
+  margin-top: 24px;
+  padding: 16px;
+  border: none;
+  border-radius: 16px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--green);
+  box-shadow: 0 4px 16px rgba(61, 174, 111, 0.25);
+  text-align: center;
+  font-family: var(--font-display);
+  transition: transform 0.12s ease, opacity 0.12s ease;
+
+  &:active {
+    transform: scale(0.94);
+    opacity: 0.85;
+  }
+
+  &[disabled] {
+    opacity: 0.4;
+  }
 }
 </style>

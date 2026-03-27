@@ -1,34 +1,83 @@
 <template>
-  <view class="wizard">
-    <!-- 步骤指示器 -->
-    <view class="wizard__steps">
-      <view v-for="i in 3" :key="i" class="wizard__step" :class="{ 'wizard__step--active': step >= i, 'wizard__step--current': step === i }">
-        <text>{{ i }}</text>
+  <view class="page">
+    <!-- 顶栏 + 步骤指示器 -->
+    <view class="page-header">
+      <view class="back-btn" @click="onBack">
+        <text class="material-icons-round" style="font-size: 20px; color: var(--text-1);">arrow_back_ios_new</text>
+      </view>
+      <text class="page-title">记录生产</text>
+      <view class="step-dots">
+        <view
+          v-for="i in 3"
+          :key="i"
+          class="step-dot"
+          :class="{
+            'step-dot--active': step === i,
+            'step-dot--done': step > i,
+          }"
+        />
       </view>
     </view>
 
-    <!-- Step 1: 基本信息 -->
-    <view v-if="step === 1" class="wizard__content">
-      <view class="wizard__section">
-        <text class="wizard__section-title">生产信息</text>
+    <!-- Step 1: 生产信息 -->
+    <view v-if="step === 1" class="form-area">
+      <!-- 母犬信息卡 -->
+      <view class="form-section">
+        <view class="section-title">
+          <view class="section-dot" style="background: var(--rose);" />
+          <text>母犬信息</text>
+        </view>
+        <view class="dog-info-card">
+          <view class="dog-info-row">
+            <view class="dog-avatar">
+              <text class="material-icons-round" style="font-size: 22px; color: #fff;">pets</text>
+            </view>
+            <view class="dog-info-text">
+              <text class="dog-name">{{ damName }}</text>
+              <text class="dog-breed">马尔济斯 · 种母</text>
+            </view>
+          </view>
+        </view>
+      </view>
 
-        <view class="wizard__field">
-          <text class="wizard__label">生产日期</text>
-          <picker mode="date" :value="birthDateStr" @change="onBirthDateChange">
-            <text class="wizard__picker" :class="{ 'wizard__picker--empty': !form.birth_date }">
-              {{ form.birth_date ? birthDateStr : '请选择' }}
-            </text>
-          </picker>
+      <!-- 生产信息 -->
+      <view class="form-section">
+        <view class="section-title">
+          <view class="section-dot" style="background: var(--primary);" />
+          <text>生产信息</text>
         </view>
 
-        <view class="wizard__field">
-          <text class="wizard__label">生产方式</text>
-          <view class="wizard__options">
+        <view class="form-field">
+          <text class="field-label">实际生产日期</text>
+          <picker mode="date" :value="birthDateStr" @change="onBirthDateChange">
+            <view class="field-input-wrap">
+              <text class="field-input-text" :class="{ 'field-input-text--empty': !form.birth_date }">
+                {{ form.birth_date ? birthDateStr : '请选择' }}
+              </text>
+              <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
+            </view>
+          </picker>
+          <view class="date-chips">
+            <view
+              v-for="chip in dateChips"
+              :key="chip.label"
+              class="date-chip"
+              :class="{ 'date-chip--active': chip.ts === form.birth_date }"
+              @click="form.birth_date = chip.ts"
+            >
+              <text>{{ chip.label }}</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="form-field">
+          <text class="field-label">生产方式</text>
+          <view class="segmented">
             <view
               v-for="t in birthTypes"
               :key="t"
-              class="wizard__option"
-              :class="{ 'wizard__option--active': form.birth_type === t }"
+              class="seg-option"
+              :class="{ 'seg-option--active': form.birth_type === t }"
               @click="form.birth_type = t"
             >
               <text>{{ t }}</text>
@@ -36,147 +85,152 @@
           </view>
         </view>
 
-        <view class="wizard__field">
-          <text class="wizard__label">费用(¥)</text>
-          <input v-model="costInput" class="wizard__input" type="digit" placeholder="选填" />
-        </view>
-
-        <view class="wizard__field">
-          <text class="wizard__label">备注</text>
-          <input v-model="form.birth_notes" class="wizard__input" placeholder="选填" />
+        <view class="form-field">
+          <text class="field-label">费用 <text class="optional">（选填）</text></text>
+          <view class="field-wrapper">
+            <text class="field-prefix">¥</text>
+            <input v-model="costInput" class="field-input" type="digit" placeholder="如剖腹产费用" />
+          </view>
         </view>
       </view>
     </view>
 
     <!-- Step 2: 录入幼崽 -->
-    <view v-if="step === 2" class="wizard__content">
-      <view class="wizard__section">
-        <text class="wizard__section-title">幼崽信息（{{ puppies.length }}只）</text>
-
-        <view v-for="(puppy, idx) in puppies" :key="idx" class="wizard__puppy">
-          <view class="wizard__puppy-header">
-            <text class="wizard__puppy-num">#{{ idx + 1 }}</text>
-            <text v-if="puppies.length > 1" class="wizard__puppy-remove" @click="removePuppy(idx)">删除</text>
+    <view v-if="step === 2" class="form-area">
+      <view class="form-section">
+        <view class="section-title">
+          <view class="section-dot" style="background: var(--rose);" />
+          <text>幼崽录入</text>
+          <view class="count-badge">
+            <text>已添加 {{ puppies.length }} 只</text>
           </view>
+        </view>
 
-          <view class="wizard__field">
-            <text class="wizard__label">名称</text>
-            <input v-model="puppy.name" class="wizard__input" placeholder="选填，可稍后命名" />
-          </view>
-
-          <view class="wizard__field">
-            <text class="wizard__label">性别</text>
-            <view class="wizard__options">
-              <view
-                class="wizard__option"
-                :class="{ 'wizard__option--active': puppy.gender === '母' }"
-                @click="puppy.gender = '母'"
-              >
-                <text>♀ 母</text>
+        <view v-for="(puppy, idx) in puppies" :key="idx" class="puppy-card">
+          <view class="puppy-card-header">
+            <text class="puppy-number">幼崽 {{ idx + 1 }}</text>
+            <view class="puppy-header-right">
+              <view class="toggle-row">
+                <text class="toggle-label-text">存活</text>
+                <view class="toggle" :class="{ 'toggle--off': puppy.alive === false }" @click="puppy.alive = !puppy.alive">
+                  <view class="toggle-knob" />
+                </view>
               </view>
-              <view
-                class="wizard__option"
-                :class="{ 'wizard__option--active': puppy.gender === '公' }"
-                @click="puppy.gender = '公'"
-              >
-                <text>♂ 公</text>
+              <view v-if="puppies.length > 1" class="puppy-delete" @click="removePuppy(idx)">
+                <text class="material-icons-round" style="font-size: 18px;">close</text>
               </view>
             </view>
           </view>
 
-          <view class="wizard__field">
-            <text class="wizard__label">体重(g)</text>
-            <input v-model="puppy.weight" class="wizard__input" type="digit" placeholder="选填" />
-          </view>
+          <view class="puppy-fields">
+            <view class="form-field">
+              <text class="field-label">性别</text>
+              <view class="segmented">
+                <view class="seg-option" :class="{ 'seg-option--active': puppy.gender === '公' }" @click="puppy.gender = '公'">
+                  <text>公</text>
+                </view>
+                <view class="seg-option" :class="{ 'seg-option--active': puppy.gender === '母' }" @click="puppy.gender = '母'">
+                  <text>母</text>
+                </view>
+              </view>
+            </view>
 
-          <view class="wizard__field">
-            <text class="wizard__label">状态</text>
-            <view class="wizard__options">
-              <view
-                class="wizard__option"
-                :class="{ 'wizard__option--active': puppy.alive !== false }"
-                @click="puppy.alive = true"
-              >
-                <text>存活</text>
+            <view class="form-field">
+              <text class="field-label">出生体重</text>
+              <view class="field-wrapper">
+                <input v-model="puppy.weight" class="field-input" type="digit" placeholder="克" style="padding-right: 32px;" />
+                <text class="field-suffix">g</text>
               </view>
-              <view
-                class="wizard__option wizard__option--dead"
-                :class="{ 'wizard__option--active': puppy.alive === false }"
-                @click="puppy.alive = false"
-              >
-                <text>死胎</text>
-              </view>
+            </view>
+
+            <view class="form-field full-width">
+              <text class="field-label">标识/昵称 <text class="optional">（选填）</text></text>
+              <input v-model="puppy.name" class="field-input" :placeholder="`${damName}窝-${idx + 1}号`" />
             </view>
           </view>
         </view>
 
-        <view class="wizard__add-puppy" @click="addPuppy">
-          <text>+ 添加幼崽</text>
+        <!-- 添加幼崽 -->
+        <view class="add-puppy-card" @click="addPuppy">
+          <text class="material-icons-round" style="font-size: 22px; color: var(--primary);">add</text>
+          <text style="font-size: 14px; font-weight: 700; color: var(--primary);">添加下一只</text>
         </view>
       </view>
     </view>
 
     <!-- Step 3: 确认 -->
-    <view v-if="step === 3" class="wizard__content">
-      <view class="wizard__section">
-        <text class="wizard__section-title">确认信息</text>
-
-        <view class="wizard__summary">
-          <view class="wizard__summary-row">
-            <text class="wizard__summary-label">生产日期</text>
-            <text>{{ birthDateStr }}</text>
-          </view>
-          <view class="wizard__summary-row">
-            <text class="wizard__summary-label">生产方式</text>
-            <text>{{ form.birth_type }}</text>
-          </view>
-          <view class="wizard__summary-row">
-            <text class="wizard__summary-label">总数</text>
-            <text>{{ puppies.length }}只</text>
-          </view>
-          <view class="wizard__summary-row">
-            <text class="wizard__summary-label">存活</text>
-            <text>{{ aliveCount }}只</text>
-          </view>
-          <view v-if="deadCount > 0" class="wizard__summary-row">
-            <text class="wizard__summary-label">死胎</text>
-            <text class="wizard__summary-dead">{{ deadCount }}只</text>
-          </view>
-          <view v-if="costInput" class="wizard__summary-row">
-            <text class="wizard__summary-label">费用</text>
-            <text>¥{{ costInput }}</text>
-          </view>
+    <view v-if="step === 3" class="form-area">
+      <view class="form-section">
+        <view class="section-title">
+          <view class="section-dot" style="background: var(--rose);" />
+          <text>生产摘要</text>
         </view>
-
-        <view class="wizard__puppy-list">
-          <view v-for="(puppy, idx) in puppies" :key="idx" class="wizard__puppy-preview">
-            <text class="wizard__puppy-preview-name">{{ puppy.name || `幼崽${idx + 1}` }}</text>
-            <text class="wizard__puppy-preview-info">
-              {{ puppy.gender }} {{ puppy.weight ? `· ${puppy.weight}g` : '' }} {{ puppy.alive === false ? '· 死胎' : '' }}
+        <view class="summary-card">
+          <view class="summary-row">
+            <text class="summary-label">母犬</text>
+            <text class="summary-value">{{ damName }}</text>
+          </view>
+          <view class="summary-row">
+            <text class="summary-label">生产日期</text>
+            <text class="summary-value">{{ birthDateStr }}</text>
+          </view>
+          <view class="summary-row">
+            <text class="summary-label">生产方式</text>
+            <text class="summary-value">{{ form.birth_type }}</text>
+          </view>
+          <view class="summary-row">
+            <text class="summary-label">幼崽</text>
+            <text class="summary-value summary-value--highlight">
+              共 {{ puppies.length }} 只（{{ maleCount }}公{{ femaleCount }}母）· 存活 {{ aliveCount }} 只
             </text>
           </view>
+          <view class="summary-row">
+            <text class="summary-label">费用</text>
+            <text class="summary-value">¥{{ costInput || '0' }}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="form-section">
+        <view class="section-title">
+          <view class="section-dot" style="background: var(--green);" />
+          <text>幼崽详情</text>
+        </view>
+        <view v-for="(puppy, idx) in puppies" :key="idx" class="puppy-summary-item">
+          <view class="puppy-summary-icon">
+            <text style="font-size: 14px;">{{ puppy.alive === false ? '💀' : puppy.gender === '公' ? '♂' : '♀' }}</text>
+          </view>
+          <text class="puppy-summary-text">
+            {{ puppy.name || `幼崽${idx + 1}` }}
+            <text style="color: var(--text-3);"> · {{ puppy.gender }}{{ puppy.weight ? ` · ${puppy.weight}g` : '' }}{{ puppy.alive === false ? ' · 死胎' : '' }}</text>
+          </text>
+          <text class="material-icons-round" style="font-size: 16px; color: var(--primary);">check_circle</text>
         </view>
       </view>
     </view>
 
-    <!-- 底部导航 -->
-    <view class="wizard__footer">
-      <button v-if="step > 1" class="wizard__btn" @click="step--">上一步</button>
+    <!-- 底部按钮 -->
+    <view class="btn-footer">
+      <view v-if="step > 1" class="btn-back" @click="step--">
+        <text class="material-icons-round" style="font-size: 18px;">arrow_back</text>
+      </view>
       <button
         v-if="step < 3"
-        class="wizard__btn wizard__btn--primary"
+        class="btn-next"
         :disabled="!canNext"
         @click="step++"
       >
-        下一步
+        <text>{{ step === 1 ? '下一步：录入幼崽' : '下一步：确认' }}</text>
+        <text class="material-icons-round" style="font-size: 18px;">arrow_forward</text>
       </button>
       <button
         v-if="step === 3"
-        class="wizard__btn wizard__btn--primary"
-        :loading="submitting"
+        class="btn-next btn-next--submit"
+        :disabled="submitting"
         @click="submit"
       >
-        提交生产记录
+        <text>{{ submitting ? '保存中...' : '提交生产记录' }}</text>
+        <text v-if="!submitting" class="material-icons-round" style="font-size: 18px;">check</text>
       </button>
     </view>
   </view>
@@ -188,6 +242,7 @@ import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 
 let cycleId = ''
+const damName = ref('花花')
 
 const step = ref(1)
 const submitting = ref(false)
@@ -199,7 +254,7 @@ const form = reactive({
   birth_notes: '',
 })
 
-const birthTypes = ['顺产', '难产', '剖腹产']
+const birthTypes = ['顺产', '助产', '剖腹产']
 
 interface PuppyEntry {
   name: string
@@ -214,6 +269,8 @@ const puppies = reactive<PuppyEntry[]>([
 
 const aliveCount = computed(() => puppies.filter(p => p.alive !== false).length)
 const deadCount = computed(() => puppies.filter(p => p.alive === false).length)
+const maleCount = computed(() => puppies.filter(p => p.gender === '公').length)
+const femaleCount = computed(() => puppies.filter(p => p.gender === '母').length)
 
 const birthDateStr = computed(() => {
   if (!form.birth_date) return ''
@@ -221,11 +278,29 @@ const birthDateStr = computed(() => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 })
 
+const dateChips = computed(() => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return [
+    { label: '今天', ts: today.getTime() },
+    { label: '昨天', ts: today.getTime() - 86400000 },
+    { label: '前天', ts: today.getTime() - 172800000 },
+  ]
+})
+
 const canNext = computed(() => {
   if (step.value === 1) return !!form.birth_date
   if (step.value === 2) return puppies.length > 0
   return true
 })
+
+function onBack() {
+  if (step.value > 1) {
+    step.value--
+  } else {
+    uni.navigateBack({ delta: 1 })
+  }
+}
 
 function onBirthDateChange(e: any) {
   form.birth_date = new Date(e.detail.value + 'T00:00:00+08:00').getTime()
@@ -265,7 +340,6 @@ async function submit() {
     })
 
     if (res) {
-      // 返回两级（回到周期详情）
       uni.navigateBack({ delta: 1 })
     }
   } finally {
@@ -278,6 +352,7 @@ onLoad((query) => {
   if (!cycleId) {
     uni.showToast({ title: '缺少周期信息', icon: 'none' })
   }
+  if (query?.damName) damName.value = query.damName
 
   // 默认日期为今天
   const today = new Date()
@@ -287,233 +362,543 @@ onLoad((query) => {
 </script>
 
 <style lang="scss" scoped>
-.wizard {
+.page {
   min-height: 100vh;
   background: var(--bg);
-  padding-bottom: 70px;
+  padding-bottom: 100px;
 }
 
-.wizard__steps {
+/* 顶栏 */
+.page-header {
   display: flex;
-  justify-content: center;
-  gap: 20px;
-  padding: 16px;
+  align-items: center;
+  padding: 8px var(--space-page) 12px;
+  gap: 12px;
+}
+
+.back-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
   background: var(--card);
   box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.12s ease;
+  &:active { transform: scale(0.9); }
 }
 
-.wizard__step {
-  width: 24px;
-  height: 24px;
+.page-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-1);
+  font-family: var(--font-display);
+  flex: 1;
+}
+
+/* 步骤指示器 */
+.step-dots {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.step-dot {
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: var(--text-4);
+  transition: all 0.2s ease;
+
+  &--active {
+    background: var(--primary);
+    width: 20px;
+    border-radius: var(--radius-progress);
+  }
+
+  &--done {
+    background: var(--primary);
+  }
+}
+
+/* 表单区域 */
+.form-area {
+  padding: 0 var(--space-page);
+}
+
+.form-section {
+  margin-bottom: 16px;
+}
+
+.section-title {
+  font-size: 13px;
+  font-weight: 700;
   color: var(--text-3);
-  font-size: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-display);
-}
-
-.wizard__step--active {
-  background: var(--primary);
-  color: var(--card);
-}
-
-.wizard__step--current {
-  box-shadow: 0 0 0 2px rgba(234, 62, 119, 0.3);
-}
-
-.wizard__content {
-  padding: 8px 16px;
-}
-
-.wizard__section {
-  background: var(--card);
-  border-radius: var(--radius-card);
-  padding: 12px;
-  box-shadow: var(--shadow);
-}
-
-.wizard__section-title {
-  font-size: 15px;
-  font-weight: 600;
-  font-family: var(--font-display);
-  color: var(--text-1);
+  letter-spacing: 0.5px;
   margin-bottom: 10px;
-  display: block;
-}
-
-.wizard__field {
   display: flex;
   align-items: center;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--bg);
+  gap: 8px;
 }
 
-.wizard__field:last-child {
-  border-bottom: none;
-}
-
-.wizard__label {
-  width: 80px;
-  font-size: 14px;
-  color: var(--text-1);
+.section-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
   flex-shrink: 0;
 }
 
-.wizard__input {
-  flex: 1;
-  font-size: 14px;
-  color: var(--text-1);
+.count-badge {
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 2px 10px;
+  border-radius: var(--radius-tag);
+  margin-left: auto;
 }
 
-.wizard__picker {
-  flex: 1;
-  font-size: 14px;
-  color: var(--text-1);
-}
-
-.wizard__picker--empty {
-  color: var(--text-4);
-}
-
-.wizard__options {
-  display: flex;
-  gap: 6px;
-  flex: 1;
-}
-
-.wizard__option {
-  padding: 5px 12px;
-  border-radius: var(--radius-pill);
-  background: var(--bg);
-  font-size: 13px;
-  color: var(--text-2);
-  transition: transform 0.15s ease;
-  &:active { transform: scale(0.975); }
-}
-
-.wizard__option--active {
-  background: var(--primary);
-  color: var(--card);
-}
-
-.wizard__option--dead.wizard__option--active {
-  background: var(--red);
-}
-
-.wizard__puppy {
+/* 母犬信息卡 */
+.dog-info-card {
   background: var(--card-dim);
   border-radius: var(--radius-row);
-  padding: 8px 10px;
-  margin-bottom: 8px;
+  padding: 14px 16px;
 }
 
-.wizard__puppy-header {
+.dog-info-row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 4px;
+  gap: 12px;
 }
 
-.wizard__puppy-num {
+.dog-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ea3e77, #e89b3e);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.dog-info-text {
+  flex: 1;
+}
+
+.dog-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-1);
+  display: block;
+}
+
+.dog-breed {
+  font-size: 12px;
+  color: var(--text-2);
+  margin-top: 1px;
+  display: block;
+}
+
+/* 表单字段 */
+.form-field {
+  margin-bottom: 14px;
+}
+
+.field-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-2);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.optional {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+
+.field-input-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 44px;
+  border-radius: 12px;
+  border: 1.5px solid var(--text-4);
+  background: var(--card);
+  padding: 0 14px;
+}
+
+.field-input-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+
+  &--empty {
+    color: var(--text-3);
+    font-weight: 500;
+  }
+}
+
+.field-input {
+  width: 100%;
+  height: 44px;
+  border-radius: 12px;
+  border: 1.5px solid var(--text-4);
+  background: var(--card);
+  padding: 0 14px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+  transition: border-color 0.2s;
+
+  &:focus {
+    border-color: var(--primary);
+  }
+}
+
+.field-wrapper {
+  position: relative;
+}
+
+.field-prefix {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.field-suffix {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+
+.field-wrapper .field-input {
+  padding-left: 32px;
+}
+
+/* 日期快捷 */
+.date-chips {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.date-chip {
+  padding: 4px 12px;
+  border-radius: var(--radius-tag);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: var(--card-dim);
+  transition: all 0.12s ease;
+  &:active { transform: scale(0.92); filter: brightness(0.95); }
+
+  &--active {
+    background: var(--primary);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(234, 62, 119, 0.25);
+  }
+}
+
+/* Segmented control */
+.segmented {
+  display: flex;
+  background: var(--card-dim);
+  border-radius: 12px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.seg-option {
+  flex: 1;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 13px;
   font-weight: 600;
-  font-family: var(--font-display);
-  color: var(--primary);
+  color: var(--text-2);
+  transition: all 0.2s ease;
+
+  &--active {
+    background: var(--card);
+    color: var(--primary);
+    font-weight: 700;
+    box-shadow: var(--shadow);
+  }
 }
 
-.wizard__puppy-remove {
-  font-size: 12px;
-  color: var(--red);
-  transition: transform 0.15s ease;
-  &:active { transform: scale(0.975); }
+/* 幼崽卡片 */
+.puppy-card {
+  background: var(--card);
+  border-radius: var(--radius-card);
+  padding: 16px;
+  box-shadow: var(--shadow);
+  margin-bottom: 10px;
+  position: relative;
+  overflow: hidden;
+  border-left: 3.5px solid var(--rose);
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 100%;
+    background: linear-gradient(135deg, var(--rose-soft) 0%, transparent 40%);
+    pointer-events: none;
+  }
+
+  & > * {
+    position: relative;
+    z-index: 1;
+  }
 }
 
-.wizard__add-puppy {
-  text-align: center;
-  padding: 12px;
-  color: var(--primary);
-  font-size: 14px;
-  border: 1px dashed var(--primary);
-  border-radius: var(--radius-row);
-  margin-top: 4px;
-  transition: transform 0.15s ease;
-  &:active { transform: scale(0.975); }
-}
-
-.wizard__summary {
+.puppy-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin-bottom: 12px;
 }
 
-.wizard__summary-row {
-  display: flex;
-  justify-content: space-between;
-  padding: 6px 0;
+.puppy-number {
   font-size: 14px;
+  font-weight: 700;
   color: var(--text-1);
 }
 
-.wizard__summary-label {
-  color: var(--text-3);
+.puppy-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
-.wizard__summary-dead {
-  color: var(--red);
+.puppy-delete {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-4);
+  transition: all 0.12s ease;
+  &:active {
+    transform: scale(0.85);
+    color: var(--red);
+    background: var(--red-soft);
+  }
 }
 
-.wizard__puppy-list {
-  border-top: 1px solid var(--card-dim);
-  padding-top: 8px;
+.puppy-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+
+  .form-field {
+    margin-bottom: 0;
+  }
+
+  .full-width {
+    grid-column: 1 / -1;
+  }
 }
 
-.wizard__puppy-preview {
+/* Toggle */
+.toggle-row {
+  display: flex;
+  align-items: center;
+}
+
+.toggle-label-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-1);
+  margin-right: 8px;
+}
+
+.toggle {
+  width: 46px;
+  height: 26px;
+  border-radius: var(--radius-progress);
+  background: var(--primary);
+  position: relative;
+  transition: background 0.2s ease;
+}
+
+.toggle--off {
+  background: var(--text-4);
+}
+
+.toggle-knob {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  box-shadow: 0 1px 4px rgba(234, 62, 119, 0.06);
+  transition: all 0.2s ease;
+}
+
+.toggle--off .toggle-knob {
+  right: auto;
+  left: 2px;
+}
+
+/* 添加幼崽 */
+.add-puppy-card {
+  border: 2px dashed var(--text-4);
+  border-radius: var(--radius-card);
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.15s ease;
+  &:active { transform: scale(0.98); }
+}
+
+/* 摘要卡片 */
+.summary-card {
+  background: var(--card-dim);
+  border-radius: var(--radius-row);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.summary-row {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   padding: 6px 0;
-  font-size: 13px;
+
+  &:not(:last-child) {
+    border-bottom: 1px solid rgba(216, 203, 189, 0.3);
+  }
 }
 
-.wizard__puppy-preview-name {
-  color: var(--text-1);
-  font-weight: 500;
-}
-
-.wizard__puppy-preview-info {
+.summary-label {
+  font-size: 12px;
+  font-weight: 600;
   color: var(--text-3);
 }
 
-.wizard__footer {
+.summary-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-1);
+
+  &--highlight {
+    color: var(--primary);
+  }
+}
+
+/* 幼崽摘要列表 */
+.puppy-summary-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--card);
+  border-radius: 12px;
+  margin-bottom: 6px;
+  box-shadow: var(--shadow);
+}
+
+.puppy-summary-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--rose-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.puppy-summary-text {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+/* 底部按钮 */
+.btn-footer {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
   display: flex;
   gap: 10px;
-  padding: 10px 16px;
-  background: var(--card);
-  padding-bottom: calc(10px + env(safe-area-inset-bottom));
-  box-shadow: var(--shadow);
-}
-
-.wizard__btn {
-  flex: 1;
-  height: 40px;
-  border-radius: var(--radius-btn);
-  font-size: 14px;
+  padding: 16px var(--space-page);
+  padding-bottom: calc(16px + env(safe-area-inset-bottom));
   background: var(--bg);
+}
+
+.btn-back {
+  width: 50px;
+  height: 50px;
+  border-radius: var(--radius-btn);
+  background: var(--card);
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
   color: var(--text-1);
-  transition: transform 0.15s ease;
-  &:active { transform: scale(0.975); }
+  transition: transform 0.12s ease;
+  &:active { transform: scale(0.94); }
 }
 
-.wizard__btn--primary {
+.btn-next {
+  flex: 1;
+  height: 50px;
+  border-radius: var(--radius-btn);
   background: var(--primary);
-  color: var(--card);
-}
+  color: #fff;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.12s ease;
+  box-shadow: 0 4px 16px rgba(234, 62, 119, 0.25);
 
-.wizard__btn--primary[disabled] {
-  opacity: 0.5;
+  &:active:not([disabled]) {
+    transform: scale(0.97);
+    opacity: 0.9;
+  }
+
+  &[disabled] {
+    opacity: 0.5;
+  }
+
+  &--submit {
+    background: var(--green);
+    box-shadow: 0 4px 16px rgba(61, 174, 111, 0.25);
+  }
 }
 </style>

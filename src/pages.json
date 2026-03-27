@@ -22,7 +22,8 @@
 		{
 			"path": "pages/dog/add",
 			"style": {
-				"navigationBarTitleText": "添加犬只"
+				"navigationBarTitleText": "添加犬只",
+				"navigationStyle": "custom"
 			}
 		},
 		{
@@ -58,13 +59,15 @@
 		{
 			"path": "pages/record/breeding",
 			"style": {
-				"navigationBarTitleText": "繁育记录"
+				"navigationBarTitleText": "繁育记录",
+				"navigationStyle": "custom"
 			}
 		},
 		{
 			"path": "pages/record/health",
 			"style": {
-				"navigationBarTitleText": "健康记录"
+				"navigationBarTitleText": "健康记录",
+				"navigationStyle": "custom"
 			}
 		},
 		{
@@ -76,13 +79,15 @@
 		{
 			"path": "pages/finance/expense-add",
 			"style": {
-				"navigationBarTitleText": "录入支出"
+				"navigationBarTitleText": "录入支出",
+				"navigationStyle": "custom"
 			}
 		},
 		{
 			"path": "pages/finance/income-add",
 			"style": {
-				"navigationBarTitleText": "录入收入"
+				"navigationBarTitleText": "录入收入",
+				"navigationStyle": "custom"
 			}
 		},
 		{

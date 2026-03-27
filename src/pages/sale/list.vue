@@ -1,41 +1,71 @@
 <template>
-  <view class="sale-list">
-    <!-- 状态筛选 -->
-    <view class="sale-list__filters">
+  <view class="page">
+    <!-- 页面标题 -->
+    <view class="page-header">
+      <text class="page-header__title">销售管理</text>
+    </view>
+
+    <!-- 状态筛选 Tabs -->
+    <view class="filter-tabs">
       <view
         v-for="f in statusFilters"
         :key="f.value"
-        class="sale-list__filter"
-        :class="{ 'sale-list__filter--active': activeFilter === f.value }"
+        class="filter-tab"
+        :class="{ 'filter-tab--active': activeFilter === f.value }"
         @click="activeFilter = f.value; load()"
       >
         <text>{{ f.label }}</text>
       </view>
     </view>
 
+    <!-- 骨架屏 -->
+    <view v-if="loading" style="padding: 0 16px; margin-top: 14px;">
+      <BSkeleton :rows="4" />
+    </view>
+
     <!-- 列表 -->
-    <view class="sale-list__items">
-      <view v-for="sale in sales" :key="sale._id" class="sale-list__item" @click="goToDetail(sale._id)">
-        <view class="sale-list__item-header">
-          <text class="sale-list__item-name">{{ sale.dog_name }}</text>
-          <text class="sale-list__item-status" :class="`sale-list__item-status--${sale.status}`">{{ sale.status }}</text>
+    <view v-else-if="sales.length > 0" class="card-feed">
+      <view
+        v-for="sale in sales"
+        :key="sale._id"
+        class="sale-card"
+        :class="getSaleCardColor(sale.status)"
+        @click="goToDetail(sale._id)"
+      >
+        <view class="card-row">
+          <BIconBox
+            :icon="getSaleIcon(sale.status)"
+            :color="getSaleIconColor(sale.status)"
+          />
+          <view class="card-middle">
+            <text class="card-name">{{ sale.dog_name }}</text>
+            <text class="card-sub">{{ sale.breed || '马尔济斯' }}{{ sale.sex ? ' · ' + sale.sex : '' }}</text>
+          </view>
+          <view class="card-right">
+            <BTag :label="sale.status" :color="getStatusTagColor(sale.status)" />
+            <text class="sale-price" :style="getSalePriceStyle(sale)">{{ getSalePriceText(sale) }}</text>
+          </view>
         </view>
-        <view class="sale-list__item-info">
-          <text v-if="sale.floor_price">底价 ¥{{ sale.floor_price }}</text>
-          <text v-if="sale.received_amount"> · 到手 ¥{{ sale.received_amount }}</text>
-          <text v-if="sale.deposit_amount"> · 定金 ¥{{ sale.deposit_amount }}</text>
+        <!-- 代理人 + 平台 行 -->
+        <view v-if="sale.agent_name || sale.platform" class="sale-extra">
+          <text class="sale-agent">{{ sale.agent_name ? '代理人：' + sale.agent_name : '' }}</text>
+          <text v-if="sale.platform" class="platform-badge">{{ sale.platform }}</text>
         </view>
-      </view>
-
-      <view v-if="sales.length === 0 && !loading" class="sale-list__empty">
-        <text>暂无销售记录</text>
       </view>
     </view>
 
-    <!-- FAB -->
-    <view class="sale-list__fab" @click="goToCreate">
-      <text>+</text>
-    </view>
+    <!-- 空状态 -->
+    <BEmpty
+      v-else
+      icon="storefront"
+      title="暂无销售记录"
+      description="设定底价后犬只进入待售状态"
+      actionText="+ 创建销售"
+      @action="goToCreate"
+    />
+
+    <!-- 底部导航 -->
+    <BNavBar current="finance" />
   </view>
 </template>
 
@@ -43,6 +73,11 @@
 import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import BNavBar from '@/components/layout/BNavBar.vue'
+import BIconBox from '@/components/base/BIconBox.vue'
+import BTag from '@/components/base/BTag.vue'
+import BSkeleton from '@/components/feedback/BSkeleton.vue'
+import BEmpty from '@/components/feedback/BEmpty.vue'
 
 const sales = ref<any[]>([])
 const loading = ref(true)
@@ -53,6 +88,8 @@ const statusFilters = [
   { label: '待售', value: '待售' },
   { label: '已预定', value: '已预定' },
   { label: '已成交', value: '已成交' },
+  { label: '已退款', value: '已退款' },
+  { label: '定金取消', value: '定金取消' },
 ]
 
 const { run: fetchSales } = useCloudCall<{ data: any[] }>('finance-service', 'getSaleList')
@@ -74,126 +111,230 @@ function goToCreate() {
   uni.navigateTo({ url: '/pages/sale/create' })
 }
 
+function getSaleCardColor(status: string) {
+  const map: Record<string, string> = {
+    '待售': 'sale-card--gray',
+    '已预定': 'sale-card--amber',
+    '已成交': 'sale-card--green',
+    '已退款': 'sale-card--red',
+    '定金取消': 'sale-card--gray',
+  }
+  return map[status] || 'sale-card--gray'
+}
+
+function getSaleIcon(status: string) {
+  const map: Record<string, string> = {
+    '待售': 'storefront',
+    '已预定': 'bookmark',
+    '已成交': 'check_circle',
+    '已退款': 'undo',
+    '定金取消': 'cancel',
+  }
+  return map[status] || 'storefront'
+}
+
+function getSaleIconColor(status: string): 'red' | 'amber' | 'green' | 'blue' | 'plum' | 'rose' | 'teal' {
+  const map: Record<string, any> = {
+    '已预定': 'amber',
+    '已成交': 'green',
+    '已退款': 'red',
+  }
+  return map[status] || 'amber'
+}
+
+function getStatusTagColor(status: string): 'red' | 'amber' | 'green' | 'blue' | 'plum' | 'rose' | 'teal' | 'primary' {
+  const map: Record<string, any> = {
+    '待售': 'amber',
+    '已预定': 'amber',
+    '已成交': 'green',
+    '已退款': 'red',
+    '定金取消': 'amber',
+  }
+  return map[status] || 'amber'
+}
+
+function getSalePriceText(sale: any) {
+  if (sale.status === '待售') return `底价 ¥${(sale.floor_price || 0).toLocaleString()}`
+  if (sale.status === '已预定') return `定金 ¥${(sale.deposit_amount || 0).toLocaleString()}`
+  if (sale.status === '已成交') return `到手 ¥${(sale.received_amount || 0).toLocaleString()}`
+  if (sale.status === '已退款') return `退款 ¥${(sale.refund_amount || 0).toLocaleString()}`
+  if (sale.status === '定金取消') return `保留 ¥${(sale.deposit_kept_amount || 0).toLocaleString()}`
+  return ''
+}
+
+function getSalePriceStyle(sale: any) {
+  if (sale.status === '已成交') return 'color: var(--red);'
+  if (sale.status === '已退款') return 'color: var(--green);'
+  if (sale.status === '定金取消') return 'color: var(--red);'
+  return ''
+}
+
 onShow(() => load())
 </script>
 
 <style lang="scss" scoped>
-.sale-list {
+.page {
   min-height: 100vh;
   background: var(--bg);
-  padding-bottom: 60px;
+  padding-bottom: 100px;
 }
 
-.sale-list__filters {
+/* ==================== PAGE HEADER ==================== */
+.page-header {
+  padding: 12px var(--space-page) 0;
+
+  &__title {
+    font-family: var(--font-display);
+    font-size: 24px;
+    font-weight: 800;
+    color: var(--text-1);
+  }
+}
+
+/* ==================== FILTER TABS ==================== */
+.filter-tabs {
   display: flex;
-  gap: 6px;
-  padding: 8px 16px;
-  background: var(--card);
+  gap: 8px;
+  padding: 14px 16px 0;
   overflow-x: auto;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
 }
 
-.sale-list__filter {
-  padding: 5px 12px;
-  border-radius: var(--radius-pill);
-  background: var(--bg);
+.filter-tab {
   font-size: 13px;
-  color: var(--text-2);
+  font-weight: 600;
+  padding: 6px 16px;
+  border-radius: var(--radius-tag);
   white-space: nowrap;
-  transition: transform 0.15s ease;
-  &:active { transform: scale(0.975); }
+  background: var(--card);
+  color: var(--text-2);
+  border: 1.5px solid var(--text-4);
+  transition: transform 0.12s ease;
+  &:active { transform: scale(0.94); }
+
+  &--active {
+    background: var(--primary);
+    color: #fff;
+    border-color: var(--primary);
+  }
 }
 
-.sale-list__filter--active {
-  background: var(--primary);
-  color: var(--card);
+/* ==================== CARD FEED ==================== */
+.card-feed {
+  padding: 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 14px;
 }
 
-.sale-list__items {
-  padding: 8px 16px;
-}
-
-.sale-list__item {
+.sale-card {
   background: var(--card);
   border-radius: var(--radius-card);
-  padding: 12px;
-  margin-bottom: 6px;
+  padding: var(--space-card);
+  padding-left: var(--space-card-left);
+  position: relative;
   box-shadow: var(--shadow);
-  transition: transform 0.15s ease;
-  &:active { transform: scale(0.975); }
+  overflow: hidden;
+  border-left: 3.5px solid transparent;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  &:active {
+    transform: scale(0.975);
+    box-shadow: 0 1px 4px rgba(234, 62, 119, 0.04);
+  }
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 100%;
+    pointer-events: none;
+  }
+
+  & > * { position: relative; z-index: 1; }
+
+  &--gray {
+    border-left-color: var(--text-4);
+    &::before { background: linear-gradient(135deg, rgba(216,203,189,0.15) 0%, transparent 40%); }
+  }
+
+  &--amber {
+    border-left-color: var(--amber);
+    &::before { background: linear-gradient(135deg, var(--amber-soft) 0%, transparent 40%); }
+  }
+
+  &--green {
+    border-left-color: var(--green);
+    &::before { background: linear-gradient(135deg, var(--green-soft) 0%, transparent 40%); }
+  }
+
+  &--red {
+    border-left-color: var(--red);
+    &::before { background: linear-gradient(135deg, var(--red-soft) 0%, transparent 40%); }
+  }
 }
 
-.sale-list__item-header {
+.card-row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 4px;
+  gap: 12px;
 }
 
-.sale-list__item-name {
+.card-middle {
+  flex: 1;
+  min-width: 0;
+}
+
+.card-name {
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 700;
+  color: var(--text-1);
+  line-height: 1.3;
+  display: block;
+}
+
+.card-sub {
+  font-size: 12px;
+  color: var(--text-2);
+  margin-top: 1px;
+  display: block;
+}
+
+.card-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.sale-price {
   font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
   color: var(--text-1);
 }
 
-.sale-list__item-status {
-  font-size: 12px;
+.sale-extra {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.sale-agent {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.platform-badge {
+  font-size: 10px;
+  font-weight: 600;
   padding: 2px 8px;
   border-radius: var(--radius-tag);
-}
-
-.sale-list__item-status--待售 {
-  background: var(--amber-soft);
-  color: var(--amber);
-}
-
-.sale-list__item-status--已预定 {
-  background: var(--blue-soft);
-  color: var(--blue);
-}
-
-.sale-list__item-status--已成交 {
-  background: var(--green-soft);
-  color: var(--green);
-}
-
-.sale-list__item-status--已退款 {
-  background: var(--bg);
-  color: var(--text-3);
-}
-
-.sale-list__item-status--定金取消 {
-  background: var(--bg);
-  color: var(--text-3);
-}
-
-.sale-list__item-info {
-  font-size: 13px;
-  color: var(--text-3);
-}
-
-.sale-list__empty {
-  text-align: center;
-  padding: 40px;
-  color: var(--text-3);
-  font-size: 14px;
-}
-
-.sale-list__fab {
-  position: fixed;
-  right: 16px;
-  bottom: 60px;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: var(--primary);
-  color: var(--card);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  box-shadow: var(--shadow-fab);
-  transition: transform 0.15s ease;
-  &:active { transform: scale(0.975); }
+  background: var(--card-dim);
+  color: var(--text-2);
 }
 </style>

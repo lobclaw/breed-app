@@ -1,57 +1,155 @@
 <template>
-  <view class="cycle" v-if="cycle">
-    <!-- 周期头部 -->
-    <view class="cycle__header">
-      <view class="cycle__status" :class="`cycle__status--${cycle.status}`">
-        <text>{{ cycle.status }}</text>
-      </view>
-      <text class="cycle__dam">{{ cycle.dam_name }}</text>
-      <text v-if="cycle.sire_name" class="cycle__sire">种公: {{ cycle.sire_name }}</text>
-    </view>
+  <view class="page">
+    <!-- 骨架屏 -->
+    <BSkeleton v-if="!cycle && loading" :rows="4" />
 
-    <!-- 时间线 -->
-    <view class="cycle__timeline">
-      <view v-for="record in records" :key="record._id" class="cycle__record">
-        <view class="cycle__dot" :class="`cycle__dot--${record.type}`" />
-        <view class="cycle__record-content">
-          <view class="cycle__record-header">
-            <text class="cycle__record-type">{{ typeLabel(record.type) }}</text>
-            <text class="cycle__record-date">{{ formatDate(record.date) }}</text>
+    <template v-if="cycle">
+      <!-- 顶栏 -->
+      <BPageHeader :title="`${cycle.dam_name} · 第${cycle.cycle_number || ''}次繁育`">
+        <template #right>
+          <BTag :label="cycle.status" :color="statusColor(cycle.status)" />
+        </template>
+      </BPageHeader>
+
+      <!-- 周期信息卡片 -->
+      <view class="card-feed">
+        <BCard color="rose" :pressable="false">
+          <view class="dam-row">
+            <view class="dam-avatar">
+              <text class="material-icons-round" style="font-size: 17px; color: #fff;">pets</text>
+            </view>
+            <view class="dam-info">
+              <text class="dam-name">{{ cycle.dam_name }}</text>
+              <text class="dam-breed">马尔济斯 · 种母</text>
+            </view>
           </view>
-          <text v-if="record.notes" class="cycle__record-notes">{{ record.notes }}</text>
-          <text v-if="record.cost" class="cycle__record-cost">¥{{ record.cost }}</text>
-          <!-- 类型特有信息 -->
-          <view v-if="record.type === 'mating' && record.details" class="cycle__record-detail">
-            <text>种公: {{ record.details.sire_name || '未知' }}</text>
+          <view class="info-rows">
+            <view class="info-row">
+              <text class="info-label">种公</text>
+              <text class="info-value">{{ cycle.sire_name || '未知' }}</text>
+            </view>
+            <view class="info-row">
+              <text class="info-label">开始日期</text>
+              <text class="info-value">{{ formatDate(cycle.start_date || cycle.created_at) }}</text>
+            </view>
+            <view class="info-row">
+              <text class="info-label">当前状态</text>
+              <text class="info-value info-value--highlight" :style="{ color: `var(--${statusColor(cycle.status)})` }">
+                {{ cycle.status }}{{ cycle.day_count ? ` · 第${cycle.day_count}天` : '' }}
+              </text>
+            </view>
           </view>
-          <view v-if="record.type === 'follicle_check' && record.details" class="cycle__record-detail">
-            <text>左{{ record.details.left_count }}({{ record.details.left_size }}mm) 右{{ record.details.right_count }}({{ record.details.right_size }}mm)</text>
+        </BCard>
+
+        <!-- 时间线 -->
+        <BSectionLabel title="繁育时间线" color="teal" />
+
+        <view class="timeline">
+          <view
+            v-for="(record, idx) in records"
+            :key="record._id"
+            class="timeline-item"
+            @click="onRecordTap(record)"
+          >
+            <view class="timeline-track">
+              <view
+                class="timeline-dot"
+                :class="record._is_future ? 'timeline-dot--hollow' : 'timeline-dot--filled'"
+                :style="{ color: `var(--${dotColor(record.type)})` }"
+              />
+              <view v-if="idx < records.length - 1" class="timeline-line" />
+            </view>
+            <view class="timeline-content">
+              <text class="timeline-date">{{ formatShortDate(record.date) }}</text>
+              <text class="timeline-desc" :style="record._is_future ? { color: 'var(--primary)' } : {}">
+                {{ typeLabel(record.type) }}
+              </text>
+              <text v-if="record.notes" class="timeline-detail">{{ record.notes }}</text>
+              <!-- 类型特有信息 -->
+              <text v-if="record.type === 'mating' && record.details" class="timeline-detail">
+                {{ record.details.method || '自然交配' }} · {{ record.details.sire_name || '未知' }}
+              </text>
+              <text v-if="record.type === 'follicle_check' && record.details" class="timeline-detail">
+                左{{ record.details.left_count }}右{{ record.details.right_count }} · 发育良好
+              </text>
+              <text v-if="record.type === 'pregnancy_check' && record.details" class="timeline-detail">
+                确认怀孕 · {{ record.details.count || '?' }}只
+              </text>
+            </view>
+            <view class="timeline-chevron">
+              <text class="material-icons-round" style="font-size: 16px; color: var(--text-4);">chevron_right</text>
+            </view>
           </view>
         </view>
-      </view>
 
-      <view v-if="records.length === 0" class="cycle__empty">
-        <text>暂无记录</text>
-      </view>
-    </view>
+        <!-- 空状态 -->
+        <BEmpty
+          v-if="records.length === 0"
+          icon="timeline"
+          title="暂无记录"
+          description="点击下方按钮添加繁育记录"
+        />
 
-    <!-- 窝信息 -->
-    <view v-if="litter" class="cycle__litter" @click="goToLitter(litter._id)">
-      <text class="cycle__litter-title">窝信息</text>
-      <view class="cycle__litter-info">
-        <text>{{ formatDate(litter.birth_date) }} · {{ litter.birth_type }}</text>
-        <text>存活 {{ litter.born_alive }}/{{ litter.total_born }}</text>
-        <text v-if="litter.weaned_at">已断奶</text>
-        <text v-else class="cycle__litter-weaning">未断奶</text>
-      </view>
-    </view>
+        <!-- 费用 -->
+        <template v-if="totalCost > 0">
+          <BSectionLabel title="周期费用" color="amber" />
+          <BCard color="amber" :pressable="false">
+            <view v-for="item in costItems" :key="item.label" class="cost-row">
+              <text class="cost-label">{{ item.label }}</text>
+              <text class="cost-value">¥{{ item.amount.toLocaleString() }}</text>
+            </view>
+            <view class="cost-divider" />
+            <view class="cost-row" style="padding-top: 6px;">
+              <text class="cost-label" style="font-weight: 700;">合计</text>
+              <text class="cost-total">¥{{ totalCost.toLocaleString() }}</text>
+            </view>
+          </BCard>
+        </template>
 
-    <!-- 底部操作 -->
-    <view class="cycle__actions" v-if="!isTerminal">
-      <button class="cycle__btn cycle__btn--primary" @click="addRecord">+ 添加记录</button>
-      <button v-if="cycle.status === '怀孕中'" class="cycle__btn cycle__btn--birth" @click="addBirth">录入生产</button>
-      <button class="cycle__btn" @click="closeCycleAction">关闭周期</button>
-    </view>
+        <!-- 窝信息 -->
+        <template v-if="litter">
+          <BSectionLabel title="窝信息" color="green" />
+          <BCard color="green" @click="goToLitter(litter._id)">
+            <view class="info-rows">
+              <view class="info-row">
+                <text class="info-label">生产日期</text>
+                <text class="info-value">{{ formatDate(litter.birth_date) }}</text>
+              </view>
+              <view class="info-row">
+                <text class="info-label">生产方式</text>
+                <text class="info-value">{{ litter.birth_type }}</text>
+              </view>
+              <view class="info-row">
+                <text class="info-label">存活</text>
+                <text class="info-value">{{ litter.born_alive }}/{{ litter.total_born }}</text>
+              </view>
+              <view class="info-row">
+                <text class="info-label">断奶</text>
+                <text class="info-value" :style="{ color: litter.weaned_at ? 'var(--green)' : 'var(--amber)' }">
+                  {{ litter.weaned_at ? '已断奶' : '未断奶' }}
+                </text>
+              </view>
+            </view>
+          </BCard>
+        </template>
+
+        <!-- 操作按钮 -->
+        <view v-if="!isTerminal" class="action-col">
+          <BButton color="primary" size="large" @click="addRecord" style="width: 100%;">
+            <text class="material-icons-round" style="font-size: 16px; margin-right: 6px;">add_circle</text>
+            添加记录
+          </BButton>
+          <BButton v-if="cycle.status === '怀孕中'" color="green" size="large" @click="addBirth" style="width: 100%;">
+            <text class="material-icons-round" style="font-size: 16px; margin-right: 6px;">child_care</text>
+            录入生产
+          </BButton>
+          <BButton variant="ghost" size="large" @click="closeCycleAction" style="width: 100%; color: var(--red);">
+            <text class="material-icons-round" style="font-size: 16px; margin-right: 6px;">warning</text>
+            记录异常终止
+          </BButton>
+        </view>
+      </view>
+    </template>
   </view>
 </template>
 
@@ -59,10 +157,18 @@
 import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import BPageHeader from '@/components/layout/BPageHeader.vue'
+import BCard from '@/components/base/BCard.vue'
+import BTag from '@/components/base/BTag.vue'
+import BButton from '@/components/base/BButton.vue'
+import BSectionLabel from '@/components/base/BSectionLabel.vue'
+import BSkeleton from '@/components/feedback/BSkeleton.vue'
+import BEmpty from '@/components/feedback/BEmpty.vue'
 
 const cycle = ref<any>(null)
 const records = ref<any[]>([])
 const litter = ref<any>(null)
+const loading = ref(true)
 let cycleId = ''
 
 const { run: fetchDetail } = useCloudCall<{ data: any }>('breeding-service', 'getCycleDetail')
@@ -72,21 +178,55 @@ const isTerminal = computed(() => {
   return cycle.value && ['已生产', '失败', '放弃'].includes(cycle.value.status)
 })
 
+const costItems = computed(() => {
+  if (!records.value.length) return []
+  return records.value
+    .filter(r => r.cost && r.cost > 0)
+    .map(r => ({ label: typeLabel(r.type), amount: r.cost }))
+})
+
+const totalCost = computed(() => costItems.value.reduce((s, i) => s + i.amount, 0))
+
 const TYPE_LABELS: Record<string, string> = {
   heat: '发情', follicle_check: '卵泡检查', mating: '配种',
   pregnancy_check: '孕检', prenatal_check: '产检',
   pre_labor: '临产监测', birth: '生产', abnormal_termination: '异常终止',
 }
 
+const DOT_COLORS: Record<string, string> = {
+  heat: 'text-3', follicle_check: 'teal', mating: 'rose',
+  pregnancy_check: 'green', prenatal_check: 'blue',
+  pre_labor: 'amber', birth: 'green', abnormal_termination: 'red',
+}
+
 function typeLabel(type: string) { return TYPE_LABELS[type] || type }
+function dotColor(type: string) { return DOT_COLORS[type] || 'primary' }
+
+function statusColor(status: string) {
+  const map: Record<string, string> = {
+    '发情中': 'amber', '怀孕中': 'rose', '已生产': 'green', '失败': 'red', '放弃': 'red',
+  }
+  return (map[status] || 'rose') as any
+}
 
 function formatDate(ts: number) {
+  if (!ts) return '-'
   const d = new Date(ts)
-  return `${d.getMonth() + 1}/${d.getDate()}`
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function formatShortDate(ts: number) {
+  if (!ts) return '-'
+  const d = new Date(ts)
+  return `${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`
 }
 
 function goToLitter(id: string) {
   uni.navigateTo({ url: `/pages/breeding/litter?id=${id}` })
+}
+
+function onRecordTap(_record: any) {
+  // 可扩展：跳转到记录详情
 }
 
 function addRecord() {
@@ -109,12 +249,14 @@ async function closeCycleAction() {
 }
 
 async function loadData() {
+  loading.value = true
   const res = await fetchDetail(cycleId)
   if (res?.data) {
     cycle.value = res.data.cycle
     records.value = res.data.records
     litter.value = res.data.litter
   }
+  loading.value = false
 }
 
 onLoad((query) => {
@@ -124,228 +266,213 @@ onLoad((query) => {
 </script>
 
 <style lang="scss" scoped>
-.cycle {
+.page {
   min-height: 100vh;
   background: var(--bg);
-  padding-bottom: 70px;
+  padding-bottom: 40px;
 }
 
-.cycle__header {
-  background: var(--card);
-  padding: 16px;
-  box-shadow: var(--shadow);
-}
-
-.cycle__status {
-  display: inline-block;
-  padding: 3px 10px;
-  border-radius: var(--radius-tag);
-  font-size: 12px;
-  margin-bottom: 6px;
-}
-
-.cycle__status--发情中 {
-  background: var(--amber-soft);
-  color: var(--amber);
-}
-
-.cycle__status--怀孕中 {
-  background: var(--rose-soft);
-  color: var(--rose);
-}
-
-.cycle__status--已生产 {
-  background: var(--green-soft);
-  color: var(--green);
-}
-
-.cycle__status--失败 {
-  background: var(--bg);
-  color: var(--text-3);
-}
-
-.cycle__status--放弃 {
-  background: var(--bg);
-  color: var(--text-3);
-}
-
-.cycle__dam {
-  display: block;
-  font-size: 18px;
-  font-weight: 700;
-  font-family: var(--font-display);
-  color: var(--text-1);
-  margin-top: 4px;
-}
-
-.cycle__sire {
-  display: block;
-  font-size: 13px;
-  color: var(--text-3);
-  margin-top: 2px;
-}
-
-.cycle__timeline {
-  padding: 12px 16px;
-}
-
-.cycle__record {
+.card-feed {
+  padding: 0 var(--space-page);
   display: flex;
-  gap: 10px;
-  margin-bottom: 12px;
-  position: relative;
-  padding-left: 4px;
+  flex-direction: column;
+  gap: var(--space-card-gap);
 }
 
-.cycle__record::before {
-  content: '';
-  position: absolute;
-  left: 5px;
-  top: 12px;
-  bottom: -12px;
-  width: 1px;
-  background: var(--text-4);
+/* 母犬信息行 */
+.dam-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
 }
 
-.cycle__record:last-child::before {
-  display: none;
-}
-
-.cycle__dot {
-  width: 12px;
-  height: 12px;
+.dam-avatar {
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
-  background: var(--primary);
+  background: linear-gradient(135deg, #ea3e77, #e89b3e);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
-  margin-top: 2px;
-  z-index: 1;
 }
 
-.cycle__dot--heat {
-  background: var(--amber);
+.dam-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-1);
+  display: block;
 }
 
-.cycle__dot--mating {
-  background: var(--red);
+.dam-breed {
+  font-size: 11px;
+  color: var(--text-2);
+  display: block;
 }
 
-.cycle__dot--birth {
-  background: var(--green);
+/* 信息行 */
+.info-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.cycle__record-content {
-  flex: 1;
-  background: var(--card);
-  border-radius: var(--radius-row);
-  padding: 8px 10px;
-  box-shadow: var(--shadow);
-}
-
-.cycle__record-header {
+.info-row {
   display: flex;
   justify-content: space-between;
+  align-items: center;
 }
 
-.cycle__record-type {
-  font-size: 14px;
+.info-label {
+  font-size: 12px;
   font-weight: 500;
-  color: var(--text-1);
-}
-
-.cycle__record-date {
-  font-size: 12px;
   color: var(--text-3);
 }
 
-.cycle__record-notes {
-  display: block;
-  font-size: 12px;
-  color: var(--text-2);
-  margin-top: 4px;
-}
-
-.cycle__record-cost {
-  display: block;
-  font-size: 12px;
-  color: var(--amber);
-  font-family: var(--font-display);
-  margin-top: 2px;
-}
-
-.cycle__record-detail {
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--text-2);
-}
-
-.cycle__empty {
-  text-align: center;
-  padding: 30px;
-  color: var(--text-3);
-  font-size: 14px;
-}
-
-.cycle__litter {
-  background: var(--card);
-  margin: 8px 16px;
-  border-radius: var(--radius-card);
-  padding: 12px;
-  box-shadow: var(--shadow);
-  transition: transform 0.15s ease;
-  &:active { transform: scale(0.975); }
-}
-
-.cycle__litter-title {
-  font-size: 15px;
-  font-weight: 600;
-  font-family: var(--font-display);
-  color: var(--text-1);
-  margin-bottom: 6px;
-}
-
-.cycle__litter-info {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+.info-value {
   font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.info-value--highlight {
+  font-weight: 700;
+}
+
+/* 时间线 */
+.timeline {
+  position: relative;
+  padding: 0;
+}
+
+.timeline-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  position: relative;
+  padding-bottom: 20px;
+  transition: background 0.12s ease;
+
+  &:last-child {
+    padding-bottom: 0;
+  }
+
+  &:active {
+    background: var(--card-dim);
+    border-radius: 12px;
+  }
+}
+
+.timeline-track {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  width: 20px;
+  position: relative;
+}
+
+.timeline-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 4px;
+  z-index: 2;
+
+  &--filled {
+    background: currentColor;
+  }
+
+  &--hollow {
+    background: var(--bg);
+    border: 2px solid currentColor;
+  }
+}
+
+.timeline-line {
+  width: 2px;
+  flex: 1;
+  background: var(--text-4);
+  margin-top: 4px;
+}
+
+.timeline-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.timeline-date {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-3);
+  font-family: var(--font-display);
+}
+
+.timeline-desc {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+  margin-top: 2px;
+  line-height: 1.4;
+  display: block;
+}
+
+.timeline-detail {
+  font-size: 11px;
+  color: var(--text-2);
+  margin-top: 1px;
+  display: block;
+}
+
+.timeline-chevron {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  margin-top: 4px;
+}
+
+/* 费用 */
+.cost-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 0;
+}
+
+.cost-label {
+  font-size: 13px;
+  font-weight: 500;
   color: var(--text-2);
 }
 
-.cycle__litter-weaning {
-  color: var(--amber);
-}
-
-.cycle__actions {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  display: flex;
-  gap: 10px;
-  padding: 10px 16px;
-  background: var(--card);
-  padding-bottom: calc(10px + env(safe-area-inset-bottom));
-  box-shadow: var(--shadow);
-}
-
-.cycle__btn {
-  flex: 1;
-  height: 40px;
-  border-radius: var(--radius-btn);
-  font-size: 14px;
-  background: var(--bg);
+.cost-value {
+  font-size: 13px;
+  font-weight: 700;
   color: var(--text-1);
-  transition: transform 0.15s ease;
-  &:active { transform: scale(0.975); }
+  font-family: var(--font-display);
 }
 
-.cycle__btn--primary {
-  background: var(--primary);
-  color: var(--card);
+.cost-divider {
+  height: 1px;
+  background: var(--text-4);
+  opacity: 0.4;
+  margin: 4px 0;
 }
 
-.cycle__btn--birth {
-  background: var(--green);
-  color: var(--card);
+.cost-total {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--primary);
+  font-family: var(--font-display);
+}
+
+/* 操作按钮 */
+.action-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 2px;
 }
 </style>

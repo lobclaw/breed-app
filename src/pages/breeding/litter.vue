@@ -1,85 +1,176 @@
 <template>
-  <view class="litter" v-if="litter">
-    <!-- 窝头部 -->
-    <view class="litter__header">
-      <view class="litter__parents">
-        <text class="litter__dam">{{ litter.dam_name }}</text>
-        <text v-if="litter.sire_name" class="litter__sire">× {{ litter.sire_name }}</text>
-      </view>
-      <view class="litter__meta">
-        <text>{{ formatDate(litter.birth_date) }} · {{ litter.birth_type }}</text>
-      </view>
-      <view class="litter__stats">
-        <view class="litter__stat">
-          <text class="litter__stat-num">{{ litter.total_born }}</text>
-          <text class="litter__stat-label">总数</text>
-        </view>
-        <view class="litter__stat">
-          <text class="litter__stat-num">{{ litter.born_alive }}</text>
-          <text class="litter__stat-label">存活</text>
-        </view>
-        <view v-if="litter.born_dead > 0" class="litter__stat">
-          <text class="litter__stat-num litter__stat-num--dead">{{ litter.born_dead }}</text>
-          <text class="litter__stat-label">死胎</text>
-        </view>
-        <view class="litter__stat">
-          <text class="litter__stat-num" :class="litter.weaned_at ? 'litter__stat-num--done' : 'litter__stat-num--pending'">
-            {{ litter.weaned_at ? '已断奶' : '未断奶' }}
-          </text>
-          <text class="litter__stat-label">状态</text>
-        </view>
-      </view>
-    </view>
+  <view class="page">
+    <!-- 骨架屏 -->
+    <BSkeleton v-if="!litter && loading" :rows="4" :avatar="true" />
 
-    <!-- 幼崽列表 -->
-    <view class="litter__section">
-      <view class="litter__section-header">
-        <text class="litter__section-title">幼崽（{{ puppies.length }}只）</text>
-        <text class="litter__add-btn" @click="addPuppy">+ 添加</text>
-      </view>
+    <template v-if="litter">
+      <!-- 顶栏 -->
+      <BPageHeader :title="litter.dam_name + (litter.litter_number ? `第${litter.litter_number}窝` : '窝')">
+        <template #right>
+          <view class="edit-btn" @click="onEdit">
+            <text class="material-icons-round" style="font-size: 18px; color: var(--text-2);">edit</text>
+          </view>
+        </template>
+      </BPageHeader>
 
-      <view v-for="puppy in puppies" :key="puppy._id" class="litter__puppy" @click="goToDog(puppy._id)">
-        <view class="litter__puppy-avatar" :class="`litter__puppy-avatar--${puppy.gender}`">
-          <text>{{ (puppy.name || '?')[0] }}</text>
+      <view class="card-feed">
+        <!-- 摘要信息卡 -->
+        <view class="summary-card">
+          <view class="info-rows">
+            <view class="info-row">
+              <text class="info-label">种母</text>
+              <text class="info-value">{{ litter.dam_name }} · 马尔济斯</text>
+            </view>
+            <view class="info-row">
+              <text class="info-label">种公</text>
+              <text class="info-value">{{ litter.sire_name || '未知' }}</text>
+            </view>
+            <view class="info-row">
+              <text class="info-label">生产日期</text>
+              <text class="info-value">{{ formatDate(litter.birth_date) }}</text>
+            </view>
+            <view class="info-row">
+              <text class="info-label">生产方式</text>
+              <text class="info-value">{{ litter.birth_type }}</text>
+            </view>
+            <view class="info-row">
+              <text class="info-label">状态</text>
+              <view class="info-value-row">
+                <text class="info-value">{{ litter.weaned_at ? '已断奶' : '哺乳中' }}</text>
+                <BTag v-if="!litter.weaned_at" label="断奶需确认" color="amber" />
+              </view>
+            </view>
+          </view>
         </view>
-        <view class="litter__puppy-info">
-          <text class="litter__puppy-name">{{ puppy.name || '未命名' }}</text>
-          <text class="litter__puppy-meta">
-            {{ puppy.gender }}
-            <text v-if="puppy.latest_weight"> · {{ puppy.latest_weight }}g</text>
-            <text> · {{ puppy.disposition }}</text>
-          </text>
+
+        <!-- 数据统计行 -->
+        <view class="stats-row">
+          <view class="stat-col">
+            <text class="stat-num">{{ litter.total_born }}</text>
+            <text class="stat-label">出生</text>
+          </view>
+          <view class="stat-col">
+            <text class="stat-num">{{ litter.born_alive }}</text>
+            <text class="stat-label">存活</text>
+          </view>
+          <view v-if="soldCount > 0" class="stat-col">
+            <text class="stat-num">{{ soldCount }}</text>
+            <text class="stat-label">已售</text>
+          </view>
         </view>
-        <text class="litter__puppy-arrow">›</text>
-      </view>
 
-      <view v-if="puppies.length === 0" class="litter__empty">
-        <text>暂无幼崽记录</text>
-      </view>
-    </view>
+        <!-- 幼崽列表 -->
+        <BSectionLabel title="幼崽" color="rose" :badge="puppies.length" />
 
-    <!-- 断奶操作 -->
-    <view v-if="!litter.weaned_at" class="litter__actions">
-      <button class="litter__btn" :loading="weaning" @click="confirmWeaning">确认断奶</button>
-    </view>
+        <view
+          v-for="puppy in puppies"
+          :key="puppy._id"
+          class="puppy-card"
+          @click="goToDog(puppy._id)"
+        >
+          <view class="puppy-avatar">
+            <text style="font-size: 18px;">{{ puppyEmoji(puppy) }}</text>
+          </view>
+          <view class="puppy-info">
+            <text class="puppy-name">{{ puppy.name || '未命名' }}</text>
+            <view class="puppy-meta">
+              <view class="gender-tag" :class="puppy.gender === '公' ? 'gender-male' : 'gender-female'">
+                <text>{{ puppy.gender }}</text>
+              </view>
+              <text v-if="puppy.latest_weight" class="puppy-weight">{{ puppy.latest_weight }}g</text>
+            </view>
+          </view>
+          <view class="disposition-tag" :class="dispClass(puppy.disposition)">
+            <text>{{ dispLabel(puppy.disposition) }}</text>
+          </view>
+        </view>
+
+        <!-- 空状态 -->
+        <BEmpty
+          v-if="puppies.length === 0"
+          icon="pets"
+          title="暂无幼崽记录"
+          description="点击下方按钮添加幼崽"
+          actionText="添加幼崽"
+          @action="addPuppy"
+        />
+
+        <!-- 窝利润 -->
+        <template v-if="hasProfit">
+          <BSectionLabel title="窝利润" color="green" />
+          <BCard color="green" :pressable="false">
+            <view class="profit-row">
+              <text class="profit-label">收入</text>
+              <text class="profit-value" style="color: var(--red);">¥{{ (litter.income || 0).toLocaleString() }}</text>
+            </view>
+            <view class="profit-row">
+              <text class="profit-label">支出</text>
+              <text class="profit-value" style="color: var(--green);">¥{{ (litter.expense || 0).toLocaleString() }}</text>
+            </view>
+            <view class="profit-divider" />
+            <view class="profit-row" style="padding-top: 8px;">
+              <text class="profit-label">净利润</text>
+              <text class="profit-net">¥{{ ((litter.income || 0) - (litter.expense || 0)).toLocaleString() }}</text>
+            </view>
+          </BCard>
+        </template>
+
+        <!-- 操作按钮 -->
+        <view class="action-buttons">
+          <view class="action-row">
+            <BButton color="teal" @click="goWeightEntry" style="flex: 1;">
+              <text class="material-icons-round" style="font-size: 16px; margin-right: 6px;">monitor_weight</text>
+              记录体重
+            </BButton>
+            <BButton variant="ghost" @click="addPuppy" style="flex: 1;">
+              <text class="material-icons-round" style="font-size: 16px; margin-right: 6px;">add</text>
+              添加幼崽
+            </BButton>
+          </view>
+          <BButton
+            v-if="!litter.weaned_at"
+            color="amber"
+            size="large"
+            :loading="weaning"
+            @click="confirmWeaning"
+            style="width: 100%;"
+          >
+            <text class="material-icons-round" style="font-size: 16px; margin-right: 6px;">check_circle</text>
+            确认断奶
+          </BButton>
+        </view>
+      </view>
+    </template>
   </view>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import BPageHeader from '@/components/layout/BPageHeader.vue'
+import BCard from '@/components/base/BCard.vue'
+import BTag from '@/components/base/BTag.vue'
+import BButton from '@/components/base/BButton.vue'
+import BSectionLabel from '@/components/base/BSectionLabel.vue'
+import BSkeleton from '@/components/feedback/BSkeleton.vue'
+import BEmpty from '@/components/feedback/BEmpty.vue'
 
 const litter = ref<any>(null)
 const puppies = ref<any[]>([])
 const weaning = ref(false)
+const loading = ref(true)
 let litterId = ''
 
 const { run: fetchDetail } = useCloudCall<{ data: any }>('breeding-service', 'getLitterDetail')
 const { run: doWeaning } = useCloudCall('breeding-service', 'confirmWeaning', { successMessage: '已确认断奶' })
 const { run: doAddPuppy } = useCloudCall('breeding-service', 'addPuppyToLitter', { successMessage: '已添加' })
 
+const soldCount = computed(() => puppies.value.filter(p => p.disposition === 'sold').length)
+const hasProfit = computed(() => litter.value && ((litter.value.income || 0) > 0 || (litter.value.expense || 0) > 0))
+
 function formatDate(ts: number) {
+  if (!ts) return '-'
   const d = new Date(ts)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
@@ -88,12 +179,48 @@ function goToDog(dogId: string) {
   uni.navigateTo({ url: `/pages/dog/detail?id=${dogId}` })
 }
 
+function goWeightEntry() {
+  uni.navigateTo({ url: `/pages/health/batch-weight?litterId=${litterId}` })
+}
+
+function onEdit() {
+  // 可扩展：编辑窝信息
+}
+
+function puppyEmoji(puppy: any) {
+  const emojis = ['🐾', '🐶', '🐕', '🐩']
+  const idx = puppies.value.indexOf(puppy)
+  return emojis[idx % emojis.length]
+}
+
+function dispClass(disposition: string) {
+  const map: Record<string, string> = {
+    keeping: 'disp-keeping',
+    for_sale: 'disp-for-sale',
+    sold: 'disp-sold',
+    gifted: 'disp-gifted',
+  }
+  return map[disposition] || 'disp-keeping'
+}
+
+function dispLabel(disposition: string) {
+  const map: Record<string, string> = {
+    keeping: '在养',
+    for_sale: '待售',
+    sold: '已售',
+    gifted: '已赠送',
+  }
+  return map[disposition] || '在养'
+}
+
 async function loadData() {
+  loading.value = true
   const res = await fetchDetail(litterId)
   if (res?.data) {
     litter.value = res.data.litter
     puppies.value = res.data.puppies || []
   }
+  loading.value = false
 }
 
 async function confirmWeaning() {
@@ -135,193 +262,236 @@ onLoad((query) => {
 </script>
 
 <style lang="scss" scoped>
-.litter {
+.page {
   min-height: 100vh;
   background: var(--bg);
-  padding-bottom: 70px;
+  padding-bottom: 40px;
 }
 
-.litter__header {
-  background: var(--card);
-  padding: 16px;
-  box-shadow: var(--shadow);
-}
-
-.litter__parents {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  margin-bottom: 4px;
-}
-
-.litter__dam {
-  font-size: 18px;
-  font-weight: 700;
-  font-family: var(--font-display);
-  color: var(--text-1);
-}
-
-.litter__sire {
-  font-size: 14px;
-  color: var(--text-3);
-}
-
-.litter__meta {
-  font-size: 13px;
-  color: var(--text-2);
-  margin-bottom: 12px;
-}
-
-.litter__stats {
-  display: flex;
-  gap: 16px;
-}
-
-.litter__stat {
+.card-feed {
+  padding: 0 var(--space-page);
   display: flex;
   flex-direction: column;
-  align-items: center;
+  gap: var(--space-card-gap);
 }
 
-.litter__stat-num {
-  font-size: 16px;
-  font-weight: 600;
-  font-family: var(--font-display);
-  color: var(--text-1);
-}
-
-.litter__stat-num--dead {
-  color: var(--red);
-}
-
-.litter__stat-num--done {
-  color: var(--green);
-  font-size: 12px;
-}
-
-.litter__stat-num--pending {
-  color: var(--amber);
-  font-size: 12px;
-}
-
-.litter__stat-label {
-  font-size: 11px;
-  color: var(--text-3);
-  margin-top: 2px;
-}
-
-.litter__section {
-  margin: 8px 16px;
-  background: var(--card);
-  border-radius: var(--radius-card);
-  padding: 12px;
-  box-shadow: var(--shadow);
-}
-
-.litter__section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.litter__section-title {
-  font-size: 15px;
-  font-weight: 600;
-  font-family: var(--font-display);
-  color: var(--text-1);
-}
-
-.litter__add-btn {
-  font-size: 13px;
-  color: var(--primary);
-  transition: transform 0.15s ease;
-  &:active { transform: scale(0.975); }
-}
-
-.litter__puppy {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--bg);
-  transition: transform 0.15s ease;
-  &:active { transform: scale(0.975); }
-}
-
-.litter__puppy:last-child {
-  border-bottom: none;
-}
-
-.litter__puppy-avatar {
-  width: 32px;
-  height: 32px;
+.edit-btn {
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
-  color: var(--card);
-  flex-shrink: 0;
-}
-
-.litter__puppy-avatar--母 {
-  background: var(--rose);
-}
-
-.litter__puppy-avatar--公 {
-  background: var(--blue);
-}
-
-.litter__puppy-info {
-  flex: 1;
-}
-
-.litter__puppy-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-1);
-  display: block;
-}
-
-.litter__puppy-meta {
-  font-size: 12px;
-  color: var(--text-3);
-  margin-top: 2px;
-}
-
-.litter__puppy-arrow {
-  font-size: 16px;
-  color: var(--text-4);
-}
-
-.litter__empty {
-  text-align: center;
-  padding: 20px;
-  color: var(--text-3);
-  font-size: 14px;
-}
-
-.litter__actions {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: 10px 16px;
   background: var(--card);
-  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  box-shadow: var(--shadow);
+  transition: transform 0.12s ease;
+  &:active { transform: scale(0.9); }
+}
+
+/* 摘要信息卡 */
+.summary-card {
+  background: var(--card-dim);
+  border-radius: var(--radius-card);
+  padding: 16px;
+}
+
+.info-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.info-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+
+.info-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.info-value-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 统计行 */
+.stats-row {
+  display: flex;
+  background: var(--card);
+  border-radius: var(--radius-card);
+  padding: 14px 0;
   box-shadow: var(--shadow);
 }
 
-.litter__btn {
-  width: 100%;
-  height: 40px;
-  border-radius: var(--radius-btn);
-  background: var(--green);
-  color: var(--card);
-  font-size: 14px;
+.stat-col {
+  flex: 1;
+  text-align: center;
+  position: relative;
+
+  & + & {
+    &::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 15%;
+      height: 70%;
+      width: 1px;
+      background: var(--text-4);
+      opacity: 0.5;
+    }
+  }
+}
+
+.stat-num {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text-1);
   font-family: var(--font-display);
+  display: block;
+}
+
+.stat-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+  margin-top: 2px;
+  display: block;
+}
+
+/* 幼崽卡片 */
+.puppy-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--card);
+  border-radius: var(--radius-row);
+  padding: 12px 14px;
+  box-shadow: var(--shadow);
   transition: transform 0.15s ease;
   &:active { transform: scale(0.975); }
+}
+
+.puppy-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--card-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.puppy-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.puppy-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-1);
+  line-height: 1.3;
+  display: block;
+}
+
+.puppy-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+}
+
+.gender-tag {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: var(--radius-tag);
+}
+
+.gender-male {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.gender-female {
+  background: var(--rose-soft);
+  color: var(--rose);
+}
+
+.puppy-weight {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.disposition-tag {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: var(--radius-tag);
+  flex-shrink: 0;
+}
+
+.disp-keeping { background: var(--card-dim); color: var(--text-3); }
+.disp-for-sale { background: var(--amber-soft); color: var(--amber); }
+.disp-sold { background: var(--green-soft); color: var(--green); }
+.disp-gifted { background: var(--blue-soft); color: var(--blue); }
+
+/* 利润 */
+.profit-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+}
+
+.profit-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+
+.profit-value {
+  font-size: 14px;
+  font-weight: 700;
+  font-family: var(--font-display);
+}
+
+.profit-divider {
+  height: 1px;
+  background: var(--text-4);
+  opacity: 0.4;
+  margin: 4px 0;
+}
+
+.profit-net {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--primary);
+  font-family: var(--font-display);
+}
+
+/* 操作按钮 */
+.action-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.action-row {
+  display: flex;
+  gap: 8px;
 }
 </style>

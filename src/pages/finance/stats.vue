@@ -1,64 +1,130 @@
 <template>
-  <view class="stats">
-    <!-- 切换周期 -->
-    <view class="stats__tabs">
-      <view class="stats__tab" :class="{ 'stats__tab--active': period === 'monthly' }" @click="period = 'monthly'; load()">
+  <view class="page">
+    <!-- 顶栏 -->
+    <BPageHeader title="财务统计" />
+
+    <!-- 切换 月度/年度 -->
+    <view class="segmented-control">
+      <view
+        class="seg-item"
+        :class="{ 'seg-item--active': period === 'monthly' }"
+        @click="period = 'monthly'; load()"
+      >
         <text>月度</text>
       </view>
-      <view class="stats__tab" :class="{ 'stats__tab--active': period === 'yearly' }" @click="period = 'yearly'; load()">
+      <view
+        class="seg-item"
+        :class="{ 'seg-item--active': period === 'yearly' }"
+        @click="period = 'yearly'; load()"
+      >
         <text>年度</text>
       </view>
     </view>
 
-    <!-- 汇总 -->
-    <view class="stats__summary">
-      <view class="stats__card">
-        <text class="stats__card-label">总收入</text>
-        <text class="stats__card-amount stats__card-amount--income">¥{{ data.totalIncome }}</text>
-      </view>
-      <view class="stats__card">
-        <text class="stats__card-label">总支出</text>
-        <text class="stats__card-amount stats__card-amount--expense">¥{{ data.totalExpense }}</text>
-      </view>
-      <view class="stats__card stats__card--full">
-        <text class="stats__card-label">净利润</text>
-        <text class="stats__card-amount" :class="data.netProfit >= 0 ? 'stats__card-amount--income' : 'stats__card-amount--expense'">
-          ¥{{ data.netProfit }}
-        </text>
-      </view>
+    <!-- 月份选择 -->
+    <view class="month-selector">
+      <text class="material-icons-round month-selector__arrow" @click="changeMonth(-1)">chevron_left</text>
+      <text class="month-selector__text">{{ monthLabel }}</text>
+      <text class="material-icons-round month-selector__arrow" @click="changeMonth(1)">chevron_right</text>
     </view>
 
-    <!-- 支出分类明细 -->
-    <view class="stats__section">
-      <text class="stats__section-title">支出分类</text>
-      <view v-for="(amount, cat) in data.categoryBreakdown" :key="cat" class="stats__breakdown-item">
-        <text class="stats__breakdown-label">{{ cat }}</text>
-        <text class="stats__breakdown-amount">¥{{ amount }}</text>
-      </view>
-      <view v-if="Object.keys(data.categoryBreakdown).length === 0" class="stats__empty">
-        <text>暂无数据</text>
-      </view>
+    <!-- 骨架屏 -->
+    <view v-if="loading" style="padding: 0 16px;">
+      <BSkeleton :rows="3" />
     </view>
 
-    <!-- 收入分类明细 -->
-    <view class="stats__section">
-      <text class="stats__section-title">收入分类</text>
-      <view v-for="(amount, type) in data.incomeBreakdown" :key="type" class="stats__breakdown-item">
-        <text class="stats__breakdown-label">{{ type }}</text>
-        <text class="stats__breakdown-amount stats__breakdown-amount--income">¥{{ amount }}</text>
+    <template v-else>
+      <!-- 汇总 2x2 网格 -->
+      <view class="summary-grid">
+        <view class="summary-card">
+          <text class="summary-card__label">总收入</text>
+          <text class="summary-card__value summary-card__value--income">¥{{ formatNum(data.totalIncome) }}</text>
+        </view>
+        <view class="summary-card">
+          <text class="summary-card__label">总支出</text>
+          <text class="summary-card__value summary-card__value--expense">¥{{ formatNum(data.totalExpense) }}</text>
+        </view>
+        <view class="summary-card">
+          <text class="summary-card__label">净利润</text>
+          <text class="summary-card__value summary-card__value--primary">¥{{ formatNum(data.netProfit) }}</text>
+        </view>
+        <view class="summary-card">
+          <text class="summary-card__label">利润率</text>
+          <text class="summary-card__value summary-card__value--muted">{{ profitRate }}</text>
+        </view>
       </view>
-      <view v-if="Object.keys(data.incomeBreakdown).length === 0" class="stats__empty">
-        <text>暂无数据</text>
+
+      <!-- 支出分类 -->
+      <BSectionLabel title="支出分类" color="green" />
+      <view class="bar-chart">
+        <view v-for="(item, idx) in expenseItems" :key="item.cat" class="bar-row">
+          <view class="bar-row__header">
+            <text class="bar-row__name">{{ item.cat }}</text>
+            <text class="bar-row__amount">¥{{ formatNum(item.amount) }}</text>
+          </view>
+          <view class="bar-track">
+            <view
+              class="bar-fill"
+              :style="{ width: item.pct + '%', opacity: 1 - idx * 0.15 }"
+            />
+          </view>
+        </view>
+        <view v-if="expenseItems.length === 0" style="padding: 12px; text-align: center;">
+          <text style="font-size: 13px; color: var(--text-3);">暂无数据</text>
+        </view>
       </view>
-    </view>
+
+      <!-- 收入来源 -->
+      <BSectionLabel title="收入来源" color="red" />
+      <view class="bar-chart">
+        <view v-for="(item, idx) in incomeItems" :key="item.cat" class="bar-row">
+          <view class="bar-row__header">
+            <text class="bar-row__name">{{ item.cat }}</text>
+            <text class="bar-row__amount">¥{{ formatNum(item.amount) }}</text>
+          </view>
+          <view class="bar-track">
+            <view
+              class="bar-fill bar-fill--income"
+              :style="{ width: item.pct + '%', opacity: 1 - idx * 0.15 }"
+            />
+          </view>
+        </view>
+        <view v-if="incomeItems.length === 0" style="padding: 12px; text-align: center;">
+          <text style="font-size: 13px; color: var(--text-3);">暂无数据</text>
+        </view>
+      </view>
+
+      <!-- 详细报表导航 -->
+      <BSectionLabel title="详细报表" color="rose" />
+      <view class="nav-cards">
+        <view class="nav-card" @click="goTo('/pages/finance/litter-profit')">
+          <text class="nav-card__title">单窝利润</text>
+          <text class="material-icons-round" style="font-size: 20px; color: var(--text-3);">chevron_right</text>
+        </view>
+        <view class="nav-card" @click="goTo('/pages/finance/dam-roi')">
+          <text class="nav-card__title">种母投资回报</text>
+          <text class="material-icons-round" style="font-size: 20px; color: var(--text-3);">chevron_right</text>
+        </view>
+        <view class="nav-card" @click="goTo('/pages/finance/projection')">
+          <text class="nav-card__title">未来预估</text>
+          <text class="material-icons-round" style="font-size: 20px; color: var(--text-3);">chevron_right</text>
+        </view>
+      </view>
+    </template>
   </view>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useCloudCall } from '@/composables/useCloudCall'
+import BPageHeader from '@/components/layout/BPageHeader.vue'
+import BSkeleton from '@/components/feedback/BSkeleton.vue'
+import BSectionLabel from '@/components/base/BSectionLabel.vue'
 
 const period = ref('monthly')
+const loading = ref(true)
+const currentMonth = ref(new Date())
+
 const data = reactive({
   totalIncome: 0,
   totalExpense: 0,
@@ -67,9 +133,54 @@ const data = reactive({
   incomeBreakdown: {} as Record<string, number>,
 })
 
+const monthLabel = computed(() => {
+  const d = currentMonth.value
+  if (period.value === 'yearly') return `${d.getFullYear()}年`
+  return `${d.getFullYear()}年${d.getMonth() + 1}月`
+})
+
+const profitRate = computed(() => {
+  if (!data.totalIncome) return '0%'
+  return ((data.netProfit / data.totalIncome) * 100).toFixed(1) + '%'
+})
+
+function toSortedItems(obj: Record<string, number>) {
+  const entries = Object.entries(obj).sort((a, b) => b[1] - a[1])
+  const max = entries.length > 0 ? entries[0][1] : 1
+  return entries.map(([cat, amount]) => ({
+    cat,
+    amount,
+    pct: max > 0 ? (amount / max) * 100 : 0,
+  }))
+}
+
+const expenseItems = computed(() => toSortedItems(data.categoryBreakdown))
+const incomeItems = computed(() => toSortedItems(data.incomeBreakdown))
+
+function changeMonth(delta: number) {
+  const d = new Date(currentMonth.value)
+  if (period.value === 'yearly') {
+    d.setFullYear(d.getFullYear() + delta)
+  } else {
+    d.setMonth(d.getMonth() + delta)
+  }
+  currentMonth.value = d
+  load()
+}
+
+function formatNum(n: number) {
+  if (n == null) return '0'
+  return n.toLocaleString()
+}
+
+function goTo(url: string) {
+  uni.navigateTo({ url })
+}
+
 const { run: fetchSummary } = useCloudCall<{ data: any }>('finance-service', 'getFinancialSummary')
 
 async function load() {
+  loading.value = true
   const res = await fetchSummary(period.value)
   if (res?.data) {
     data.totalIncome = res.data.totalIncome || 0
@@ -78,130 +189,193 @@ async function load() {
     data.categoryBreakdown = res.data.categoryBreakdown || {}
     data.incomeBreakdown = res.data.incomeBreakdown || {}
   }
+  loading.value = false
 }
 
 onMounted(() => load())
 </script>
 
 <style lang="scss" scoped>
-.stats {
+.page {
   min-height: 100vh;
   background: var(--bg);
+  padding-bottom: 40px;
 }
 
-.stats__tabs {
+/* ==================== SEGMENTED CONTROL ==================== */
+.segmented-control {
   display: flex;
-  background: var(--card);
-  padding: 8px 16px;
-  gap: 8px;
+  background: var(--card-dim);
+  border-radius: 12px;
+  padding: 3px;
+  margin: 0 var(--space-page) 12px;
 }
 
-.stats__tab {
+.seg-item {
   flex: 1;
   text-align: center;
-  padding: 8px;
-  border-radius: var(--radius-row);
-  background: var(--bg);
-  font-size: 14px;
-  color: var(--text-2);
-  transition: transform 0.15s ease;
-  &:active { transform: scale(0.975); }
-}
-
-.stats__tab--active {
-  background: var(--primary);
-  color: var(--card);
-}
-
-.stats__summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 8px 16px;
-}
-
-.stats__card {
-  flex: 1;
-  min-width: 40%;
-  background: var(--card);
-  border-radius: var(--radius-card);
-  padding: 12px;
-  text-align: center;
-  box-shadow: var(--shadow);
-}
-
-.stats__card--full {
-  flex-basis: 100%;
-}
-
-.stats__card-label {
-  display: block;
-  font-size: 12px;
-  color: var(--text-3);
-  margin-bottom: 4px;
-}
-
-.stats__card-amount {
-  font-size: 20px;
+  padding: 8px 0;
+  font-size: 13px;
   font-weight: 700;
-  font-family: var(--font-display);
+  color: var(--text-3);
+  border-radius: 10px;
+  transition: all 0.2s;
+
+  &--active {
+    background: var(--card);
+    color: var(--primary);
+    box-shadow: var(--shadow);
+  }
 }
 
-.stats__card-amount--income {
-  color: var(--red);
+/* ==================== MONTH SELECTOR ==================== */
+.month-selector {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin: 0 var(--space-page) 16px;
+
+  &__text {
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-1);
+  }
+
+  &__arrow {
+    font-family: 'Material Icons Round';
+    font-size: 20px;
+    color: var(--text-3);
+    transition: transform 0.12s ease;
+    &:active { transform: scale(0.85); }
+  }
 }
 
-.stats__card-amount--expense {
-  color: var(--green);
+/* ==================== SUMMARY GRID ==================== */
+.summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 0 16px 16px;
 }
 
-.stats__section {
-  margin: 8px 16px;
+.summary-card {
   background: var(--card);
   border-radius: var(--radius-card);
-  padding: 12px;
+  padding: 16px;
   box-shadow: var(--shadow);
+  position: relative;
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 100%;
+    pointer-events: none;
+  }
+
+  & > * { position: relative; z-index: 1; }
+
+  &__label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-3);
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  &__value {
+    font-family: var(--font-display);
+    font-weight: 800;
+    line-height: 1.2;
+    display: block;
+
+    &--income { color: var(--red); font-size: 20px; }
+    &--expense { color: var(--green); font-size: 20px; }
+    &--primary { color: var(--primary); font-size: 24px; }
+    &--muted { color: var(--text-2); font-size: 20px; }
+  }
 }
 
-.stats__section-title {
-  font-size: 15px;
-  font-weight: 600;
-  font-family: var(--font-display);
-  color: var(--text-1);
-  margin-bottom: 8px;
-  display: block;
+/* ==================== BAR CHART ==================== */
+.bar-chart {
+  padding: 0 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.stats__breakdown-item {
+.bar-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  &__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  &__name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-1);
+  }
+
+  &__amount {
+    font-family: var(--font-display);
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--text-2);
+  }
+}
+
+.bar-track {
+  height: 8px;
+  background: var(--card-dim);
+  border-radius: var(--radius-progress);
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: var(--radius-progress);
+  background: var(--green);
+  transition: width 0.6s ease;
+
+  &--income {
+    background: var(--red);
+  }
+}
+
+/* ==================== NAV CARDS ==================== */
+.nav-cards {
+  padding: 0 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nav-card {
+  background: var(--card);
+  border-radius: var(--radius-card);
+  padding: 16px 18px;
+  box-shadow: var(--shadow);
   display: flex;
   justify-content: space-between;
-  padding: 6px 0;
-  border-bottom: 1px solid var(--bg);
-  font-size: 14px;
-}
+  align-items: center;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  &:active {
+    transform: scale(0.975);
+    box-shadow: 0 1px 6px rgba(234, 62, 119, 0.04);
+  }
 
-.stats__breakdown-item:last-child {
-  border-bottom: none;
-}
-
-.stats__breakdown-label {
-  color: var(--text-2);
-}
-
-.stats__breakdown-amount {
-  color: var(--text-1);
-  font-weight: 500;
-  font-family: var(--font-display);
-}
-
-.stats__breakdown-amount--income {
-  color: var(--red);
-}
-
-.stats__empty {
-  text-align: center;
-  padding: 20px;
-  color: var(--text-3);
-  font-size: 13px;
+  &__title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-1);
+  }
 }
 </style>

@@ -1,40 +1,66 @@
 <template>
-  <view class="sale-create">
-    <view class="sale-create__section">
-      <!-- 选择犬只 -->
-      <view class="sale-create__field">
-        <text class="sale-create__label">选择犬只 *</text>
-        <picker :range="dogNames" @change="onDogChange">
-          <text class="sale-create__picker" :class="{ 'sale-create__picker--placeholder': !form.dog_id }">
-            {{ selectedDogName || '请选择犬只' }}
-          </text>
-        </picker>
-      </view>
+  <view class="page">
+    <!-- 顶栏 -->
+    <BPageHeader title="设定底价" />
 
-      <!-- 底价 -->
-      <view class="sale-create__field">
-        <text class="sale-create__label">底价(¥)</text>
-        <input v-model="floorPriceInput" class="sale-create__input" type="digit" placeholder="选填" />
+    <!-- 犬只选择卡片 -->
+    <view class="dog-card" v-if="selectedDog" @click="showDogPicker = true">
+      <view class="dog-avatar">
+        <text class="material-icons-round" style="color: #fff; font-size: 22px;">pets</text>
       </view>
-
-      <!-- 买家信息 -->
-      <view class="sale-create__field">
-        <text class="sale-create__label">买家信息</text>
-        <input v-model="form.buyer_info" class="sale-create__input" placeholder="选填" />
+      <view class="dog-info">
+        <text class="dog-name">{{ selectedDog.name }}</text>
+        <text class="dog-meta">{{ selectedDog.breed || '马尔济斯' }}{{ selectedDog.sex ? ' · ' + selectedDog.sex : '' }}</text>
       </view>
+      <BTag :label="selectedDog.disposition || '在养'" color="amber" />
+    </view>
 
-      <!-- 备注 -->
-      <view class="sale-create__field">
-        <text class="sale-create__label">备注</text>
-        <input v-model="form.notes" class="sale-create__input" placeholder="选填" />
+    <!-- 空选择卡片 -->
+    <view class="dog-card dog-card--empty" v-else @click="showDogPicker = true">
+      <text class="material-icons-round" style="font-size: 22px; color: var(--text-3);">pets</text>
+      <text style="font-size: 14px; color: var(--text-3); flex: 1;">点击选择犬只</text>
+      <text class="material-icons-round" style="font-size: 18px; color: var(--text-4);">chevron_right</text>
+    </view>
+
+    <!-- 表单 -->
+    <view class="form-section">
+      <view class="form-card">
+        <view class="form-group">
+          <text class="form-label">底价</text>
+          <view class="price-input-wrapper">
+            <text class="price-symbol">¥</text>
+            <input
+              v-model="floorPriceInput"
+              type="digit"
+              class="price-input"
+              placeholder="输入底价"
+            />
+          </view>
+          <text class="form-helper">底价是给代理人的最低出售价，实际到手价不应低于此值</text>
+        </view>
       </view>
     </view>
 
-    <view class="sale-create__footer">
-      <button class="sale-create__submit" :loading="submitting" :disabled="!form.dog_id" @click="submit">
-        创建销售记录
-      </button>
+    <!-- 提交 -->
+    <view class="submit-area">
+      <button
+        class="submit-btn"
+        :disabled="!form.dog_id"
+        :loading="submitting"
+        @click="submit"
+      >确认设定底价</button>
+      <text class="submit-note">设定后犬只状态变为「待售」</text>
     </view>
+
+    <!-- 犬只选择器 Picker -->
+    <picker
+      v-if="dogs.length > 0"
+      :range="dogNames"
+      :value="dogPickerIdx"
+      @change="onDogChange"
+      style="display: none;"
+      ref="dogPickerRef"
+    />
   </view>
 </template>
 
@@ -42,10 +68,14 @@
 import { ref, reactive, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import BPageHeader from '@/components/layout/BPageHeader.vue'
+import BTag from '@/components/base/BTag.vue'
 
 const dogs = ref<any[]>([])
 const submitting = ref(false)
 const floorPriceInput = ref('')
+const showDogPicker = ref(false)
+const dogPickerIdx = ref(0)
 
 const form = reactive({
   dog_id: '',
@@ -54,10 +84,7 @@ const form = reactive({
 })
 
 const dogNames = computed(() => dogs.value.map(d => d.name))
-const selectedDogName = computed(() => {
-  const dog = dogs.value.find(d => d._id === form.dog_id)
-  return dog?.name || ''
-})
+const selectedDog = computed(() => dogs.value.find(d => d._id === form.dog_id) || null)
 
 function onDogChange(e: any) {
   const idx = e.detail.value
@@ -88,7 +115,6 @@ async function submit() {
 }
 
 onLoad(async () => {
-  // 加载可售犬只（在养 + 自留状态）
   const res = await fetchDogs()
   if (res?.data) {
     dogs.value = res.data.filter((d: any) => ['在养', '自留'].includes(d.disposition))
@@ -97,75 +123,165 @@ onLoad(async () => {
 </script>
 
 <style lang="scss" scoped>
-.sale-create {
+.page {
   min-height: 100vh;
   background: var(--bg);
-  padding-bottom: 70px;
+  padding-bottom: 40px;
 }
 
-.sale-create__section {
+/* ==================== DOG CARD ==================== */
+.dog-card {
+  margin: 0 16px 16px;
   background: var(--card);
-  margin: 8px 16px;
   border-radius: var(--radius-card);
-  padding: 12px;
+  padding: 14px 16px;
   box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: relative;
+  overflow: hidden;
+  border-left: 3.5px solid var(--amber);
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 100%;
+    background: linear-gradient(135deg, var(--amber-soft) 0%, transparent 40%);
+    pointer-events: none;
+  }
+
+  & > * { position: relative; z-index: 1; }
+
+  &--empty {
+    border-left-color: var(--text-4);
+    &::before { background: none; }
+  }
 }
 
-.sale-create__field {
-  padding: 10px 0;
-  border-bottom: 1px solid var(--bg);
+.dog-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), var(--amber));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
-.sale-create__field:last-child {
-  border-bottom: none;
-}
+.dog-info { flex: 1; min-width: 0; }
 
-.sale-create__label {
-  font-size: 14px;
+.dog-name {
+  font-size: 15px;
+  font-weight: 700;
   color: var(--text-1);
-  margin-bottom: 6px;
   display: block;
 }
 
-.sale-create__input {
-  font-size: 14px;
-  color: var(--text-1);
+.dog-meta {
+  font-size: 12px;
+  color: var(--text-2);
+  margin-top: 2px;
+  display: block;
 }
 
-.sale-create__picker {
-  font-size: 14px;
-  color: var(--text-1);
-  padding: 4px 0;
+/* ==================== FORM ==================== */
+.form-section {
+  padding: 0 16px;
 }
 
-.sale-create__picker--placeholder {
-  color: var(--text-4);
-}
-
-.sale-create__footer {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: 10px 16px;
+.form-card {
   background: var(--card);
-  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  border-radius: var(--radius-card);
+  padding: 20px 16px;
   box-shadow: var(--shadow);
+  margin-bottom: 16px;
 }
 
-.sale-create__submit {
-  width: 100%;
-  height: 44px;
-  border-radius: var(--radius-btn);
-  background: var(--primary);
-  color: var(--card);
-  font-size: 16px;
+.form-group {
+  margin-bottom: 18px;
+  &:last-child { margin-bottom: 0; }
+}
+
+.form-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  margin-bottom: 8px;
+  display: block;
+}
+
+.price-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 1.5px solid var(--text-4);
+  border-radius: 14px;
+  padding: 0 16px;
+  height: 56px;
+  background: var(--bg);
+  transition: border-color 0.2s;
+
+  &:focus-within { border-color: var(--primary); }
+}
+
+.price-symbol {
   font-family: var(--font-display);
-  transition: transform 0.15s ease;
-  &:active { transform: scale(0.975); }
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--text-3);
 }
 
-.sale-create__submit[disabled] {
-  opacity: 0.5;
+.price-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--text-1);
+}
+
+.form-helper {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 8px;
+  line-height: 1.5;
+  display: block;
+}
+
+/* ==================== SUBMIT ==================== */
+.submit-area {
+  padding: 16px 16px 24px;
+}
+
+.submit-btn {
+  width: 100%;
+  height: 50px;
+  border-radius: var(--radius-btn);
+  border: none;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--primary);
+  box-shadow: 0 4px 16px rgba(234, 62, 119, 0.25);
+  transition: all 0.12s ease;
+  &:active { transform: scale(0.97); opacity: 0.9; }
+
+  &[disabled] { opacity: 0.5; }
+}
+
+.submit-note {
+  font-size: 12px;
+  color: var(--text-3);
+  text-align: center;
+  margin-top: 10px;
+  display: block;
+  line-height: 1.4;
 }
 </style>

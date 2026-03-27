@@ -1,217 +1,492 @@
 <template>
-  <view class="breed-form">
-    <!-- 记录类型选择 -->
-    <view class="breed-form__section">
-      <text class="breed-form__section-title">记录类型</text>
-      <view class="breed-form__types">
-        <view
-          v-for="t in typeOptions"
-          :key="t.value"
-          class="breed-form__type"
-          :class="{ 'breed-form__type--active': form.type === t.value }"
-          @click="form.type = t.value"
-        >
-          <text>{{ t.label }}</text>
-        </view>
-      </view>
-    </view>
+  <view class="page">
+    <BPageHeader title="录入繁育记录" />
 
-    <!-- 公共字段 -->
-    <view class="breed-form__section">
-      <text class="breed-form__section-title">基本信息</text>
-
-      <view class="breed-form__field">
-        <text class="breed-form__label">日期</text>
-        <picker mode="date" :value="dateStr" @change="onDateChange">
-          <text class="breed-form__picker" :class="{ 'breed-form__picker--empty': !form.date }">
-            {{ form.date ? dateStr : '请选择日期' }}
-          </text>
-        </picker>
-      </view>
-
-      <view class="breed-form__field">
-        <text class="breed-form__label">费用(¥)</text>
-        <input
-          v-model="costInput"
-          class="breed-form__input"
-          type="digit"
-          placeholder="选填"
-        />
-      </view>
-
-      <view class="breed-form__field">
-        <text class="breed-form__label">备注</text>
-        <input
-          v-model="form.notes"
-          class="breed-form__input"
-          placeholder="选填"
-        />
-      </view>
-    </view>
-
-    <!-- 发情详情 -->
-    <view v-if="form.type === 'heat'" class="breed-form__section">
-      <text class="breed-form__section-title">发情详情</text>
-
-      <view class="breed-form__field">
-        <text class="breed-form__label">开始日期</text>
-        <picker mode="date" :value="heatStartStr" @change="onHeatStartChange">
-          <text class="breed-form__picker" :class="{ 'breed-form__picker--empty': !details.start_date }">
-            {{ details.start_date ? heatStartStr : '同上方日期' }}
-          </text>
-        </picker>
-      </view>
-    </view>
-
-    <!-- 卵泡检查详情 -->
-    <view v-if="form.type === 'follicle_check'" class="breed-form__section">
-      <text class="breed-form__section-title">卵泡检查</text>
-
-      <view class="breed-form__row">
-        <view class="breed-form__half">
-          <text class="breed-form__sub-label">左侧数量</text>
-          <input v-model="details.left_count" class="breed-form__input" type="number" placeholder="0" />
-        </view>
-        <view class="breed-form__half">
-          <text class="breed-form__sub-label">左侧大小(mm)</text>
-          <input v-model="details.left_size" class="breed-form__input" type="digit" placeholder="0" />
-        </view>
-      </view>
-
-      <view class="breed-form__row">
-        <view class="breed-form__half">
-          <text class="breed-form__sub-label">右侧数量</text>
-          <input v-model="details.right_count" class="breed-form__input" type="number" placeholder="0" />
-        </view>
-        <view class="breed-form__half">
-          <text class="breed-form__sub-label">右侧大小(mm)</text>
-          <input v-model="details.right_size" class="breed-form__input" type="digit" placeholder="0" />
-        </view>
-      </view>
-
-      <view class="breed-form__field">
-        <text class="breed-form__label">结果</text>
-        <picker :range="follicleResults" :value="follicleResultIndex" @change="onFollicleResultChange">
-          <text class="breed-form__picker">{{ details.result || '请选择' }}</text>
-        </picker>
-      </view>
-    </view>
-
-    <!-- 配种详情 -->
-    <view v-if="form.type === 'mating'" class="breed-form__section">
-      <text class="breed-form__section-title">配种详情</text>
-
-      <view class="breed-form__field">
-        <text class="breed-form__label">种公</text>
-        <picker :range="sireNames" :value="sireIndex" @change="onSireChange">
-          <text class="breed-form__picker" :class="{ 'breed-form__picker--empty': !details.sire_name }">
-            {{ details.sire_name || '请选择种公' }}
-          </text>
-        </picker>
-      </view>
-
-      <view class="breed-form__field">
-        <text class="breed-form__label">方式</text>
-        <view class="breed-form__inline-options">
+    <!-- 记录类型选择 (segmented pill row) -->
+    <view class="form-body">
+      <view class="field-group">
+        <view class="field-label"><text>记录类型</text></view>
+        <view class="segmented-control">
           <view
-            v-for="m in matingMethods"
-            :key="m"
-            class="breed-form__option"
-            :class="{ 'breed-form__option--active': details.method === m }"
-            @click="details.method = m"
+            v-for="t in typeOptions"
+            :key="t.value"
+            class="seg-option"
+            :class="{ active: form.type === t.value }"
+            @click="form.type = t.value"
           >
-            <text>{{ m }}</text>
+            <text>{{ t.label }}</text>
           </view>
         </view>
       </view>
 
-      <view class="breed-form__field">
-        <text class="breed-form__label">第几次</text>
-        <input v-model="details.mating_number" class="breed-form__input" type="number" placeholder="1" />
-      </view>
-    </view>
-
-    <!-- 孕检详情 -->
-    <view v-if="form.type === 'pregnancy_check'" class="breed-form__section">
-      <text class="breed-form__section-title">孕检详情</text>
-
-      <view class="breed-form__field">
-        <text class="breed-form__label">是否怀孕</text>
-        <view class="breed-form__inline-options">
-          <view
-            v-for="c in ['是', '否']"
-            :key="c"
-            class="breed-form__option"
-            :class="{ 'breed-form__option--active': details.confirmed === c }"
-            @click="details.confirmed = c"
-          >
-            <text>{{ c }}</text>
+      <!-- ============ 发情记录 (R-2) ============ -->
+      <template v-if="form.type === 'heat'">
+        <!-- 选择种母 -->
+        <view class="field-group">
+          <view class="field-label"><text>选择种母</text></view>
+          <view class="dog-picker-empty" @click="pickDog">
+            <text class="material-icons-round">pets</text>
+            <text>点击选择犬只</text>
           </view>
         </view>
+
+        <!-- 发情开始日期 -->
+        <view class="field-group">
+          <view class="field-label"><text>发情开始日期</text></view>
+          <picker mode="date" :value="dateStr" @change="onDateChange">
+            <input type="text" class="form-input" :value="dateStr" placeholder="请选择日期" disabled />
+          </picker>
+          <view class="date-chips">
+            <text
+              class="date-chip"
+              :class="{ active: dateChipActive === 'today' }"
+              @click="setDateChip('today')"
+            >今天</text>
+            <text
+              class="date-chip"
+              :class="{ active: dateChipActive === 'yesterday' }"
+              @click="setDateChip('yesterday')"
+            >昨天</text>
+            <text
+              class="date-chip"
+              :class="{ active: dateChipActive === 'dayBefore' }"
+              @click="setDateChip('dayBefore')"
+            >前天</text>
+          </view>
+        </view>
+
+        <!-- 备注 -->
+        <view class="field-group">
+          <view class="field-label">
+            <text>备注</text>
+            <text class="field-label__optional">（选填）</text>
+          </view>
+          <textarea
+            v-model="form.notes"
+            class="form-textarea"
+            placeholder="记录观察到的症状、行为变化等"
+          />
+        </view>
+      </template>
+
+      <!-- ============ 卵泡检查 (R-3) ============ -->
+      <template v-if="form.type === 'follicle_check'">
+        <view class="field-group">
+          <view class="field-label"><text>选择种母</text></view>
+          <view class="dog-picker-empty" @click="pickDog">
+            <text class="material-icons-round">pets</text>
+            <text>点击选择犬只</text>
+          </view>
+        </view>
+
+        <view class="field-group">
+          <view class="field-label"><text>检查日期</text></view>
+          <picker mode="date" :value="dateStr" @change="onDateChange">
+            <input type="text" class="form-input" :value="dateStr" placeholder="请选择日期" disabled />
+          </picker>
+          <view class="date-chips">
+            <text class="date-chip" :class="{ active: dateChipActive === 'today' }" @click="setDateChip('today')">今天</text>
+            <text class="date-chip" :class="{ active: dateChipActive === 'yesterday' }" @click="setDateChip('yesterday')">昨天</text>
+            <text class="date-chip" :class="{ active: dateChipActive === 'dayBefore' }" @click="setDateChip('dayBefore')">前天</text>
+          </view>
+        </view>
+
+        <!-- 左侧卵泡 -->
+        <view class="field-group">
+          <view class="field-label"><text>左侧卵泡</text></view>
+          <view class="inline-fields">
+            <view class="inline-fields__item">
+              <input v-model="details.left_count" class="form-input" type="number" placeholder="数量" />
+            </view>
+            <view class="inline-fields__item">
+              <input v-model="details.left_size" class="form-input" type="text" placeholder="大小 (如 1.2cm)" />
+            </view>
+          </view>
+        </view>
+
+        <!-- 右侧卵泡 -->
+        <view class="field-group">
+          <view class="field-label"><text>右侧卵泡</text></view>
+          <view class="inline-fields">
+            <view class="inline-fields__item">
+              <input v-model="details.right_count" class="form-input" type="number" placeholder="数量" />
+            </view>
+            <view class="inline-fields__item">
+              <input v-model="details.right_size" class="form-input" type="text" placeholder="大小 (如 1.0cm)" />
+            </view>
+          </view>
+        </view>
+
+        <!-- 检查结果 -->
+        <view class="field-group">
+          <view class="field-label"><text>检查结果</text></view>
+          <view class="segmented-control">
+            <view
+              v-for="r in follicleResults"
+              :key="r"
+              class="seg-option"
+              :class="{ active: details.result === r }"
+              @click="details.result = r"
+            >
+              <text>{{ r }}</text>
+            </view>
+          </view>
+        </view>
+
+        <!-- 费用 -->
+        <view class="field-group">
+          <view class="field-label">
+            <text>费用</text>
+            <text class="field-label__optional">（选填）</text>
+          </view>
+          <view class="input-prefix-wrapper">
+            <text class="input-prefix">¥</text>
+            <input v-model="costInput" class="form-input form-input--prefixed" type="digit" placeholder="0.00" />
+          </view>
+        </view>
+
+        <!-- 备注 -->
+        <view class="field-group">
+          <view class="field-label">
+            <text>备注</text>
+            <text class="field-label__optional">（选填）</text>
+          </view>
+          <textarea v-model="form.notes" class="form-textarea" placeholder="补充检查说明" />
+        </view>
+      </template>
+
+      <!-- ============ 配种记录 (R-4) ============ -->
+      <template v-if="form.type === 'mating'">
+        <view class="field-group">
+          <view class="field-label"><text>选择种母</text></view>
+          <view class="dog-picker-empty" @click="pickDog">
+            <text class="material-icons-round">pets</text>
+            <text>点击选择犬只</text>
+          </view>
+        </view>
+
+        <view class="field-group">
+          <view class="field-label"><text>选择种公</text></view>
+          <view v-if="details.sire_name" class="dog-picker-selected" @click="pickSire">
+            <view class="dog-avatar dog-avatar--male">
+              <text class="material-icons-round">pets</text>
+            </view>
+            <view class="dog-info">
+              <text class="dog-name">{{ details.sire_name }}</text>
+              <text class="dog-breed">马尔济斯</text>
+            </view>
+            <text class="material-icons-round chevron">chevron_right</text>
+          </view>
+          <view v-else class="dog-picker-empty" @click="pickSire">
+            <text class="material-icons-round">pets</text>
+            <text>点击选择种公</text>
+          </view>
+        </view>
+
+        <view class="field-group">
+          <view class="field-label"><text>配种日期</text></view>
+          <picker mode="date" :value="dateStr" @change="onDateChange">
+            <input type="text" class="form-input" :value="dateStr" placeholder="请选择日期" disabled />
+          </picker>
+          <view class="date-chips">
+            <text class="date-chip" :class="{ active: dateChipActive === 'today' }" @click="setDateChip('today')">今天</text>
+            <text class="date-chip" :class="{ active: dateChipActive === 'yesterday' }" @click="setDateChip('yesterday')">昨天</text>
+            <text class="date-chip" :class="{ active: dateChipActive === 'dayBefore' }" @click="setDateChip('dayBefore')">前天</text>
+          </view>
+        </view>
+
+        <view class="field-group">
+          <view class="field-label"><text>配种方式</text></view>
+          <view class="segmented-control">
+            <view
+              v-for="m in matingMethods"
+              :key="m"
+              class="seg-option"
+              :class="{ active: details.method === m }"
+              @click="details.method = m"
+            >
+              <text>{{ m }}</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="field-group">
+          <view class="field-label"><text>第几次配种</text></view>
+          <view class="display-field">
+            <text>第 {{ details.mating_number || 1 }} 次（本周期）</text>
+          </view>
+        </view>
+
+        <!-- 自动计算卡片 -->
+        <view class="field-group">
+          <view class="field-label"><text>系统自动计算</text></view>
+          <view class="auto-card">
+            <view class="auto-card__row">
+              <text class="material-icons-round auto-card__icon">event_available</text>
+              <text class="auto-card__label">预计孕检日</text>
+              <text class="auto-card__value">{{ estimatedCheckDate }}</text>
+            </view>
+            <view class="auto-card__row">
+              <text class="material-icons-round auto-card__icon">child_friendly</text>
+              <text class="auto-card__label">预计预产期</text>
+              <text class="auto-card__value">{{ estimatedDueDate }}</text>
+            </view>
+            <view class="auto-card__hint">
+              <text class="material-icons-round" style="font-size:16px;color:var(--amber);">info_outline</text>
+              <text>可手动修改预产期</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="field-group">
+          <view class="field-label">
+            <text>借配费用</text>
+            <text class="field-label__optional">（选填）</text>
+          </view>
+          <view class="input-prefix-wrapper">
+            <text class="input-prefix">¥</text>
+            <input v-model="costInput" class="form-input form-input--prefixed" type="digit" placeholder="0.00" />
+          </view>
+        </view>
+
+        <view class="field-group">
+          <view class="field-label">
+            <text>备注</text>
+            <text class="field-label__optional">（选填）</text>
+          </view>
+          <textarea v-model="form.notes" class="form-textarea" placeholder="配种情况、注意事项等" />
+        </view>
+      </template>
+
+      <!-- ============ 孕检记录 (R-5) ============ -->
+      <template v-if="form.type === 'pregnancy_check'">
+        <view class="field-group">
+          <view class="field-label"><text>选择种母</text></view>
+          <view class="dog-picker-empty" @click="pickDog">
+            <text class="material-icons-round">pets</text>
+            <text>点击选择犬只</text>
+          </view>
+        </view>
+
+        <view class="field-group">
+          <view class="field-label"><text>检查日期</text></view>
+          <picker mode="date" :value="dateStr" @change="onDateChange">
+            <input type="text" class="form-input" :value="dateStr" placeholder="请选择日期" disabled />
+          </picker>
+          <view class="date-chips">
+            <text class="date-chip" :class="{ active: dateChipActive === 'today' }" @click="setDateChip('today')">今天</text>
+            <text class="date-chip" :class="{ active: dateChipActive === 'yesterday' }" @click="setDateChip('yesterday')">昨天</text>
+            <text class="date-chip" :class="{ active: dateChipActive === 'dayBefore' }" @click="setDateChip('dayBefore')">前天</text>
+          </view>
+        </view>
+
+        <view class="field-group">
+          <view class="field-label"><text>确认怀孕</text></view>
+          <view class="toggle-row">
+            <view
+              class="toggle-track"
+              :class="{ on: details.confirmed === '是' }"
+              @click="details.confirmed = details.confirmed === '是' ? '否' : '是'"
+            >
+              <view class="toggle-knob" />
+            </view>
+            <text class="toggle-label">{{ details.confirmed === '是' ? '是' : '否' }}</text>
+          </view>
+        </view>
+
+        <view v-if="details.confirmed === '是'" class="field-group">
+          <view class="field-label"><text>幼崽数量</text></view>
+          <input v-model="details.puppy_count" class="form-input" type="number" placeholder="B超估计数量" />
+        </view>
+
+        <view class="field-group">
+          <view class="field-label">
+            <text>费用</text>
+            <text class="field-label__optional">（选填）</text>
+          </view>
+          <view class="input-prefix-wrapper">
+            <text class="input-prefix">¥</text>
+            <input v-model="costInput" class="form-input form-input--prefixed" type="digit" placeholder="0.00" />
+          </view>
+        </view>
+
+        <view class="field-group">
+          <view class="field-label">
+            <text>备注</text>
+            <text class="field-label__optional">（选填）</text>
+          </view>
+          <textarea v-model="form.notes" class="form-textarea" placeholder="检查结果详情、医生建议等" />
+        </view>
+      </template>
+
+      <!-- ============ 产检 (R-6) ============ -->
+      <template v-if="form.type === 'prenatal_check'">
+        <view class="field-group">
+          <view class="field-label"><text>选择种母</text></view>
+          <view class="dog-picker-empty" @click="pickDog">
+            <text class="material-icons-round">pets</text>
+            <text>点击选择犬只</text>
+          </view>
+        </view>
+
+        <view class="field-group">
+          <view class="field-label"><text>检查日期</text></view>
+          <picker mode="date" :value="dateStr" @change="onDateChange">
+            <input type="text" class="form-input" :value="dateStr" placeholder="请选择日期" disabled />
+          </picker>
+          <view class="date-chips">
+            <text class="date-chip" :class="{ active: dateChipActive === 'today' }" @click="setDateChip('today')">今天</text>
+            <text class="date-chip" :class="{ active: dateChipActive === 'yesterday' }" @click="setDateChip('yesterday')">昨天</text>
+            <text class="date-chip" :class="{ active: dateChipActive === 'dayBefore' }" @click="setDateChip('dayBefore')">前天</text>
+          </view>
+        </view>
+
+        <view class="field-group">
+          <view class="field-label"><text>检查结果</text></view>
+          <textarea v-model="details.results" class="form-textarea" placeholder="填写检查结果" />
+        </view>
+
+        <view class="field-group">
+          <view class="field-label">
+            <text>费用</text>
+            <text class="field-label__optional">（选填）</text>
+          </view>
+          <view class="input-prefix-wrapper">
+            <text class="input-prefix">¥</text>
+            <input v-model="costInput" class="form-input form-input--prefixed" type="digit" placeholder="0.00" />
+          </view>
+        </view>
+
+        <view class="field-group">
+          <view class="field-label">
+            <text>备注</text>
+            <text class="field-label__optional">（选填）</text>
+          </view>
+          <textarea v-model="form.notes" class="form-textarea" placeholder="补充说明" />
+        </view>
+      </template>
+
+      <!-- ============ 临产监测 (R-7) ============ -->
+      <template v-if="form.type === 'pre_labor'">
+        <view class="field-group">
+          <view class="field-label"><text>选择种母</text></view>
+          <view class="dog-picker-empty" @click="pickDog">
+            <text class="material-icons-round">pets</text>
+            <text>点击选择犬只</text>
+          </view>
+        </view>
+
+        <view class="field-group">
+          <view class="field-label"><text>日期</text></view>
+          <picker mode="date" :value="dateStr" @change="onDateChange">
+            <input type="text" class="form-input" :value="dateStr" placeholder="请选择日期" disabled />
+          </picker>
+          <view class="date-chips">
+            <text class="date-chip" :class="{ active: dateChipActive === 'today' }" @click="setDateChip('today')">今天</text>
+            <text class="date-chip" :class="{ active: dateChipActive === 'yesterday' }" @click="setDateChip('yesterday')">昨天</text>
+            <text class="date-chip" :class="{ active: dateChipActive === 'dayBefore' }" @click="setDateChip('dayBefore')">前天</text>
+          </view>
+        </view>
+
+        <view class="field-group">
+          <view class="field-label"><text>体温 (°C)</text></view>
+          <input v-model="details.temperature" class="form-input" type="digit" placeholder="如 37.5" />
+        </view>
+
+        <view class="field-group">
+          <view class="field-label"><text>刨窝行为</text></view>
+          <view class="toggle-row">
+            <view
+              class="toggle-track"
+              :class="{ on: details.nesting_behavior }"
+              @click="details.nesting_behavior = !details.nesting_behavior"
+            >
+              <view class="toggle-knob" />
+            </view>
+            <text class="toggle-label">{{ details.nesting_behavior ? '有' : '无' }}</text>
+          </view>
+        </view>
+
+        <view class="field-group">
+          <view class="field-label">
+            <text>食欲变化</text>
+            <text class="field-label__optional">（选填）</text>
+          </view>
+          <input v-model="details.appetite_change" class="form-input" placeholder="如：食欲减退" />
+        </view>
+
+        <view class="field-group">
+          <view class="field-label">
+            <text>其他征兆</text>
+            <text class="field-label__optional">（选填）</text>
+          </view>
+          <input v-model="details.other_signs" class="form-input" placeholder="如：焦躁、喘气" />
+        </view>
+
+        <view class="field-group">
+          <view class="field-label">
+            <text>备注</text>
+            <text class="field-label__optional">（选填）</text>
+          </view>
+          <textarea v-model="form.notes" class="form-textarea" placeholder="补充说明" />
+        </view>
+      </template>
+
+      <!-- ============ 异常终止 (R-9) ============ -->
+      <template v-if="form.type === 'abnormal_termination'">
+        <view class="field-group">
+          <view class="field-label"><text>选择犬只</text></view>
+          <view class="dog-picker-empty" @click="pickDog">
+            <text class="material-icons-round">pets</text>
+            <text>点击选择犬只</text>
+          </view>
+        </view>
+
+        <view class="field-group">
+          <view class="field-label"><text>日期</text></view>
+          <picker mode="date" :value="dateStr" @change="onDateChange">
+            <input type="text" class="form-input" :value="dateStr" placeholder="请选择日期" disabled />
+          </picker>
+          <view class="date-chips">
+            <text class="date-chip" :class="{ active: dateChipActive === 'today' }" @click="setDateChip('today')">今天</text>
+            <text class="date-chip" :class="{ active: dateChipActive === 'yesterday' }" @click="setDateChip('yesterday')">昨天</text>
+            <text class="date-chip" :class="{ active: dateChipActive === 'dayBefore' }" @click="setDateChip('dayBefore')">前天</text>
+          </view>
+        </view>
+
+        <view class="field-group">
+          <view class="field-label"><text>类型</text></view>
+          <view class="segmented-control">
+            <view
+              v-for="tt in terminationTypes"
+              :key="tt"
+              class="seg-option"
+              :class="{ active: details.termination_type === tt }"
+              @click="details.termination_type = tt"
+            >
+              <text>{{ tt }}</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="field-group">
+          <view class="field-label">
+            <text>备注</text>
+            <text class="field-label__optional">（选填）</text>
+          </view>
+          <textarea v-model="form.notes" class="form-textarea" placeholder="补充说明" />
+        </view>
+      </template>
+
+      <!-- 体温预警 -->
+      <view v-if="showTempWarning" class="temp-warning">
+        <text class="material-icons-round" style="font-size:18px;color:var(--amber);">warning</text>
+        <text>体温低于 37.1°C，注意观察，可能 24 小时内生产</text>
       </view>
 
-      <view class="breed-form__field">
-        <text class="breed-form__label">胎数</text>
-        <input v-model="details.puppy_count" class="breed-form__input" type="number" placeholder="选填" />
-      </view>
-    </view>
-
-    <!-- 产检详情 -->
-    <view v-if="form.type === 'prenatal_check'" class="breed-form__section">
-      <text class="breed-form__section-title">产检详情</text>
-
-      <view class="breed-form__field">
-        <text class="breed-form__label">检查结果</text>
-        <input v-model="details.results" class="breed-form__input" placeholder="填写检查结果" />
-      </view>
-    </view>
-
-    <!-- 临产监测详情 -->
-    <view v-if="form.type === 'pre_labor'" class="breed-form__section">
-      <text class="breed-form__section-title">临产监测</text>
-
-      <view class="breed-form__field">
-        <text class="breed-form__label">体温(°C)</text>
-        <input v-model="details.temperature" class="breed-form__input" type="digit" placeholder="选填" />
-      </view>
-
-      <view class="breed-form__field">
-        <text class="breed-form__label">刨窝行为</text>
-        <switch :checked="details.nesting_behavior" @change="details.nesting_behavior = $event.detail.value" />
-      </view>
-
-      <view class="breed-form__field">
-        <text class="breed-form__label">食欲变化</text>
-        <input v-model="details.appetite_change" class="breed-form__input" placeholder="选填" />
-      </view>
-
-      <view class="breed-form__field">
-        <text class="breed-form__label">其他征兆</text>
-        <input v-model="details.other_signs" class="breed-form__input" placeholder="选填" />
-      </view>
-    </view>
-
-    <!-- 异常终止详情 -->
-    <view v-if="form.type === 'abnormal_termination'" class="breed-form__section">
-      <text class="breed-form__section-title">异常终止</text>
-
-      <view class="breed-form__field">
-        <text class="breed-form__label">类型</text>
-        <picker :range="terminationTypes" :value="terminationIndex" @change="onTerminationChange">
-          <text class="breed-form__picker">{{ details.termination_type || '请选择' }}</text>
-        </picker>
-      </view>
-    </view>
-
-    <!-- 体温预警 -->
-    <view v-if="showTempWarning" class="breed-form__warning">
-      <text>体温低于 37.1°C，注意观察，可能 24 小时内生产</text>
-    </view>
-
-    <!-- 提交按钮 -->
-    <view class="breed-form__footer">
+      <!-- 提交按钮 -->
       <button
-        class="breed-form__submit"
+        class="submit-btn"
         :loading="submitting"
         :disabled="!canSubmit"
         @click="submit"
@@ -219,7 +494,6 @@
         保存记录
       </button>
     </view>
-
   </view>
 </template>
 
@@ -227,13 +501,13 @@
 import { ref, reactive, computed, watch } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import BPageHeader from '@/components/layout/BPageHeader.vue'
 
 let cycleId = ''
 let dogId = ''
 
 // 种公列表（配种时选择）
 const sires = ref<{ _id: string; name: string }[]>([])
-const sireNames = computed(() => sires.value.map(s => s.name))
 
 const form = reactive({
   type: 'heat' as string,
@@ -245,28 +519,21 @@ const form = reactive({
 const costInput = ref('')
 const details = reactive<Record<string, any>>({})
 const submitting = ref(false)
+const dateChipActive = ref('today')
 
 const typeOptions = [
   { label: '发情', value: 'heat' },
-  { label: '卵泡检查', value: 'follicle_check' },
+  { label: '卵泡', value: 'follicle_check' },
   { label: '配种', value: 'mating' },
   { label: '孕检', value: 'pregnancy_check' },
   { label: '产检', value: 'prenatal_check' },
-  { label: '临产监测', value: 'pre_labor' },
-  { label: '异常终止', value: 'abnormal_termination' },
+  { label: '临产', value: 'pre_labor' },
+  { label: '异常', value: 'abnormal_termination' },
 ]
 
 const matingMethods = ['自然交配', '人工授精']
-const follicleResults = ['发育良好', '发育不良', '其他']
+const follicleResults = ['发育中', '已成熟', '发育不良', '其他']
 const terminationTypes = ['流产', '死胎', '医疗终止', '确认未怀孕']
-
-const follicleResultIndex = computed(() => {
-  return Math.max(0, follicleResults.indexOf(details.result || ''))
-})
-
-const terminationIndex = computed(() => {
-  return Math.max(0, terminationTypes.indexOf(details.termination_type || ''))
-})
 
 // 切换类型时重置 details
 watch(() => form.type, () => {
@@ -305,20 +572,43 @@ const canSubmit = computed(() => {
   return true
 })
 
+// 自动计算日期
+const estimatedCheckDate = computed(() => {
+  if (!form.date) return '--'
+  const d = new Date(form.date + 21 * 86400000)
+  return `${d.getMonth() + 1}月${d.getDate()}日`
+})
+
+const estimatedDueDate = computed(() => {
+  if (!form.date) return '--'
+  const d = new Date(form.date + 59 * 86400000)
+  return `${d.getMonth() + 1}月${d.getDate()}日`
+})
+
+function setDateChip(chip: string) {
+  dateChipActive.value = chip
+  const now = new Date()
+  now.setHours(0, 0, 0, 0)
+  if (chip === 'yesterday') now.setDate(now.getDate() - 1)
+  if (chip === 'dayBefore') now.setDate(now.getDate() - 2)
+  form.date = now.getTime()
+}
+
 function onDateChange(e: any) {
   form.date = new Date(e.detail.value + 'T00:00:00+08:00').getTime()
+  dateChipActive.value = ''
 }
 
 function onHeatStartChange(e: any) {
   details.start_date = new Date(e.detail.value + 'T00:00:00+08:00').getTime()
 }
 
-function onFollicleResultChange(e: any) {
-  details.result = follicleResults[e.detail.value]
+function pickDog() {
+  // 犬只选择器 placeholder
 }
 
-function onTerminationChange(e: any) {
-  details.termination_type = terminationTypes[e.detail.value]
+function pickSire() {
+  // 种公选择器 placeholder
 }
 
 const sireIndex = computed(() => {
@@ -432,162 +722,391 @@ onLoad((query) => {
 </script>
 
 <style lang="scss" scoped>
-.breed-form {
+.page {
   min-height: 100vh;
   background: var(--bg);
-  padding-bottom: 70px;
+  padding-bottom: 40px;
 }
 
-.breed-form__section {
-  background: var(--card);
-  margin: 8px 16px;
-  border-radius: var(--radius-card);
-  padding: 12px;
-  box-shadow: var(--shadow);
+.form-body {
+  padding: 0 var(--space-page);
 }
 
-.breed-form__section:first-child {
-  margin-top: 8px;
+/* ---- Field Group ---- */
+.field-group {
+  margin-bottom: 16px;
 }
 
-.breed-form__section-title {
-  font-size: 15px;
+.field-label {
+  font-size: 12px;
   font-weight: 600;
-  font-family: var(--font-display);
-  color: var(--text-1);
-  margin-bottom: 10px;
-  display: block;
-}
-
-.breed-form__types {
+  color: var(--text-3);
+  margin-bottom: 8px;
+  letter-spacing: 0.5px;
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  align-items: baseline;
+  gap: 4px;
+
+  &__optional {
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--text-3);
+  }
 }
 
-.breed-form__type {
-  padding: 6px 12px;
-  border-radius: var(--radius-pill);
-  background: var(--bg);
-  font-size: 13px;
-  color: var(--text-2);
-  transition: transform 0.15s ease;
-  &:active { transform: scale(0.975); }
+/* ---- Text inputs ---- */
+.form-input {
+  width: 100%;
+  height: 48px;
+  border-radius: 14px;
+  border: 1px solid var(--text-4);
+  background: var(--card);
+  padding: 0 16px;
+  font-size: 15px;
+  font-family: var(--font-body);
+  color: var(--text-1);
+  outline: none;
+  transition: border-color 0.2s, background 0.2s;
+
+  &:focus {
+    background: var(--card-dim);
+    border-color: var(--primary);
+  }
+
+  &::placeholder {
+    color: var(--text-4);
+  }
+
+  &--prefixed {
+    padding-left: 34px;
+  }
 }
 
-.breed-form__type--active {
-  background: var(--primary);
-  color: var(--card);
+/* ---- Textarea ---- */
+.form-textarea {
+  width: 100%;
+  min-height: 80px;
+  border-radius: 14px;
+  border: 1px solid var(--text-4);
+  background: var(--card);
+  padding: 14px 16px;
+  font-size: 15px;
+  font-family: var(--font-body);
+  color: var(--text-1);
+  outline: none;
+  resize: vertical;
+  transition: border-color 0.2s, background 0.2s;
+
+  &:focus {
+    background: var(--card-dim);
+    border-color: var(--primary);
+  }
+
+  &::placeholder {
+    color: var(--text-4);
+  }
 }
 
-.breed-form__field {
+/* ---- Prefix wrapper ---- */
+.input-prefix-wrapper {
+  position: relative;
   display: flex;
   align-items: center;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--bg);
 }
 
-.breed-form__field:last-child {
-  border-bottom: none;
+.input-prefix {
+  position: absolute;
+  left: 16px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-3);
+  pointer-events: none;
+  z-index: 1;
 }
 
-.breed-form__label {
-  width: 80px;
-  font-size: 14px;
-  color: var(--text-1);
+/* ---- Dog picker ---- */
+.dog-picker-empty {
+  width: 100%;
+  height: 60px;
+  border-radius: 14px;
+  border: 1px dashed var(--text-4);
+  background: var(--card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: background 0.2s;
+
+  .material-icons-round {
+    font-size: 20px;
+    color: var(--text-4);
+  }
+
+  text:not(.material-icons-round) {
+    font-size: 14px;
+    color: var(--text-4);
+    font-weight: 500;
+  }
+}
+
+.dog-picker-selected {
+  width: 100%;
+  border-radius: 14px;
+  border: 1px solid var(--text-4);
+  background: var(--card);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: background 0.2s;
+}
+
+.dog-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), var(--amber));
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+
+  .material-icons-round {
+    color: white;
+    font-size: 22px;
+  }
+
+  &--male {
+    background: linear-gradient(135deg, var(--blue), var(--teal));
+  }
 }
 
-.breed-form__input {
+.dog-info {
   flex: 1;
-  font-size: 14px;
+}
+
+.dog-name {
+  font-size: 15px;
+  font-weight: 700;
   color: var(--text-1);
 }
 
-.breed-form__picker {
-  flex: 1;
-  font-size: 14px;
-  color: var(--text-1);
+.dog-breed {
+  font-size: 12px;
+  color: var(--text-2);
+  margin-top: 2px;
 }
 
-.breed-form__picker--empty {
+.chevron {
   color: var(--text-4);
+  font-size: 20px;
 }
 
-.breed-form__row {
+/* ---- Segmented control ---- */
+.segmented-control {
+  display: flex;
+  background: var(--card-dim);
+  border-radius: var(--radius-btn);
+  padding: 3px;
+  gap: 2px;
+}
+
+.seg-option {
+  flex: 1;
+  text-align: center;
+  padding: 10px 8px;
+  border-radius: var(--radius-btn);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  transition: all 0.2s ease;
+  white-space: nowrap;
+
+  &.active {
+    background: var(--primary);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(234, 62, 119, 0.25);
+  }
+}
+
+/* ---- Inline fields ---- */
+.inline-fields {
   display: flex;
   gap: 12px;
-  margin-bottom: 8px;
+
+  &__item {
+    flex: 1;
+  }
 }
 
-.breed-form__half {
-  flex: 1;
+/* ---- Toggle ---- */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
-.breed-form__sub-label {
-  font-size: 12px;
-  color: var(--text-3);
-  margin-bottom: 4px;
-  display: block;
+.toggle-track {
+  width: 52px;
+  height: 30px;
+  border-radius: var(--radius-btn);
+  background: var(--text-4);
+  position: relative;
+  transition: background 0.2s;
+  flex-shrink: 0;
+
+  &.on {
+    background: var(--primary);
+  }
 }
 
-.breed-form__inline-options {
+.toggle-knob {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #fff;
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 4px rgba(234, 62, 119, 0.06);
+
+  .toggle-track.on & {
+    transform: translateX(22px);
+  }
+}
+
+.toggle-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+/* ---- Display field ---- */
+.display-field {
+  width: 100%;
+  height: 48px;
+  border-radius: 14px;
+  background: var(--card-dim);
+  padding: 0 16px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-2);
+  display: flex;
+  align-items: center;
+  border: 1px solid transparent;
+}
+
+/* ---- Auto-calculated card ---- */
+.auto-card {
+  background: var(--card-dim);
+  border-radius: 14px;
+  padding: 16px;
+
+  &__row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+
+    &:not(:last-child) {
+      border-bottom: 1px solid rgba(184, 160, 138, 0.15);
+    }
+  }
+
+  &__icon {
+    font-size: 18px;
+    color: var(--primary);
+  }
+
+  &__label {
+    font-size: 13px;
+    color: var(--text-2);
+    flex: 1;
+  }
+
+  &__value {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-1);
+  }
+
+  &__hint {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 10px;
+    padding-top: 8px;
+
+    text:not(.material-icons-round) {
+      font-size: 12px;
+      color: var(--text-3);
+    }
+  }
+}
+
+/* ---- Date quick chips ---- */
+.date-chips {
   display: flex;
   gap: 6px;
-  flex: 1;
+  margin-top: 6px;
 }
 
-.breed-form__option {
-  padding: 5px 12px;
-  border-radius: var(--radius-pill);
-  background: var(--bg);
-  font-size: 13px;
+.date-chip {
+  padding: 4px 12px;
+  border-radius: var(--radius-btn);
+  font-size: 11px;
+  font-weight: 600;
   color: var(--text-2);
-  transition: transform 0.15s ease;
-  &:active { transform: scale(0.975); }
+  background: var(--card-dim);
+  transition: all 0.12s ease;
+
+  &:active {
+    transform: scale(0.92);
+  }
+
+  &.active {
+    background: var(--primary);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(234, 62, 119, 0.25);
+  }
 }
 
-.breed-form__option--active {
-  background: var(--primary);
-  color: var(--card);
-}
-
-.breed-form__warning {
-  margin: 0 16px;
-  padding: 10px 12px;
+/* ---- Temperature warning ---- */
+.temp-warning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
   background: var(--amber-soft);
   border-radius: var(--radius-row);
   font-size: 13px;
   color: var(--amber);
+  margin-bottom: 16px;
 }
 
-.breed-form__footer {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: 10px 16px;
-  background: var(--card);
-  padding-bottom: calc(10px + env(safe-area-inset-bottom));
-  box-shadow: var(--shadow);
-}
-
-.breed-form__submit {
+/* ---- Submit button ---- */
+.submit-btn {
   width: 100%;
-  height: 44px;
+  height: 50px;
   border-radius: var(--radius-btn);
+  border: none;
   background: var(--primary);
-  color: var(--card);
-  font-size: 16px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
   font-family: var(--font-display);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform 0.15s ease;
-  &:active { transform: scale(0.975); }
-}
+  margin-top: 24px;
+  transition: transform 0.12s ease, opacity 0.12s ease;
+  box-shadow: 0 4px 16px rgba(234, 62, 119, 0.3);
 
-.breed-form__submit[disabled] {
-  opacity: 0.5;
+  &:active {
+    transform: scale(0.94);
+    opacity: 0.85;
+  }
+
+  &[disabled] {
+    opacity: 0.4;
+  }
 }
 </style>

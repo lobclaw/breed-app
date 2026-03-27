@@ -1,94 +1,108 @@
 <template>
-  <view class="dog-add">
-    <view class="dog-add__form">
-      <!-- 角色选择 -->
-      <view class="dog-add__section">
-        <text class="dog-add__section-title">角色</text>
-        <view class="dog-add__roles">
+  <view class="page">
+    <BPageHeader :title="isEdit ? '编辑犬只' : '新建犬只'" />
+
+    <!-- 角色选择器 -->
+    <view class="role-selector">
+      <view
+        v-for="r in roleOptions"
+        :key="r.value"
+        class="role-selector__option"
+        :class="{ 'role-selector__option--active': form.role === r.value }"
+        @click="form.role = r.value"
+      >
+        <text>{{ r.label }}</text>
+      </view>
+    </view>
+
+    <!-- 幼崽提示 -->
+    <view v-if="form.role === '幼崽'" class="form-section">
+      <view class="hint-box">
+        <text class="hint-box__icon material-icons-round">info</text>
+        <text class="hint-box__text">如果是刚出生的幼崽，建议通过「生产记录」创建，可自动关联母犬和窝信息</text>
+      </view>
+    </view>
+
+    <!-- 表单字段 -->
+    <view class="form-section">
+      <!-- 昵称 -->
+      <view class="form-field">
+        <view class="field-label">
+          <text>昵称</text>
+          <text v-if="form.role === '幼崽'" class="field-label__optional">（选填）</text>
+        </view>
+        <input
+          v-model="form.name"
+          class="field-input"
+          :placeholder="form.role === '幼崽' ? '选填，可稍后设置' : '请输入犬只名称'"
+        />
+      </view>
+
+      <!-- 性别 -->
+      <view class="form-field">
+        <view class="field-label"><text>性别</text></view>
+        <view class="segmented">
           <view
-            v-for="r in roleOptions"
-            :key="r.value"
-            class="dog-add__role"
-            :class="{ 'dog-add__role--active': form.role === r.value }"
-            @click="form.role = r.value"
+            class="seg-option"
+            :class="{ active: form.gender === '公', locked: form.role === '外部种公' && form.gender === '母' }"
+            @click="form.gender = '公'"
           >
-            <text>{{ r.label }}</text>
+            <text>公</text>
+          </view>
+          <view
+            class="seg-option"
+            :class="{ active: form.gender === '母', locked: form.role === '外部种公' }"
+            @click="form.role !== '外部种公' && (form.gender = '母')"
+          >
+            <text>母</text>
           </view>
         </view>
       </view>
 
-      <!-- 基础信息 -->
-      <view class="dog-add__section">
-        <text class="dog-add__section-title">基础信息</text>
+      <!-- 品种 -->
+      <view class="form-field">
+        <view class="field-label"><text>品种</text></view>
+        <input v-model="form.breed" class="field-input" placeholder="如：马尔济斯" />
+      </view>
 
-        <view class="dog-add__field">
-          <text class="dog-add__label">名称</text>
-          <input
-            v-model="form.name"
-            class="dog-add__input"
-            placeholder="犬只名称（幼崽可留空）"
-          />
-        </view>
-
-        <view class="dog-add__field">
-          <text class="dog-add__label">性别</text>
-          <view class="dog-add__gender">
-            <view
-              class="dog-add__gender-btn"
-              :class="{ 'dog-add__gender-btn--active': form.gender === '母' }"
-              @click="form.gender = '母'"
-            >
-              <text>♀ 母</text>
-            </view>
-            <view
-              class="dog-add__gender-btn"
-              :class="{ 'dog-add__gender-btn--active': form.gender === '公' }"
-              @click="form.gender = '公'"
-            >
-              <text>♂ 公</text>
-            </view>
-          </view>
-        </view>
-
-        <view class="dog-add__field">
-          <text class="dog-add__label">品种</text>
-          <input
-            v-model="form.breed"
-            class="dog-add__input"
-            placeholder="如：马尔济斯"
-          />
-        </view>
-
-        <view class="dog-add__field">
-          <text class="dog-add__label">出生日期</text>
-          <picker mode="date" :value="birthDateStr" @change="onBirthDateChange">
-            <text class="dog-add__picker-text" :class="{ 'dog-add__picker-text--placeholder': !form.birth_date }">
-              {{ form.birth_date ? birthDateStr : '请选择' }}
+      <!-- 出生日期 -->
+      <view class="form-field">
+        <view class="field-label"><text>出生日期</text></view>
+        <picker mode="date" :value="birthDateStr" @change="onBirthDateChange">
+          <view class="field-input field-input--picker">
+            <text :class="{ 'placeholder-text': !form.birth_date }">
+              {{ form.birth_date ? birthDateStr : '请选择日期' }}
             </text>
-          </picker>
-        </view>
+            <text class="material-icons-round field-input__icon">calendar_today</text>
+          </view>
+        </picker>
+      </view>
 
-        <!-- 外部种公额外字段 -->
-        <view v-if="form.role === '外部种公'" class="dog-add__field">
-          <text class="dog-add__label">主人信息</text>
-          <input
-            v-model="form.owner_info"
-            class="dog-add__input"
-            placeholder="主人姓名/犬舍名（选填）"
-          />
+      <!-- 外部种公额外字段 -->
+      <view v-if="form.role === '外部种公'" class="form-field">
+        <view class="field-label">
+          <text>主人信息</text>
+          <text class="field-label__optional">（选填）</text>
         </view>
+        <input
+          v-model="form.owner_info"
+          class="field-input"
+          placeholder="主人姓名/犬舍名"
+        />
       </view>
     </view>
 
     <!-- 提交按钮 -->
-    <view class="dog-add__footer">
+    <view class="btn-footer">
       <button
-        class="dog-add__submit"
+        class="btn-full"
+        :class="{ 'btn-full--disabled': !canSubmit }"
         :loading="submitting"
         :disabled="!canSubmit"
         @click="submit"
       >
-        {{ isEdit ? '保存修改' : '添加犬只' }}
+        <text v-if="!isEdit" class="material-icons-round" style="font-size: 20px;">add_circle</text>
+        {{ isEdit ? '保存修改' : '创建犬只' }}
       </button>
     </view>
   </view>
@@ -98,6 +112,7 @@
 import { ref, computed, reactive } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import BPageHeader from '@/components/layout/BPageHeader.vue'
 
 const isEdit = ref(false)
 let editDogId = ''
@@ -194,136 +209,195 @@ onLoad(async (query) => {
 </script>
 
 <style lang="scss" scoped>
-.dog-add {
+.page {
   min-height: 100vh;
   background: var(--bg);
-  padding-bottom: 70px;
+  padding-bottom: 100px;
 }
 
-.dog-add__form {
-  padding: 8px 16px;
-}
-
-.dog-add__section {
-  background: var(--card);
-  border-radius: var(--radius-card);
-  padding: 12px;
-  margin-bottom: 8px;
-  box-shadow: var(--shadow);
-}
-
-.dog-add__section-title {
-  font-size: 15px;
-  font-weight: 600;
-  font-family: var(--font-display);
-  color: var(--text-1);
-  margin-bottom: 10px;
-}
-
-.dog-add__roles {
+/* ---- 角色选择器 ---- */
+.role-selector {
   display: flex;
+  background: var(--card-dim);
+  border-radius: 14px;
+  padding: 4px;
+  gap: 3px;
+  margin: 0 var(--space-page) 16px;
+
+  &__option {
+    flex: 1;
+    height: 42px;
+    border-radius: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-2);
+    transition: all 0.2s ease;
+
+    &--active {
+      background: var(--primary);
+      color: #fff;
+      font-weight: 700;
+      box-shadow: 0 2px 8px rgba(234, 62, 119, 0.25);
+    }
+  }
+}
+
+/* ---- 幼崽提示 ---- */
+.hint-box {
+  background: var(--amber-soft);
+  border-radius: 12px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: flex-start;
   gap: 8px;
+
+  &__icon {
+    font-size: 18px;
+    color: var(--amber);
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  &__text {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-2);
+    line-height: 1.5;
+  }
 }
 
-.dog-add__role {
-  flex: 1;
-  text-align: center;
-  padding: 8px;
-  border-radius: var(--radius-row);
-  background: var(--bg);
-  font-size: 14px;
+/* ---- 表单区域 ---- */
+.form-section {
+  padding: 0 var(--space-page);
+  margin-bottom: 16px;
+}
+
+/* ---- 表单字段 ---- */
+.form-field {
+  margin-bottom: 14px;
+}
+
+.field-label {
+  font-size: 12px;
+  font-weight: 700;
   color: var(--text-2);
-  transition: transform 0.15s ease;
-  &:active { transform: scale(0.975); }
-}
-
-.dog-add__role--active {
-  background: var(--primary);
-  color: var(--card);
-}
-
-.dog-add__field {
+  margin-bottom: 6px;
   display: flex;
   align-items: center;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--bg);
+  gap: 4px;
+
+  &__optional {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-3);
+  }
 }
 
-.dog-add__field:last-child {
-  border-bottom: none;
-}
-
-.dog-add__label {
-  width: 80px;
-  font-size: 14px;
-  color: var(--text-1);
-  flex-shrink: 0;
-}
-
-.dog-add__input {
-  flex: 1;
-  font-size: 14px;
-  color: var(--text-1);
-}
-
-.dog-add__gender {
-  display: flex;
-  gap: 8px;
-  flex: 1;
-}
-
-.dog-add__gender-btn {
-  flex: 1;
-  text-align: center;
-  padding: 6px;
-  border-radius: var(--radius-row);
-  background: var(--bg);
-  font-size: 14px;
-  transition: transform 0.15s ease;
-  &:active { transform: scale(0.975); }
-}
-
-.dog-add__gender-btn--active {
-  background: var(--primary);
-  color: var(--card);
-}
-
-.dog-add__picker-text {
-  font-size: 14px;
-  color: var(--text-1);
-}
-
-.dog-add__picker-text--placeholder {
-  color: var(--text-4);
-}
-
-.dog-add__footer {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: 10px 16px;
-  background: var(--card);
-  padding-bottom: calc(10px + env(safe-area-inset-bottom));
-  box-shadow: var(--shadow);
-}
-
-.dog-add__submit {
+.field-input {
   width: 100%;
   height: 44px;
-  border-radius: var(--radius-btn);
-  background: var(--primary);
-  color: var(--card);
-  font-size: 16px;
-  font-family: var(--font-display);
+  border-radius: 12px;
+  border: 1.5px solid var(--text-4);
+  background: var(--card);
+  padding: 0 14px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+  outline: none;
+  transition: border-color 0.2s;
+
+  &:focus {
+    border-color: var(--primary);
+  }
+
+  &::placeholder {
+    color: var(--text-3);
+    font-weight: 500;
+  }
+
+  &--picker {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  &__icon {
+    font-size: 18px;
+    color: var(--text-3);
+  }
+}
+
+.placeholder-text {
+  color: var(--text-3);
+  font-weight: 500;
+}
+
+/* ---- 性别切换 (segmented) ---- */
+.segmented {
+  display: flex;
+  background: var(--card-dim);
+  border-radius: 12px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.seg-option {
+  flex: 1;
+  height: 38px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.15s ease;
-  &:active { transform: scale(0.975); }
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  transition: all 0.2s ease;
+
+  &.active {
+    background: var(--card);
+    color: var(--primary);
+    font-weight: 700;
+    box-shadow: var(--shadow);
+  }
+
+  &.locked {
+    opacity: 0.5;
+  }
 }
 
-.dog-add__submit[disabled] {
-  opacity: 0.5;
+/* ---- 提交按钮 ---- */
+.btn-footer {
+  padding: 16px var(--space-page) 0;
+}
+
+.btn-full {
+  width: 100%;
+  height: 50px;
+  border-radius: var(--radius-btn);
+  border: none;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--primary);
+  box-shadow: 0 4px 16px rgba(234, 62, 119, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.12s ease;
+
+  &:active:not(.btn-full--disabled) {
+    transform: scale(0.97);
+    opacity: 0.9;
+  }
+
+  &--disabled {
+    opacity: 0.4;
+  }
 }
 </style>
