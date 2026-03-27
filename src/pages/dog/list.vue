@@ -73,10 +73,8 @@
       />
     </view>
 
-    <!-- FAB 添加按钮 -->
-    <view class="dog-list__fab" @click="goToAdd">
-      <text class="dog-list__fab-icon material-icons-round">add</text>
-    </view>
+    <!-- 底部导航栏 -->
+    <BNavBar current="dog" @fab-click="goToAdd" />
   </view>
 </template>
 
@@ -87,6 +85,7 @@ import DogAvatar from '@/components/common/DogAvatar.vue'
 import BTag from '@/components/base/BTag.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
+import BNavBar from '@/components/layout/BNavBar.vue'
 import { useCloudCall } from '@/composables/useCloudCall'
 import type { DogWithStatus, DeriveStatusType } from '@/types/dog'
 
@@ -267,26 +266,4 @@ onShow(() => {
   flex-shrink: 0;
 }
 
-/* FAB 添加按钮 */
-.dog-list__fab {
-  position: fixed;
-  right: 20px;
-  bottom: 100px;
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--primary), var(--amber));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: var(--shadow-fab);
-  z-index: 50;
-  transition: transform 0.15s ease;
-  &:active { transform: scale(0.88); }
-}
-.dog-list__fab-icon {
-  font-family: 'Material Icons Round';
-  font-size: 28px;
-  color: #FFFFFF;
-}
 </style>

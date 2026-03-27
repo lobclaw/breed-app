@@ -103,10 +103,8 @@
       />
     </scroll-view>
 
-    <!-- FAB 快速记录按钮 -->
-    <view class="fab" @click="showActionSheet = true">
-      <text class="material-icons-round" style="font-size: 28px; color: #fff;">add</text>
-    </view>
+    <!-- 底部导航栏 -->
+    <BNavBar current="home" @fab-click="showActionSheet = true" />
 
     <!-- Action Sheet -->
     <view class="sheet-mask" v-if="showActionSheet" @click.self="showActionSheet = false">
@@ -161,6 +159,7 @@ import WeekStrip from '@/components/week-strip/WeekStrip.vue'
 import SmartCard from '@/components/smart-card/SmartCard.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
+import BNavBar from '@/components/layout/BNavBar.vue'
 
 const { hasFamily, loadFamily } = useAuth()
 
@@ -467,27 +466,6 @@ onShow(async () => {
   flex-direction: column;
   gap: 12px;
   margin-bottom: 8px;
-}
-
-/* ==================== FAB ==================== */
-.fab {
-  position: fixed;
-  right: 20px;
-  bottom: 100px;
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--primary), var(--amber));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 4px 16px rgba(234, 62, 119, 0.3);
-  z-index: 50;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-  &:active {
-    transform: scale(0.88);
-    box-shadow: 0 2px 8px rgba(234, 62, 119, 0.2);
-  }
 }
 
 /* ==================== ACTION SHEET ==================== */

@@ -33,4 +33,9 @@ page {
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
 }
+
+/* 隐藏原生 tabBar，使用自定义 BNavBar */
+uni-tabbar, .uni-tabbar {
+  display: none !important;
+}
 </style>

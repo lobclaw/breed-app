@@ -52,6 +52,9 @@
         <text class="profile__logout-text">退出登录</text>
       </view>
     </view>
+
+    <!-- 底部导航栏 -->
+    <BNavBar current="profile" />
   </view>
 </template>
 
@@ -59,6 +62,7 @@
 import { computed } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import { useTheme } from '@/composables/useTheme'
+import BNavBar from '@/components/layout/BNavBar.vue'
 
 const { currentFamily, userRole, logout } = useAuth()
 const { isDark, setTheme } = useTheme()

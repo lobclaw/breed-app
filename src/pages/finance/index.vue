@@ -47,6 +47,9 @@
         <text>暂无收支记录</text>
       </view>
     </view>
+
+    <!-- 底部导航栏 -->
+    <BNavBar current="finance" @fab-click="goToAdd" />
   </view>
 </template>
 
@@ -54,6 +57,11 @@
 import { ref, reactive } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import BNavBar from '@/components/layout/BNavBar.vue'
+
+function goToAdd() {
+  uni.navigateTo({ url: '/pages/finance/expense-add' })
+}
 
 const transactions = ref<any[]>([])
 const loading = ref(true)
