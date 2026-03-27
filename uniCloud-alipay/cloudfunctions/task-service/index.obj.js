@@ -24,9 +24,9 @@ module.exports = {
 
   _after: function(error, result) {
     if (error) {
-      return { code: error.code || -1, message: error.message }
+      return { errCode: error.code || -1, errMsg: error.message }
     }
-    return { code: 0, ...result }
+    return result
   },
 
   /**
