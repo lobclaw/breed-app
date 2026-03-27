@@ -167,7 +167,7 @@
           <text class="modal-label">平台</text>
           <view class="modal-pills">
             <view
-              v-for="p in platforms"
+              v-for="p in platformLabels"
               :key="p"
               class="modal-pill"
               :class="{ 'modal-pill--active': depositForm.platform === p }"
@@ -200,7 +200,7 @@
           <text class="modal-label">平台</text>
           <view class="modal-pills">
             <view
-              v-for="p in platforms"
+              v-for="p in platformLabels"
               :key="p"
               class="modal-pill"
               :class="{ 'modal-pill--active': completeForm.platform === p }"
@@ -236,7 +236,177 @@
       </view>
     </view>
 
-    <!-- 退款弹窗 -->
+    <!-- S-6: 退款表单 BSheet -->
+    <BSheet :visible="showRefundSheet" title="退款" @update:visible="showRefundSheet = $event">
+      <view class="sheet-form">
+        <!-- 全额/部分退款 -->
+        <view class="sheet-toggle">
+          <view
+            class="sheet-toggle__item"
+            :class="{ 'sheet-toggle__item--active': refundSheetForm.type === 'full' }"
+            @click="refundSheetForm.type = 'full'; refundSheetForm.refund_amount = String(sale?.received_amount || '')"
+          >
+            <text>全额退款</text>
+          </view>
+          <view
+            class="sheet-toggle__item"
+            :class="{ 'sheet-toggle__item--active': refundSheetForm.type === 'partial' }"
+            @click="refundSheetForm.type = 'partial'; refundSheetForm.refund_amount = ''"
+          >
+            <text>部分退款</text>
+          </view>
+        </view>
+        <!-- 退款金额 -->
+        <view class="sheet-field">
+          <text class="sheet-label">退款金额(¥) *</text>
+          <input
+            v-model="refundSheetForm.refund_amount"
+            type="digit"
+            :placeholder="`最多 ${sale?.received_amount || ''}`"
+            class="sheet-input"
+            :disabled="refundSheetForm.type === 'full'"
+          />
+        </view>
+        <!-- 退款原因 -->
+        <view class="sheet-field">
+          <text class="sheet-label">退款原因</text>
+          <view class="sheet-select" @click="showRefundReasonPicker = !showRefundReasonPicker">
+            <text :style="{ color: refundSheetForm.refund_reason ? 'var(--text-1)' : 'var(--text-3)' }">
+              {{ refundSheetForm.refund_reason || '选择原因' }}
+            </text>
+            <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">expand_more</text>
+          </view>
+          <view v-if="showRefundReasonPicker" class="sheet-options">
+            <view
+              v-for="r in refundReasons"
+              :key="r"
+              class="sheet-option"
+              :class="{ 'sheet-option--active': refundSheetForm.refund_reason === r }"
+              @click="refundSheetForm.refund_reason = r; showRefundReasonPicker = false"
+            >
+              <text>{{ r }}</text>
+            </view>
+          </view>
+        </view>
+        <!-- 退款日期 -->
+        <view class="sheet-field">
+          <text class="sheet-label">退款日期</text>
+          <picker mode="date" :value="refundSheetForm.refund_date" @change="refundSheetForm.refund_date = $event.detail.value">
+            <view class="sheet-select">
+              <text :style="{ color: refundSheetForm.refund_date ? 'var(--text-1)' : 'var(--text-3)' }">
+                {{ refundSheetForm.refund_date || '选择日期' }}
+              </text>
+              <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
+            </view>
+          </picker>
+        </view>
+        <!-- 确认退款 -->
+        <button
+          class="sheet-btn sheet-btn--red"
+          :disabled="!refundSheetForm.refund_amount"
+          @click="doRefundSheet"
+        >确认退款</button>
+      </view>
+    </BSheet>
+
+    <!-- S-7: 定金取消 BSheet -->
+    <BSheet :visible="showCancelSheet" title="取消预定" @update:visible="showCancelSheet = $event">
+      <view class="sheet-form">
+        <view class="sheet-field">
+          <text class="sheet-label">取消原因</text>
+          <input v-model="cancelSheetForm.reason" class="sheet-input" placeholder="输入取消原因" />
+        </view>
+        <view class="sheet-field">
+          <text class="sheet-label">退还定金(¥)</text>
+          <input
+            v-model="cancelSheetForm.refund_amount"
+            type="digit"
+            :placeholder="`定金总额 ${sale?.deposit_amount || 0}`"
+            class="sheet-input"
+          />
+          <text class="sheet-helper">留空或输入 0 表示不退还定金</text>
+        </view>
+        <button
+          class="sheet-btn sheet-btn--red"
+          @click="doCancelSheet"
+        >确认取消预定</button>
+      </view>
+    </BSheet>
+
+    <!-- S-8: 平台选择器 BSheet -->
+    <BSheet :visible="showPlatformSheet" title="选择平台" @update:visible="showPlatformSheet = $event">
+      <view class="platform-grid">
+        <view
+          v-for="p in platforms"
+          :key="p.label"
+          class="platform-grid__item"
+          :class="{ 'platform-grid__item--active': platformSheetValue === p.label }"
+          @click="selectPlatform(p.label)"
+        >
+          <text class="material-icons-round platform-grid__icon">{{ p.icon }}</text>
+          <text class="platform-grid__label">{{ p.label }}</text>
+        </view>
+      </view>
+    </BSheet>
+
+    <!-- S-9: 代理人选择器 BSheet -->
+    <BSheet :visible="showAgentSheet" title="选择代理人" @update:visible="showAgentSheet = $event">
+      <view v-if="agentLoading" style="padding: 20px 0;">
+        <BSkeleton :rows="3" />
+      </view>
+      <view v-else-if="agentList.length > 0" class="agent-select-list">
+        <view
+          v-for="agent in agentList"
+          :key="agent._id"
+          class="agent-select-item"
+          :class="{ 'agent-select-item--active': agentSheetValue === agent._id }"
+          @click="selectAgent(agent)"
+        >
+          <view class="agent-select-avatar">
+            <text class="material-icons-round" style="color: #fff; font-size: 18px;">person</text>
+          </view>
+          <view class="agent-select-info">
+            <text class="agent-select-name">{{ agent.name }}</text>
+            <text v-if="agent.contact_info" class="agent-select-contact">{{ agent.contact_info }}</text>
+          </view>
+          <text v-if="agentSheetValue === agent._id" class="material-icons-round" style="font-size: 20px; color: var(--primary);">check_circle</text>
+        </view>
+      </view>
+      <BEmpty v-else icon="handshake" title="暂无代理人" description="请先在设置中添加代理人" />
+    </BSheet>
+
+    <!-- S-10: 价格预警 BModal -->
+    <BModal
+      :visible="showPriceWarning"
+      title="价格预警"
+      confirmText="仍然继续"
+      cancelText="返回修改"
+      :danger="true"
+      @update:visible="showPriceWarning = $event"
+      @confirm="confirmPriceWarning"
+      @cancel="showPriceWarning = false"
+    >
+      <view class="price-warn">
+        <text class="material-icons-round price-warn__icon">warning</text>
+        <text class="price-warn__msg">到手价低于底价</text>
+        <view class="price-warn__compare">
+          <view class="price-warn__row">
+            <text class="price-warn__label">底价</text>
+            <text class="price-warn__val">¥{{ sale?.floor_price?.toLocaleString() }}</text>
+          </view>
+          <view class="price-warn__row">
+            <text class="price-warn__label">到手价</text>
+            <text class="price-warn__val price-warn__val--red">¥{{ priceWarningReceived?.toLocaleString() }}</text>
+          </view>
+          <view class="price-warn__row">
+            <text class="price-warn__label">差额</text>
+            <text class="price-warn__val price-warn__val--red">-¥{{ ((sale?.floor_price || 0) - (priceWarningReceived || 0)).toLocaleString() }}</text>
+          </view>
+        </view>
+      </view>
+    </BModal>
+
+    <!-- 兼容旧退款弹窗（保留） -->
     <view class="modal-mask" v-if="showRefundModal" @click.self="showRefundModal = false">
       <view class="modal-content">
         <text class="modal-title">退款</text>
@@ -264,6 +434,9 @@ import { useCloudCall } from '@/composables/useCloudCall'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BTag from '@/components/base/BTag.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
+import BSheet from '@/components/layout/BSheet.vue'
+import BModal from '@/components/layout/BModal.vue'
+import BEmpty from '@/components/feedback/BEmpty.vue'
 
 const sale = ref<any>(null)
 const saleId = ref('')
@@ -273,7 +446,50 @@ const showCompleteModal = ref(false)
 const showCancelModal = ref(false)
 const showRefundModal = ref(false)
 
-const platforms = ['线下', '微信', '小红书', '抖音', '快手', '闲鱼']
+const platforms = [
+  { label: '线下', icon: 'storefront' },
+  { label: '微信', icon: 'chat' },
+  { label: '小红书', icon: 'auto_stories' },
+  { label: '抖音', icon: 'music_note' },
+  { label: '快手', icon: 'play_circle' },
+  { label: '闲鱼', icon: 'shopping_bag' },
+]
+const platformLabels = platforms.map(p => p.label)
+
+/* S-6: 退款表单 */
+const showRefundSheet = ref(false)
+const showRefundReasonPicker = ref(false)
+const refundReasons = ['质量问题', '买家反悔', '健康问题', '买卖双方协商', '其他']
+const refundSheetForm = reactive({
+  type: 'full' as 'full' | 'partial',
+  refund_amount: '',
+  refund_reason: '',
+  refund_date: '',
+})
+
+/* S-7: 定金取消 */
+const showCancelSheet = ref(false)
+const cancelSheetForm = reactive({
+  reason: '',
+  refund_amount: '',
+})
+
+/* S-8: 平台选择器 */
+const showPlatformSheet = ref(false)
+const platformSheetValue = ref('')
+let platformCallback: ((val: string) => void) | null = null
+
+/* S-9: 代理人选择器 */
+const showAgentSheet = ref(false)
+const agentSheetValue = ref('')
+const agentList = ref<any[]>([])
+const agentLoading = ref(false)
+let agentCallback: ((agent: any) => void) | null = null
+
+/* S-10: 价格预警 */
+const showPriceWarning = ref(false)
+const priceWarningReceived = ref<number | null>(null)
+let priceWarningCallback: (() => void) | null = null
 
 const depositForm = reactive({
   deposit_amount: '',
@@ -404,6 +620,82 @@ async function doRefund() {
     showRefundModal.value = false
     load()
   }
+}
+
+/* S-6 退款提交 */
+async function doRefundSheet() {
+  const amount = parseFloat(refundSheetForm.refund_amount)
+  if (!amount || amount <= 0) return
+  const res = await cancelSale(saleId.value, {
+    refund_amount: amount,
+    refund_reason: refundSheetForm.refund_reason || null,
+  })
+  if (res) {
+    showRefundSheet.value = false
+    load()
+  }
+}
+
+/* S-7 定金取消提交 */
+async function doCancelSheet() {
+  const refundAmt = cancelSheetForm.refund_amount ? parseFloat(cancelSheetForm.refund_amount) : 0
+  const kept = (sale.value?.deposit_amount || 0) - refundAmt
+  const res = await cancelSale(saleId.value, {
+    deposit_kept_amount: kept > 0 ? kept : 0,
+    refund_reason: cancelSheetForm.reason || null,
+  })
+  if (res) {
+    showCancelSheet.value = false
+    load()
+  }
+}
+
+/* S-8 平台选择 */
+function openPlatformSheet(currentVal: string, cb: (val: string) => void) {
+  platformSheetValue.value = currentVal
+  platformCallback = cb
+  showPlatformSheet.value = true
+}
+
+function selectPlatform(label: string) {
+  platformSheetValue.value = label
+  if (platformCallback) platformCallback(label)
+  showPlatformSheet.value = false
+}
+
+/* S-9 代理人选择 */
+const { run: fetchAgents } = useCloudCall<{ data: any[] }>('finance-service', 'getAgentList')
+
+async function openAgentSheet(currentId: string, cb: (agent: any) => void) {
+  agentSheetValue.value = currentId
+  agentCallback = cb
+  showAgentSheet.value = true
+  agentLoading.value = true
+  const res = await fetchAgents()
+  if (res?.data) agentList.value = res.data
+  agentLoading.value = false
+}
+
+function selectAgent(agent: any) {
+  agentSheetValue.value = agent._id
+  if (agentCallback) agentCallback(agent)
+  showAgentSheet.value = false
+}
+
+/* S-10 价格预警 */
+function checkPriceWarning(receivedAmount: number, onConfirm: () => void) {
+  if (sale.value?.floor_price && receivedAmount < sale.value.floor_price) {
+    priceWarningReceived.value = receivedAmount
+    priceWarningCallback = onConfirm
+    showPriceWarning.value = true
+    return true
+  }
+  return false
+}
+
+function confirmPriceWarning() {
+  showPriceWarning.value = false
+  if (priceWarningCallback) priceWarningCallback()
 }
 
 onLoad((options: any) => {
@@ -756,5 +1048,261 @@ onLoad((options: any) => {
   }
 
   &[disabled] { opacity: 0.5; }
+}
+
+/* ==================== SHEET FORM (S-6, S-7) ==================== */
+.sheet-form {
+  padding-bottom: 20px;
+}
+
+.sheet-field {
+  margin-bottom: 16px;
+}
+
+.sheet-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  margin-bottom: 8px;
+  display: block;
+}
+
+.sheet-input {
+  width: 100%;
+  height: 44px;
+  border: 1.5px solid var(--text-4);
+  border-radius: var(--radius-date);
+  padding: 0 14px;
+  font-size: 15px;
+  color: var(--text-1);
+  background: var(--bg);
+  transition: border-color 0.2s;
+  &:focus { border-color: var(--primary); }
+  &[disabled] { opacity: 0.6; background: var(--card-dim); }
+}
+
+.sheet-select {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 44px;
+  border: 1.5px solid var(--text-4);
+  border-radius: var(--radius-date);
+  padding: 0 14px;
+  background: var(--bg);
+  font-size: 14px;
+}
+
+.sheet-options {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sheet-option {
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  background: var(--card-dim);
+  font-size: 12px;
+  color: var(--text-2);
+  transition: transform 0.12s ease;
+  &:active { transform: scale(0.94); }
+
+  &--active {
+    background: var(--primary);
+    color: #fff;
+  }
+}
+
+.sheet-helper {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 6px;
+  display: block;
+}
+
+.sheet-toggle {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+
+  &__item {
+    flex: 1;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-btn);
+    font-size: 13px;
+    font-weight: 600;
+    background: var(--card-dim);
+    color: var(--text-2);
+    transition: all 0.15s ease;
+    &:active { transform: scale(0.94); }
+
+    &--active {
+      background: var(--primary);
+      color: #fff;
+    }
+  }
+}
+
+.sheet-btn {
+  width: 100%;
+  height: 48px;
+  border-radius: var(--radius-btn);
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  border: none;
+  color: #fff;
+  margin-top: 20px;
+  transition: all 0.12s ease;
+  &:active { transform: scale(0.97); opacity: 0.9; }
+  &[disabled] { opacity: 0.5; }
+
+  &--red { background: var(--red); }
+  &--primary { background: var(--primary); }
+}
+
+/* ==================== PLATFORM GRID (S-8) ==================== */
+.platform-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  padding-bottom: 20px;
+
+  &__item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 16px 8px;
+    border-radius: var(--radius-card);
+    background: var(--bg);
+    transition: all 0.15s ease;
+    &:active { transform: scale(0.94); }
+
+    &--active {
+      background: var(--primary-soft);
+      border: 1.5px solid var(--primary);
+    }
+  }
+
+  &__icon {
+    font-family: 'Material Icons Round';
+    font-size: 28px;
+    color: var(--text-2);
+    .platform-grid__item--active & { color: var(--primary); }
+  }
+
+  &__label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-1);
+  }
+}
+
+/* ==================== AGENT SELECT LIST (S-9) ==================== */
+.agent-select-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 20px;
+}
+
+.agent-select-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-row);
+  background: var(--bg);
+  transition: all 0.15s ease;
+  &:active { transform: scale(0.975); }
+
+  &--active {
+    background: var(--primary-soft);
+    border: 1.5px solid var(--primary);
+  }
+}
+
+.agent-select-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), var(--amber));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.agent-select-info { flex: 1; min-width: 0; }
+
+.agent-select-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+  display: block;
+}
+
+.agent-select-contact {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 2px;
+  display: block;
+}
+
+/* ==================== PRICE WARNING (S-10) ==================== */
+.price-warn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0 4px;
+
+  &__icon {
+    font-family: 'Material Icons Round';
+    font-size: 40px;
+    color: var(--amber);
+    margin-bottom: 8px;
+  }
+
+  &__msg {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-1);
+    margin-bottom: 16px;
+  }
+
+  &__compare {
+    width: 100%;
+    background: var(--bg);
+    border-radius: var(--radius-date);
+    padding: 12px 16px;
+  }
+
+  &__row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    &:not(:last-child) { border-bottom: 1px solid var(--card-dim); }
+  }
+
+  &__label {
+    font-size: 13px;
+    color: var(--text-3);
+  }
+
+  &__val {
+    font-family: var(--font-display);
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-1);
+
+    &--red { color: var(--red); }
+  }
 }
 </style>

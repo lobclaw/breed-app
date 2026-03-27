@@ -57,6 +57,13 @@
 			}
 		},
 		{
+			"path": "pages/record/index",
+			"style": {
+				"navigationBarTitleText": "全部记录类型",
+				"navigationStyle": "custom"
+			}
+		},
+		{
 			"path": "pages/record/breeding",
 			"style": {
 				"navigationBarTitleText": "繁育记录",
@@ -67,6 +74,55 @@
 			"path": "pages/record/health",
 			"style": {
 				"navigationBarTitleText": "健康记录",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/record/heat-observation",
+			"style": {
+				"navigationBarTitleText": "发情观察",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/record/prelabor-monitor",
+			"style": {
+				"navigationBarTitleText": "临产监测",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/record/breeding-detail",
+			"style": {
+				"navigationBarTitleText": "繁育记录详情",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/record/health-detail",
+			"style": {
+				"navigationBarTitleText": "健康记录详情",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/record/medication-detail",
+			"style": {
+				"navigationBarTitleText": "用药任务详情",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/finance/expense-detail",
+			"style": {
+				"navigationBarTitleText": "支出详情",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/finance/income-detail",
+			"style": {
+				"navigationBarTitleText": "收入详情",
 				"navigationStyle": "custom"
 			}
 		},
@@ -154,6 +210,42 @@
 			"path": "pages/profile/notifications",
 			"style": {
 				"navigationBarTitleText": "通知设置"
+			}
+		},
+		{
+			"path": "pages/profile/defaults",
+			"style": {
+				"navigationBarTitleText": "默认参数"
+			}
+		},
+		{
+			"path": "pages/profile/care-rules",
+			"style": {
+				"navigationBarTitleText": "护理规则"
+			}
+		},
+		{
+			"path": "pages/profile/backup",
+			"style": {
+				"navigationBarTitleText": "数据备份"
+			}
+		},
+		{
+			"path": "pages/profile/recycle",
+			"style": {
+				"navigationBarTitleText": "回收站"
+			}
+		},
+		{
+			"path": "pages/profile/about",
+			"style": {
+				"navigationBarTitleText": "关于"
+			}
+		},
+		{
+			"path": "pages/profile/expense-categories",
+			"style": {
+				"navigationBarTitleText": "支出分类管理"
 			}
 		},
 		{
