@@ -245,9 +245,9 @@ async function loadDateCounts() {
   }
 }
 
-function onDateSelect(ts: number) {
+async function onDateSelect(ts: number) {
   selectedDate.value = ts
-  loadCards()
+  await loadCards()
 }
 
 function toggleCalendar() {
@@ -256,8 +256,8 @@ function toggleCalendar() {
 
 async function onComplete(taskId: string) {
   await doCompleteTask(taskId)
-  loadCards()
-  loadDateCounts()
+  await loadCards()
+  await loadDateCounts()
 }
 
 function onPostpone(taskId: string) {
@@ -274,14 +274,14 @@ function onPostponeDateChange(e: any) {
 async function doPostpone() {
   await doPostponeTask(postponeTaskId.value, postponeDate.value, postponeReason.value || null)
   showPostponeModal.value = false
-  loadCards()
-  loadDateCounts()
+  await loadCards()
+  await loadDateCounts()
 }
 
 async function onBatchComplete(taskIds: string[]) {
   await doBatchComplete(taskIds)
-  loadCards()
-  loadDateCounts()
+  await loadCards()
+  await loadDateCounts()
 }
 
 function onAction(payload: { type: string; data: any }) {
@@ -295,8 +295,8 @@ async function confirmQuickComplete() {
   await doCompleteTask(quickCompleteTask.value._id)
   showQuickComplete.value = false
   quickCompleteNotes.value = ''
-  loadCards()
-  loadDateCounts()
+  await loadCards()
+  await loadDateCounts()
 }
 
 onShow(async () => {
@@ -310,8 +310,8 @@ onShow(async () => {
     return
   }
   selectedDate.value = startOfDay(Date.now())
-  loadCards()
-  loadDateCounts()
+  await loadCards()
+  await loadDateCounts()
 })
 </script>
 

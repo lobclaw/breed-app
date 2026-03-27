@@ -40,7 +40,7 @@ async function create() {
     await createFamily(familyName.value.trim())
     uni.showToast({ title: '创建成功', icon: 'success' })
     setTimeout(() => {
-      uni.switchTab({ url: '/pages/home/index' })
+      uni.reLaunch({ url: '/pages/home/index' })
     }, 1000)
   } catch (e: any) {
     uni.showToast({ title: e.message || '创建失败', icon: 'none' })

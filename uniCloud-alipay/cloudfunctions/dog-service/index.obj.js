@@ -57,7 +57,7 @@ module.exports = {
       // 活跃用药任务
       db.collection('medication_tasks').where({
         family_id: this.familyId,
-        status: 'active',
+        status: '进行中',
       }).get(),
       // 未断奶的窝
       db.collection('litters').where({

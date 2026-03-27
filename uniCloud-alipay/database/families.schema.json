@@ -31,7 +31,13 @@
           },
           "role": {
             "bsonType": "string",
-            "description": "成员角色（owner/member/viewer）"
+            "enum": ["creator", "admin", "helper"],
+            "description": "成员角色"
+          },
+          "status": {
+            "bsonType": "string",
+            "enum": ["active", "removed"],
+            "description": "成员状态"
           },
           "joined_at": {
             "bsonType": "number",

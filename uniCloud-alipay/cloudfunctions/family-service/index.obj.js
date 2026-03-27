@@ -19,7 +19,7 @@ const DEFAULT_SETTINGS = {
 module.exports = {
   _before: async function() {
     // createFamily 和 joinFamily 允许无家庭用户调用
-    const skipFamilyCheck = ['createFamily', 'joinFamily']
+    const skipFamilyCheck = ['createFamily', 'joinFamily', 'getFamilyInfo']
     const { uid, familyId, role } = await verifyAndGetFamily(this.getUniIdToken(), this.getClientInfo())
     this.uid = uid
     this.familyId = familyId
@@ -76,6 +76,11 @@ module.exports = {
    * 获取当前用户的家庭信息
    */
   async getFamilyInfo() {
+    // 用户可能还没有家庭（登录后首次检查）
+    if (!this.familyId) {
+      return { data: null }
+    }
+
     const { data } = await db.collection('families')
       .doc(this.familyId)
       .get()

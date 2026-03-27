@@ -73,9 +73,13 @@ export function useAuth() {
     try {
       const result = await cloudCall<{ data: Family }>('family-service', 'getFamilyInfo')
       currentFamily.value = result.data
-    } catch {
-      // 用户可能还没有家庭
+    } catch (e: any) {
       currentFamily.value = null
+      // 区分"没有家庭"和网络错误
+      const code = e.code || e.errCode
+      if (code && code !== 'NO_FAMILY') {
+        console.warn('加载家庭信息失败:', e.message || e)
+      }
     }
   }
 

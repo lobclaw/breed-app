@@ -60,7 +60,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onShow } from '@dcloudio/uni-app'
+import { ref, computed } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import DogAvatar from '@/components/common/DogAvatar.vue'
 import { useCloudCall } from '@/composables/useCloudCall'
 import type { DogWithStatus, DeriveStatusType } from '@/types/dog'
