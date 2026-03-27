@@ -362,21 +362,70 @@ const dayCounts = ref<Record<number, number>>({})
 // 选中日期（0点 timestamp）
 const selectedDate = ref(startOfDay(Date.now()))
 
-// 快速完成
+// H-3: 快速完成
 const showQuickComplete = ref(false)
 const quickCompleteTask = ref<any>(null)
 const quickCompleteNotes = ref('')
+const quickCompleteDate = ref(Date.now())
 
-// 推迟弹窗
+const quickCompleteDateStr = computed(() => {
+  const d = new Date(quickCompleteDate.value)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+})
+
+function onQuickCompleteDateChange(e: any) {
+  quickCompleteDate.value = new Date(e.detail.value + 'T00:00:00+08:00').getTime()
+}
+
+// H-4: 推迟弹窗
 const showPostponeModal = ref(false)
 const postponeTaskId = ref('')
-const postponeDate = ref(Date.now() + 86400000) // 默认明天
+const postponeDate = ref(Date.now() + 86400000)
 const postponeReason = ref('')
+const postponeQuick = ref('tomorrow')
 
 const postponeDateStr = computed(() => {
   const d = new Date(postponeDate.value)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 })
+
+function setPostponeQuick(option: string) {
+  postponeQuick.value = option
+  const now = new Date()
+  now.setHours(0, 0, 0, 0)
+  if (option === 'tomorrow') now.setDate(now.getDate() + 1)
+  else if (option === 'dayAfter') now.setDate(now.getDate() + 2)
+  else if (option === 'nextWeek') now.setDate(now.getDate() + 7)
+  postponeDate.value = now.getTime()
+}
+
+// H-5: 批量完成
+const showBatchComplete = ref(false)
+const batchCompleteTitle = ref('批量完成')
+const batchDogList = ref<Array<{ id: string; name: string; completed: boolean }>>([])
+const batchSelected = reactive<Record<string, boolean>>({})
+let batchTaskIds: string[] = []
+
+const batchSelectedCount = computed(() => Object.values(batchSelected).filter(Boolean).length)
+const isAllSelected = computed(() => {
+  const uncompleted = batchDogList.value.filter(d => !d.completed)
+  return uncompleted.length > 0 && uncompleted.every(d => batchSelected[d.id])
+})
+
+function toggleSelectAll() {
+  const uncompleted = batchDogList.value.filter(d => !d.completed)
+  if (isAllSelected.value) {
+    uncompleted.forEach(d => { batchSelected[d.id] = false })
+  } else {
+    uncompleted.forEach(d => { batchSelected[d.id] = true })
+  }
+}
+
+function toggleBatchDog(id: string) {
+  const dog = batchDogList.value.find(d => d.id === id)
+  if (dog?.completed) return
+  batchSelected[id] = !batchSelected[id]
+}
 
 function startOfDay(ts: number) {
   const d = new Date(ts)
@@ -443,7 +492,15 @@ function toggleCalendar() {
   // 月历展开功能后续迭代
 }
 
-async function onComplete(taskId: string) {
+async function onComplete(taskId: string, card?: any) {
+  // 如果卡片有信息，打开快速完成 Sheet (H-3)
+  if (card) {
+    quickCompleteTask.value = card
+    quickCompleteNotes.value = ''
+    quickCompleteDate.value = startOfDay(Date.now())
+    showQuickComplete.value = true
+    return
+  }
   await doCompleteTask(taskId)
   await loadCards()
   await loadDateCounts()
@@ -453,11 +510,13 @@ function onPostpone(taskId: string) {
   postponeTaskId.value = taskId
   postponeDate.value = Date.now() + 86400000
   postponeReason.value = ''
+  postponeQuick.value = 'tomorrow'
   showPostponeModal.value = true
 }
 
 function onPostponeDateChange(e: any) {
   postponeDate.value = new Date(e.detail.value + 'T00:00:00+08:00').getTime()
+  postponeQuick.value = ''
 }
 
 async function doPostpone() {
@@ -467,7 +526,22 @@ async function doPostpone() {
   await loadDateCounts()
 }
 
-async function onBatchComplete(taskIds: string[]) {
+async function onBatchComplete(payload: any) {
+  // 打开批量完成 Sheet (H-5)
+  if (payload && payload.dogs) {
+    batchCompleteTitle.value = payload.title || '批量完成'
+    batchDogList.value = payload.dogs
+    batchTaskIds = payload.taskIds || []
+    // 重置选择状态
+    Object.keys(batchSelected).forEach(k => delete batchSelected[k])
+    payload.dogs.forEach((d: any) => {
+      if (!d.completed) batchSelected[d.id] = false
+    })
+    showBatchComplete.value = true
+    return
+  }
+  // 兼容旧数组方式
+  const taskIds = Array.isArray(payload) ? payload : []
   await doBatchComplete(taskIds)
   await loadCards()
   await loadDateCounts()
@@ -481,9 +555,32 @@ function onAction(payload: { type: string; data: any }) {
 
 async function confirmQuickComplete() {
   if (!quickCompleteTask.value) return
-  await doCompleteTask(quickCompleteTask.value._id)
+  await doCompleteTask(
+    quickCompleteTask.value._id || quickCompleteTask.value.id,
+    quickCompleteDate.value,
+    quickCompleteNotes.value || null,
+  )
   showQuickComplete.value = false
   quickCompleteNotes.value = ''
+  quickCompleteTask.value = null
+  await loadCards()
+  await loadDateCounts()
+}
+
+async function confirmBatchComplete() {
+  if (batchSelectedCount.value === 0) return
+  const selectedIds = Object.entries(batchSelected)
+    .filter(([, v]) => v)
+    .map(([k]) => k)
+  // 映射回 taskIds
+  const taskIdsToComplete = batchTaskIds.length > 0
+    ? batchTaskIds.filter((_id, idx) => {
+        const dog = batchDogList.value[idx]
+        return dog && selectedIds.includes(dog.id)
+      })
+    : selectedIds
+  await doBatchComplete(taskIdsToComplete)
+  showBatchComplete.value = false
   await loadCards()
   await loadDateCounts()
 }
