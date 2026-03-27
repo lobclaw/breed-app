@@ -294,6 +294,61 @@
         </button>
       </view>
     </view>
+
+    <!-- ==================== R-14: 用药方案选择器 Sheet ==================== -->
+    <BSheet v-model:visible="showProtocolPicker" title="选择用药方案">
+      <view class="protocol-picker">
+        <view v-if="protocols.length === 0" class="protocol-picker__empty">
+          <text class="material-icons-round" style="font-size: 36px; color: var(--text-4);">medication</text>
+          <text class="protocol-picker__empty-text">暂无已保存的方案</text>
+        </view>
+        <view v-else class="protocol-picker__list">
+          <view
+            v-for="protocol in protocols"
+            :key="protocol._id"
+            class="protocol-picker__item"
+            @click="applyProtocol(protocol)"
+          >
+            <view class="protocol-picker__item-icon">
+              <text class="material-icons-round" style="font-size: 18px; color: var(--plum);">medication</text>
+            </view>
+            <view class="protocol-picker__item-body">
+              <text class="protocol-picker__item-name">{{ protocol.name }}</text>
+              <text class="protocol-picker__item-detail">
+                {{ protocol.drug_name }} · {{ protocol.dosage }} · {{ protocol.duration }}天
+              </text>
+            </view>
+            <text class="material-icons-round" style="font-size: 18px; color: var(--text-4);">chevron_right</text>
+          </view>
+        </view>
+        <view class="protocol-picker__footer">
+          <view class="protocol-picker__new-link" @click="goToNewProtocol">
+            <text class="material-icons-round" style="font-size: 16px; color: var(--primary);">add</text>
+            <text class="protocol-picker__new-text">新建方案</text>
+          </view>
+        </view>
+      </view>
+    </BSheet>
+
+    <!-- ==================== R-15: 保存为方案确认 Modal ==================== -->
+    <BModal
+      v-model:visible="showSaveProtocol"
+      title="保存为用药方案"
+      confirm-text="保存"
+      @confirm="doSaveProtocol"
+    >
+      <view class="save-protocol">
+        <text class="save-protocol__desc">将本次用药记录保存为方案，方便下次快速填写。</text>
+        <view class="save-protocol__field">
+          <text class="save-protocol__label">方案名称</text>
+          <input
+            v-model="protocolName"
+            class="save-protocol__input"
+            placeholder="如：驱虫常规方案"
+          />
+        </view>
+      </view>
+    </BModal>
   </view>
 </template>
 
@@ -302,6 +357,8 @@ import { ref, reactive, computed, watch } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
+import BSheet from '@/components/layout/BSheet.vue'
+import BModal from '@/components/layout/BModal.vue'
 
 let dogId = ''
 
@@ -432,11 +489,85 @@ async function submit() {
     })
 
     if (res) {
-      uni.navigateBack()
+      // 如果是驱虫类型且有药品信息，提示保存为方案
+      if (form.type === 'deworming' && details.drug_name) {
+        offerSaveAsProtocol()
+      } else {
+        uni.navigateBack()
+      }
     }
   } finally {
     submitting.value = false
   }
+}
+
+// ==================== R-14: 用药方案选择器 ====================
+
+interface MedicationProtocol {
+  _id: string
+  name: string
+  drug_name: string
+  dosage: string
+  duration: number
+  notes?: string
+}
+
+const showProtocolPicker = ref(false)
+const protocols = ref<MedicationProtocol[]>([])
+
+const { run: fetchProtocols } = useCloudCall<{ data: MedicationProtocol[] }>('health-service', 'getMedicationProtocols')
+
+async function openProtocolPicker() {
+  const res = await fetchProtocols()
+  if (res?.data) {
+    protocols.value = res.data
+  }
+  showProtocolPicker.value = true
+}
+
+function applyProtocol(protocol: MedicationProtocol) {
+  // 将方案数据填入表单
+  details.drug_name = protocol.drug_name
+  details.dosage = protocol.dosage
+  details.duration = protocol.duration
+  if (protocol.notes) {
+    form.notes = protocol.notes
+  }
+  showProtocolPicker.value = false
+}
+
+function goToNewProtocol() {
+  showProtocolPicker.value = false
+  uni.navigateTo({ url: '/pages/health/medication-protocols' })
+}
+
+// ==================== R-15: 保存为用药方案 ====================
+
+const showSaveProtocol = ref(false)
+const protocolName = ref('')
+
+const { run: saveProtocol } = useCloudCall('health-service', 'saveMedicationProtocol', {
+  successMessage: '方案已保存',
+})
+
+function offerSaveAsProtocol() {
+  protocolName.value = ''
+  showSaveProtocol.value = true
+}
+
+async function doSaveProtocol() {
+  if (!protocolName.value.trim()) {
+    uni.showToast({ title: '请输入方案名称', icon: 'none' })
+    return
+  }
+  await saveProtocol({
+    name: protocolName.value.trim(),
+    drug_name: details.drug_name || '',
+    dosage: details.dosage || '',
+    duration: details.duration || 0,
+    notes: form.notes || null,
+  })
+  showSaveProtocol.value = false
 }
 
 onLoad((query) => {
@@ -692,5 +823,115 @@ onLoad((query) => {
   &[disabled] {
     opacity: 0.4;
   }
+}
+
+/* ==================== R-14: 用药方案选择器 ==================== */
+.protocol-picker {
+  padding-bottom: 20px;
+}
+.protocol-picker__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 30px 0;
+}
+.protocol-picker__empty-text {
+  font-size: 13px;
+  color: var(--text-3);
+}
+.protocol-picker__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-group-gap);
+}
+.protocol-picker__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--bg);
+  border-radius: var(--radius-row);
+  transition: all 0.12s ease;
+  &:active { transform: scale(0.98); opacity: 0.85; }
+}
+.protocol-picker__item-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-icon);
+  background: var(--icon-plum);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.protocol-picker__item-body {
+  flex: 1;
+  min-width: 0;
+}
+.protocol-picker__item-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+  display: block;
+}
+.protocol-picker__item-detail {
+  font-size: 12px;
+  color: var(--text-3);
+  display: block;
+  margin-top: 2px;
+}
+.protocol-picker__footer {
+  margin-top: 16px;
+  display: flex;
+  justify-content: center;
+}
+.protocol-picker__new-link {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px;
+  border-radius: var(--radius-btn);
+  background: var(--primary-soft);
+  transition: all 0.12s ease;
+  &:active { transform: scale(0.94); opacity: 0.85; }
+}
+.protocol-picker__new-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+/* ==================== R-15: 保存为方案 Modal ==================== */
+.save-protocol {
+  margin-top: 4px;
+}
+.save-protocol__desc {
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 1.5;
+  display: block;
+  text-align: center;
+  margin-bottom: 16px;
+}
+.save-protocol__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.save-protocol__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.save-protocol__input {
+  height: 44px;
+  border-radius: 14px;
+  border: 1px solid var(--text-4);
+  background: var(--bg);
+  padding: 0 14px;
+  font-size: 14px;
+  color: var(--text-1);
+  font-family: var(--font-body);
 }
 </style>

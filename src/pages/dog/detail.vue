@@ -62,7 +62,7 @@
         <text class="dog-detail__stat-value">{{ dog.birth_date ? formatAge(dog.birth_date) : '未知' }}</text>
         <text class="dog-detail__stat-label">年龄</text>
       </view>
-      <view class="dog-detail__stat-item">
+      <view class="dog-detail__stat-item" @click="openWeightChart">
         <text class="material-icons-round dog-detail__stat-icon">monitor_weight</text>
         <text class="dog-detail__stat-value">{{ dog.latest_weight ? formatWeight(dog.latest_weight) : '—' }}</text>
         <text class="dog-detail__stat-label">体重</text>
@@ -224,6 +224,18 @@
 
       <!-- ========== 健康 Tab ========== -->
       <view v-if="activeTab === 'health'" class="dog-detail__pane">
+        <!-- 体重快捷操作 -->
+        <view class="dog-detail__weight-actions">
+          <view class="dog-detail__weight-btn" @click="openWeightEntry">
+            <text class="material-icons-round" style="font-size: 16px; color: var(--blue);">add</text>
+            <text class="dog-detail__weight-btn-text">记录体重</text>
+          </view>
+          <view class="dog-detail__weight-btn" @click="openWeightChart">
+            <text class="material-icons-round" style="font-size: 16px; color: var(--teal);">show_chart</text>
+            <text class="dog-detail__weight-btn-text">体重趋势</text>
+          </view>
+        </view>
+
         <BEmpty
           v-if="healthRecords.length === 0"
           icon="healing"
@@ -493,11 +505,139 @@
       :content="`确认删除「${dog.name || '未命名'}」？删除后将移入回收站。`"
       @confirm="doDelete"
     />
+
+    <!-- ==================== D-20: 单犬体重录入 Sheet ==================== -->
+    <BSheet v-model:visible="showWeightEntry" title="记录体重">
+      <view class="weight-entry">
+        <view class="weight-entry__dog-row">
+          <view class="weight-entry__dog-avatar">
+            <text class="material-icons-round" style="font-size: 16px; color: #fff;">pets</text>
+          </view>
+          <view class="weight-entry__dog-info">
+            <text class="weight-entry__dog-name">{{ dog.name || '未命名' }}</text>
+            <text class="weight-entry__last-weight">
+              上次体重：{{ dog.latest_weight ? formatWeight(dog.latest_weight) : '暂无记录' }}
+            </text>
+          </view>
+        </view>
+
+        <view class="weight-entry__form">
+          <view class="weight-entry__field">
+            <text class="weight-entry__label">体重 (kg)</text>
+            <view class="weight-entry__input-wrap">
+              <input
+                v-model="weightInput"
+                class="weight-entry__input"
+                type="digit"
+                placeholder="请输入体重"
+              />
+              <text class="weight-entry__unit">kg</text>
+            </view>
+          </view>
+
+          <view class="weight-entry__field">
+            <text class="weight-entry__label">日期</text>
+            <picker mode="date" :value="weightDateStr" @change="weightDateStr = $event.detail.value">
+              <view class="weight-entry__date-picker">
+                <text class="weight-entry__date-text">{{ weightDateStr }}</text>
+                <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
+              </view>
+            </picker>
+          </view>
+
+          <view class="weight-entry__field">
+            <text class="weight-entry__label">备注（选填）</text>
+            <input
+              v-model="weightNotes"
+              class="weight-entry__notes-input"
+              placeholder="如：饭前/饭后..."
+            />
+          </view>
+        </view>
+
+        <view class="weight-entry__actions">
+          <view class="weight-entry__save-btn" @click="saveWeight">
+            <text class="weight-entry__save-text">保存</text>
+          </view>
+        </view>
+      </view>
+    </BSheet>
+
+    <!-- ==================== D-21: 体重趋势详情 Sheet ==================== -->
+    <BSheet v-model:visible="showWeightChart" title="体重趋势" height="75vh">
+      <view class="weight-chart">
+        <!-- 简易趋势图占位 -->
+        <view class="weight-chart__graph">
+          <view v-if="weightHistory.length < 2" class="weight-chart__graph-empty">
+            <text class="material-icons-round" style="font-size: 40px; color: var(--text-4);">show_chart</text>
+            <text class="weight-chart__graph-empty-text">至少需要2条记录才能显示趋势</text>
+          </view>
+          <view v-else class="weight-chart__svg-area">
+            <!-- SVG 折线图 -->
+            <view class="weight-chart__axis">
+              <text class="weight-chart__axis-label">{{ weightChartMax }}kg</text>
+              <view class="weight-chart__axis-line" />
+              <text class="weight-chart__axis-label">{{ weightChartMin }}kg</text>
+            </view>
+            <view class="weight-chart__bars">
+              <view
+                v-for="(w, idx) in weightHistory.slice(0, 10)"
+                :key="idx"
+                class="weight-chart__bar-col"
+              >
+                <view
+                  class="weight-chart__bar"
+                  :style="{ height: weightBarHeight(w.weight) + '%' }"
+                />
+                <text class="weight-chart__bar-label">{{ formatWeightKg(w.weight) }}</text>
+                <text class="weight-chart__bar-date">{{ formatShortDate(w.date) }}</text>
+              </view>
+            </view>
+          </view>
+        </view>
+
+        <!-- 增长率 -->
+        <view v-if="growthRate !== null" class="weight-chart__growth">
+          <text class="material-icons-round" style="font-size: 16px;" :style="{ color: growthRate >= 0 ? 'var(--green)' : 'var(--red)' }">
+            {{ growthRate >= 0 ? 'trending_up' : 'trending_down' }}
+          </text>
+          <text class="weight-chart__growth-text">
+            近期增长率：{{ growthRate >= 0 ? '+' : '' }}{{ growthRate.toFixed(1) }}%
+          </text>
+        </view>
+
+        <!-- 最近10条记录 -->
+        <view class="weight-chart__section-title">
+          <text>最近记录</text>
+        </view>
+        <view v-if="weightHistory.length === 0" class="weight-chart__empty-list">
+          <text class="weight-chart__empty-text">暂无体重记录</text>
+        </view>
+        <view v-else class="weight-chart__list">
+          <view
+            v-for="(record, idx) in weightHistory.slice(0, 10)"
+            :key="idx"
+            class="weight-chart__record"
+          >
+            <view class="weight-chart__rec-icon">
+              <text class="material-icons-round" style="font-size: 16px; color: var(--blue);">monitor_weight</text>
+            </view>
+            <view class="weight-chart__rec-body">
+              <text class="weight-chart__rec-weight">{{ formatWeight(record.weight) }}</text>
+              <text class="weight-chart__rec-date">{{ formatDate(record.date) }}</text>
+            </view>
+            <text v-if="idx > 0" class="weight-chart__rec-diff" :style="{ color: record.weight >= weightHistory[idx - 1].weight ? 'var(--green)' : 'var(--red)' }">
+              {{ record.weight >= weightHistory[idx - 1].weight ? '+' : '' }}{{ formatWeight(record.weight - weightHistory[idx - 1].weight) }}
+            </text>
+          </view>
+        </view>
+      </view>
+    </BSheet>
   </view>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
@@ -745,6 +885,105 @@ async function doRecovery() {
   showRecoveryModal.value = false
   await loadData()
 }
+
+// ==================== D-20: 单犬体重录入 ====================
+
+const showWeightEntry = ref(false)
+const weightInput = ref('')
+const weightDateStr = ref(todayStr())
+const weightNotes = ref('')
+
+const { run: addWeightRecord } = useCloudCall('health-service', 'addWeightRecord', {
+  successMessage: '体重已保存',
+  showLoading: true,
+  loadingText: '保存中...',
+})
+
+function openWeightEntry() {
+  weightInput.value = ''
+  weightDateStr.value = todayStr()
+  weightNotes.value = ''
+  showWeightEntry.value = true
+}
+
+async function saveWeight() {
+  const kg = parseFloat(weightInput.value)
+  if (!kg || kg <= 0) {
+    uni.showToast({ title: '请输入有效体重', icon: 'none' })
+    return
+  }
+  // 转换为克存储
+  const grams = Math.round(kg * 1000)
+  const dateTs = new Date(weightDateStr.value + 'T00:00:00+08:00').getTime()
+  const res = await addWeightRecord({
+    dog_id: dogId,
+    weight: grams,
+    date: dateTs,
+    notes: weightNotes.value || null,
+  })
+  if (res) {
+    showWeightEntry.value = false
+    await loadData()
+    await loadWeightHistory()
+  }
+}
+
+// ==================== D-21: 体重趋势详情 ====================
+
+const showWeightChart = ref(false)
+const weightHistory = ref<Array<{ weight: number; date: number; notes?: string }>>([])
+
+const { run: fetchWeightHistory } = useCloudCall<{ data: Array<{ weight: number; date: number; notes?: string }> }>('health-service', 'getWeightHistory')
+
+async function loadWeightHistory() {
+  const res = await fetchWeightHistory(dogId)
+  if (res?.data) {
+    weightHistory.value = res.data
+  }
+}
+
+function openWeightChart() {
+  loadWeightHistory()
+  showWeightChart.value = true
+}
+
+function formatWeightKg(grams: number) {
+  return (grams / 1000).toFixed(1)
+}
+
+function formatShortDate(ts: number) {
+  const d = new Date(ts)
+  return `${d.getMonth() + 1}/${d.getDate()}`
+}
+
+const weightChartMax = computed(() => {
+  if (weightHistory.value.length === 0) return 0
+  const max = Math.max(...weightHistory.value.slice(0, 10).map(w => w.weight))
+  return (max / 1000).toFixed(1)
+})
+
+const weightChartMin = computed(() => {
+  if (weightHistory.value.length === 0) return 0
+  const min = Math.min(...weightHistory.value.slice(0, 10).map(w => w.weight))
+  return (min / 1000).toFixed(1)
+})
+
+function weightBarHeight(grams: number) {
+  const records = weightHistory.value.slice(0, 10)
+  const max = Math.max(...records.map(w => w.weight))
+  const min = Math.min(...records.map(w => w.weight))
+  if (max === min) return 50
+  return 20 + ((grams - min) / (max - min)) * 60
+}
+
+const growthRate = computed(() => {
+  const records = weightHistory.value
+  if (records.length < 2) return null
+  const latest = records[0].weight
+  const previous = records[1].weight
+  if (previous === 0) return null
+  return ((latest - previous) / previous) * 100
+})
 
 // ==================== D-14: 删除犬只 ====================
 
@@ -1629,5 +1868,306 @@ onLoad((query) => {
 .sheet-form__btn-text {
   font-size: 15px;
   font-weight: 600;
+}
+
+/* ==================== 体重快捷操作 ==================== */
+.dog-detail__weight-actions {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.dog-detail__weight-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 0;
+  background: var(--card);
+  border-radius: var(--radius-row);
+  box-shadow: var(--shadow);
+  transition: all 0.12s ease;
+  &:active { transform: scale(0.94); opacity: 0.85; }
+}
+.dog-detail__weight-btn-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+/* ==================== D-20: 体重录入 Sheet ==================== */
+.weight-entry {
+  padding-bottom: 20px;
+}
+.weight-entry__dog-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.weight-entry__dog-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), var(--amber));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.weight-entry__dog-info { flex: 1; }
+.weight-entry__dog-name {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-1);
+  display: block;
+}
+.weight-entry__last-weight {
+  font-size: 12px;
+  color: var(--text-3);
+  display: block;
+  margin-top: 2px;
+}
+.weight-entry__form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.weight-entry__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.weight-entry__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.weight-entry__input-wrap {
+  display: flex;
+  align-items: center;
+  height: 48px;
+  border-radius: 14px;
+  border: 1px solid var(--text-4);
+  background: var(--card);
+  padding: 0 16px;
+}
+.weight-entry__input {
+  flex: 1;
+  font-size: 16px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--text-1);
+  border: none;
+  background: transparent;
+  outline: none;
+}
+.weight-entry__unit {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+.weight-entry__date-picker {
+  height: 48px;
+  border-radius: 14px;
+  border: 1px solid var(--text-4);
+  background: var(--card);
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.weight-entry__date-text {
+  font-size: 14px;
+  color: var(--text-1);
+}
+.weight-entry__notes-input {
+  height: 48px;
+  border-radius: 14px;
+  border: 1px solid var(--text-4);
+  background: var(--card);
+  padding: 0 16px;
+  font-size: 14px;
+  color: var(--text-1);
+}
+.weight-entry__actions {
+  margin-top: 20px;
+}
+.weight-entry__save-btn {
+  height: 50px;
+  border-radius: var(--radius-btn);
+  background: var(--primary);
+  box-shadow: var(--shadow-fab);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s ease;
+  &:active { transform: scale(0.94); opacity: 0.85; }
+}
+.weight-entry__save-text {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+}
+
+/* ==================== D-21: 体重趋势详情 Sheet ==================== */
+.weight-chart {
+  padding-bottom: 20px;
+}
+.weight-chart__graph {
+  background: var(--bg);
+  border-radius: var(--radius-card);
+  padding: 16px;
+  margin-bottom: 16px;
+  min-height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.weight-chart__graph-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.weight-chart__graph-empty-text {
+  font-size: 13px;
+  color: var(--text-3);
+}
+.weight-chart__svg-area {
+  width: 100%;
+  display: flex;
+  gap: 12px;
+}
+.weight-chart__axis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-end;
+  width: 40px;
+  flex-shrink: 0;
+}
+.weight-chart__axis-label {
+  font-size: 10px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: var(--text-3);
+}
+.weight-chart__axis-line {
+  flex: 1;
+  width: 1px;
+  background: var(--text-4);
+  margin: 4px 0;
+}
+.weight-chart__bars {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 120px;
+}
+.weight-chart__bar-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  height: 100%;
+  justify-content: flex-end;
+}
+.weight-chart__bar {
+  width: 100%;
+  max-width: 20px;
+  background: linear-gradient(180deg, var(--primary), var(--rose));
+  border-radius: 4px 4px 0 0;
+  min-height: 4px;
+}
+.weight-chart__bar-label {
+  font-size: 9px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--text-1);
+}
+.weight-chart__bar-date {
+  font-size: 8px;
+  color: var(--text-3);
+}
+.weight-chart__growth {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  background: var(--card);
+  border-radius: var(--radius-row);
+  box-shadow: var(--shadow);
+  margin-bottom: 16px;
+}
+.weight-chart__growth-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.weight-chart__section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-2);
+  margin-bottom: 10px;
+}
+.weight-chart__empty-list {
+  padding: 20px 0;
+  text-align: center;
+}
+.weight-chart__empty-text {
+  font-size: 13px;
+  color: var(--text-3);
+}
+.weight-chart__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-group-gap);
+}
+.weight-chart__record {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--card);
+  border-radius: var(--radius-row);
+  box-shadow: var(--shadow);
+}
+.weight-chart__rec-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-icon);
+  background: var(--icon-blue);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.weight-chart__rec-body {
+  flex: 1;
+}
+.weight-chart__rec-weight {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+  display: block;
+}
+.weight-chart__rec-date {
+  font-size: 12px;
+  color: var(--text-3);
+  display: block;
+  margin-top: 2px;
+}
+.weight-chart__rec-diff {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
 }
 </style>

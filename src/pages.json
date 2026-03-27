@@ -165,6 +165,13 @@
 			}
 		},
 		{
+			"path": "pages/home/batch-process",
+			"style": {
+				"navigationBarTitleText": "批量处理",
+				"navigationStyle": "custom"
+			}
+		},
+		{
 			"path": "pages/family/setup",
 			"style": {
 				"navigationBarTitleText": "创建家庭"
