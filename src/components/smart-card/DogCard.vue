@@ -1,31 +1,41 @@
+<!--
+  DogCard — 个体犬只卡片
+  设计稿：home-v1-final.html Card 1 (bar-red/green)
+  左色条 + 渐变色晕 + 图标 + 犬名 + 状态标签 + 操作按钮
+-->
 <template>
-  <view class="dog-card" :class="`dog-card--${card.priority}`">
-    <!-- 头部：犬只名 + 状态 -->
-    <view class="dog-card__header">
-      <view class="dog-card__name-wrap">
-        <text class="dog-card__name">{{ card.dogName }}</text>
-        <text v-if="card.statusLabel" class="dog-card__status">{{ card.statusLabel }}</text>
+  <view class="card" :class="`card--${barColor}`" @click="$emit('action', { type: 'viewDog', data: { dogId: card.dogId } })">
+    <!-- 头部：图标 + 名称区 -->
+    <view class="card-header">
+      <view class="card-icon" :class="`card-icon--${barColor}`">
+        <text style="font-size: 20px;">🐩</text>
       </view>
-      <text v-if="card.priority === 'overdue'" class="dog-card__badge dog-card__badge--overdue">逾期</text>
-    </view>
-
-    <!-- 任务列表（最多3个） -->
-    <view v-for="(task, idx) in visibleTasks" :key="task._id" class="dog-card__task">
-      <view class="dog-card__task-row">
-        <text class="dog-card__task-icon" :class="taskIconClass(task)">{{ taskIcon(task) }}</text>
-        <text class="dog-card__task-title">{{ task.title }}</text>
-      </view>
-      <view class="dog-card__task-actions">
-        <button size="mini" type="primary" class="dog-card__btn" @click="$emit('complete', task._id)">完成</button>
-        <button v-if="card.priority === 'overdue'" size="mini" class="dog-card__btn dog-card__btn--secondary" @click="$emit('postpone', task._id)">推迟</button>
+      <view class="card-title-area">
+        <text class="card-name">{{ card.dogName }}</text>
+        <text class="card-sub">{{ card.breed || '马尔济斯' }}<text v-if="card.statusLabel"> · {{ card.statusLabel }}</text></text>
       </view>
     </view>
 
-    <!-- 更多任务 -->
-    <view v-if="card.tasks.length > 3" class="dog-card__more">
-      <text class="dog-card__more-text" @click="$emit('action', { type: 'viewDog', data: { dogId: card.dogId } })">
-        还有{{ card.tasks.length - 3 }}项
-      </text>
+    <!-- 状态标签 -->
+    <view v-if="card.tasks?.length" class="tags">
+      <view
+        v-for="task in visibleTasks"
+        :key="task._id"
+        class="tag"
+        :class="`tag--${taskColor(task)}`"
+      >
+        <text class="tag-text">{{ task.title }}</text>
+      </view>
+    </view>
+
+    <!-- 操作按钮 -->
+    <view class="card-actions">
+      <view class="btn btn--filled" :class="`btn--${barColor}`" @click.stop="$emit('complete', visibleTasks[0]?._id)">
+        <text class="btn-text btn-text--white">{{ mainBtnText }}</text>
+      </view>
+      <view v-if="card.priority === 'overdue'" class="btn btn--ghost" @click.stop="$emit('postpone', visibleTasks[0]?._id)">
+        <text class="btn-text btn-text--ghost">推迟</text>
+      </view>
     </view>
   </view>
 </template>
@@ -33,54 +43,97 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-const props = defineProps<{
-  card: any
-}>()
-
+const props = defineProps<{ card: any }>()
 defineEmits<{
   (e: 'complete', taskId: string): void
   (e: 'postpone', taskId: string): void
   (e: 'action', payload: { type: string; data: any }): void
 }>()
 
-const visibleTasks = computed(() => props.card.tasks.slice(0, 3))
+const visibleTasks = computed(() => (props.card.tasks || []).slice(0, 3))
 
-function taskIcon(task: any) {
-  const icons: Record<string, string> = {
-    vaccination: '💉',
-    deworming: '💊',
-    breeding_milestone: '🐾',
-    medication_daily: '💊',
-    care_group: '🏥',
-  }
-  return icons[task.type] || '📋'
-}
+const barColor = computed(() => {
+  if (props.card.priority === 'overdue') return 'red'
+  return 'green'
+})
 
-function taskIconClass(task: any) {
-  if (task.priority === 'overdue' || task.postpone_count >= 3) return 'dog-card__task-icon--overdue'
-  return ''
+const mainBtnText = computed(() => {
+  const task = visibleTasks.value[0]
+  if (!task) return '查看'
+  if (props.card.priority === 'overdue') return '去处理'
+  return '记录'
+})
+
+function taskColor(task: any) {
+  if (task.priority === 'overdue') return 'red'
+  if (task.type === 'vaccination' || task.type === 'deworming') return 'amber'
+  return 'green'
 }
 </script>
 
-<style scoped>
-.dog-card { background: #fff; border-radius: 16rpx; padding: 24rpx; margin-bottom: 16rpx; }
-.dog-card--overdue { border-left: 6rpx solid #FF3B30; }
-.dog-card--today { border-left: 6rpx solid #FF9500; }
-.dog-card--upcoming { opacity: 0.85; }
-.dog-card__header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16rpx; }
-.dog-card__name-wrap { display: flex; align-items: center; gap: 12rpx; }
-.dog-card__name { font-size: 32rpx; font-weight: 700; color: #333; }
-.dog-card__status { font-size: 22rpx; color: #666; background: #f0f0f0; padding: 4rpx 12rpx; border-radius: 8rpx; }
-.dog-card__badge--overdue { font-size: 22rpx; color: #FF3B30; background: #FFF0F0; padding: 4rpx 12rpx; border-radius: 8rpx; }
-.dog-card__task { padding: 12rpx 0; border-bottom: 1rpx solid #f5f5f5; }
-.dog-card__task:last-child { border-bottom: none; }
-.dog-card__task-row { display: flex; align-items: center; gap: 8rpx; margin-bottom: 8rpx; }
-.dog-card__task-icon { font-size: 28rpx; }
-.dog-card__task-icon--overdue { filter: saturate(2); }
-.dog-card__task-title { font-size: 28rpx; color: #333; flex: 1; }
-.dog-card__task-actions { display: flex; gap: 12rpx; }
-.dog-card__btn { min-height: 52rpx !important; font-size: 24rpx !important; padding: 0 20rpx !important; }
-.dog-card__btn--secondary { background: #f5f5f5 !important; color: #666 !important; }
-.dog-card__more { padding-top: 12rpx; text-align: center; }
-.dog-card__more-text { font-size: 24rpx; color: #007AFF; }
+<style lang="scss" scoped>
+/* 卡片基础 — 一比一还原 home-v1-final.html .card */
+.card {
+  position: relative;
+  background: var(--card);
+  border-radius: 16px;
+  padding: 16px 16px 16px 18px;
+  border-left: 3.5px solid transparent;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  &:active { transform: scale(0.975); }
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    pointer-events: none;
+    z-index: 0;
+  }
+  > * { position: relative; z-index: 1; }
+
+  &--red { border-left-color: var(--red); &::before { background: linear-gradient(135deg, var(--red-soft) 0%, transparent 40%); } }
+  &--green { border-left-color: var(--green); &::before { background: linear-gradient(135deg, var(--green-soft) 0%, transparent 40%); } }
+  &--amber { border-left-color: var(--amber); &::before { background: linear-gradient(135deg, var(--amber-soft) 0%, transparent 40%); } }
+  &--rose { border-left-color: var(--rose); &::before { background: linear-gradient(135deg, var(--rose-soft) 0%, transparent 40%); } }
+}
+
+.card-header { display: flex; align-items: flex-start; gap: 12px; }
+.card-icon {
+  width: 36px; height: 36px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  &--red { background: var(--icon-red); }
+  &--green { background: var(--icon-green); }
+  &--amber { background: var(--icon-amber); }
+  &--rose { background: var(--icon-rose); }
+}
+.card-title-area { flex: 1; min-width: 0; }
+.card-name { display: block; font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--text-1); line-height: 1.3; }
+.card-sub { display: block; font-size: 12px; color: var(--text-2); margin-top: 1px; }
+
+.tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.tag {
+  font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 999px;
+  &--red { background: var(--red-soft); .tag-text { color: var(--red); } }
+  &--amber { background: var(--amber-soft); .tag-text { color: var(--amber); } }
+  &--green { background: var(--green-soft); .tag-text { color: var(--green); } }
+  &--rose { background: var(--rose-soft); .tag-text { color: var(--rose); } }
+}
+.tag-text { font-size: 11px; font-weight: 600; }
+
+.card-actions { display: flex; gap: 8px; margin-top: 14px; }
+.btn {
+  padding: 8px 18px; border-radius: 999px; border: none;
+  transition: transform 0.12s ease, opacity 0.12s ease;
+  &:active { transform: scale(0.94); opacity: 0.85; }
+  &--filled { &.btn--red { background: var(--red); } &.btn--green { background: var(--green); } &.btn--amber { background: var(--amber); } &.btn--rose { background: var(--rose); } }
+  &--ghost { background: transparent; border: 1.5px solid var(--text-4); }
+}
+.btn-text {
+  font-family: var(--font-display); font-size: 13px; font-weight: 700;
+  &--white { color: #FFFFFF; }
+  &--ghost { color: var(--text-2); }
+}
 </style>
