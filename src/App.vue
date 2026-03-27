@@ -24,6 +24,7 @@ onHide(() => {
 </script>
 <style lang="scss">
 @import '@/styles/tokens.scss';
+@import '@/styles/fonts.scss';
 
 /* 全局基础样式 */
 page {
