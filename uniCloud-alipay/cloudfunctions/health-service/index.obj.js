@@ -178,6 +178,7 @@ module.exports = {
       const { data: remaining } = await db.collection('tasks')
         .where({
           medication_task_id: task.medication_task_id,
+          family_id: this.familyId,
           status: 'pending',
         })
         .get()
@@ -365,6 +366,22 @@ module.exports = {
 
     const now = Date.now()
     const familyId = this.familyId
+
+    // 校验窝次归属当前家庭
+    const { data: litters } = await db.collection('litters')
+      .where({ _id: litterId, family_id: familyId })
+      .get()
+    if (!litters || litters.length === 0) throw new Error('窝次不存在')
+
+    // 校验所有 dog_id 归属当前家庭
+    const dogIds = [...new Set(weights.map(w => w.dog_id))]
+    const { data: dogs } = await db.collection('dogs')
+      .where({ family_id: familyId, deleted_at: null })
+      .get()
+    const familyDogIds = new Set(dogs.map(d => d._id))
+    for (const dogId of dogIds) {
+      if (!familyDogIds.has(dogId)) throw new Error('犬只不属于当前家庭')
+    }
 
     for (const entry of weights) {
       await db.collection('dog_weights').add({

@@ -275,13 +275,22 @@ module.exports = {
       .get()
     totalExpense += litterExpenses.reduce((sum, e) => sum + (e.total_amount || 0), 0)
 
-    // 幼崽个体费用（遍历所有费用，检查 linked_dog_ids 是否包含幼崽 ID）
-    // 简化：查询有 linked_dog_ids 的费用，过滤匹配
+    // 幼崽个体费用（通过 linked_dog_ids 关联，排除已通过 cycle/litter 计过的费用）
+    const countedExpenseIds = new Set()
+    if (litter.cycle_id) {
+      const { data: ce } = await db.collection('expenses')
+        .where({ linked_cycle_id: litter.cycle_id, family_id: familyId, deleted_at: null })
+        .get()
+      ce.forEach(e => countedExpenseIds.add(e._id))
+    }
+    litterExpenses.forEach(e => countedExpenseIds.add(e._id))
+
     const { data: allLinkedExpenses } = await db.collection('expenses')
       .where({ family_id: familyId, deleted_at: null })
       .get()
 
     for (const e of allLinkedExpenses) {
+      if (countedExpenseIds.has(e._id)) continue // 已计入，跳过避免重复
       if (e.linked_dog_ids && e.linked_dog_ids.length > 0) {
         const matchCount = e.linked_dog_ids.filter(id => puppyIds.includes(id)).length
         if (matchCount > 0) {
