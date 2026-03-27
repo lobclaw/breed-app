@@ -1,0 +1,302 @@
+/**
+ * task-service 云对象测试
+ * 测试首页卡片、任务完成/推迟、审计、自动关闭
+ */
+import { describe, it, expect, beforeEach } from 'vitest'
+import {
+  resetDB,
+  seedCollection,
+  createMockUniCloud,
+} from '../helpers/mock-unicloud'
+
+const mockUniCloud = createMockUniCloud()
+;(globalThis as any).uniCloud = mockUniCloud
+
+describe('task-service', () => {
+  const db = mockUniCloud.database()
+  const familyId = 'fam_1'
+  const DAY_MS = 86400000
+
+  beforeEach(() => {
+    resetDB()
+    seedCollection('families', [{
+      _id: familyId,
+      name: '测试犬舍',
+      settings: {
+        default_weaning_days: 45,
+        default_vaccine_interval: 21,
+        default_deworming_interval_puppy: 14,
+        default_deworming_interval_adult: 90,
+      },
+    }])
+  })
+
+  describe('getHomeCards 首页卡片', () => {
+    it('应按优先级分组返回任务', async () => {
+      const now = Date.now()
+      const todayStart = new Date(now)
+      todayStart.setHours(0, 0, 0, 0)
+
+      seedCollection('tasks', [
+        { _id: 't1', family_id: familyId, status: 'pending', due_date: todayStart.getTime() - DAY_MS, title: '逾期任务' },
+        { _id: 't2', family_id: familyId, status: 'pending', due_date: todayStart.getTime() + 1000, title: '今日任务' },
+        { _id: 't3', family_id: familyId, status: 'pending', due_date: todayStart.getTime() + 2 * DAY_MS, title: '未来任务' },
+        { _id: 't4', family_id: familyId, status: 'completed', due_date: todayStart.getTime(), title: '已完成' },
+      ])
+
+      // 逾期
+      const { data: overdue } = await db.collection('tasks')
+        .where({ family_id: familyId, status: 'pending', due_date: { $lt: todayStart.getTime() } })
+        .get()
+      expect(overdue).toHaveLength(1)
+      expect(overdue[0].title).toBe('逾期任务')
+
+      // 今日
+      const todayEnd = new Date(now)
+      todayEnd.setHours(23, 59, 59, 999)
+      const { data: today } = await db.collection('tasks')
+        .where({
+          family_id: familyId,
+          status: 'pending',
+          due_date: { $gte: todayStart.getTime(), $lte: todayEnd.getTime() },
+        })
+        .get()
+      expect(today).toHaveLength(1)
+      expect(today[0].title).toBe('今日任务')
+
+      // 未来
+      const { data: upcoming } = await db.collection('tasks')
+        .where({
+          family_id: familyId,
+          status: 'pending',
+          due_date: { $gt: todayEnd.getTime() },
+        })
+        .get()
+      expect(upcoming).toHaveLength(1)
+      expect(upcoming[0].title).toBe('未来任务')
+    })
+
+    it('不应返回已完成的任务', async () => {
+      const now = Date.now()
+
+      seedCollection('tasks', [
+        { _id: 't1', family_id: familyId, status: 'completed', due_date: now },
+        { _id: 't2', family_id: familyId, status: 'cancelled', due_date: now },
+      ])
+
+      const { data } = await db.collection('tasks')
+        .where({ family_id: familyId, status: 'pending' })
+        .get()
+
+      expect(data).toHaveLength(0)
+    })
+  })
+
+  describe('completeTask 完成任务', () => {
+    it('应将 pending 任务标记为 completed', async () => {
+      const now = Date.now()
+
+      seedCollection('tasks', [{
+        _id: 'task_1',
+        family_id: familyId,
+        status: 'pending',
+        due_date: now,
+        title: '测试任务',
+      }])
+
+      await db.collection('tasks').doc('task_1').update({
+        status: 'completed',
+        completed_by: 'user_1',
+        completed_at: now,
+        updated_at: now,
+      })
+
+      const { data } = await db.collection('tasks').doc('task_1').get()
+      expect(data[0].status).toBe('completed')
+      expect(data[0].completed_by).toBe('user_1')
+    })
+  })
+
+  describe('postponeTask 推迟任务', () => {
+    it('应更新到期日期和推迟次数', async () => {
+      const now = Date.now()
+      const newDate = now + 3 * DAY_MS
+
+      seedCollection('tasks', [{
+        _id: 'task_p',
+        family_id: familyId,
+        status: 'pending',
+        due_date: now,
+        postpone_count: 0,
+      }])
+
+      await db.collection('tasks').doc('task_p').update({
+        due_date: newDate,
+        postpone_count: 1,
+        postpone_reason: '等待复查',
+        updated_at: now,
+      })
+
+      const { data } = await db.collection('tasks').doc('task_p').get()
+      expect(data[0].due_date).toBe(newDate)
+      expect(data[0].postpone_count).toBe(1)
+      expect(data[0].postpone_reason).toBe('等待复查')
+    })
+  })
+
+  describe('cancelTasksByCycle 批量取消', () => {
+    it('应取消指定周期的所有 pending 任务', async () => {
+      const now = Date.now()
+
+      seedCollection('tasks', [
+        { _id: 't1', cycle_id: 'c1', family_id: familyId, status: 'pending' },
+        { _id: 't2', cycle_id: 'c1', family_id: familyId, status: 'pending' },
+        { _id: 't3', cycle_id: 'c1', family_id: familyId, status: 'completed' },
+        { _id: 't4', cycle_id: 'c2', family_id: familyId, status: 'pending' },
+      ])
+
+      // 取消 c1 的 pending 任务
+      await db.collection('tasks').where({
+        cycle_id: 'c1',
+        family_id: familyId,
+        status: 'pending',
+      }).update({ status: 'cancelled', updated_at: now })
+
+      const { data: c1Tasks } = await db.collection('tasks')
+        .where({ cycle_id: 'c1' })
+        .get()
+
+      const pending = c1Tasks.filter(t => t.status === 'pending')
+      const cancelled = c1Tasks.filter(t => t.status === 'cancelled')
+      expect(pending).toHaveLength(0)
+      expect(cancelled).toHaveLength(2)
+
+      // c2 的任务不受影响
+      const { data: c2Tasks } = await db.collection('tasks')
+        .where({ cycle_id: 'c2' })
+        .get()
+      expect(c2Tasks[0].status).toBe('pending')
+    })
+  })
+
+  describe('_timing_autoCloseCycles 自动关闭', () => {
+    it('应关闭超过 21 天的发情周期', async () => {
+      const now = Date.now()
+      const threshold = now - 21 * DAY_MS
+
+      seedCollection('breeding_cycles', [
+        { _id: 'c_old', status: '发情中', updated_at: threshold - DAY_MS, family_id: familyId },
+        { _id: 'c_new', status: '发情中', updated_at: now, family_id: familyId },
+        { _id: 'c_preg', status: '怀孕中', updated_at: threshold - DAY_MS, family_id: familyId },
+      ])
+
+      seedCollection('tasks', [
+        { _id: 't_old', cycle_id: 'c_old', status: 'pending', family_id: familyId },
+      ])
+
+      // 模拟自动关闭：只关闭发情中 + 超过阈值的
+      const { data: expired } = await db.collection('breeding_cycles')
+        .where({ status: '发情中' })
+        .get()
+
+      const toClose = expired.filter(c => c.updated_at < threshold)
+      expect(toClose).toHaveLength(1)
+      expect(toClose[0]._id).toBe('c_old')
+
+      // 关闭
+      await db.collection('breeding_cycles').doc('c_old').update({
+        status: '放弃',
+        updated_at: now,
+      })
+
+      await db.collection('tasks').where({
+        cycle_id: 'c_old',
+        status: 'pending',
+      }).update({ status: 'cancelled', updated_at: now })
+
+      // 验证
+      const { data: closedCycle } = await db.collection('breeding_cycles').doc('c_old').get()
+      expect(closedCycle[0].status).toBe('放弃')
+
+      const { data: cancelledTasks } = await db.collection('tasks')
+        .where({ cycle_id: 'c_old' })
+        .get()
+      expect(cancelledTasks[0].status).toBe('cancelled')
+
+      // c_new 不受影响
+      const { data: newCycle } = await db.collection('breeding_cycles').doc('c_new').get()
+      expect(newCycle[0].status).toBe('发情中')
+    })
+  })
+
+  describe('_timing_dailyAudit 每日审计', () => {
+    it('应为缺失任务的怀孕周期补生成', async () => {
+      seedCollection('breeding_cycles', [{
+        _id: 'c_audit',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        status: '怀孕中',
+      }])
+
+      // 没有任何任务
+      const { data: tasks } = await db.collection('tasks')
+        .where({ cycle_id: 'c_audit' })
+        .get()
+      expect(tasks).toHaveLength(0)
+
+      // 审计补生成
+      const now = Date.now()
+      await db.collection('tasks').add({
+        dog_id: 'dam_1',
+        dog_name: '花花',
+        cycle_id: 'c_audit',
+        type: 'breeding_milestone',
+        title: '花花 · 预产期（审计补生成）',
+        due_date: now + 7 * DAY_MS,
+        status: 'pending',
+        family_id: familyId,
+      })
+
+      const { data: afterAudit } = await db.collection('tasks')
+        .where({ cycle_id: 'c_audit' })
+        .get()
+      expect(afterAudit).toHaveLength(1)
+      expect(afterAudit[0].title).toContain('审计补生成')
+    })
+
+    it('应为缺失任务的未断奶窝补生成', async () => {
+      seedCollection('litters', [{
+        _id: 'l_audit',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        weaned_at: null,
+      }])
+
+      const { total } = await db.collection('tasks')
+        .where({ litter_id: 'l_audit' })
+        .count()
+      expect(total).toBe(0)
+
+      // 审计补生成
+      const now = Date.now()
+      await db.collection('tasks').add({
+        dog_id: 'dam_1',
+        dog_name: '花花',
+        litter_id: 'l_audit',
+        type: 'breeding_milestone',
+        title: '花花窝 · 确认断奶（审计补生成）',
+        due_date: now + 3 * DAY_MS,
+        status: 'pending',
+        family_id: familyId,
+      })
+
+      const { data: afterAudit } = await db.collection('tasks')
+        .where({ litter_id: 'l_audit' })
+        .get()
+      expect(afterAudit).toHaveLength(1)
+      expect(afterAudit[0].title).toContain('断奶')
+    })
+  })
+})

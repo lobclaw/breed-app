@@ -201,4 +201,162 @@ module.exports = {
 
     return { message: '护理规则已删除' }
   },
+
+  // ── 协作 ──
+
+  /**
+   * 生成邀请码（6位随机码，24小时有效）
+   */
+  async generateInviteLink() {
+    requireAdmin(this.role)
+
+    const crypto = require('crypto')
+    const code = crypto.randomBytes(4).toString('hex').substring(0, 6).toUpperCase()
+    const now = Date.now()
+
+    await db.collection('families')
+      .doc(this.familyId)
+      .update({
+        invite_code: code,
+        invite_expires: now + 24 * 60 * 60 * 1000,
+        updated_at: now,
+      })
+
+    return { data: { code } }
+  },
+
+  /**
+   * 通过邀请码加入家庭
+   */
+  async joinFamily(inviteCode) {
+    if (!inviteCode) throw new Error('请输入邀请码')
+    if (this.familyId) throw new Error('您已加入家庭，V1 暂不支持多家庭')
+
+    const now = Date.now()
+
+    const { data: families } = await db.collection('families')
+      .where({
+        invite_code: inviteCode.toUpperCase(),
+        invite_expires: dbCmd.gt(now),
+      })
+      .limit(1)
+      .get()
+
+    if (!families || families.length === 0) throw new Error('邀请码无效或已过期')
+
+    const family = families[0]
+
+    // 检查是否已是成员
+    const existing = family.members.find(m => m.user_id === this.uid)
+    if (existing) {
+      if (existing.status === 'active') throw new Error('您已是该家庭成员')
+      // 重新激活：需要 read-modify-write（修改现有数组元素）
+      existing.status = 'active'
+      existing.joined_at = now
+      existing.removed_at = null
+      await db.collection('families').doc(family._id).update({
+        members: family.members,
+        updated_at: now,
+      })
+    } else {
+      // 新成员：使用 dbCmd.push 避免并发竞争
+      await db.collection('families').doc(family._id).update({
+        members: dbCmd.push({
+          user_id: this.uid,
+          role: 'helper',
+          status: 'active',
+          joined_at: now,
+        }),
+        updated_at: now,
+      })
+    }
+
+    return { data: { familyId: family._id, familyName: family.name } }
+  },
+
+  /**
+   * 获取成员列表
+   */
+  async getMemberList() {
+    const { data } = await db.collection('families')
+      .doc(this.familyId)
+      .field({ members: true, name: true, creator_id: true })
+      .get()
+
+    const family = data[0] || data
+    const activeMembers = (family.members || []).filter(m => m.status === 'active')
+
+    return { data: activeMembers }
+  },
+
+  /**
+   * 更新成员角色
+   */
+  async updateMemberRole(userId, newRole) {
+    requireAdmin(this.role)
+    if (!userId) throw new Error('缺少用户 ID')
+    if (!['admin', 'helper'].includes(newRole)) throw new Error('无效角色')
+
+    const now = Date.now()
+
+    const { data } = await db.collection('families')
+      .doc(this.familyId)
+      .field({ members: true, creator_id: true })
+      .get()
+
+    const family = data[0] || data
+    const member = family.members.find(m => m.user_id === userId && m.status === 'active')
+    if (!member) throw new Error('成员不存在')
+    if (member.role === 'creator') throw new Error('不能更改创建者角色')
+
+    // 非创建者不能设置管理员
+    if (newRole === 'admin' && this.role !== 'creator') {
+      throw new Error('仅创建者可设置管理员')
+    }
+
+    member.role = newRole
+
+    await db.collection('families').doc(this.familyId).update({
+      members: family.members,
+      updated_at: now,
+    })
+
+    return { message: '角色已更新' }
+  },
+
+  /**
+   * 移除成员
+   */
+  async removeMember(userId) {
+    requireAdmin(this.role)
+    if (!userId) throw new Error('缺少用户 ID')
+    if (userId === this.uid) throw new Error('不能移除自己')
+
+    const now = Date.now()
+
+    const { data } = await db.collection('families')
+      .doc(this.familyId)
+      .field({ members: true, creator_id: true })
+      .get()
+
+    const family = data[0] || data
+    const member = family.members.find(m => m.user_id === userId && m.status === 'active')
+    if (!member) throw new Error('成员不存在')
+    if (member.role === 'creator') throw new Error('不能移除创建者')
+
+    // 非创建者不能移除管理员
+    if (member.role === 'admin' && this.role !== 'creator') {
+      throw new Error('仅创建者可移除管理员')
+    }
+
+    member.status = 'removed'
+    member.removed_at = now
+
+    await db.collection('families').doc(this.familyId).update({
+      members: family.members,
+      updated_at: now,
+    })
+
+    return { message: '成员已移除' }
+  },
 }
