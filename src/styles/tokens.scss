@@ -1,0 +1,154 @@
+/**
+ * 设计令牌 — Breed App Design Tokens
+ * 来源：docs/ui/design-system.md
+ * 规则：所有颜色、间距、圆角、阴影通过 CSS 变量引用，禁止硬编码 hex
+ */
+
+/* ============================================
+   浅色模式（默认）
+   ============================================ */
+:root {
+  /* 品牌色 */
+  --primary: #ea3e77;
+  --primary-soft: #fff0f2;
+
+  /* 背景 */
+  --bg: #fdf8f9;
+  --card: #FFFFFF;
+  --card-dim: #FFF0E8;
+
+  /* 文字（暖棕色系） */
+  --text-1: #1a1a2e;
+  --text-2: #8B7355;
+  --text-3: #B8A08A;
+  --text-4: #D8CBBD;
+
+  /* 功能色 */
+  --red: #e05252;
+  --red-soft: #fff0f0;
+  --amber: #e89b3e;
+  --amber-soft: #fff9f0;
+  --green: #3dae6f;
+  --green-soft: #f0fff4;
+  --blue: #4a8dd4;
+  --blue-soft: #f0f7ff;
+  --plum: #8668b0;
+  --plum-soft: #f5f0ff;
+  --rose: #ea3e77;
+  --rose-soft: #fff0f2;
+  --teal: #3da8a0;
+  --teal-soft: #f0fffe;
+
+  /* Icon 背景（比 soft 深一档，确保白卡上可见） */
+  --icon-red: #FFD9D4;
+  --icon-rose: #FFD4DE;
+  --icon-green: #D0F0DC;
+  --icon-blue: #D4E8F8;
+  --icon-plum: #E4D8F4;
+  --icon-teal: #D0F0EC;
+  --icon-amber: #FFE8CC;
+
+  /* 阴影（粉调暖影，不用灰色） */
+  --shadow: 0 2px 12px rgba(234, 62, 119, 0.06);
+  --shadow-lg: 0 6px 24px rgba(234, 62, 119, 0.1);
+  --shadow-today: 0 3px 12px rgba(234, 62, 119, 0.3);
+  --shadow-fab: 0 4px 16px rgba(234, 62, 119, 0.3);
+
+  /* 导航 */
+  --nav-bg: rgba(255, 255, 255, 0.85);
+  --nav-border: rgba(234, 62, 119, 0.08);
+
+  /* 遮罩 */
+  --mask: rgba(0, 0, 0, 0.4);
+}
+
+/* ============================================
+   暗色模式
+   ============================================ */
+.dark {
+  --primary: #f05888;
+  --primary-soft: rgba(240, 88, 136, 0.12);
+
+  --bg: #181210;
+  --card: #241E1A;
+  --card-dim: #2C2420;
+
+  --text-1: #F0E8E0;
+  --text-2: #A08868;
+  --text-3: #6B5A48;
+  --text-4: #3E3328;
+
+  --red: #f06666;
+  --red-soft: rgba(240, 102, 102, 0.12);
+  --amber: #f0a84e;
+  --amber-soft: rgba(240, 168, 78, 0.12);
+  --green: #4ec080;
+  --green-soft: rgba(78, 192, 128, 0.12);
+  --blue: #5ea0e6;
+  --blue-soft: rgba(94, 160, 230, 0.12);
+  --plum: #9a7ec4;
+  --plum-soft: rgba(154, 126, 196, 0.12);
+  --rose: #f05888;
+  --rose-soft: rgba(240, 88, 136, 0.12);
+  --teal: #4ebab2;
+  --teal-soft: rgba(78, 186, 178, 0.12);
+
+  --icon-red: rgba(240, 102, 102, 0.2);
+  --icon-rose: rgba(240, 88, 136, 0.2);
+  --icon-green: rgba(78, 192, 128, 0.2);
+  --icon-blue: rgba(94, 160, 230, 0.2);
+  --icon-plum: rgba(154, 126, 196, 0.2);
+  --icon-teal: rgba(78, 186, 178, 0.2);
+  --icon-amber: rgba(240, 168, 78, 0.2);
+
+  --shadow: 0 2px 12px rgba(234, 62, 119, 0.1);
+  --shadow-lg: 0 6px 24px rgba(234, 62, 119, 0.15);
+  --shadow-today: 0 3px 12px rgba(234, 62, 119, 0.35);
+  --shadow-fab: 0 4px 16px rgba(234, 62, 119, 0.35);
+
+  --nav-bg: rgba(24, 18, 16, 0.88);
+  --nav-border: rgba(240, 88, 136, 0.1);
+
+  --mask: rgba(0, 0, 0, 0.6);
+}
+
+/* ============================================
+   字体
+   ============================================ */
+:root {
+  /* 显示字体（标题/数字/强调） */
+  --font-display: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  /* 中文正文 */
+  --font-body: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', sans-serif;
+}
+
+/* ============================================
+   间距
+   ============================================ */
+:root {
+  --space-page: 20px;         /* 页面水平内边距 */
+  --space-card: 16px;         /* 卡片内边距（上/右/下） */
+  --space-card-left: 18px;    /* 卡片左内边距（给左色条留空间） */
+  --space-card-gap: 12px;     /* 卡片间距 */
+  --space-group-gap: 6px;     /* 群组行间距 */
+  --space-tag-gap: 6px;       /* 标签间距 */
+  --space-pill-gap: 8px;      /* Pill 间距 */
+  --space-btn-gap: 8px;       /* 按钮间距 */
+  --space-header-top: 12px;   /* Header 顶部 */
+}
+
+/* ============================================
+   圆角
+   ============================================ */
+:root {
+  --radius-card: 16px;
+  --radius-row: 14px;
+  --radius-date: 12px;
+  --radius-icon: 10px;
+  --radius-pill: 16px;
+  --radius-btn: 999px;
+  --radius-tag: 999px;
+  --radius-badge: 999px;
+  --radius-checkbox: 6px;
+  --radius-progress: 999px;
+}

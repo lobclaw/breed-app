@@ -14,6 +14,8 @@
 - `05-tech-stack.md` — 技术选型 + 费用估算 + 图片上传规范
 - `06-unicloud-validation.md` — UniCloud 技术验证报告
 - `07-design-audit.md` — 设计审查报告（已完成，所有问题已修复）
+- `08-implementation-plan.md` — Phase 1 实现计划（功能逻辑 + 开发顺序）
+- `09-ui-implementation-plan.md` — UI 实现计划（设计系统 + 组件库 + 页面还原）
 
 ## 技术栈
 

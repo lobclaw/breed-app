@@ -19,4 +19,14 @@ onHide(() => {
   console.log("App Hide");
 });
 </script>
-<style></style>
+<style lang="scss">
+@import '@/styles/tokens.scss';
+
+/* 全局基础样式 */
+page {
+  background-color: var(--bg);
+  color: var(--text-1);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+</style>
