@@ -14,7 +14,7 @@ const DEFAULT_EXPENSE_CATEGORIES = ['食品', '营养品', '消耗品', '日常�
 
 module.exports = {
   _before: async function() {
-    const { uid, familyId, role } = await verifyAndGetFamily(this.getUniIdToken())
+    const { uid, familyId, role } = await verifyAndGetFamily(this.getUniIdToken(), this.getClientInfo())
     this.uid = uid
     this.familyId = familyId
     this.role = role

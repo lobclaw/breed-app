@@ -9,7 +9,7 @@ const dbCmd = db.command
 
 module.exports = {
   _before: async function() {
-    const { uid, familyId, role } = await verifyAndGetFamily(this.getUniIdToken())
+    const { uid, familyId, role } = await verifyAndGetFamily(this.getUniIdToken(), this.getClientInfo())
     this.uid = uid
     this.familyId = familyId
     this.role = role

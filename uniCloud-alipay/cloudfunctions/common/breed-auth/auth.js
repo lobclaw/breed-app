@@ -5,39 +5,28 @@
  */
 
 const db = uniCloud.database()
+const uniIdCommon = require('uni-id-common')
 
 /**
  * 验证用户身份并返回 familyId 和角色
  * @param {string} token - uni-id token
+ * @param {object} clientInfo - 云对象的 clientInfo（通过 this.getClientInfo() 获取）
  * @returns {{ uid: string, familyId: string, role: string }}
  */
-async function verifyAndGetFamily(token) {
+async function verifyAndGetFamily(token, clientInfo) {
   if (!token) {
     throw createAuthError('TOKEN_MISSING', '请先登录')
   }
 
-  // 验证 uni-id token
-  const payload = await uniCloud.request({
-    function: 'uni-id-co',
-    data: { method: 'checkToken', token }
-  }).catch(() => null)
+  // 使用 uni-id-common 验证 token（UniCloud 标准方式）
+  const uniID = uniIdCommon.createInstance({ clientInfo })
+  const payload = await uniID.checkToken(token)
 
-  // uni-id checkToken 返回 { uid, token, tokenExpired, ... }
-  // 如果 token 无效或过期，payload 里 uid 不存在
-  let uid
-  if (payload && payload.result && payload.result.uid) {
-    uid = payload.result.uid
-  } else {
-    // 备用方案：直接用 uniCloud.auth() 验证
-    try {
-      const auth = uniCloud.auth()
-      const info = await auth.getUserInfo()
-      uid = info.uid
-    } catch (e) {
-      throw createAuthError('TOKEN_INVALID', '登录已过期，请重新登录')
-    }
+  if (payload.errCode) {
+    throw createAuthError('TOKEN_INVALID', payload.errMsg || '登录已过期，请重新登录')
   }
 
+  const uid = payload.uid
   if (!uid) {
     throw createAuthError('TOKEN_INVALID', '登录已过期，请重新登录')
   }

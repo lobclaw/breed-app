@@ -15,7 +15,7 @@ module.exports = {
     // _timing 方法不需要用户认证
     if (this.getMethodName().startsWith('_timing')) return
 
-    const { uid, familyId, role } = await verifyAndGetFamily(this.getUniIdToken())
+    const { uid, familyId, role } = await verifyAndGetFamily(this.getUniIdToken(), this.getClientInfo())
     this.uid = uid
     this.familyId = familyId
     this.role = role

@@ -20,7 +20,7 @@ module.exports = {
   _before: async function() {
     // createFamily 和 joinFamily 允许无家庭用户调用
     const skipFamilyCheck = ['createFamily', 'joinFamily']
-    const { uid, familyId, role } = await verifyAndGetFamily(this.getUniIdToken())
+    const { uid, familyId, role } = await verifyAndGetFamily(this.getUniIdToken(), this.getClientInfo())
     this.uid = uid
     this.familyId = familyId
     this.role = role

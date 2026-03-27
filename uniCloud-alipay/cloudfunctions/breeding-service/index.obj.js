@@ -24,7 +24,7 @@ const CYCLE_TRIGGER_TYPES = ['heat', 'follicle_check', 'mating']
 
 module.exports = {
   _before: async function() {
-    const { uid, familyId, role } = await verifyAndGetFamily(this.getUniIdToken())
+    const { uid, familyId, role } = await verifyAndGetFamily(this.getUniIdToken(), this.getClientInfo())
     this.uid = uid
     this.familyId = familyId
     this.role = role
