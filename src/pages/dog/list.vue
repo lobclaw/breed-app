@@ -1,60 +1,81 @@
+<!--
+  犬只列表页 (D-1)
+  设计稿：docs/ui/pages-list.html
+  筛选 chips + 犬只卡片列表 + 状态标签 + FAB 添加
+-->
 <template>
   <view class="dog-list">
-    <!-- 筛选栏 -->
-    <view class="dog-list__filters">
+    <!-- 页面标题 -->
+    <view class="dog-list__header">
+      <text class="dog-list__title">犬只档案</text>
+      <text class="dog-list__count">{{ dogs.length }}只</text>
+    </view>
+
+    <!-- 筛选 chips -->
+    <scroll-view scroll-x class="dog-list__filters">
       <view
         v-for="filter in filterOptions"
         :key="filter.value"
-        class="dog-list__filter"
-        :class="{ 'dog-list__filter--active': activeFilter === filter.value }"
+        class="dog-list__chip"
+        :class="{ 'dog-list__chip--active': activeFilter === filter.value }"
         @click="activeFilter = filter.value"
       >
-        <text>{{ filter.label }}</text>
-      </view>
-    </view>
-
-    <!-- 犬只列表 -->
-    <scroll-view scroll-y class="dog-list__scroll">
-      <view
-        v-for="dog in filteredDogs"
-        :key="dog._id"
-        class="dog-list__item"
-        @click="goToDetail(dog._id)"
-      >
-        <DogAvatar :name="dog.name" :size="96" />
-        <view class="dog-list__info">
-          <view class="dog-list__name-row">
-            <text class="dog-list__name">{{ dog.name || '未命名' }}</text>
-            <text class="dog-list__role">{{ dog.role }}</text>
-          </view>
-          <view class="dog-list__meta">
-            <text>{{ dog.gender }}</text>
-            <text v-if="dog.breed"> · {{ dog.breed }}</text>
-            <text v-if="dog.birth_date"> · {{ formatAge(dog.birth_date) }}</text>
-          </view>
-          <!-- 状态标签 -->
-          <view class="dog-list__statuses">
-            <text
-              v-for="(status, idx) in dog.statuses"
-              :key="idx"
-              class="dog-list__status"
-              :class="statusClass(status.type)"
-            >
-              {{ status.type }}
-            </text>
-          </view>
-        </view>
-        <text class="dog-list__arrow">›</text>
-      </view>
-
-      <view v-if="filteredDogs.length === 0 && !loading" class="dog-list__empty">
-        <text>暂无犬只</text>
+        <text class="dog-list__chip-text">{{ filter.label }}</text>
       </view>
     </scroll-view>
 
-    <!-- 添加按钮 -->
+    <!-- 加载骨架屏 -->
+    <BSkeleton v-if="loading" :rows="4" avatar />
+
+    <!-- 犬只列表 -->
+    <view v-else class="dog-list__content">
+      <view
+        v-for="dog in filteredDogs"
+        :key="dog._id"
+        class="dog-list__card"
+        @click="goToDetail(dog._id)"
+      >
+        <!-- 左侧头像 -->
+        <DogAvatar :name="dog.name" :size="42" />
+        <!-- 中间信息 -->
+        <view class="dog-list__info">
+          <view class="dog-list__name-row">
+            <text class="dog-list__name">{{ dog.name || '未命名' }}</text>
+            <BTag v-if="dog.role === '外部种公'" label="外部" color="blue" />
+          </view>
+          <text class="dog-list__meta">
+            {{ dog.gender }}
+            <text v-if="dog.breed"> · {{ dog.breed }}</text>
+            <text v-if="dog.birth_date"> · {{ formatAge(dog.birth_date) }}</text>
+          </text>
+          <!-- 状态标签 -->
+          <view v-if="dog.statuses?.length" class="dog-list__tags">
+            <BTag
+              v-for="(status, idx) in dog.statuses"
+              :key="idx"
+              :label="status.type"
+              :color="statusColor(status.type)"
+            />
+          </view>
+        </view>
+        <!-- 右侧箭头 -->
+        <text class="dog-list__arrow material-icons-round">chevron_right</text>
+      </view>
+
+      <!-- 空状态 -->
+      <BEmpty
+        v-if="filteredDogs.length === 0"
+        icon="pets"
+        title="暂无犬只"
+        description="点击右下角添加第一只犬"
+        action-text="添加犬只"
+        @action="goToAdd"
+      />
+    </view>
+
+    <!-- FAB 添加按钮 -->
     <view class="dog-list__fab" @click="goToAdd">
-      <text class="dog-list__fab-text">+</text>
+      <text class="dog-list__fab-icon material-icons-round">add</text>
     </view>
   </view>
 </template>
@@ -63,6 +84,9 @@
 import { ref, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import DogAvatar from '@/components/common/DogAvatar.vue'
+import BTag from '@/components/base/BTag.vue'
+import BSkeleton from '@/components/feedback/BSkeleton.vue'
+import BEmpty from '@/components/feedback/BEmpty.vue'
 import { useCloudCall } from '@/composables/useCloudCall'
 import type { DogWithStatus, DeriveStatusType } from '@/types/dog'
 
@@ -89,6 +113,18 @@ const filteredDogs = computed(() => {
   return dogs.value
 })
 
+/** 状态类型 → 功能色映射 */
+function statusColor(type: DeriveStatusType): 'red' | 'amber' | 'green' | 'rose' | 'plum' | 'teal' {
+  const map: Record<string, any> = {
+    '发情中': 'amber',
+    '怀孕中': 'rose',
+    '哺乳中': 'green',
+    '生病中': 'red',
+    '用药中': 'plum',
+  }
+  return map[type] || 'green'
+}
+
 function formatAge(birthTs: number) {
   const now = Date.now()
   const days = Math.floor((now - birthTs) / 86400000)
@@ -97,18 +133,6 @@ function formatAge(birthTs: number) {
   const years = Math.floor(days / 365)
   const months = Math.floor((days % 365) / 30)
   return months > 0 ? `${years}岁${months}月` : `${years}岁`
-}
-
-function statusClass(type: DeriveStatusType) {
-  const map: Record<string, string> = {
-    '发情中': 'dog-list__status--heat',
-    '怀孕中': 'dog-list__status--pregnant',
-    '哺乳中': 'dog-list__status--nursing',
-    '生病中': 'dog-list__status--sick',
-    '用药中': 'dog-list__status--medication',
-    '正常': 'dog-list__status--normal',
-  }
-  return map[type] || ''
 }
 
 function goToDetail(dogId: string) {
@@ -133,130 +157,136 @@ onShow(() => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .dog-list {
   min-height: 100vh;
-  background: #f5f5f5;
+  background: var(--bg);
+  padding-bottom: 100px;
 }
 
+/* 页面标题 */
+.dog-list__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: var(--space-header-top) var(--space-page) 8px;
+}
+.dog-list__title {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--text-1);
+}
+.dog-list__count {
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+/* 筛选 chips */
 .dog-list__filters {
   display: flex;
-  gap: 16rpx;
-  padding: 20rpx 32rpx;
-  background: #fff;
-  overflow-x: auto;
-}
-
-.dog-list__filter {
-  padding: 10rpx 28rpx;
-  border-radius: 28rpx;
-  background: #f0f0f0;
-  font-size: 26rpx;
+  gap: 8px;
+  padding: 8px var(--space-page) 16px;
   white-space: nowrap;
-  color: #666;
+}
+.dog-list__chip {
+  padding: 6px 16px;
+  border-radius: var(--radius-tag);
+  background: var(--card-dim);
+  transition: transform 0.12s ease;
+  &:active { transform: scale(0.94); }
+}
+.dog-list__chip--active {
+  background: var(--primary);
+  .dog-list__chip-text { color: #FFFFFF; }
+}
+.dog-list__chip-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
 }
 
-.dog-list__filter--active {
-  background: #007AFF;
-  color: #fff;
+/* 列表内容区 */
+.dog-list__content {
+  padding: 0 var(--space-card);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-card-gap);
 }
 
-.dog-list__scroll {
-  height: calc(100vh - 100rpx);
-  padding: 16rpx 32rpx;
-}
-
-.dog-list__item {
+/* 犬只卡片 */
+.dog-list__card {
   display: flex;
   align-items: center;
-  gap: 20rpx;
-  background: #fff;
-  border-radius: 16rpx;
-  padding: 24rpx;
-  margin-bottom: 16rpx;
+  gap: 12px;
+  background: var(--card);
+  border-radius: var(--radius-card);
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
 }
 
 .dog-list__info {
   flex: 1;
+  min-width: 0;
 }
 
 .dog-list__name-row {
   display: flex;
   align-items: center;
-  gap: 12rpx;
+  gap: 6px;
 }
 
 .dog-list__name {
-  font-size: 32rpx;
-  font-weight: 600;
-  color: #333;
-}
-
-.dog-list__role {
-  font-size: 22rpx;
-  color: #999;
-  background: #f5f5f5;
-  padding: 2rpx 12rpx;
-  border-radius: 8rpx;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dog-list__meta {
-  font-size: 24rpx;
-  color: #999;
-  margin-top: 6rpx;
+  font-size: 12px;
+  color: var(--text-2);
+  margin-top: 2px;
 }
 
-.dog-list__statuses {
+.dog-list__tags {
   display: flex;
-  gap: 8rpx;
-  margin-top: 8rpx;
+  gap: var(--space-tag-gap);
+  margin-top: 6px;
   flex-wrap: wrap;
 }
 
-.dog-list__status {
-  font-size: 22rpx;
-  padding: 4rpx 12rpx;
-  border-radius: 8rpx;
-  background: #f0f0f0;
-  color: #666;
-}
-
-.dog-list__status--heat { background: #FFF3E0; color: #E65100; }
-.dog-list__status--pregnant { background: #FCE4EC; color: #C62828; }
-.dog-list__status--nursing { background: #E8F5E9; color: #2E7D32; }
-.dog-list__status--sick { background: #FFEBEE; color: #C62828; }
-.dog-list__status--medication { background: #E3F2FD; color: #1565C0; }
-.dog-list__status--normal { display: none; }
-
 .dog-list__arrow {
-  font-size: 36rpx;
-  color: #ccc;
+  font-family: 'Material Icons Round';
+  font-size: 20px;
+  color: var(--text-4);
+  flex-shrink: 0;
 }
 
-.dog-list__empty {
-  text-align: center;
-  padding: 120rpx 0;
-  color: #999;
-  font-size: 28rpx;
-}
-
+/* FAB 添加按钮 */
 .dog-list__fab {
   position: fixed;
-  right: 40rpx;
-  bottom: 200rpx;
-  width: 100rpx;
-  height: 100rpx;
+  right: 20px;
+  bottom: 100px;
+  width: 50px;
+  height: 50px;
   border-radius: 50%;
-  background: #007AFF;
+  background: linear-gradient(135deg, var(--primary), var(--amber));
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4rpx 16rpx rgba(0, 122, 255, 0.4);
+  box-shadow: var(--shadow-fab);
+  z-index: 50;
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.88); }
 }
-
-.dog-list__fab-text {
-  font-size: 48rpx;
-  color: #fff;
-  font-weight: 300;
+.dog-list__fab-icon {
+  font-family: 'Material Icons Round';
+  font-size: 28px;
+  color: #FFFFFF;
 }
 </style>
