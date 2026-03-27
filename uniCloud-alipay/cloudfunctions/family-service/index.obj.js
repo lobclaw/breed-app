@@ -210,7 +210,8 @@ module.exports = {
   async generateInviteLink() {
     requireAdmin(this.role)
 
-    const code = Math.random().toString(36).substring(2, 8).toUpperCase()
+    const crypto = require('crypto')
+    const code = crypto.randomBytes(4).toString('hex').substring(0, 6).toUpperCase()
     const now = Date.now()
 
     await db.collection('families')
@@ -249,23 +250,26 @@ module.exports = {
     const existing = family.members.find(m => m.user_id === this.uid)
     if (existing) {
       if (existing.status === 'active') throw new Error('您已是该家庭成员')
-      // 重新激活
+      // 重新激活：需要 read-modify-write（修改现有数组元素）
       existing.status = 'active'
       existing.joined_at = now
       existing.removed_at = null
+      await db.collection('families').doc(family._id).update({
+        members: family.members,
+        updated_at: now,
+      })
     } else {
-      family.members.push({
-        user_id: this.uid,
-        role: 'helper',
-        status: 'active',
-        joined_at: now,
+      // 新成员：使用 dbCmd.push 避免并发竞争
+      await db.collection('families').doc(family._id).update({
+        members: dbCmd.push({
+          user_id: this.uid,
+          role: 'helper',
+          status: 'active',
+          joined_at: now,
+        }),
+        updated_at: now,
       })
     }
-
-    await db.collection('families').doc(family._id).update({
-      members: family.members,
-      updated_at: now,
-    })
 
     return { data: { familyId: family._id, familyName: family.name } }
   },

@@ -68,7 +68,7 @@ module.exports = {
    * 手动录入收入
    */
   async addIncome(data) {
-    if (!data.amount) throw new Error('请填写金额')
+    if (!data.amount || typeof data.amount !== 'number' || data.amount <= 0 || isNaN(data.amount)) throw new Error('请填写有效金额')
     if (!data.type) throw new Error('请选择收入类型')
 
     const now = Date.now()
@@ -187,9 +187,11 @@ module.exports = {
     const [expenseResult, incomeResult] = await Promise.all([
       db.collection('expenses')
         .where({ family_id: familyId, deleted_at: null, date: dateFilter })
+        .limit(1000)
         .get(),
       db.collection('incomes')
         .where({ family_id: familyId, deleted_at: null, date: dateFilter })
+        .limit(1000)
         .get(),
     ])
 
@@ -287,6 +289,7 @@ module.exports = {
 
     const { data: allLinkedExpenses } = await db.collection('expenses')
       .where({ family_id: familyId, deleted_at: null })
+      .limit(1000)
       .get()
 
     for (const e of allLinkedExpenses) {
@@ -381,12 +384,28 @@ module.exports = {
       totalExpense += expenses.reduce((sum, e) => sum + (e.total_amount || 0), 0)
     }
 
-    // 种母个体费用
+    // 种母个体费用（排除已通过 cycle/litter 计入的费用）
+    const countedIds = new Set()
+    for (const cid of cycleIds) {
+      const { data: ce } = await db.collection('expenses')
+        .where({ linked_cycle_id: cid, family_id: familyId, deleted_at: null })
+        .get()
+      ce.forEach(e => countedIds.add(e._id))
+    }
+    for (const lid of litterIds) {
+      const { data: le } = await db.collection('expenses')
+        .where({ linked_litter_id: lid, family_id: familyId, deleted_at: null })
+        .get()
+      le.forEach(e => countedIds.add(e._id))
+    }
+
     const { data: allExpenses } = await db.collection('expenses')
       .where({ family_id: familyId, deleted_at: null })
+      .limit(1000)
       .get()
 
     for (const e of allExpenses) {
+      if (countedIds.has(e._id)) continue // 已通过 cycle/litter 计入，跳过
       if (e.linked_dog_ids && e.linked_dog_ids.includes(damId)) {
         totalExpense += (e.total_amount || 0) / e.linked_dog_ids.length
       }
