@@ -7,6 +7,121 @@ const { verifyAndGetFamily, requireFamily } = require('breed-auth/auth')
 const db = uniCloud.database()
 const dbCmd = db.command
 
+// ── 内部辅助函数（不能放在 module.exports 内，否则 _ 前缀会被当作生命周期钩子） ──
+
+function validateDetails(type, details) {
+  if (type === 'vaccination' && !details.vaccine_type) {
+    throw new Error('请填写疫苗类型')
+  }
+  if (type === 'deworming' && !details.deworming_type) {
+    throw new Error('请选择驱虫类型')
+  }
+}
+
+async function getFamilySettings(familyId) {
+  const { data } = await db.collection('families')
+    .doc(familyId)
+    .field({ settings: true })
+    .get()
+
+  const family = data[0] || data
+  return family.settings || {
+    default_weaning_days: 45,
+    default_vaccine_interval: 21,
+    default_deworming_interval_puppy: 14,
+    default_deworming_interval_adult: 90,
+  }
+}
+
+async function generateReminders(familyId, type, data, dog, recordId) {
+  const now = Date.now()
+  const settings = await getFamilySettings(familyId)
+
+  if (type === 'vaccination' && data.details?.next_reminder_date) {
+    await db.collection('tasks').add({
+      card_type: 'individual',
+      dog_id: dog._id,
+      dog_name: dog.name,
+      type: 'vaccination',
+      title: `${dog.name} · 下次疫苗`,
+      due_date: data.details.next_reminder_date,
+      status: 'pending',
+      priority: 'upcoming',
+      source_record_id: recordId,
+      source_collection: 'health_records',
+      family_id: familyId,
+      postpone_count: 0,
+      created_at: now,
+      updated_at: now,
+    })
+  } else if (type === 'vaccination') {
+    // 默认间隔
+    await db.collection('tasks').add({
+      card_type: 'individual',
+      dog_id: dog._id,
+      dog_name: dog.name,
+      type: 'vaccination',
+      title: `${dog.name} · 下次疫苗`,
+      due_date: data.date + (settings.default_vaccine_interval * 86400000),
+      status: 'pending',
+      priority: 'upcoming',
+      source_record_id: recordId,
+      source_collection: 'health_records',
+      family_id: familyId,
+      postpone_count: 0,
+      created_at: now,
+      updated_at: now,
+    })
+  }
+
+  if (type === 'deworming') {
+    const nextDate = data.details?.next_reminder_date ||
+      (data.date + (settings.default_deworming_interval_adult * 86400000))
+
+    await db.collection('tasks').add({
+      card_type: 'individual',
+      dog_id: dog._id,
+      dog_name: dog.name,
+      type: 'deworming',
+      title: `${dog.name} · 下次驱虫`,
+      due_date: nextDate,
+      status: 'pending',
+      priority: 'upcoming',
+      source_record_id: recordId,
+      source_collection: 'health_records',
+      family_id: familyId,
+      postpone_count: 0,
+      created_at: now,
+      updated_at: now,
+    })
+  }
+}
+
+async function createExpense(familyId, uid, data, dog, sourceRecordId) {
+  const now = Date.now()
+  const typeLabels = {
+    vaccination: '疫苗',
+    deworming: '驱虫',
+    illness: '治疗',
+  }
+
+  await db.collection('expenses').add({
+    total_amount: data.cost,
+    category: typeLabels[data.type] || '健康',
+    date: data.date,
+    notes: data.notes || null,
+    linked_dog_ids: [data.dog_id],
+    dog_names: [dog.name],
+    source_type: 'auto',
+    source_record_id: sourceRecordId || null,
+    family_id: familyId,
+    created_by: uid,
+    deleted_at: null,
+    created_at: now,
+    updated_at: now,
+  })
+}
+
 module.exports = {
   _before: async function() {
     const { uid, familyId, role } = await verifyAndGetFamily(this.getUniIdToken(), this.getClientInfo())
@@ -46,7 +161,7 @@ module.exports = {
     const dog = dogs[0]
 
     // 类型特有字段校验
-    this._validateDetails(data.type, data.details || {})
+    validateDetails(data.type, data.details || {})
 
     // 创建健康记录
     const recordData = {
@@ -64,11 +179,11 @@ module.exports = {
     const { id: recordId } = await db.collection('health_records').add(recordData)
 
     // 生成下次提醒任务
-    await this._generateReminders(data.type, data, dog, recordId)
+    await generateReminders(familyId, data.type, data, dog, recordId)
 
     // 如有费用 → 创建 expense
     if (data.cost && data.cost > 0) {
-      await this._createExpense(data, dog, recordId)
+      await createExpense(familyId, this.uid, data, dog, recordId)
     }
 
     return { data: { recordId } }
@@ -227,82 +342,6 @@ module.exports = {
     return { message: '用药已提前结束' }
   },
 
-  // ── 内部方法 ──
-
-  _validateDetails(type, details) {
-    if (type === 'vaccination' && !details.vaccine_type) {
-      throw new Error('请填写疫苗类型')
-    }
-    if (type === 'deworming' && !details.deworming_type) {
-      throw new Error('请选择驱虫类型')
-    }
-  },
-
-  async _generateReminders(type, data, dog, recordId) {
-    const now = Date.now()
-    const familyId = this.familyId
-    const settings = await this._getFamilySettings()
-
-    if (type === 'vaccination' && data.details?.next_reminder_date) {
-      await db.collection('tasks').add({
-        card_type: 'individual',
-        dog_id: dog._id,
-        dog_name: dog.name,
-        type: 'vaccination',
-        title: `${dog.name} · 下次疫苗`,
-        due_date: data.details.next_reminder_date,
-        status: 'pending',
-        priority: 'upcoming',
-        source_record_id: recordId,
-        source_collection: 'health_records',
-        family_id: familyId,
-        postpone_count: 0,
-        created_at: now,
-        updated_at: now,
-      })
-    } else if (type === 'vaccination') {
-      // 默认间隔
-      await db.collection('tasks').add({
-        card_type: 'individual',
-        dog_id: dog._id,
-        dog_name: dog.name,
-        type: 'vaccination',
-        title: `${dog.name} · 下次疫苗`,
-        due_date: data.date + (settings.default_vaccine_interval * 86400000),
-        status: 'pending',
-        priority: 'upcoming',
-        source_record_id: recordId,
-        source_collection: 'health_records',
-        family_id: familyId,
-        postpone_count: 0,
-        created_at: now,
-        updated_at: now,
-      })
-    }
-
-    if (type === 'deworming') {
-      const nextDate = data.details?.next_reminder_date ||
-        (data.date + (settings.default_deworming_interval_adult * 86400000))
-
-      await db.collection('tasks').add({
-        card_type: 'individual',
-        dog_id: dog._id,
-        dog_name: dog.name,
-        type: 'deworming',
-        title: `${dog.name} · 下次驱虫`,
-        due_date: nextDate,
-        status: 'pending',
-        priority: 'upcoming',
-        source_record_id: recordId,
-        source_collection: 'health_records',
-        family_id: familyId,
-        postpone_count: 0,
-        created_at: now,
-        updated_at: now,
-      })
-    }
-  },
-
   /**
    * 获取用药方案列表
    */
@@ -411,45 +450,5 @@ module.exports = {
       .get()
 
     return { data: records }
-  },
-
-  async _createExpense(data, dog, sourceRecordId) {
-    const now = Date.now()
-    const typeLabels = {
-      vaccination: '疫苗',
-      deworming: '驱虫',
-      illness: '治疗',
-    }
-
-    await db.collection('expenses').add({
-      total_amount: data.cost,
-      category: typeLabels[data.type] || '健康',
-      date: data.date,
-      notes: data.notes || null,
-      linked_dog_ids: [data.dog_id],
-      dog_names: [dog.name],
-      source_type: 'auto',
-      source_record_id: sourceRecordId || null,
-      family_id: this.familyId,
-      created_by: this.uid,
-      deleted_at: null,
-      created_at: now,
-      updated_at: now,
-    })
-  },
-
-  async _getFamilySettings() {
-    const { data } = await db.collection('families')
-      .doc(this.familyId)
-      .field({ settings: true })
-      .get()
-
-    const family = data[0] || data
-    return family.settings || {
-      default_weaning_days: 45,
-      default_vaccine_interval: 21,
-      default_deworming_interval_puppy: 14,
-      default_deworming_interval_adult: 90,
-    }
   },
 }

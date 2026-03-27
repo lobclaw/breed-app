@@ -10,6 +10,162 @@ const dbCmd = db.command
 // 一天的毫秒数
 const DAY_MS = 86400000
 
+/**
+ * 取一组任务中的最高优先级
+ */
+function highestPriority(tasks) {
+  const order = { overdue: 0, today: 1, upcoming: 2 }
+  let best = 'upcoming'
+  for (const t of tasks) {
+    if ((order[t.priority] || 2) < (order[best] || 2)) {
+      best = t.priority
+    }
+  }
+  return best
+}
+
+/**
+ * 智能合并任务为卡片
+ * 合并优先级：窝级别 > 用药 > 护理群组 > 批量(3+同类同天) > 个体犬只
+ */
+function mergeTasks(tasks) {
+  const cards = []
+  const consumed = new Set()
+
+  // 第 1 轮：用药卡片（medication 类型合并）
+  const medTasks = tasks.filter(t => t.type === 'medication')
+  if (medTasks.length > 0) {
+    medTasks.forEach(t => consumed.add(t._id))
+    const dogMap = new Map()
+    for (const t of medTasks) {
+      if (!dogMap.has(t.dog_id)) {
+        dogMap.set(t.dog_id, { dogId: t.dog_id, dogName: t.dog_name, drugName: t.title })
+      }
+    }
+    cards.push({
+      cardType: 'medication',
+      id: 'med-' + Date.now(),
+      priority: highestPriority(medTasks),
+      groupTitle: '每日用药',
+      dogs: Array.from(dogMap.values()),
+      tasks: medTasks,
+      progress: null,
+    })
+  }
+
+  // 第 2 轮：护理群组卡片
+  const careTasks = tasks.filter(t => t.type === 'care_group' && !consumed.has(t._id))
+  if (careTasks.length > 0) {
+    const groupMap = new Map()
+    for (const t of careTasks) {
+      const key = t.title
+      if (!groupMap.has(key)) groupMap.set(key, [])
+      groupMap.get(key).push(t)
+    }
+    for (const [title, group] of groupMap) {
+      group.forEach(t => consumed.add(t._id))
+      const dogMap = new Map()
+      for (const t of group) {
+        if (!dogMap.has(t.dog_id)) {
+          dogMap.set(t.dog_id, { dogId: t.dog_id, dogName: t.dog_name, statusLabel: '' })
+        }
+      }
+      cards.push({
+        cardType: 'care_group',
+        id: 'care-' + title,
+        priority: highestPriority(group),
+        groupTitle: title,
+        dogs: Array.from(dogMap.values()),
+        tasks: group,
+      })
+    }
+  }
+
+  // 第 3 轮：窝级别合并（同 litter_id + 同 type）
+  const litterTasks = tasks.filter(t => t.litter_id && !consumed.has(t._id))
+  const litterGroups = new Map()
+  for (const t of litterTasks) {
+    const key = `${t.litter_id}__${t.type}`
+    if (!litterGroups.has(key)) litterGroups.set(key, [])
+    litterGroups.get(key).push(t)
+  }
+  for (const [, group] of litterGroups) {
+    if (group.length >= 2) {
+      group.forEach(t => consumed.add(t._id))
+      const dogMap = new Map()
+      for (const t of group) {
+        if (!dogMap.has(t.dog_id)) {
+          dogMap.set(t.dog_id, { dogId: t.dog_id, dogName: t.dog_name, completed: false })
+        }
+      }
+      const dogs = Array.from(dogMap.values())
+      cards.push({
+        cardType: 'batch',
+        id: `litter-${group[0].litter_id}-${group[0].type}`,
+        priority: highestPriority(group),
+        groupTitle: `${group[0].dog_name || ''}窝 · ${group[0].title}`,
+        dogs,
+        tasks: group,
+        progress: { done: 0, total: dogs.length },
+      })
+    }
+  }
+
+  // 第 4 轮：批量合并（同 type + 同天 + 3只以上）
+  const remaining = tasks.filter(t => !consumed.has(t._id))
+  const batchGroups = new Map()
+  for (const t of remaining) {
+    const dayKey = new Date(t.due_date).toDateString()
+    const key = `${t.type}__${dayKey}`
+    if (!batchGroups.has(key)) batchGroups.set(key, [])
+    batchGroups.get(key).push(t)
+  }
+  for (const [, group] of batchGroups) {
+    const dogIds = new Set(group.map(t => t.dog_id))
+    if (dogIds.size >= 3) {
+      group.forEach(t => consumed.add(t._id))
+      const dogMap = new Map()
+      for (const t of group) {
+        if (!dogMap.has(t.dog_id)) {
+          dogMap.set(t.dog_id, { dogId: t.dog_id, dogName: t.dog_name, completed: false })
+        }
+      }
+      const dogs = Array.from(dogMap.values())
+      cards.push({
+        cardType: 'batch',
+        id: `batch-${group[0].type}-${group[0].due_date}`,
+        priority: highestPriority(group),
+        groupTitle: `${group[0].title} · ${dogs.length}只`,
+        dogs,
+        tasks: group,
+        progress: { done: 0, total: dogs.length },
+      })
+    }
+  }
+
+  // 第 5 轮：剩余任务 → 按犬只合并为个体卡片
+  const leftover = tasks.filter(t => !consumed.has(t._id))
+  const dogGroups = new Map()
+  for (const t of leftover) {
+    const key = t.dog_id || t._id
+    if (!dogGroups.has(key)) dogGroups.set(key, [])
+    dogGroups.get(key).push(t)
+  }
+  for (const [dogId, group] of dogGroups) {
+    cards.push({
+      cardType: 'dog',
+      id: `dog-${dogId}`,
+      priority: highestPriority(group),
+      dogName: group[0].dog_name,
+      dogId: group[0].dog_id,
+      statusLabel: '',
+      tasks: group,
+    })
+  }
+
+  return cards
+}
+
 module.exports = {
   _before: async function() {
     // _timing 方法不需要用户认证
@@ -66,7 +222,7 @@ module.exports = {
     }
 
     // 智能合并为卡片
-    const cards = this._mergeTasks(tasks)
+    const cards = mergeTasks(tasks)
 
     // 按优先级分组
     const overdue = cards.filter(c => c.priority === 'overdue')
@@ -402,162 +558,4 @@ module.exports = {
     return { data: { pushCount } }
   },
 
-  /**
-   * 智能合并任务为卡片
-   * 合并优先级：窝级别 > 用药 > 护理群组 > 批量(3+同类同天) > 个体犬只
-   */
-  _mergeTasks(tasks) {
-    const cards = []
-    const consumed = new Set()
-
-    // 第 1 轮：用药卡片（medication_daily 类型合并）
-    const medTasks = tasks.filter(t => t.type === 'medication')
-    if (medTasks.length > 0) {
-      medTasks.forEach(t => consumed.add(t._id))
-      // 按犬只分组，收集药品信息
-      const dogMap = new Map()
-      for (const t of medTasks) {
-        if (!dogMap.has(t.dog_id)) {
-          dogMap.set(t.dog_id, { dogId: t.dog_id, dogName: t.dog_name, drugName: t.title })
-        }
-      }
-      cards.push({
-        cardType: 'medication',
-        id: 'med-' + Date.now(),
-        priority: this._highestPriority(medTasks),
-        groupTitle: '每日用药',
-        dogs: Array.from(dogMap.values()),
-        tasks: medTasks,
-        progress: null,
-      })
-    }
-
-    // 第 2 轮：护理群组卡片
-    const careTasks = tasks.filter(t => t.type === 'care_group' && !consumed.has(t._id))
-    if (careTasks.length > 0) {
-      // 按 title 分组（同一规则的护理任务 title 相同）
-      const groupMap = new Map()
-      for (const t of careTasks) {
-        const key = t.title
-        if (!groupMap.has(key)) groupMap.set(key, [])
-        groupMap.get(key).push(t)
-      }
-      for (const [title, group] of groupMap) {
-        group.forEach(t => consumed.add(t._id))
-        const dogMap = new Map()
-        for (const t of group) {
-          if (!dogMap.has(t.dog_id)) {
-            dogMap.set(t.dog_id, { dogId: t.dog_id, dogName: t.dog_name, statusLabel: '' })
-          }
-        }
-        cards.push({
-          cardType: 'care_group',
-          id: 'care-' + title,
-          priority: this._highestPriority(group),
-          groupTitle: title,
-          dogs: Array.from(dogMap.values()),
-          tasks: group,
-        })
-      }
-    }
-
-    // 第 3 轮：窝级别合并（同 litter_id + 同 type）
-    const litterTasks = tasks.filter(t => t.litter_id && !consumed.has(t._id))
-    const litterGroups = new Map()
-    for (const t of litterTasks) {
-      const key = `${t.litter_id}__${t.type}`
-      if (!litterGroups.has(key)) litterGroups.set(key, [])
-      litterGroups.get(key).push(t)
-    }
-    for (const [, group] of litterGroups) {
-      if (group.length >= 2) {
-        group.forEach(t => consumed.add(t._id))
-        const dogMap = new Map()
-        for (const t of group) {
-          if (!dogMap.has(t.dog_id)) {
-            dogMap.set(t.dog_id, { dogId: t.dog_id, dogName: t.dog_name, completed: false })
-          }
-        }
-        const dogs = Array.from(dogMap.values())
-        cards.push({
-          cardType: 'batch',
-          id: `litter-${group[0].litter_id}-${group[0].type}`,
-          priority: this._highestPriority(group),
-          groupTitle: `${group[0].dog_name || ''}窝 · ${group[0].title}`,
-          dogs,
-          tasks: group,
-          progress: { done: 0, total: dogs.length },
-        })
-      }
-    }
-
-    // 第 4 轮：批量合并（同 type + 同天 + 3只以上，非窝级别）
-    const remaining = tasks.filter(t => !consumed.has(t._id))
-    const batchGroups = new Map()
-    for (const t of remaining) {
-      const dayKey = new Date(t.due_date).toDateString()
-      const key = `${t.type}__${dayKey}`
-      if (!batchGroups.has(key)) batchGroups.set(key, [])
-      batchGroups.get(key).push(t)
-    }
-    for (const [, group] of batchGroups) {
-      // 去重犬只
-      const dogIds = new Set(group.map(t => t.dog_id))
-      if (dogIds.size >= 3) {
-        group.forEach(t => consumed.add(t._id))
-        const dogMap = new Map()
-        for (const t of group) {
-          if (!dogMap.has(t.dog_id)) {
-            dogMap.set(t.dog_id, { dogId: t.dog_id, dogName: t.dog_name, completed: false })
-          }
-        }
-        const dogs = Array.from(dogMap.values())
-        cards.push({
-          cardType: 'batch',
-          id: `batch-${group[0].type}-${group[0].due_date}`,
-          priority: this._highestPriority(group),
-          groupTitle: `${group[0].title} · ${dogs.length}只`,
-          dogs,
-          tasks: group,
-          progress: { done: 0, total: dogs.length },
-        })
-      }
-    }
-
-    // 第 5 轮：剩余任务 → 按犬只合并为个体卡片
-    const leftover = tasks.filter(t => !consumed.has(t._id))
-    const dogGroups = new Map()
-    for (const t of leftover) {
-      const key = t.dog_id || t._id
-      if (!dogGroups.has(key)) dogGroups.set(key, [])
-      dogGroups.get(key).push(t)
-    }
-    for (const [dogId, group] of dogGroups) {
-      cards.push({
-        cardType: 'dog',
-        id: `dog-${dogId}`,
-        priority: this._highestPriority(group),
-        dogName: group[0].dog_name,
-        dogId: group[0].dog_id,
-        statusLabel: '',
-        tasks: group,
-      })
-    }
-
-    return cards
-  },
-
-  /**
-   * 取一组任务中的最高优先级
-   */
-  _highestPriority(tasks) {
-    const order = { overdue: 0, today: 1, upcoming: 2 }
-    let best = 'upcoming'
-    for (const t of tasks) {
-      if ((order[t.priority] || 2) < (order[best] || 2)) {
-        best = t.priority
-      }
-    }
-    return best
-  },
 }
