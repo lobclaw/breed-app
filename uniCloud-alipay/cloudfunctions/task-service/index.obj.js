@@ -2,7 +2,7 @@
  * 任务云对象
  * 管理首页卡片生成、任务完成/推迟、每日审计
  */
-const { verifyAndGetFamily, requireFamily } = require('common/auth')
+const { verifyAndGetFamily, requireFamily } = require('breed-auth/auth')
 
 const db = uniCloud.database()
 const dbCmd = db.command

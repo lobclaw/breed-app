@@ -1,0 +1,6 @@
+{
+  "name": "breed-auth",
+  "version": "1.0.0",
+  "description": "繁育APP公共认证模块",
+  "main": "index.js"
+}

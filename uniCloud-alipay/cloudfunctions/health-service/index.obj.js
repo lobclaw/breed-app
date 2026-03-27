@@ -2,7 +2,7 @@
  * 健康管理云对象
  * 管理疫苗、驱虫、疾病记录、用药任务
  */
-const { verifyAndGetFamily, requireFamily } = require('common/auth')
+const { verifyAndGetFamily, requireFamily } = require('breed-auth/auth')
 
 const db = uniCloud.database()
 const dbCmd = db.command

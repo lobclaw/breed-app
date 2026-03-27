@@ -2,7 +2,7 @@
  * 繁育流程云对象
  * 管理繁育周期生命周期、8种记录类型、窝管理
  */
-const { verifyAndGetFamily, requireFamily, requireAdmin } = require('common/auth')
+const { verifyAndGetFamily, requireFamily, requireAdmin } = require('breed-auth/auth')
 
 const db = uniCloud.database()
 const dbCmd = db.command

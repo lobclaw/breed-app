@@ -2,7 +2,7 @@
  * 家庭云对象
  * 管理家庭创建、成员管理、设置
  */
-const { verifyAndGetFamily, requireAdmin, requireFamily } = require('common/auth')
+const { verifyAndGetFamily, requireAdmin, requireFamily } = require('breed-auth/auth')
 
 const db = uniCloud.database()
 const dbCmd = db.command

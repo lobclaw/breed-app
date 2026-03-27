@@ -2,7 +2,7 @@
  * 财务云对象
  * 管理费用/收入 CRUD、财务统计、销售流程
  */
-const { verifyAndGetFamily, requireFamily } = require('common/auth')
+const { verifyAndGetFamily, requireFamily } = require('breed-auth/auth')
 
 const db = uniCloud.database()
 const dbCmd = db.command

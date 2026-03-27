@@ -1,6 +1,7 @@
 /**
  * 认证状态管理
  * 管理登录状态、用户信息、家庭信息
+ * 与 uni-id-pages 集成
  */
 import { ref, computed } from 'vue'
 import { cloudCall } from './useCloudCall'
@@ -25,44 +26,44 @@ export function useAuth() {
 
   /**
    * 初始化认证状态（App 启动时调用）
-   * 检查本地缓存的 token，如果有效则恢复登录状态
+   * 监听 uni-id-pages 登录成功事件
    */
   async function init() {
     if (isInitialized.value) return
 
-    try {
-      const token = uni.getStorageSync('uni_id_token')
-      if (!token) {
-        isInitialized.value = true
-        return
-      }
-
-      // 验证 token 有效性
-      const { result } = await uniCloud.callFunction({
-        name: 'uni-id-co',
-        data: { method: 'checkToken' }
-      })
-
-      if (result?.uid) {
-        currentUser.value = { uid: result.uid, token }
+    // 监听 uni-id-pages 登录成功事件
+    uni.$on('uni-id-pages-login-success', async () => {
+      const info = uniCloud.getCurrentUserInfo()
+      if (info.uid) {
+        const token = uni.getStorageSync('uni_id_token')
+        currentUser.value = { uid: info.uid, token }
         await loadFamily()
-      } else {
-        // token 过期，清除
-        uni.removeStorageSync('uni_id_token')
+        // 登录后如果没有家庭，跳转到创建家庭页
+        if (!currentFamily.value) {
+          uni.redirectTo({ url: '/pages/family/setup' })
+        }
+      }
+    })
+
+    // 监听退出登录事件
+    uni.$on('uni-id-pages-logout', () => {
+      currentUser.value = null
+      currentFamily.value = null
+    })
+
+    try {
+      const info = uniCloud.getCurrentUserInfo()
+      const token = uni.getStorageSync('uni_id_token')
+
+      if (info.uid && info.tokenExpired > Date.now()) {
+        currentUser.value = { uid: info.uid, token }
+        await loadFamily()
       }
     } catch {
-      // 静默失败，用户需要重新登录
+      // 静默失败，uni-id-pages 的 uniIdRouter 会自动跳转登录页
     } finally {
       isInitialized.value = true
     }
-  }
-
-  /**
-   * 登录成功后调用（uni-id-pages 登录成功回调中使用）
-   */
-  async function onLoginSuccess(uid: string, token: string) {
-    currentUser.value = { uid, token }
-    await loadFamily()
   }
 
   /**
@@ -83,30 +84,27 @@ export function useAuth() {
    */
   async function createFamily(name: string) {
     const result = await cloudCall<{ data: { familyId: string } }>('family-service', 'createFamily', name)
-    // 创建后重新加载家庭信息
     await loadFamily()
     return result.data.familyId
   }
 
   /**
-   * 退出登录
+   * 退出登录（调用 uni-id-pages 的 logout）
    */
-  function logout() {
-    currentUser.value = null
-    currentFamily.value = null
-    uni.removeStorageSync('uni_id_token')
-    uni.reLaunch({ url: '/pages/index/index' })
+  async function logout() {
+    // @ts-ignore
+    const { mutations } = await import('@/uni_modules/uni-id-pages/common/store.js')
+    mutations.logout()
   }
 
   /**
    * 跳转到登录页
    */
   function navigateToLogin() {
-    uni.navigateTo({ url: '/uni_modules/uni-id-pages/pages/login/login-withoutpwd' })
+    uni.navigateTo({ url: '/uni_modules/uni-id-pages/pages/login/login-withpwd' })
   }
 
   return {
-    // 状态
     currentUser,
     currentFamily,
     isLoggedIn,
@@ -114,9 +112,7 @@ export function useAuth() {
     userRole,
     isAdmin,
     isInitialized,
-    // 方法
     init,
-    onLoginSuccess,
     loadFamily,
     createFamily,
     logout,

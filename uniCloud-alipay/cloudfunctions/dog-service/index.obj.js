@@ -2,7 +2,7 @@
  * 犬只档案云对象
  * 负责犬只 CRUD、状态派生、disposition 变更
  */
-const { verifyAndGetFamily, requireFamily, requireAdmin } = require('common/auth')
+const { verifyAndGetFamily, requireFamily, requireAdmin } = require('breed-auth/auth')
 
 const db = uniCloud.database()
 const dbCmd = db.command

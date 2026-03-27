@@ -61,8 +61,9 @@ export function useCloudCall<T = any>(
       const service = uniCloud.importObject(serviceName)
       const result = await (service as any)[methodName](...args)
 
-      if (result.code !== 0) {
-        throw new Error(result.message || '操作失败')
+      // 云对象返回 errCode 时表示业务错误
+      if (result && result.errCode) {
+        throw new Error(result.errMsg || result.message || '操作失败')
       }
 
       if (successMessage) {
@@ -105,8 +106,8 @@ export async function cloudCall<T = any>(
   const service = uniCloud.importObject(serviceName)
   const result = await (service as any)[methodName](...args)
 
-  if (result.code !== 0) {
-    throw new Error(result.message || '操作失败')
+  if (result && result.errCode) {
+    throw new Error(result.errMsg || result.message || '操作失败')
   }
 
   return result as T

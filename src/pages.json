@@ -152,6 +152,21 @@
 			}
 		}
 	],
+	"uniIdRouter": {
+		"loginPage": "uni_modules/uni-id-pages/pages/login/login-withpwd",
+		"needLogin": [
+			"pages/home/index",
+			"pages/dog/.*",
+			"pages/finance/.*",
+			"pages/profile/.*",
+			"pages/breeding/.*",
+			"pages/record/.*",
+			"pages/sale/.*",
+			"pages/family/.*",
+			"pages/health/.*"
+		],
+		"rpiority": "redirect"
+	},
 	"globalStyle": {
 		"navigationBarTextStyle": "black",
 		"navigationBarTitleText": "繁育管理",
