@@ -150,8 +150,11 @@
 import { ref, reactive, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
 import WeekStrip from '@/components/week-strip/WeekStrip.vue'
 import SmartCard from '@/components/smart-card/SmartCard.vue'
+
+const { hasFamily, loadFamily } = useAuth()
 
 const showActionSheet = ref(false)
 
@@ -296,7 +299,16 @@ async function confirmQuickComplete() {
   loadDateCounts()
 }
 
-onShow(() => {
+onShow(async () => {
+  // 确保家庭信息已加载
+  if (!hasFamily.value) {
+    await loadFamily()
+  }
+  // 没有家庭则跳转创建页
+  if (!hasFamily.value) {
+    uni.navigateTo({ url: '/pages/family/setup' })
+    return
+  }
   selectedDate.value = startOfDay(Date.now())
   loadCards()
   loadDateCounts()

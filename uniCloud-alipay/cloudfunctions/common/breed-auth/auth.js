@@ -32,10 +32,14 @@ async function verifyAndGetFamily(token, clientInfo) {
   }
 
   // 查询用户所属家庭（单家庭模式：取第一个 active 的）
+  // 使用 elemMatch 确保匹配同一个成员的 user_id 和 status
+  const dbCmd = db.command
   const { data: families } = await db.collection('families')
     .where({
-      'members.user_id': uid,
-      'members.status': 'active'
+      members: dbCmd.elemMatch({
+        user_id: uid,
+        status: 'active'
+      })
     })
     .limit(1)
     .get()
