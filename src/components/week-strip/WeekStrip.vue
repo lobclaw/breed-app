@@ -1,40 +1,55 @@
+<!--
+  WeekStrip — 7天日期预览条
+  设计稿：home-v1-final.html .day-strip 区域
+  月份标题 + 7天格子（星期标签 + 日期数字 + 事件圆点）
+  今日高亮：品牌色底 + 白字 + 粉色阴影
+-->
 <template>
-  <view class="week-strip">
-    <!-- 月份标题 -->
-    <view class="week-strip__header" @click="$emit('toggle-calendar')">
-      <text class="week-strip__month">{{ monthLabel }}</text>
-      <text class="week-strip__arrow">&#9662;</text>
+  <view class="day-strip-wrap">
+    <!-- 月份标题：2026年3月 · -->
+    <view class="month-header" @click="$emit('toggle-calendar')">
+      <text class="month-text">{{ monthLabel }}</text>
+      <text class="month-arrow">·</text>
     </view>
 
-    <!-- 7天导航 -->
-    <scroll-view scroll-x class="week-strip__days" :scroll-left="scrollLeft">
+    <!-- 7天格子 -->
+    <view class="day-strip">
       <view
         v-for="day in days"
         :key="day.ts"
-        class="week-strip__day"
-        :class="{
-          'week-strip__day--active': day.ts === selectedDate,
-          'week-strip__day--today': day.isToday,
-        }"
+        class="day-cell"
+        :class="{ 'today': day.ts === selectedDate || (day.isToday && day.ts === selectedDate) }"
         @click="$emit('select', day.ts)"
       >
-        <text class="week-strip__day-label">{{ day.label }}</text>
-        <text class="week-strip__day-num">{{ day.date }}</text>
-        <view v-if="day.count > 0" class="week-strip__day-dot">
-          <text class="week-strip__day-count">{{ day.count > 9 ? '9+' : day.count }}</text>
+        <!-- 星期标签 -->
+        <text class="day-label" :class="{ 'day-label--today': day.isToday && day.ts === selectedDate }">
+          {{ day.label }}
+        </text>
+        <!-- 日期数字方块 -->
+        <view class="day-num" :class="{ 'day-num--today': day.ts === selectedDate }">
+          <text class="day-num-text" :class="{ 'day-num-text--today': day.ts === selectedDate }">
+            {{ day.date }}
+          </text>
+        </view>
+        <!-- 事件圆点（最多3个） -->
+        <view class="event-dots">
+          <view
+            v-for="(dot, idx) in day.dots"
+            :key="idx"
+            class="event-dot"
+            :style="{ background: dot }"
+          />
         </view>
       </view>
-    </scroll-view>
+    </view>
   </view>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed } from 'vue'
 
 const props = defineProps<{
-  /** 当前选中日期 timestamp（毫秒，0点） */
   selectedDate: number
-  /** 每天事件数 Record<timestamp, count> */
   dayCounts?: Record<number, number>
 }>()
 
@@ -43,10 +58,11 @@ defineEmits<{
   (e: 'toggle-calendar'): void
 }>()
 
-const scrollLeft = ref(0)
 const WEEK_LABELS = ['日', '一', '二', '三', '四', '五', '六']
 
-/** 获取日期 0 点 timestamp */
+/** 事件圆点颜色：根据数量映射 */
+const DOT_COLORS = ['var(--red)', 'var(--amber)', 'var(--green)']
+
 function startOfDay(ts: number): number {
   const d = new Date(ts)
   d.setHours(0, 0, 0, 0)
@@ -58,21 +74,30 @@ const today = computed(() => startOfDay(Date.now()))
 const days = computed(() => {
   const result = []
   const DAY_MS = 86400000
-  // 显示过去2天 + 今天 + 未来11天 = 14天
-  const start = today.value - 2 * DAY_MS
+  // 显示以今天为中心的7天（前3天 + 今天 + 后3天）
+  const start = today.value - 3 * DAY_MS
 
-  for (let i = 0; i < 14; i++) {
+  for (let i = 0; i < 7; i++) {
     const ts = start + i * DAY_MS
     const d = new Date(ts)
-    const dayOfWeek = d.getDay()
     const isToday = ts === today.value
+    const count = props.dayCounts?.[ts] || 0
+
+    // 生成事件圆点（按数量分配颜色）
+    const dots: string[] = []
+    if (count > 0) {
+      dots.push(DOT_COLORS[0])
+      if (count > 2) dots.push(DOT_COLORS[1])
+      if (count > 4) dots.push(DOT_COLORS[2])
+    }
 
     result.push({
       ts,
       date: d.getDate(),
-      label: isToday ? '今' : WEEK_LABELS[dayOfWeek],
+      label: isToday ? '今' : WEEK_LABELS[d.getDay()],
       isToday,
-      count: props.dayCounts?.[ts] || 0,
+      count,
+      dots,
     })
   }
 
@@ -83,33 +108,98 @@ const monthLabel = computed(() => {
   const d = new Date(props.selectedDate || today.value)
   return `${d.getFullYear()}年${d.getMonth() + 1}月`
 })
-
-// 初始滚动到"今天"附近
-watch(
-  () => days.value,
-  () => {
-    // 今天是第3个元素（index=2），每个元素约90rpx宽
-    // 滚动使今天居中偏左
-    scrollLeft.value = 0
-  },
-  { immediate: true }
-)
 </script>
 
-<style scoped>
-.week-strip { background: #fff; border-bottom: 1rpx solid #f0f0f0; }
-.week-strip__header { display: flex; align-items: center; justify-content: center; padding: 12rpx 0 4rpx; gap: 8rpx; }
-.week-strip__month { font-size: 26rpx; color: #333; font-weight: 500; }
-.week-strip__arrow { font-size: 20rpx; color: #999; }
-.week-strip__days { display: flex; white-space: nowrap; padding: 8rpx 16rpx 16rpx; }
-.week-strip__day { display: inline-flex; flex-direction: column; align-items: center; width: 90rpx; min-width: 90rpx; padding: 8rpx 0; border-radius: 16rpx; position: relative; }
-.week-strip__day--active { background: #007AFF; }
-.week-strip__day--active .week-strip__day-label { color: #fff; }
-.week-strip__day--active .week-strip__day-num { color: #fff; }
-.week-strip__day--today .week-strip__day-num { color: #007AFF; font-weight: 700; }
-.week-strip__day--active.week-strip__day--today .week-strip__day-num { color: #fff; }
-.week-strip__day-label { font-size: 22rpx; color: #999; }
-.week-strip__day-num { font-size: 32rpx; color: #333; font-weight: 500; margin-top: 4rpx; }
-.week-strip__day-dot { position: absolute; top: 2rpx; right: 10rpx; min-width: 28rpx; height: 28rpx; border-radius: 14rpx; background: #FF3B30; display: flex; align-items: center; justify-content: center; }
-.week-strip__day-count { font-size: 18rpx; color: #fff; font-weight: 600; }
+<style lang="scss" scoped>
+/* 一比一还原 home-v1-final.html .day-strip */
+.day-strip-wrap {
+  background: transparent;
+}
+
+/* 月份标题 */
+.month-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 20px 8px;
+}
+.month-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.month-arrow {
+  font-size: 16px;
+  color: var(--text-3);
+}
+
+/* 7天格子行 */
+.day-strip {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 20px 16px;
+}
+
+/* 单个日期格子 */
+.day-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 40px;
+  transition: transform 0.12s ease;
+  &:active { transform: scale(0.9); }
+}
+
+/* 星期标签 */
+.day-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-3);
+  text-transform: uppercase;
+
+  &--today {
+    color: var(--primary);
+    font-weight: 700;
+  }
+}
+
+/* 日期数字方块 */
+.day-num {
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &--today {
+    background: var(--primary);
+    box-shadow: 0 3px 12px rgba(234, 62, 119, 0.3);
+  }
+}
+.day-num-text {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-1);
+
+  &--today {
+    color: #FFFFFF;
+  }
+}
+
+/* 事件圆点 */
+.event-dots {
+  display: flex;
+  gap: 3px;
+  height: 6px;
+  align-items: center;
+}
+.event-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+}
 </style>
