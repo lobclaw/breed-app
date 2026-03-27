@@ -75,18 +75,94 @@ function goToInvite() {
 onShow(() => load())
 </script>
 
-<style scoped>
-.members { min-height: 100vh; background: #f5f5f5; padding-bottom: 140rpx; }
-.members__list { padding: 16rpx 32rpx; }
-.members__item { background: #fff; border-radius: 16rpx; padding: 24rpx; margin-bottom: 12rpx; display: flex; justify-content: space-between; align-items: center; }
-.members__info { flex: 1; }
-.members__name { font-size: 30rpx; font-weight: 500; color: #333; display: block; }
-.members__role { font-size: 24rpx; padding: 4rpx 12rpx; border-radius: 8rpx; margin-top: 8rpx; display: inline-block; }
-.members__role--creator { background: #FFF3E0; color: #E65100; }
-.members__role--admin { background: #E3F2FD; color: #1565C0; }
-.members__role--helper { background: #f5f5f5; color: #666; }
-.members__actions { display: flex; gap: 8rpx; }
-.members__empty { text-align: center; padding: 80rpx; color: #999; font-size: 28rpx; }
-.members__footer { position: fixed; bottom: 0; left: 0; right: 0; padding: 20rpx 32rpx; background: #fff; padding-bottom: calc(20rpx + env(safe-area-inset-bottom)); }
-.members__invite-btn { width: 100%; height: 88rpx; border-radius: 44rpx; background: #007AFF; color: #fff; font-size: 32rpx; }
+<style lang="scss" scoped>
+.members {
+  min-height: 100vh;
+  background: var(--bg);
+  padding-bottom: 70px;
+}
+
+.members__list {
+  padding: 8px 16px;
+}
+
+.members__item {
+  background: var(--card);
+  border-radius: var(--radius-card);
+  padding: 12px;
+  margin-bottom: 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: var(--shadow);
+}
+
+.members__info {
+  flex: 1;
+}
+
+.members__name {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-1);
+  display: block;
+}
+
+.members__role {
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: var(--radius-tag);
+  margin-top: 4px;
+  display: inline-block;
+}
+
+.members__role--creator {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.members__role--admin {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.members__role--helper {
+  background: var(--bg);
+  color: var(--text-2);
+}
+
+.members__actions {
+  display: flex;
+  gap: 4px;
+}
+
+.members__empty {
+  text-align: center;
+  padding: 40px;
+  color: var(--text-3);
+  font-size: 14px;
+}
+
+.members__footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 10px 16px;
+  background: var(--card);
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  box-shadow: var(--shadow);
+}
+
+.members__invite-btn {
+  width: 100%;
+  height: 44px;
+  border-radius: var(--radius-btn);
+  background: var(--primary);
+  color: var(--card);
+  font-size: 16px;
+  font-family: var(--font-display);
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
+}
 </style>

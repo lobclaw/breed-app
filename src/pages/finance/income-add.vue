@@ -99,19 +99,99 @@ onLoad(() => {
 })
 </script>
 
-<style scoped>
-.income-add { min-height: 100vh; background: #f5f5f5; padding-bottom: 140rpx; }
-.income-add__section { background: #fff; margin: 16rpx 32rpx; border-radius: 16rpx; padding: 24rpx; }
-.income-add__field { padding: 20rpx 0; border-bottom: 1rpx solid #f5f5f5; }
-.income-add__field:last-child { border-bottom: none; }
-.income-add__label { font-size: 28rpx; color: #333; margin-bottom: 12rpx; display: block; }
-.income-add__input { font-size: 28rpx; color: #333; }
-.income-add__input--big { font-size: 48rpx; font-weight: 700; color: #FF3B30; }
-.income-add__types { display: flex; flex-wrap: wrap; gap: 12rpx; }
-.income-add__type { padding: 10rpx 24rpx; border-radius: 20rpx; background: #f5f5f5; font-size: 26rpx; color: #666; }
-.income-add__type--active { background: #FF3B30; color: #fff; }
-.income-add__picker { font-size: 28rpx; color: #333; }
-.income-add__footer { position: fixed; bottom: 0; left: 0; right: 0; padding: 20rpx 32rpx; background: #fff; padding-bottom: calc(20rpx + env(safe-area-inset-bottom)); }
-.income-add__submit { width: 100%; height: 88rpx; border-radius: 44rpx; background: #FF3B30; color: #fff; font-size: 32rpx; }
-.income-add__submit[disabled] { opacity: 0.5; }
+<style lang="scss" scoped>
+.income-add {
+  min-height: 100vh;
+  background: var(--bg);
+  padding-bottom: 70px;
+}
+
+.income-add__section {
+  background: var(--card);
+  margin: 8px 16px;
+  border-radius: var(--radius-card);
+  padding: 12px;
+  box-shadow: var(--shadow);
+}
+
+.income-add__field {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--bg);
+}
+
+.income-add__field:last-child {
+  border-bottom: none;
+}
+
+.income-add__label {
+  font-size: 14px;
+  color: var(--text-1);
+  margin-bottom: 6px;
+  display: block;
+}
+
+.income-add__input {
+  font-size: 14px;
+  color: var(--text-1);
+}
+
+.income-add__input--big {
+  font-size: 24px;
+  font-weight: 700;
+  font-family: var(--font-display);
+  color: var(--red);
+}
+
+.income-add__types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.income-add__type {
+  padding: 5px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--bg);
+  font-size: 13px;
+  color: var(--text-2);
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
+}
+
+.income-add__type--active {
+  background: var(--red);
+  color: var(--card);
+}
+
+.income-add__picker {
+  font-size: 14px;
+  color: var(--text-1);
+}
+
+.income-add__footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 10px 16px;
+  background: var(--card);
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  box-shadow: var(--shadow);
+}
+
+.income-add__submit {
+  width: 100%;
+  height: 44px;
+  border-radius: var(--radius-btn);
+  background: var(--red);
+  color: var(--card);
+  font-size: 16px;
+  font-family: var(--font-display);
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
+}
+
+.income-add__submit[disabled] {
+  opacity: 0.5;
+}
 </style>

@@ -134,45 +134,47 @@ onLoad((query) => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .litter {
   min-height: 100vh;
-  background: #f5f5f5;
-  padding-bottom: 140rpx;
+  background: var(--bg);
+  padding-bottom: 70px;
 }
 
 .litter__header {
-  background: #fff;
-  padding: 32rpx;
+  background: var(--card);
+  padding: 16px;
+  box-shadow: var(--shadow);
 }
 
 .litter__parents {
   display: flex;
   align-items: baseline;
-  gap: 12rpx;
-  margin-bottom: 8rpx;
+  gap: 6px;
+  margin-bottom: 4px;
 }
 
 .litter__dam {
-  font-size: 36rpx;
+  font-size: 18px;
   font-weight: 700;
-  color: #333;
+  font-family: var(--font-display);
+  color: var(--text-1);
 }
 
 .litter__sire {
-  font-size: 28rpx;
-  color: #999;
+  font-size: 14px;
+  color: var(--text-3);
 }
 
 .litter__meta {
-  font-size: 26rpx;
-  color: #666;
-  margin-bottom: 24rpx;
+  font-size: 13px;
+  color: var(--text-2);
+  margin-bottom: 12px;
 }
 
 .litter__stats {
   display: flex;
-  gap: 32rpx;
+  gap: 16px;
 }
 
 .litter__stat {
@@ -182,62 +184,69 @@ onLoad((query) => {
 }
 
 .litter__stat-num {
-  font-size: 32rpx;
+  font-size: 16px;
   font-weight: 600;
-  color: #333;
+  font-family: var(--font-display);
+  color: var(--text-1);
 }
 
 .litter__stat-num--dead {
-  color: #FF3B30;
+  color: var(--red);
 }
 
 .litter__stat-num--done {
-  color: #4CAF50;
-  font-size: 24rpx;
+  color: var(--green);
+  font-size: 12px;
 }
 
 .litter__stat-num--pending {
-  color: #FF9500;
-  font-size: 24rpx;
+  color: var(--amber);
+  font-size: 12px;
 }
 
 .litter__stat-label {
-  font-size: 22rpx;
-  color: #999;
-  margin-top: 4rpx;
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 2px;
 }
 
 .litter__section {
-  margin: 16rpx 32rpx;
-  background: #fff;
-  border-radius: 16rpx;
-  padding: 24rpx;
+  margin: 8px 16px;
+  background: var(--card);
+  border-radius: var(--radius-card);
+  padding: 12px;
+  box-shadow: var(--shadow);
 }
 
 .litter__section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16rpx;
+  margin-bottom: 8px;
 }
 
 .litter__section-title {
-  font-size: 30rpx;
+  font-size: 15px;
   font-weight: 600;
-  color: #333;
+  font-family: var(--font-display);
+  color: var(--text-1);
 }
 
 .litter__add-btn {
-  font-size: 26rpx;
-  color: #007AFF;
+  font-size: 13px;
+  color: var(--primary);
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
 }
 
 .litter__puppy {
   display: flex;
   align-items: center;
-  gap: 20rpx;
-  padding: 16rpx 0;
-  border-bottom: 1rpx solid #f5f5f5;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--bg);
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
 }
 
 .litter__puppy:last-child {
@@ -245,23 +254,23 @@ onLoad((query) => {
 }
 
 .litter__puppy-avatar {
-  width: 64rpx;
-  height: 64rpx;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 28rpx;
-  color: #fff;
+  font-size: 14px;
+  color: var(--card);
   flex-shrink: 0;
 }
 
 .litter__puppy-avatar--母 {
-  background: #FF6B81;
+  background: var(--rose);
 }
 
 .litter__puppy-avatar--公 {
-  background: #54A0FF;
+  background: var(--blue);
 }
 
 .litter__puppy-info {
@@ -269,28 +278,28 @@ onLoad((query) => {
 }
 
 .litter__puppy-name {
-  font-size: 28rpx;
+  font-size: 14px;
   font-weight: 500;
-  color: #333;
+  color: var(--text-1);
   display: block;
 }
 
 .litter__puppy-meta {
-  font-size: 24rpx;
-  color: #999;
-  margin-top: 4rpx;
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 2px;
 }
 
 .litter__puppy-arrow {
-  font-size: 32rpx;
-  color: #ccc;
+  font-size: 16px;
+  color: var(--text-4);
 }
 
 .litter__empty {
   text-align: center;
-  padding: 40rpx;
-  color: #999;
-  font-size: 28rpx;
+  padding: 20px;
+  color: var(--text-3);
+  font-size: 14px;
 }
 
 .litter__actions {
@@ -298,17 +307,21 @@ onLoad((query) => {
   bottom: 0;
   left: 0;
   right: 0;
-  padding: 20rpx 32rpx;
-  background: #fff;
-  padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+  padding: 10px 16px;
+  background: var(--card);
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  box-shadow: var(--shadow);
 }
 
 .litter__btn {
   width: 100%;
-  height: 80rpx;
-  border-radius: 40rpx;
-  background: #4CAF50;
-  color: #fff;
-  font-size: 28rpx;
+  height: 40px;
+  border-radius: var(--radius-btn);
+  background: var(--green);
+  color: var(--card);
+  font-size: 14px;
+  font-family: var(--font-display);
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
 }
 </style>

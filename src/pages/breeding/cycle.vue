@@ -123,42 +123,229 @@ onLoad((query) => {
 })
 </script>
 
-<style scoped>
-.cycle { min-height: 100vh; background: #f5f5f5; padding-bottom: 140rpx; }
-.cycle__header { background: #fff; padding: 32rpx; }
-.cycle__status { display: inline-block; padding: 6rpx 20rpx; border-radius: 8rpx; font-size: 24rpx; margin-bottom: 12rpx; }
-.cycle__status--发情中 { background: #FFF3E0; color: #E65100; }
-.cycle__status--怀孕中 { background: #FCE4EC; color: #C62828; }
-.cycle__status--已生产 { background: #E8F5E9; color: #2E7D32; }
-.cycle__status--失败 { background: #f5f5f5; color: #999; }
-.cycle__status--放弃 { background: #f5f5f5; color: #999; }
-.cycle__dam { display: block; font-size: 36rpx; font-weight: 700; color: #333; margin-top: 8rpx; }
-.cycle__sire { display: block; font-size: 26rpx; color: #999; margin-top: 4rpx; }
+<style lang="scss" scoped>
+.cycle {
+  min-height: 100vh;
+  background: var(--bg);
+  padding-bottom: 70px;
+}
 
-.cycle__timeline { padding: 24rpx 32rpx; }
-.cycle__record { display: flex; gap: 20rpx; margin-bottom: 24rpx; position: relative; padding-left: 8rpx; }
-.cycle__record::before { content: ''; position: absolute; left: 11rpx; top: 24rpx; bottom: -24rpx; width: 2rpx; background: #e0e0e0; }
-.cycle__record:last-child::before { display: none; }
-.cycle__dot { width: 24rpx; height: 24rpx; border-radius: 50%; background: #007AFF; flex-shrink: 0; margin-top: 4rpx; z-index: 1; }
-.cycle__dot--heat { background: #FF9500; }
-.cycle__dot--mating { background: #FF3B30; }
-.cycle__dot--birth { background: #4CAF50; }
-.cycle__record-content { flex: 1; background: #fff; border-radius: 12rpx; padding: 16rpx 20rpx; }
-.cycle__record-header { display: flex; justify-content: space-between; }
-.cycle__record-type { font-size: 28rpx; font-weight: 500; color: #333; }
-.cycle__record-date { font-size: 24rpx; color: #999; }
-.cycle__record-notes { display: block; font-size: 24rpx; color: #666; margin-top: 8rpx; }
-.cycle__record-cost { display: block; font-size: 24rpx; color: #FF9500; margin-top: 4rpx; }
-.cycle__record-detail { margin-top: 8rpx; font-size: 24rpx; color: #666; }
-.cycle__empty { text-align: center; padding: 60rpx; color: #999; font-size: 28rpx; }
+.cycle__header {
+  background: var(--card);
+  padding: 16px;
+  box-shadow: var(--shadow);
+}
 
-.cycle__litter { background: #fff; margin: 16rpx 32rpx; border-radius: 16rpx; padding: 24rpx; }
-.cycle__litter-title { font-size: 30rpx; font-weight: 600; color: #333; margin-bottom: 12rpx; }
-.cycle__litter-info { display: flex; flex-wrap: wrap; gap: 16rpx; font-size: 26rpx; color: #666; }
-.cycle__litter-weaning { color: #FF9500; }
+.cycle__status {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: var(--radius-tag);
+  font-size: 12px;
+  margin-bottom: 6px;
+}
 
-.cycle__actions { position: fixed; bottom: 0; left: 0; right: 0; display: flex; gap: 20rpx; padding: 20rpx 32rpx; background: #fff; padding-bottom: calc(20rpx + env(safe-area-inset-bottom)); }
-.cycle__btn { flex: 1; height: 80rpx; border-radius: 40rpx; font-size: 28rpx; background: #f5f5f5; color: #333; }
-.cycle__btn--primary { background: #007AFF; color: #fff; }
-.cycle__btn--birth { background: #4CAF50; color: #fff; }
+.cycle__status--发情中 {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.cycle__status--怀孕中 {
+  background: var(--rose-soft);
+  color: var(--rose);
+}
+
+.cycle__status--已生产 {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.cycle__status--失败 {
+  background: var(--bg);
+  color: var(--text-3);
+}
+
+.cycle__status--放弃 {
+  background: var(--bg);
+  color: var(--text-3);
+}
+
+.cycle__dam {
+  display: block;
+  font-size: 18px;
+  font-weight: 700;
+  font-family: var(--font-display);
+  color: var(--text-1);
+  margin-top: 4px;
+}
+
+.cycle__sire {
+  display: block;
+  font-size: 13px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+
+.cycle__timeline {
+  padding: 12px 16px;
+}
+
+.cycle__record {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+  position: relative;
+  padding-left: 4px;
+}
+
+.cycle__record::before {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 12px;
+  bottom: -12px;
+  width: 1px;
+  background: var(--text-4);
+}
+
+.cycle__record:last-child::before {
+  display: none;
+}
+
+.cycle__dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--primary);
+  flex-shrink: 0;
+  margin-top: 2px;
+  z-index: 1;
+}
+
+.cycle__dot--heat {
+  background: var(--amber);
+}
+
+.cycle__dot--mating {
+  background: var(--red);
+}
+
+.cycle__dot--birth {
+  background: var(--green);
+}
+
+.cycle__record-content {
+  flex: 1;
+  background: var(--card);
+  border-radius: var(--radius-row);
+  padding: 8px 10px;
+  box-shadow: var(--shadow);
+}
+
+.cycle__record-header {
+  display: flex;
+  justify-content: space-between;
+}
+
+.cycle__record-type {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-1);
+}
+
+.cycle__record-date {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.cycle__record-notes {
+  display: block;
+  font-size: 12px;
+  color: var(--text-2);
+  margin-top: 4px;
+}
+
+.cycle__record-cost {
+  display: block;
+  font-size: 12px;
+  color: var(--amber);
+  font-family: var(--font-display);
+  margin-top: 2px;
+}
+
+.cycle__record-detail {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.cycle__empty {
+  text-align: center;
+  padding: 30px;
+  color: var(--text-3);
+  font-size: 14px;
+}
+
+.cycle__litter {
+  background: var(--card);
+  margin: 8px 16px;
+  border-radius: var(--radius-card);
+  padding: 12px;
+  box-shadow: var(--shadow);
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
+}
+
+.cycle__litter-title {
+  font-size: 15px;
+  font-weight: 600;
+  font-family: var(--font-display);
+  color: var(--text-1);
+  margin-bottom: 6px;
+}
+
+.cycle__litter-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.cycle__litter-weaning {
+  color: var(--amber);
+}
+
+.cycle__actions {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--card);
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  box-shadow: var(--shadow);
+}
+
+.cycle__btn {
+  flex: 1;
+  height: 40px;
+  border-radius: var(--radius-btn);
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--text-1);
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
+}
+
+.cycle__btn--primary {
+  background: var(--primary);
+  color: var(--card);
+}
+
+.cycle__btn--birth {
+  background: var(--green);
+  color: var(--card);
+}
 </style>

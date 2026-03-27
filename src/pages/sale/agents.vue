@@ -77,20 +77,116 @@ async function remove(id: string) {
 onShow(() => load())
 </script>
 
-<style scoped>
-.agents { min-height: 100vh; background: #f5f5f5; padding-bottom: 120rpx; }
-.agents__list { padding: 16rpx 32rpx; }
-.agents__item { background: #fff; border-radius: 16rpx; padding: 24rpx; margin-bottom: 12rpx; display: flex; justify-content: space-between; align-items: center; }
-.agents__item-info { flex: 1; }
-.agents__item-name { font-size: 30rpx; font-weight: 500; color: #333; display: block; }
-.agents__item-contact { font-size: 24rpx; color: #999; display: block; margin-top: 4rpx; }
-.agents__empty { text-align: center; padding: 80rpx; color: #999; font-size: 28rpx; }
-.agents__add { padding: 16rpx 32rpx; }
-.agents__form { background: #fff; border-radius: 16rpx; padding: 24rpx; }
-.agents__input { border-bottom: 1rpx solid #f0f0f0; padding: 20rpx 0; font-size: 28rpx; color: #333; }
-.agents__form-actions { display: flex; gap: 16rpx; margin-top: 24rpx; }
-.agents__btn { flex: 1; height: 72rpx; border-radius: 36rpx; font-size: 28rpx; background: #f5f5f5; color: #666; line-height: 72rpx; padding: 0; }
-.agents__btn--primary { background: #007AFF; color: #fff; }
-.agents__btn[disabled] { opacity: 0.5; }
-.agents__fab { position: fixed; right: 32rpx; bottom: 120rpx; width: 96rpx; height: 96rpx; border-radius: 50%; background: #007AFF; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 48rpx; box-shadow: 0 4rpx 16rpx rgba(0,122,255,0.3); }
+<style lang="scss" scoped>
+.agents {
+  min-height: 100vh;
+  background: var(--bg);
+  padding-bottom: 60px;
+}
+
+.agents__list {
+  padding: 8px 16px;
+}
+
+.agents__item {
+  background: var(--card);
+  border-radius: var(--radius-card);
+  padding: 12px;
+  margin-bottom: 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: var(--shadow);
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
+}
+
+.agents__item-info {
+  flex: 1;
+}
+
+.agents__item-name {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-1);
+  display: block;
+}
+
+.agents__item-contact {
+  font-size: 12px;
+  color: var(--text-3);
+  display: block;
+  margin-top: 2px;
+}
+
+.agents__empty {
+  text-align: center;
+  padding: 40px;
+  color: var(--text-3);
+  font-size: 14px;
+}
+
+.agents__add {
+  padding: 8px 16px;
+}
+
+.agents__form {
+  background: var(--card);
+  border-radius: var(--radius-card);
+  padding: 12px;
+  box-shadow: var(--shadow);
+}
+
+.agents__input {
+  border-bottom: 1px solid var(--card-dim);
+  padding: 10px 0;
+  font-size: 14px;
+  color: var(--text-1);
+}
+
+.agents__form-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.agents__btn {
+  flex: 1;
+  height: 36px;
+  border-radius: var(--radius-btn);
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--text-2);
+  line-height: 36px;
+  padding: 0;
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
+}
+
+.agents__btn--primary {
+  background: var(--primary);
+  color: var(--card);
+}
+
+.agents__btn[disabled] {
+  opacity: 0.5;
+}
+
+.agents__fab {
+  position: fixed;
+  right: 16px;
+  bottom: 60px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: var(--card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  box-shadow: var(--shadow-fab);
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
+}
 </style>

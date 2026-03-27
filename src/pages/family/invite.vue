@@ -39,12 +39,57 @@ function copyCode() {
 }
 </script>
 
-<style scoped>
-.invite { min-height: 100vh; background: #f5f5f5; }
-.invite__section { background: #fff; margin: 16rpx 32rpx; border-radius: 16rpx; padding: 40rpx; text-align: center; }
-.invite__desc { font-size: 28rpx; color: #666; display: block; margin-bottom: 40rpx; }
-.invite__code-wrap { display: flex; align-items: center; justify-content: center; gap: 16rpx; margin-bottom: 40rpx; }
-.invite__code { font-size: 56rpx; font-weight: 700; color: #007AFF; letter-spacing: 8rpx; }
-.invite__copy { font-size: 24rpx; }
-.invite__btn { width: 100%; height: 88rpx; border-radius: 44rpx; background: #007AFF; color: #fff; font-size: 32rpx; }
+<style lang="scss" scoped>
+.invite {
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+.invite__section {
+  background: var(--card);
+  margin: 8px 16px;
+  border-radius: var(--radius-card);
+  padding: 20px;
+  text-align: center;
+  box-shadow: var(--shadow);
+}
+
+.invite__desc {
+  font-size: 14px;
+  color: var(--text-2);
+  display: block;
+  margin-bottom: 20px;
+}
+
+.invite__code-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.invite__code {
+  font-size: 28px;
+  font-weight: 700;
+  font-family: var(--font-display);
+  color: var(--primary);
+  letter-spacing: 4px;
+}
+
+.invite__copy {
+  font-size: 12px;
+}
+
+.invite__btn {
+  width: 100%;
+  height: 44px;
+  border-radius: var(--radius-btn);
+  background: var(--primary);
+  color: var(--card);
+  font-size: 16px;
+  font-family: var(--font-display);
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
+}
 </style>

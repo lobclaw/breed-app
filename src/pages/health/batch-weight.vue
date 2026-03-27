@@ -113,24 +113,136 @@ async function submit() {
 onShow(() => loadLitters())
 </script>
 
-<style scoped>
-.batch-weight { min-height: 100vh; background: #f5f5f5; }
-.batch-weight__section { background: #fff; margin: 16rpx 32rpx; border-radius: 16rpx; padding: 24rpx; }
-.batch-weight__header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16rpx; }
-.batch-weight__title { font-size: 32rpx; font-weight: 700; color: #333; display: block; margin-bottom: 16rpx; }
-.batch-weight__back { font-size: 26rpx; color: #007AFF; }
-.batch-weight__litter { display: flex; justify-content: space-between; padding: 20rpx 0; border-bottom: 1rpx solid #f5f5f5; }
-.batch-weight__litter:last-child { border-bottom: none; }
-.batch-weight__litter-name { font-size: 30rpx; color: #333; font-weight: 500; }
-.batch-weight__litter-info { font-size: 26rpx; color: #999; }
-.batch-weight__empty { text-align: center; padding: 40rpx; color: #999; font-size: 28rpx; }
-.batch-weight__date { display: flex; justify-content: space-between; align-items: center; padding: 16rpx 0; border-bottom: 1rpx solid #f5f5f5; margin-bottom: 16rpx; }
-.batch-weight__label { font-size: 28rpx; color: #333; }
-.batch-weight__picker { font-size: 28rpx; color: #007AFF; }
-.batch-weight__puppy { display: flex; align-items: center; padding: 16rpx 0; border-bottom: 1rpx solid #f5f5f5; gap: 16rpx; }
-.batch-weight__puppy-name { font-size: 28rpx; color: #333; width: 150rpx; }
-.batch-weight__puppy-input { flex: 1; font-size: 32rpx; font-weight: 600; color: #333; text-align: right; }
-.batch-weight__unit { font-size: 26rpx; color: #999; }
-.batch-weight__submit { margin-top: 24rpx; width: 100%; height: 88rpx; border-radius: 44rpx; background: #007AFF; color: #fff; font-size: 32rpx; }
-.batch-weight__submit[disabled] { opacity: 0.5; }
+<style lang="scss" scoped>
+.batch-weight {
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+.batch-weight__section {
+  background: var(--card);
+  margin: 8px 16px;
+  border-radius: var(--radius-card);
+  padding: 12px;
+  box-shadow: var(--shadow);
+}
+
+.batch-weight__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.batch-weight__title {
+  font-size: 16px;
+  font-weight: 700;
+  font-family: var(--font-display);
+  color: var(--text-1);
+  display: block;
+  margin-bottom: 8px;
+}
+
+.batch-weight__back {
+  font-size: 13px;
+  color: var(--primary);
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
+}
+
+.batch-weight__litter {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--bg);
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
+}
+
+.batch-weight__litter:last-child {
+  border-bottom: none;
+}
+
+.batch-weight__litter-name {
+  font-size: 15px;
+  color: var(--text-1);
+  font-weight: 500;
+}
+
+.batch-weight__litter-info {
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+.batch-weight__empty {
+  text-align: center;
+  padding: 20px;
+  color: var(--text-3);
+  font-size: 14px;
+}
+
+.batch-weight__date {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--bg);
+  margin-bottom: 8px;
+}
+
+.batch-weight__label {
+  font-size: 14px;
+  color: var(--text-1);
+}
+
+.batch-weight__picker {
+  font-size: 14px;
+  color: var(--primary);
+  font-family: var(--font-display);
+}
+
+.batch-weight__puppy {
+  display: flex;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--bg);
+  gap: 8px;
+}
+
+.batch-weight__puppy-name {
+  font-size: 14px;
+  color: var(--text-1);
+  width: 75px;
+}
+
+.batch-weight__puppy-input {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 600;
+  font-family: var(--font-display);
+  color: var(--text-1);
+  text-align: right;
+}
+
+.batch-weight__unit {
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+.batch-weight__submit {
+  margin-top: 12px;
+  width: 100%;
+  height: 44px;
+  border-radius: var(--radius-btn);
+  background: var(--primary);
+  color: var(--card);
+  font-size: 16px;
+  font-family: var(--font-display);
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
+}
+
+.batch-weight__submit[disabled] {
+  opacity: 0.5;
+}
 </style>

@@ -286,65 +286,69 @@ onLoad((query) => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .wizard {
   min-height: 100vh;
-  background: #f5f5f5;
-  padding-bottom: 140rpx;
+  background: var(--bg);
+  padding-bottom: 70px;
 }
 
 .wizard__steps {
   display: flex;
   justify-content: center;
-  gap: 40rpx;
-  padding: 32rpx;
-  background: #fff;
+  gap: 20px;
+  padding: 16px;
+  background: var(--card);
+  box-shadow: var(--shadow);
 }
 
 .wizard__step {
-  width: 48rpx;
-  height: 48rpx;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
-  background: #e0e0e0;
-  color: #999;
-  font-size: 24rpx;
+  background: var(--text-4);
+  color: var(--text-3);
+  font-size: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
+  font-family: var(--font-display);
 }
 
 .wizard__step--active {
-  background: #007AFF;
-  color: #fff;
+  background: var(--primary);
+  color: var(--card);
 }
 
 .wizard__step--current {
-  box-shadow: 0 0 0 4rpx rgba(0, 122, 255, 0.3);
+  box-shadow: 0 0 0 2px rgba(234, 62, 119, 0.3);
 }
 
 .wizard__content {
-  padding: 16rpx 32rpx;
+  padding: 8px 16px;
 }
 
 .wizard__section {
-  background: #fff;
-  border-radius: 16rpx;
-  padding: 24rpx;
+  background: var(--card);
+  border-radius: var(--radius-card);
+  padding: 12px;
+  box-shadow: var(--shadow);
 }
 
 .wizard__section-title {
-  font-size: 30rpx;
+  font-size: 15px;
   font-weight: 600;
-  color: #333;
-  margin-bottom: 20rpx;
+  font-family: var(--font-display);
+  color: var(--text-1);
+  margin-bottom: 10px;
   display: block;
 }
 
 .wizard__field {
   display: flex;
   align-items: center;
-  padding: 20rpx 0;
-  border-bottom: 1rpx solid #f5f5f5;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--bg);
 }
 
 .wizard__field:last-child {
@@ -352,125 +356,132 @@ onLoad((query) => {
 }
 
 .wizard__label {
-  width: 160rpx;
-  font-size: 28rpx;
-  color: #333;
+  width: 80px;
+  font-size: 14px;
+  color: var(--text-1);
   flex-shrink: 0;
 }
 
 .wizard__input {
   flex: 1;
-  font-size: 28rpx;
-  color: #333;
+  font-size: 14px;
+  color: var(--text-1);
 }
 
 .wizard__picker {
   flex: 1;
-  font-size: 28rpx;
-  color: #333;
+  font-size: 14px;
+  color: var(--text-1);
 }
 
 .wizard__picker--empty {
-  color: #ccc;
+  color: var(--text-4);
 }
 
 .wizard__options {
   display: flex;
-  gap: 12rpx;
+  gap: 6px;
   flex: 1;
 }
 
 .wizard__option {
-  padding: 10rpx 24rpx;
-  border-radius: 20rpx;
-  background: #f5f5f5;
-  font-size: 26rpx;
-  color: #666;
+  padding: 5px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--bg);
+  font-size: 13px;
+  color: var(--text-2);
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
 }
 
 .wizard__option--active {
-  background: #007AFF;
-  color: #fff;
+  background: var(--primary);
+  color: var(--card);
 }
 
 .wizard__option--dead.wizard__option--active {
-  background: #FF3B30;
+  background: var(--red);
 }
 
 .wizard__puppy {
-  background: #fafafa;
-  border-radius: 12rpx;
-  padding: 16rpx 20rpx;
-  margin-bottom: 16rpx;
+  background: var(--card-dim);
+  border-radius: var(--radius-row);
+  padding: 8px 10px;
+  margin-bottom: 8px;
 }
 
 .wizard__puppy-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8rpx;
+  margin-bottom: 4px;
 }
 
 .wizard__puppy-num {
-  font-size: 26rpx;
+  font-size: 13px;
   font-weight: 600;
-  color: #007AFF;
+  font-family: var(--font-display);
+  color: var(--primary);
 }
 
 .wizard__puppy-remove {
-  font-size: 24rpx;
-  color: #FF3B30;
+  font-size: 12px;
+  color: var(--red);
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
 }
 
 .wizard__add-puppy {
   text-align: center;
-  padding: 24rpx;
-  color: #007AFF;
-  font-size: 28rpx;
-  border: 2rpx dashed #007AFF;
-  border-radius: 12rpx;
-  margin-top: 8rpx;
+  padding: 12px;
+  color: var(--primary);
+  font-size: 14px;
+  border: 1px dashed var(--primary);
+  border-radius: var(--radius-row);
+  margin-top: 4px;
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
 }
 
 .wizard__summary {
-  margin-bottom: 24rpx;
+  margin-bottom: 12px;
 }
 
 .wizard__summary-row {
   display: flex;
   justify-content: space-between;
-  padding: 12rpx 0;
-  font-size: 28rpx;
-  color: #333;
+  padding: 6px 0;
+  font-size: 14px;
+  color: var(--text-1);
 }
 
 .wizard__summary-label {
-  color: #999;
+  color: var(--text-3);
 }
 
 .wizard__summary-dead {
-  color: #FF3B30;
+  color: var(--red);
 }
 
 .wizard__puppy-list {
-  border-top: 1rpx solid #f0f0f0;
-  padding-top: 16rpx;
+  border-top: 1px solid var(--card-dim);
+  padding-top: 8px;
 }
 
 .wizard__puppy-preview {
   display: flex;
   justify-content: space-between;
-  padding: 12rpx 0;
-  font-size: 26rpx;
+  padding: 6px 0;
+  font-size: 13px;
 }
 
 .wizard__puppy-preview-name {
-  color: #333;
+  color: var(--text-1);
   font-weight: 500;
 }
 
 .wizard__puppy-preview-info {
-  color: #999;
+  color: var(--text-3);
 }
 
 .wizard__footer {
@@ -479,24 +490,27 @@ onLoad((query) => {
   left: 0;
   right: 0;
   display: flex;
-  gap: 20rpx;
-  padding: 20rpx 32rpx;
-  background: #fff;
-  padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--card);
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  box-shadow: var(--shadow);
 }
 
 .wizard__btn {
   flex: 1;
-  height: 80rpx;
-  border-radius: 40rpx;
-  font-size: 28rpx;
-  background: #f5f5f5;
-  color: #333;
+  height: 40px;
+  border-radius: var(--radius-btn);
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--text-1);
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
 }
 
 .wizard__btn--primary {
-  background: #007AFF;
-  color: #fff;
+  background: var(--primary);
+  color: var(--card);
 }
 
 .wizard__btn--primary[disabled] {

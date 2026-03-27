@@ -94,21 +94,120 @@ async function remove(idx: number) {
 onShow(() => load())
 </script>
 
-<style scoped>
-.protocols { min-height: 100vh; background: #f5f5f5; padding-bottom: 120rpx; }
-.protocols__list { padding: 16rpx 32rpx; }
-.protocols__item { background: #fff; border-radius: 16rpx; padding: 24rpx; margin-bottom: 12rpx; }
-.protocols__item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8rpx; }
-.protocols__item-name { font-size: 30rpx; font-weight: 600; color: #333; }
-.protocols__item-drug { font-size: 26rpx; color: #666; display: block; }
-.protocols__item-notes { font-size: 24rpx; color: #999; display: block; margin-top: 4rpx; }
-.protocols__empty { text-align: center; padding: 80rpx; color: #999; font-size: 28rpx; }
-.protocols__add { padding: 16rpx 32rpx; }
-.protocols__form { background: #fff; border-radius: 16rpx; padding: 24rpx; }
-.protocols__input { border-bottom: 1rpx solid #f0f0f0; padding: 20rpx 0; font-size: 28rpx; color: #333; }
-.protocols__form-actions { display: flex; gap: 16rpx; margin-top: 24rpx; }
-.protocols__btn { flex: 1; height: 72rpx; border-radius: 36rpx; font-size: 28rpx; background: #f5f5f5; color: #666; line-height: 72rpx; padding: 0; }
-.protocols__btn--primary { background: #007AFF; color: #fff; }
-.protocols__btn[disabled] { opacity: 0.5; }
-.protocols__fab { position: fixed; right: 32rpx; bottom: 120rpx; width: 96rpx; height: 96rpx; border-radius: 50%; background: #007AFF; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 48rpx; box-shadow: 0 4rpx 16rpx rgba(0,122,255,0.3); }
+<style lang="scss" scoped>
+.protocols {
+  min-height: 100vh;
+  background: var(--bg);
+  padding-bottom: 60px;
+}
+
+.protocols__list {
+  padding: 8px 16px;
+}
+
+.protocols__item {
+  background: var(--card);
+  border-radius: var(--radius-card);
+  padding: 12px;
+  margin-bottom: 6px;
+  box-shadow: var(--shadow);
+}
+
+.protocols__item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.protocols__item-name {
+  font-size: 15px;
+  font-weight: 600;
+  font-family: var(--font-display);
+  color: var(--text-1);
+}
+
+.protocols__item-drug {
+  font-size: 13px;
+  color: var(--text-2);
+  display: block;
+}
+
+.protocols__item-notes {
+  font-size: 12px;
+  color: var(--text-3);
+  display: block;
+  margin-top: 2px;
+}
+
+.protocols__empty {
+  text-align: center;
+  padding: 40px;
+  color: var(--text-3);
+  font-size: 14px;
+}
+
+.protocols__add {
+  padding: 8px 16px;
+}
+
+.protocols__form {
+  background: var(--card);
+  border-radius: var(--radius-card);
+  padding: 12px;
+  box-shadow: var(--shadow);
+}
+
+.protocols__input {
+  border-bottom: 1px solid var(--card-dim);
+  padding: 10px 0;
+  font-size: 14px;
+  color: var(--text-1);
+}
+
+.protocols__form-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.protocols__btn {
+  flex: 1;
+  height: 36px;
+  border-radius: var(--radius-btn);
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--text-2);
+  line-height: 36px;
+  padding: 0;
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
+}
+
+.protocols__btn--primary {
+  background: var(--primary);
+  color: var(--card);
+}
+
+.protocols__btn[disabled] {
+  opacity: 0.5;
+}
+
+.protocols__fab {
+  position: fixed;
+  right: 16px;
+  bottom: 60px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: var(--card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  box-shadow: var(--shadow-fab);
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
+}
 </style>

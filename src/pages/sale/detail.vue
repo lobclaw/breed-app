@@ -309,47 +309,240 @@ onLoad((options: any) => {
 })
 </script>
 
-<style scoped>
-.sale-detail { min-height: 100vh; background: #f5f5f5; padding-bottom: 140rpx; }
+<style lang="scss" scoped>
+.sale-detail {
+  min-height: 100vh;
+  background: var(--bg);
+  padding-bottom: 70px;
+}
 
-.sale-detail__header { padding: 40rpx 32rpx; text-align: center; }
-.sale-detail__header--待售 { background: linear-gradient(135deg, #FFF3E0, #FFE0B2); }
-.sale-detail__header--已预定 { background: linear-gradient(135deg, #E3F2FD, #BBDEFB); }
-.sale-detail__header--已成交 { background: linear-gradient(135deg, #E8F5E9, #C8E6C9); }
-.sale-detail__header--已退款 { background: linear-gradient(135deg, #f5f5f5, #e0e0e0); }
-.sale-detail__header--定金取消 { background: linear-gradient(135deg, #f5f5f5, #e0e0e0); }
-.sale-detail__status { display: block; font-size: 24rpx; color: #666; margin-bottom: 8rpx; }
-.sale-detail__dog-name { font-size: 40rpx; font-weight: 700; color: #333; }
+.sale-detail__header {
+  padding: 20px 16px;
+  text-align: center;
+}
 
-.sale-detail__section { background: #fff; margin: 16rpx 32rpx; border-radius: 16rpx; padding: 24rpx; }
-.sale-detail__row { display: flex; justify-content: space-between; align-items: center; padding: 16rpx 0; border-bottom: 1rpx solid #f5f5f5; }
-.sale-detail__row:last-child { border-bottom: none; }
-.sale-detail__label { font-size: 28rpx; color: #999; }
-.sale-detail__value { font-size: 28rpx; color: #333; font-weight: 500; }
-.sale-detail__value-wrap { display: flex; align-items: center; gap: 8rpx; }
-.sale-detail__value--income { color: #FF3B30; }
-.sale-detail__value--refund { color: #FF3B30; }
-.sale-detail__warning { font-size: 22rpx; color: #fff; background: #FF3B30; padding: 2rpx 12rpx; border-radius: 8rpx; }
+.sale-detail__header--待售 {
+  background: linear-gradient(135deg, var(--amber-soft), var(--icon-amber));
+}
 
-.sale-detail__actions { display: flex; gap: 16rpx; padding: 24rpx 32rpx; }
-.sale-detail__btn { flex: 1; height: 80rpx; border-radius: 40rpx; font-size: 30rpx; line-height: 80rpx; padding: 0; }
-.sale-detail__btn--deposit { background: #E3F2FD; color: #1565C0; }
-.sale-detail__btn--complete { background: #E8F5E9; color: #2E7D32; }
-.sale-detail__btn--cancel { background: #f5f5f5; color: #999; }
+.sale-detail__header--已预定 {
+  background: linear-gradient(135deg, var(--blue-soft), var(--icon-blue));
+}
+
+.sale-detail__header--已成交 {
+  background: linear-gradient(135deg, var(--green-soft), var(--icon-green));
+}
+
+.sale-detail__header--已退款 {
+  background: linear-gradient(135deg, var(--bg), var(--card-dim));
+}
+
+.sale-detail__header--定金取消 {
+  background: linear-gradient(135deg, var(--bg), var(--card-dim));
+}
+
+.sale-detail__status {
+  display: block;
+  font-size: 12px;
+  color: var(--text-2);
+  margin-bottom: 4px;
+}
+
+.sale-detail__dog-name {
+  font-size: 20px;
+  font-weight: 700;
+  font-family: var(--font-display);
+  color: var(--text-1);
+}
+
+.sale-detail__section {
+  background: var(--card);
+  margin: 8px 16px;
+  border-radius: var(--radius-card);
+  padding: 12px;
+  box-shadow: var(--shadow);
+}
+
+.sale-detail__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--bg);
+}
+
+.sale-detail__row:last-child {
+  border-bottom: none;
+}
+
+.sale-detail__label {
+  font-size: 14px;
+  color: var(--text-3);
+}
+
+.sale-detail__value {
+  font-size: 14px;
+  color: var(--text-1);
+  font-weight: 500;
+  font-family: var(--font-display);
+}
+
+.sale-detail__value-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sale-detail__value--income {
+  color: var(--red);
+}
+
+.sale-detail__value--refund {
+  color: var(--red);
+}
+
+.sale-detail__warning {
+  font-size: 11px;
+  color: var(--card);
+  background: var(--red);
+  padding: 1px 6px;
+  border-radius: var(--radius-tag);
+}
+
+.sale-detail__actions {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+}
+
+.sale-detail__btn {
+  flex: 1;
+  height: 40px;
+  border-radius: var(--radius-btn);
+  font-size: 15px;
+  line-height: 40px;
+  padding: 0;
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
+}
+
+.sale-detail__btn--deposit {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.sale-detail__btn--complete {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.sale-detail__btn--cancel {
+  background: var(--bg);
+  color: var(--text-3);
+}
 
 /* 弹窗 */
-.sale-detail__modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 100; }
-.sale-detail__modal-content { background: #fff; border-radius: 24rpx; padding: 40rpx; width: 85%; max-width: 600rpx; }
-.sale-detail__modal-title { font-size: 34rpx; font-weight: 700; color: #333; display: block; margin-bottom: 32rpx; text-align: center; }
-.sale-detail__modal-field { margin-bottom: 24rpx; }
-.sale-detail__modal-label { font-size: 26rpx; color: #666; margin-bottom: 8rpx; display: block; }
-.sale-detail__modal-input { border: 1rpx solid #e0e0e0; border-radius: 12rpx; padding: 16rpx; font-size: 28rpx; }
-.sale-detail__platforms { display: flex; flex-wrap: wrap; gap: 12rpx; }
-.sale-detail__platform { padding: 8rpx 20rpx; border-radius: 16rpx; background: #f5f5f5; font-size: 24rpx; color: #666; }
-.sale-detail__platform--active { background: #007AFF; color: #fff; }
-.sale-detail__modal-actions { display: flex; gap: 16rpx; margin-top: 32rpx; }
-.sale-detail__modal-btn { flex: 1; height: 72rpx; border-radius: 36rpx; font-size: 28rpx; background: #f5f5f5; color: #666; line-height: 72rpx; padding: 0; }
-.sale-detail__modal-btn--primary { background: #007AFF; color: #fff; }
-.sale-detail__modal-btn--warn { background: #FF3B30; color: #fff; }
-.sale-detail__modal-btn[disabled] { opacity: 0.5; }
+.sale-detail__modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--mask);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.sale-detail__modal-content {
+  background: var(--card);
+  border-radius: var(--radius-card);
+  padding: 20px;
+  width: 85%;
+  max-width: 300px;
+  box-shadow: var(--shadow-lg);
+}
+
+.sale-detail__modal-title {
+  font-size: 17px;
+  font-weight: 700;
+  font-family: var(--font-display);
+  color: var(--text-1);
+  display: block;
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.sale-detail__modal-field {
+  margin-bottom: 12px;
+}
+
+.sale-detail__modal-label {
+  font-size: 13px;
+  color: var(--text-2);
+  margin-bottom: 4px;
+  display: block;
+}
+
+.sale-detail__modal-input {
+  border: 1px solid var(--text-4);
+  border-radius: var(--radius-row);
+  padding: 8px;
+  font-size: 14px;
+}
+
+.sale-detail__platforms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sale-detail__platform {
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--bg);
+  font-size: 12px;
+  color: var(--text-2);
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
+}
+
+.sale-detail__platform--active {
+  background: var(--primary);
+  color: var(--card);
+}
+
+.sale-detail__modal-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.sale-detail__modal-btn {
+  flex: 1;
+  height: 36px;
+  border-radius: var(--radius-btn);
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--text-2);
+  line-height: 36px;
+  padding: 0;
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
+}
+
+.sale-detail__modal-btn--primary {
+  background: var(--primary);
+  color: var(--card);
+}
+
+.sale-detail__modal-btn--warn {
+  background: var(--red);
+  color: var(--card);
+}
+
+.sale-detail__modal-btn[disabled] {
+  opacity: 0.5;
+}
 </style>

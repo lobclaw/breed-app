@@ -256,57 +256,61 @@ onLoad((query) => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .health-form {
   min-height: 100vh;
-  background: #f5f5f5;
-  padding-bottom: 140rpx;
+  background: var(--bg);
+  padding-bottom: 70px;
 }
 
 .health-form__section {
-  background: #fff;
-  margin: 16rpx 32rpx;
-  border-radius: 16rpx;
-  padding: 24rpx;
+  background: var(--card);
+  margin: 8px 16px;
+  border-radius: var(--radius-card);
+  padding: 12px;
+  box-shadow: var(--shadow);
 }
 
 .health-form__section:first-child {
-  margin-top: 16rpx;
+  margin-top: 8px;
 }
 
 .health-form__section-title {
-  font-size: 30rpx;
+  font-size: 15px;
   font-weight: 600;
-  color: #333;
-  margin-bottom: 20rpx;
+  font-family: var(--font-display);
+  color: var(--text-1);
+  margin-bottom: 10px;
   display: block;
 }
 
 .health-form__types {
   display: flex;
-  gap: 16rpx;
+  gap: 8px;
 }
 
 .health-form__type {
   flex: 1;
   text-align: center;
-  padding: 16rpx;
-  border-radius: 12rpx;
-  background: #f5f5f5;
-  font-size: 28rpx;
-  color: #666;
+  padding: 8px;
+  border-radius: var(--radius-row);
+  background: var(--bg);
+  font-size: 14px;
+  color: var(--text-2);
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
 }
 
 .health-form__type--active {
-  background: #007AFF;
-  color: #fff;
+  background: var(--primary);
+  color: var(--card);
 }
 
 .health-form__field {
   display: flex;
   align-items: center;
-  padding: 20rpx 0;
-  border-bottom: 1rpx solid #f5f5f5;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--bg);
 }
 
 .health-form__field:last-child {
@@ -314,46 +318,48 @@ onLoad((query) => {
 }
 
 .health-form__label {
-  width: 160rpx;
-  font-size: 28rpx;
-  color: #333;
+  width: 80px;
+  font-size: 14px;
+  color: var(--text-1);
   flex-shrink: 0;
 }
 
 .health-form__input {
   flex: 1;
-  font-size: 28rpx;
-  color: #333;
+  font-size: 14px;
+  color: var(--text-1);
 }
 
 .health-form__picker {
   flex: 1;
-  font-size: 28rpx;
-  color: #333;
+  font-size: 14px;
+  color: var(--text-1);
 }
 
 .health-form__picker--empty {
-  color: #ccc;
+  color: var(--text-4);
 }
 
 .health-form__options {
   display: flex;
-  gap: 12rpx;
+  gap: 6px;
   flex: 1;
   flex-wrap: wrap;
 }
 
 .health-form__option {
-  padding: 10rpx 24rpx;
-  border-radius: 20rpx;
-  background: #f5f5f5;
-  font-size: 26rpx;
-  color: #666;
+  padding: 5px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--bg);
+  font-size: 13px;
+  color: var(--text-2);
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
 }
 
 .health-form__option--active {
-  background: #007AFF;
-  color: #fff;
+  background: var(--primary);
+  color: var(--card);
 }
 
 .health-form__footer {
@@ -361,21 +367,25 @@ onLoad((query) => {
   bottom: 0;
   left: 0;
   right: 0;
-  padding: 20rpx 32rpx;
-  background: #fff;
-  padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+  padding: 10px 16px;
+  background: var(--card);
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  box-shadow: var(--shadow);
 }
 
 .health-form__submit {
   width: 100%;
-  height: 88rpx;
-  border-radius: 44rpx;
-  background: #007AFF;
-  color: #fff;
-  font-size: 32rpx;
+  height: 44px;
+  border-radius: var(--radius-btn);
+  background: var(--primary);
+  color: var(--card);
+  font-size: 16px;
+  font-family: var(--font-display);
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
 }
 
 .health-form__submit[disabled] {

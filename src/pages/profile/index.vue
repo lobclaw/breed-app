@@ -69,17 +69,84 @@ function goTo(url: string) {
 }
 </script>
 
-<style scoped>
-.profile { min-height: 100vh; background: #f5f5f5; }
-.profile__header { display: flex; gap: 24rpx; padding: 40rpx 32rpx; background: #fff; align-items: center; }
-.profile__avatar { width: 100rpx; height: 100rpx; border-radius: 50%; background: #007AFF; display: flex; align-items: center; justify-content: center; }
-.profile__avatar-text { font-size: 40rpx; color: #fff; font-weight: 600; }
-.profile__info { flex: 1; }
-.profile__name { font-size: 34rpx; font-weight: 600; color: #333; display: block; }
-.profile__role { font-size: 26rpx; color: #999; margin-top: 4rpx; display: block; }
-.profile__menu { background: #fff; margin-top: 16rpx; }
-.profile__menu-item { display: flex; justify-content: space-between; align-items: center; padding: 28rpx 32rpx; border-bottom: 1rpx solid #f5f5f5; font-size: 30rpx; }
-.profile__menu-item:last-child { border-bottom: none; }
-.profile__arrow { color: #ccc; font-size: 36rpx; }
-.profile__logout-text { color: #FF3B30; }
+<style lang="scss" scoped>
+.profile {
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+.profile__header {
+  display: flex;
+  gap: 12px;
+  padding: 20px 16px;
+  background: var(--card);
+  align-items: center;
+  box-shadow: var(--shadow);
+}
+
+.profile__avatar {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.profile__avatar-text {
+  font-size: 20px;
+  font-family: var(--font-display);
+  color: var(--card);
+  font-weight: 600;
+}
+
+.profile__info {
+  flex: 1;
+}
+
+.profile__name {
+  font-size: 17px;
+  font-weight: 600;
+  font-family: var(--font-display);
+  color: var(--text-1);
+  display: block;
+}
+
+.profile__role {
+  font-size: 13px;
+  color: var(--text-3);
+  margin-top: 2px;
+  display: block;
+}
+
+.profile__menu {
+  background: var(--card);
+  margin-top: 8px;
+  box-shadow: var(--shadow);
+}
+
+.profile__menu-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--bg);
+  font-size: 15px;
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
+}
+
+.profile__menu-item:last-child {
+  border-bottom: none;
+}
+
+.profile__arrow {
+  color: var(--text-4);
+  font-size: 18px;
+}
+
+.profile__logout-text {
+  color: var(--red);
+}
 </style>

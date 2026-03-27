@@ -1,20 +1,23 @@
 <template>
-  <view class="dog-detail" v-if="dog">
+  <!-- 加载骨架屏 -->
+  <BSkeleton v-if="loading" :rows="3" :avatar="true" />
+
+  <!-- 主内容 -->
+  <view class="dog-detail" v-else-if="dog">
     <!-- 头部信息 -->
     <view class="dog-detail__header">
       <DogAvatar :name="dog.name" :size="128" />
       <view class="dog-detail__header-info">
         <text class="dog-detail__name">{{ dog.name || '未命名' }}</text>
         <text class="dog-detail__meta">{{ dog.gender }} · {{ dog.role }} · {{ dog.breed }}</text>
+        <!-- 状态标签 — 使用 BTag 组件 + 功能色映射 -->
         <view class="dog-detail__statuses">
-          <text
+          <BTag
             v-for="(s, idx) in statuses"
             :key="idx"
-            class="dog-detail__status-tag"
-            :class="`dog-detail__status-tag--${s.type}`"
-          >
-            {{ s.type }}
-          </text>
+            :label="s.type"
+            :color="statusColorMap[s.type] || 'primary'"
+          />
         </view>
       </view>
     </view>
@@ -44,25 +47,27 @@
       </view>
     </view>
 
-    <!-- Tab 切换 -->
-    <view class="dog-detail__tabs">
-      <view
-        v-for="tab in tabs"
-        :key="tab.key"
-        class="dog-detail__tab"
-        :class="{ 'dog-detail__tab--active': activeTab === tab.key }"
-        @click="activeTab = tab.key"
-      >
-        <text>{{ tab.label }}</text>
-      </view>
-    </view>
+    <!-- Tab 切换 — 使用 BTabBar 组件 -->
+    <BTabBar :tabs="tabs" v-model="activeTab" />
 
     <!-- Tab 内容 -->
     <view class="dog-detail__tab-content">
       <!-- 繁育历史 -->
       <view v-if="activeTab === 'breeding'">
-        <view v-if="cycles.length === 0" class="dog-detail__empty">暂无繁育记录</view>
-        <view v-for="cycle in cycles" :key="cycle._id" class="dog-detail__record" @click="goToCycle(cycle._id)">
+        <BEmpty
+          v-if="cycles.length === 0"
+          icon="child_care"
+          title="暂无繁育记录"
+          description="添加第一条繁育记录开始跟踪"
+          actionText="添加记录"
+          @action="addRecord"
+        />
+        <view
+          v-for="cycle in cycles"
+          :key="cycle._id"
+          class="dog-detail__record"
+          @click="goToCycle(cycle._id)"
+        >
           <view class="dog-detail__record-header">
             <text class="dog-detail__record-title">繁育周期 · {{ cycle.status }}</text>
             <text class="dog-detail__record-date">{{ formatDate(cycle.created_at) }}</text>
@@ -73,7 +78,12 @@
 
       <!-- 健康记录 -->
       <view v-if="activeTab === 'health'">
-        <view v-if="healthRecords.length === 0" class="dog-detail__empty">暂无健康记录</view>
+        <BEmpty
+          v-if="healthRecords.length === 0"
+          icon="healing"
+          title="暂无健康记录"
+          description="记录疫苗、驱虫、疾病等信息"
+        />
         <view v-for="record in healthRecords" :key="record._id" class="dog-detail__record">
           <view class="dog-detail__record-header">
             <text class="dog-detail__record-title">{{ typeLabel(record.type) }}</text>
@@ -85,7 +95,11 @@
 
       <!-- 财务 -->
       <view v-if="activeTab === 'finance'">
-        <view class="dog-detail__empty">财务功能将在第二批开发</view>
+        <BEmpty
+          icon="account_balance_wallet"
+          title="财务功能将在第二批开发"
+          description="敬请期待"
+        />
       </view>
     </view>
 
@@ -98,9 +112,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import DogAvatar from '@/components/common/DogAvatar.vue'
+import BTag from '@/components/base/BTag.vue'
+import BTabBar from '@/components/layout/BTabBar.vue'
+import BSkeleton from '@/components/feedback/BSkeleton.vue'
+import BEmpty from '@/components/feedback/BEmpty.vue'
 import { useCloudCall } from '@/composables/useCloudCall'
 import type { Dog, DeriveStatus } from '@/types/dog'
 
@@ -109,6 +127,7 @@ const statuses = ref<DeriveStatus[]>([])
 const cycles = ref<any[]>([])
 const healthRecords = ref<any[]>([])
 const activeTab = ref('breeding')
+const loading = ref(true)
 let dogId = ''
 
 const tabs = [
@@ -116,6 +135,15 @@ const tabs = [
   { key: 'health', label: '健康' },
   { key: 'finance', label: '财务' },
 ]
+
+// 状态 → 功能色映射
+const statusColorMap: Record<string, 'amber' | 'rose' | 'green' | 'red' | 'plum'> = {
+  '发情中': 'amber',
+  '怀孕中': 'rose',
+  '哺乳中': 'green',
+  '生病中': 'red',
+  '用药中': 'plum',
+}
 
 const { run: fetchDetail } = useCloudCall<{ data: Dog }>('dog-service', 'getDogDetail')
 const { run: fetchCycles } = useCloudCall<{ data: any[] }>('breeding-service', 'getCycleHistory')
@@ -161,20 +189,25 @@ function addRecord() {
 }
 
 async function loadData() {
-  const [detailRes, cyclesRes, healthRes] = await Promise.all([
-    fetchDetail(dogId),
-    fetchCycles(dogId),
-    fetchHealth(dogId),
-  ])
+  loading.value = true
+  try {
+    const [detailRes, cyclesRes, healthRes] = await Promise.all([
+      fetchDetail(dogId),
+      fetchCycles(dogId),
+      fetchHealth(dogId),
+    ])
 
-  if (detailRes?.data) {
-    dog.value = detailRes.data
-  }
-  if (cyclesRes?.data) {
-    cycles.value = cyclesRes.data
-  }
-  if (healthRes?.data) {
-    healthRecords.value = healthRes.data
+    if (detailRes?.data) {
+      dog.value = detailRes.data
+    }
+    if (cyclesRes?.data) {
+      cycles.value = cyclesRes.data
+    }
+    if (healthRes?.data) {
+      healthRecords.value = healthRes.data
+    }
+  } finally {
+    loading.value = false
   }
 }
 
@@ -184,18 +217,19 @@ onLoad((query) => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .dog-detail {
   min-height: 100vh;
-  background: #f5f5f5;
-  padding-bottom: 140rpx;
+  background: var(--bg);
+  padding-bottom: 70px; // 为底部操作栏留空间
 }
 
+// 头部：头像 + 名字 + 状态标签
 .dog-detail__header {
   display: flex;
-  gap: 24rpx;
-  padding: 32rpx;
-  background: #fff;
+  gap: 12px;
+  padding: 16px var(--space-page);
+  background: var(--card);
   align-items: center;
 }
 
@@ -204,57 +238,47 @@ onLoad((query) => {
 }
 
 .dog-detail__name {
-  font-size: 36rpx;
+  font-family: var(--font-display);
+  font-size: 18px;
   font-weight: 700;
-  color: #333;
+  color: var(--text-1);
 }
 
 .dog-detail__meta {
-  font-size: 26rpx;
-  color: #999;
-  margin-top: 6rpx;
+  font-size: 13px;
+  color: var(--text-3);
+  margin-top: 3px;
 }
 
 .dog-detail__statuses {
   display: flex;
-  gap: 8rpx;
-  margin-top: 12rpx;
+  gap: var(--space-tag-gap);
+  margin-top: 6px;
   flex-wrap: wrap;
 }
 
-.dog-detail__status-tag {
-  font-size: 22rpx;
-  padding: 4rpx 16rpx;
-  border-radius: 8rpx;
-  background: #f0f0f0;
-  color: #666;
-}
-
-.dog-detail__status-tag--发情中 { background: #FFF3E0; color: #E65100; }
-.dog-detail__status-tag--怀孕中 { background: #FCE4EC; color: #C62828; }
-.dog-detail__status-tag--哺乳中 { background: #E8F5E9; color: #2E7D32; }
-.dog-detail__status-tag--生病中 { background: #FFEBEE; color: #C62828; }
-.dog-detail__status-tag--用药中 { background: #E3F2FD; color: #1565C0; }
-
+// 基础信息卡片
 .dog-detail__card {
-  background: #fff;
-  margin: 16rpx 32rpx;
-  border-radius: 16rpx;
-  padding: 24rpx;
+  background: var(--card);
+  margin: var(--space-card-gap) var(--space-page);
+  border-radius: var(--radius-card);
+  padding: var(--space-card);
+  box-shadow: var(--shadow);
 }
 
 .dog-detail__card-title {
-  font-size: 30rpx;
+  font-family: var(--font-display);
+  font-size: 15px;
   font-weight: 600;
-  margin-bottom: 16rpx;
-  color: #333;
+  margin-bottom: 8px;
+  color: var(--text-1);
 }
 
 .dog-detail__field {
   display: flex;
   justify-content: space-between;
-  padding: 12rpx 0;
-  border-bottom: 1rpx solid #f5f5f5;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--card-dim);
 }
 
 .dog-detail__field:last-child {
@@ -262,56 +286,33 @@ onLoad((query) => {
 }
 
 .dog-detail__label {
-  font-size: 28rpx;
-  color: #999;
+  font-size: 14px;
+  color: var(--text-3);
 }
 
 .dog-detail__value {
-  font-size: 28rpx;
-  color: #333;
+  font-size: 14px;
+  color: var(--text-1);
 }
 
-.dog-detail__tabs {
-  display: flex;
-  background: #fff;
-  margin-top: 16rpx;
-  border-bottom: 1rpx solid #eee;
-}
-
-.dog-detail__tab {
-  flex: 1;
-  text-align: center;
-  padding: 24rpx 0;
-  font-size: 28rpx;
-  color: #999;
-  position: relative;
-}
-
-.dog-detail__tab--active {
-  color: #007AFF;
-  font-weight: 600;
-}
-
-.dog-detail__tab--active::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 30%;
-  right: 30%;
-  height: 4rpx;
-  background: #007AFF;
-  border-radius: 2rpx;
-}
-
+// Tab 内容区
 .dog-detail__tab-content {
-  padding: 16rpx 32rpx;
+  padding: 8px var(--space-page);
 }
 
+// 记录卡片（繁育/健康）— 可点击带按压效果
 .dog-detail__record {
-  background: #fff;
-  border-radius: 12rpx;
-  padding: 20rpx;
-  margin-bottom: 12rpx;
+  background: var(--card);
+  border-radius: var(--radius-row);
+  padding: 10px var(--space-card);
+  margin-bottom: var(--space-card-gap);
+  box-shadow: var(--shadow);
+  transition: transform 0.12s ease, opacity 0.12s ease;
+
+  &:active {
+    transform: scale(0.97);
+    opacity: 0.85;
+  }
 }
 
 .dog-detail__record-header {
@@ -320,56 +321,57 @@ onLoad((query) => {
 }
 
 .dog-detail__record-title {
-  font-size: 28rpx;
+  font-size: 14px;
   font-weight: 500;
-  color: #333;
+  color: var(--text-1);
 }
 
 .dog-detail__record-date {
-  font-size: 24rpx;
-  color: #999;
+  font-size: 12px;
+  color: var(--text-3);
 }
 
 .dog-detail__record-sub {
-  font-size: 24rpx;
-  color: #999;
-  margin-top: 8rpx;
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 4px;
 }
 
-.dog-detail__empty {
-  text-align: center;
-  padding: 60rpx 0;
-  color: #999;
-  font-size: 28rpx;
-}
-
+// 底部操作栏
 .dog-detail__actions {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
   display: flex;
-  gap: 20rpx;
-  padding: 20rpx 32rpx;
-  background: #fff;
-  box-shadow: 0 -2rpx 8rpx rgba(0,0,0,0.05);
-  padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+  gap: 10px;
+  padding: 10px var(--space-page);
+  background: var(--card);
+  box-shadow: var(--shadow-lg);
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
 }
 
 .dog-detail__btn {
   flex: 1;
-  height: 80rpx;
-  border-radius: 40rpx;
-  font-size: 28rpx;
+  height: 40px;
+  border-radius: var(--radius-btn);
+  font-size: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f5f5f5;
-  color: #333;
-}
+  background: var(--card-dim);
+  color: var(--text-1);
+  transition: transform 0.12s ease, opacity 0.12s ease;
 
-.dog-detail__btn--primary {
-  background: #007AFF;
-  color: #fff;
+  // 按压效果
+  &:active {
+    transform: scale(0.96);
+    opacity: 0.85;
+  }
+
+  &--primary {
+    background: var(--primary);
+    color: #fff;
+  }
 }
 </style>

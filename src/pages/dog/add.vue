@@ -193,56 +193,60 @@ onLoad(async (query) => {
 })
 </script>
 
-<style scoped>
+<style lang="scss" scoped>
 .dog-add {
   min-height: 100vh;
-  background: #f5f5f5;
-  padding-bottom: 140rpx;
+  background: var(--bg);
+  padding-bottom: 70px;
 }
 
 .dog-add__form {
-  padding: 16rpx 32rpx;
+  padding: 8px 16px;
 }
 
 .dog-add__section {
-  background: #fff;
-  border-radius: 16rpx;
-  padding: 24rpx;
-  margin-bottom: 16rpx;
+  background: var(--card);
+  border-radius: var(--radius-card);
+  padding: 12px;
+  margin-bottom: 8px;
+  box-shadow: var(--shadow);
 }
 
 .dog-add__section-title {
-  font-size: 30rpx;
+  font-size: 15px;
   font-weight: 600;
-  color: #333;
-  margin-bottom: 20rpx;
+  font-family: var(--font-display);
+  color: var(--text-1);
+  margin-bottom: 10px;
 }
 
 .dog-add__roles {
   display: flex;
-  gap: 16rpx;
+  gap: 8px;
 }
 
 .dog-add__role {
   flex: 1;
   text-align: center;
-  padding: 16rpx;
-  border-radius: 12rpx;
-  background: #f5f5f5;
-  font-size: 28rpx;
-  color: #666;
+  padding: 8px;
+  border-radius: var(--radius-row);
+  background: var(--bg);
+  font-size: 14px;
+  color: var(--text-2);
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
 }
 
 .dog-add__role--active {
-  background: #007AFF;
-  color: #fff;
+  background: var(--primary);
+  color: var(--card);
 }
 
 .dog-add__field {
   display: flex;
   align-items: center;
-  padding: 20rpx 0;
-  border-bottom: 1rpx solid #f5f5f5;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--bg);
 }
 
 .dog-add__field:last-child {
@@ -250,45 +254,47 @@ onLoad(async (query) => {
 }
 
 .dog-add__label {
-  width: 160rpx;
-  font-size: 28rpx;
-  color: #333;
+  width: 80px;
+  font-size: 14px;
+  color: var(--text-1);
   flex-shrink: 0;
 }
 
 .dog-add__input {
   flex: 1;
-  font-size: 28rpx;
-  color: #333;
+  font-size: 14px;
+  color: var(--text-1);
 }
 
 .dog-add__gender {
   display: flex;
-  gap: 16rpx;
+  gap: 8px;
   flex: 1;
 }
 
 .dog-add__gender-btn {
   flex: 1;
   text-align: center;
-  padding: 12rpx;
-  border-radius: 12rpx;
-  background: #f5f5f5;
-  font-size: 28rpx;
+  padding: 6px;
+  border-radius: var(--radius-row);
+  background: var(--bg);
+  font-size: 14px;
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
 }
 
 .dog-add__gender-btn--active {
-  background: #007AFF;
-  color: #fff;
+  background: var(--primary);
+  color: var(--card);
 }
 
 .dog-add__picker-text {
-  font-size: 28rpx;
-  color: #333;
+  font-size: 14px;
+  color: var(--text-1);
 }
 
 .dog-add__picker-text--placeholder {
-  color: #ccc;
+  color: var(--text-4);
 }
 
 .dog-add__footer {
@@ -296,21 +302,25 @@ onLoad(async (query) => {
   bottom: 0;
   left: 0;
   right: 0;
-  padding: 20rpx 32rpx;
-  background: #fff;
-  padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+  padding: 10px 16px;
+  background: var(--card);
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  box-shadow: var(--shadow);
 }
 
 .dog-add__submit {
   width: 100%;
-  height: 88rpx;
-  border-radius: 44rpx;
-  background: #007AFF;
-  color: #fff;
-  font-size: 32rpx;
+  height: 44px;
+  border-radius: var(--radius-btn);
+  background: var(--primary);
+  color: var(--card);
+  font-size: 16px;
+  font-family: var(--font-display);
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
 }
 
 .dog-add__submit[disabled] {

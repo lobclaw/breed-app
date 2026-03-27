@@ -99,19 +99,99 @@ onLoad(() => {
 })
 </script>
 
-<style scoped>
-.expense-add { min-height: 100vh; background: #f5f5f5; padding-bottom: 140rpx; }
-.expense-add__section { background: #fff; margin: 16rpx 32rpx; border-radius: 16rpx; padding: 24rpx; }
-.expense-add__field { padding: 20rpx 0; border-bottom: 1rpx solid #f5f5f5; }
-.expense-add__field:last-child { border-bottom: none; }
-.expense-add__label { font-size: 28rpx; color: #333; margin-bottom: 12rpx; display: block; }
-.expense-add__input { font-size: 28rpx; color: #333; }
-.expense-add__input--big { font-size: 48rpx; font-weight: 700; color: #4CAF50; }
-.expense-add__categories { display: flex; flex-wrap: wrap; gap: 12rpx; }
-.expense-add__cat { padding: 10rpx 24rpx; border-radius: 20rpx; background: #f5f5f5; font-size: 26rpx; color: #666; }
-.expense-add__cat--active { background: #4CAF50; color: #fff; }
-.expense-add__picker { font-size: 28rpx; color: #333; }
-.expense-add__footer { position: fixed; bottom: 0; left: 0; right: 0; padding: 20rpx 32rpx; background: #fff; padding-bottom: calc(20rpx + env(safe-area-inset-bottom)); }
-.expense-add__submit { width: 100%; height: 88rpx; border-radius: 44rpx; background: #4CAF50; color: #fff; font-size: 32rpx; }
-.expense-add__submit[disabled] { opacity: 0.5; }
+<style lang="scss" scoped>
+.expense-add {
+  min-height: 100vh;
+  background: var(--bg);
+  padding-bottom: 70px;
+}
+
+.expense-add__section {
+  background: var(--card);
+  margin: 8px 16px;
+  border-radius: var(--radius-card);
+  padding: 12px;
+  box-shadow: var(--shadow);
+}
+
+.expense-add__field {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--bg);
+}
+
+.expense-add__field:last-child {
+  border-bottom: none;
+}
+
+.expense-add__label {
+  font-size: 14px;
+  color: var(--text-1);
+  margin-bottom: 6px;
+  display: block;
+}
+
+.expense-add__input {
+  font-size: 14px;
+  color: var(--text-1);
+}
+
+.expense-add__input--big {
+  font-size: 24px;
+  font-weight: 700;
+  font-family: var(--font-display);
+  color: var(--green);
+}
+
+.expense-add__categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.expense-add__cat {
+  padding: 5px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--bg);
+  font-size: 13px;
+  color: var(--text-2);
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
+}
+
+.expense-add__cat--active {
+  background: var(--green);
+  color: var(--card);
+}
+
+.expense-add__picker {
+  font-size: 14px;
+  color: var(--text-1);
+}
+
+.expense-add__footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 10px 16px;
+  background: var(--card);
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  box-shadow: var(--shadow);
+}
+
+.expense-add__submit {
+  width: 100%;
+  height: 44px;
+  border-radius: var(--radius-btn);
+  background: var(--green);
+  color: var(--card);
+  font-size: 16px;
+  font-family: var(--font-display);
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
+}
+
+.expense-add__submit[disabled] {
+  opacity: 0.5;
+}
 </style>

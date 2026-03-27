@@ -77,22 +77,123 @@ function goToCreate() {
 onShow(() => load())
 </script>
 
-<style scoped>
-.sale-list { min-height: 100vh; background: #f5f5f5; padding-bottom: 120rpx; }
-.sale-list__filters { display: flex; gap: 12rpx; padding: 16rpx 32rpx; background: #fff; overflow-x: auto; }
-.sale-list__filter { padding: 10rpx 24rpx; border-radius: 20rpx; background: #f5f5f5; font-size: 26rpx; color: #666; white-space: nowrap; }
-.sale-list__filter--active { background: #007AFF; color: #fff; }
-.sale-list__items { padding: 16rpx 32rpx; }
-.sale-list__item { background: #fff; border-radius: 16rpx; padding: 24rpx; margin-bottom: 12rpx; }
-.sale-list__item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8rpx; }
-.sale-list__item-name { font-size: 30rpx; font-weight: 600; color: #333; }
-.sale-list__item-status { font-size: 24rpx; padding: 4rpx 16rpx; border-radius: 8rpx; }
-.sale-list__item-status--待售 { background: #FFF3E0; color: #E65100; }
-.sale-list__item-status--已预定 { background: #E3F2FD; color: #1565C0; }
-.sale-list__item-status--已成交 { background: #E8F5E9; color: #2E7D32; }
-.sale-list__item-status--已退款 { background: #f5f5f5; color: #999; }
-.sale-list__item-status--定金取消 { background: #f5f5f5; color: #999; }
-.sale-list__item-info { font-size: 26rpx; color: #999; }
-.sale-list__empty { text-align: center; padding: 80rpx; color: #999; font-size: 28rpx; }
-.sale-list__fab { position: fixed; right: 32rpx; bottom: 120rpx; width: 96rpx; height: 96rpx; border-radius: 50%; background: #007AFF; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 48rpx; box-shadow: 0 4rpx 16rpx rgba(0,122,255,0.3); }
+<style lang="scss" scoped>
+.sale-list {
+  min-height: 100vh;
+  background: var(--bg);
+  padding-bottom: 60px;
+}
+
+.sale-list__filters {
+  display: flex;
+  gap: 6px;
+  padding: 8px 16px;
+  background: var(--card);
+  overflow-x: auto;
+}
+
+.sale-list__filter {
+  padding: 5px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--bg);
+  font-size: 13px;
+  color: var(--text-2);
+  white-space: nowrap;
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
+}
+
+.sale-list__filter--active {
+  background: var(--primary);
+  color: var(--card);
+}
+
+.sale-list__items {
+  padding: 8px 16px;
+}
+
+.sale-list__item {
+  background: var(--card);
+  border-radius: var(--radius-card);
+  padding: 12px;
+  margin-bottom: 6px;
+  box-shadow: var(--shadow);
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
+}
+
+.sale-list__item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.sale-list__item-name {
+  font-size: 15px;
+  font-weight: 600;
+  font-family: var(--font-display);
+  color: var(--text-1);
+}
+
+.sale-list__item-status {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: var(--radius-tag);
+}
+
+.sale-list__item-status--待售 {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.sale-list__item-status--已预定 {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.sale-list__item-status--已成交 {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.sale-list__item-status--已退款 {
+  background: var(--bg);
+  color: var(--text-3);
+}
+
+.sale-list__item-status--定金取消 {
+  background: var(--bg);
+  color: var(--text-3);
+}
+
+.sale-list__item-info {
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+.sale-list__empty {
+  text-align: center;
+  padding: 40px;
+  color: var(--text-3);
+  font-size: 14px;
+}
+
+.sale-list__fab {
+  position: fixed;
+  right: 16px;
+  bottom: 60px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: var(--card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  box-shadow: var(--shadow-fab);
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
+}
 </style>

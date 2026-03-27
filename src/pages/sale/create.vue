@@ -96,16 +96,76 @@ onLoad(async () => {
 })
 </script>
 
-<style scoped>
-.sale-create { min-height: 100vh; background: #f5f5f5; padding-bottom: 140rpx; }
-.sale-create__section { background: #fff; margin: 16rpx 32rpx; border-radius: 16rpx; padding: 24rpx; }
-.sale-create__field { padding: 20rpx 0; border-bottom: 1rpx solid #f5f5f5; }
-.sale-create__field:last-child { border-bottom: none; }
-.sale-create__label { font-size: 28rpx; color: #333; margin-bottom: 12rpx; display: block; }
-.sale-create__input { font-size: 28rpx; color: #333; }
-.sale-create__picker { font-size: 28rpx; color: #333; padding: 8rpx 0; }
-.sale-create__picker--placeholder { color: #ccc; }
-.sale-create__footer { position: fixed; bottom: 0; left: 0; right: 0; padding: 20rpx 32rpx; background: #fff; padding-bottom: calc(20rpx + env(safe-area-inset-bottom)); }
-.sale-create__submit { width: 100%; height: 88rpx; border-radius: 44rpx; background: #007AFF; color: #fff; font-size: 32rpx; }
-.sale-create__submit[disabled] { opacity: 0.5; }
+<style lang="scss" scoped>
+.sale-create {
+  min-height: 100vh;
+  background: var(--bg);
+  padding-bottom: 70px;
+}
+
+.sale-create__section {
+  background: var(--card);
+  margin: 8px 16px;
+  border-radius: var(--radius-card);
+  padding: 12px;
+  box-shadow: var(--shadow);
+}
+
+.sale-create__field {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--bg);
+}
+
+.sale-create__field:last-child {
+  border-bottom: none;
+}
+
+.sale-create__label {
+  font-size: 14px;
+  color: var(--text-1);
+  margin-bottom: 6px;
+  display: block;
+}
+
+.sale-create__input {
+  font-size: 14px;
+  color: var(--text-1);
+}
+
+.sale-create__picker {
+  font-size: 14px;
+  color: var(--text-1);
+  padding: 4px 0;
+}
+
+.sale-create__picker--placeholder {
+  color: var(--text-4);
+}
+
+.sale-create__footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 10px 16px;
+  background: var(--card);
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  box-shadow: var(--shadow);
+}
+
+.sale-create__submit {
+  width: 100%;
+  height: 44px;
+  border-radius: var(--radius-btn);
+  background: var(--primary);
+  color: var(--card);
+  font-size: 16px;
+  font-family: var(--font-display);
+  transition: transform 0.15s ease;
+  &:active { transform: scale(0.975); }
+}
+
+.sale-create__submit[disabled] {
+  opacity: 0.5;
+}
 </style>
