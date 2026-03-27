@@ -73,6 +73,8 @@
   /* #endif */
   padding: 18px 0;
   font-weight: 800;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  color: #1a1a2e;
   flex-direction: column;
 }
 
@@ -80,7 +82,7 @@
   /* #ifndef APP-NVUE */
   display: flex;
   /* #endif */
-  color: #BDBDC0;
+  color: #B8A08A;
   font-size: 11px;
   margin: 6px 0;
 }
@@ -93,8 +95,8 @@
 
 .input-box {
   height: 44px;
-  background-color: #F8F8F8 !important;
-  border-radius: 0;
+  background-color: #FFF0E8 !important;
+  border-radius: 14px;
   font-size: 14px;
   /* #ifndef APP-NVUE */
   display: flex;
@@ -113,12 +115,15 @@
 
 .uni-btn {
 	text-align: center;
-	height: 40px;
-	line-height: 40px;
+	height: 44px;
+	line-height: 44px;
 	margin: 15px 0 10px 0;
 	color: #FFF !important;
-	border-radius: 5px;
-	font-size: 16px;
+	border-radius: 999px;
+	font-size: 15px;
+	font-weight: 700;
+	font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+	background-color: #ea3e77 !important;
 }
 
 .uni-body.uni_modules-uni-id-pages-pages-login-login-withoutpwd{

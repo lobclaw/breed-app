@@ -241,12 +241,12 @@
 	"globalStyle": {
 		"navigationBarTextStyle": "black",
 		"navigationBarTitleText": "繁育管理",
-		"navigationBarBackgroundColor": "#FFFFFF",
-		"backgroundColor": "#F5F5F5"
+		"navigationBarBackgroundColor": "#fdf8f9",
+		"backgroundColor": "#fdf8f9"
 	},
 	"tabBar": {
-		"color": "#999999",
-		"selectedColor": "#007AFF",
+		"color": "#B8A08A",
+		"selectedColor": "#ea3e77",
 		"backgroundColor": "#FFFFFF",
 		"borderStyle": "white",
 		"list": [

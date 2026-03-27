@@ -41,6 +41,10 @@
         <text>通知设置</text>
         <text class="profile__arrow">›</text>
       </view>
+      <view class="profile__menu-item" @click="toggleDarkMode">
+        <text>暗色模式</text>
+        <switch :checked="isDark" style="transform: scale(0.8);" @change="toggleDarkMode" />
+      </view>
     </view>
 
     <view class="profile__menu">
@@ -54,8 +58,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useAuth } from '@/composables/useAuth'
+import { useTheme } from '@/composables/useTheme'
 
 const { currentFamily, userRole, logout } = useAuth()
+const { isDark, setTheme } = useTheme()
+
+function toggleDarkMode() {
+  setTheme(isDark.value ? 'light' : 'dark')
+}
 
 const familyName = computed(() => currentFamily.value?.name || '')
 const userInitial = computed(() => familyName.value.charAt(0) || '?')
