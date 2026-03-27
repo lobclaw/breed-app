@@ -33,3 +33,4 @@ coverage/
 
 # UniCloud local dev
 uniCloud-alipay/cloudfunctions/*/node_modules/
+.gstack/
