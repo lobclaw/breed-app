@@ -911,75 +911,167 @@ onShow(async () => {
   color: var(--primary);
 }
 
-/* ==================== MODAL ==================== */
-.modal-mask {
-  position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: var(--mask);
+/* ==================== TASK SHEETS (H-3, H-4, H-5) ==================== */
+.task-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-bottom: 12px;
+}
+.task-sheet__info {
   display: flex;
   align-items: center;
-  justify-content: center;
-  z-index: 300;
+  gap: 12px;
+  padding: 4px 0 8px;
 }
-.modal-panel {
-  background: var(--card);
-  border-radius: 16px;
-  padding: 24px;
-  width: 85%;
-  max-width: 320px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+.task-sheet__info-text {
+  flex: 1;
 }
-.modal-title {
-  display: block;
-  font-family: var(--font-display);
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--text-1);
-  text-align: center;
-  margin-bottom: 20px;
-}
-.modal-field { margin-bottom: 16px; }
-.modal-label {
-  display: block;
-  font-size: 14px;
-  color: var(--text-2);
-  margin-bottom: 6px;
-}
-.modal-picker {
+.task-sheet__task-title {
   display: block;
   font-size: 15px;
+  font-weight: 700;
   color: var(--text-1);
-  padding: 10px 14px;
-  border: 1.5px solid var(--text-4);
-  border-radius: 14px;
 }
-.modal-input {
+.task-sheet__dog-name {
+  display: block;
+  font-size: 13px;
+  color: var(--text-2);
+  margin-top: 2px;
+}
+.task-sheet__field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.task-sheet__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.task-sheet__input {
   width: 100%;
   font-size: 15px;
   color: var(--text-1);
   padding: 10px 14px;
   border: 1.5px solid var(--text-4);
   border-radius: 14px;
+  background: var(--card);
 }
-.modal-actions {
+.task-sheet__picker {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 15px;
+  color: var(--text-1);
+  padding: 10px 14px;
+  border: 1.5px solid var(--text-4);
+  border-radius: 14px;
+}
+.task-sheet__quick-dates {
+  display: flex;
+  gap: 8px;
+}
+.task-sheet__quick-date {
+  padding: 6px 14px;
+  border-radius: var(--radius-btn);
+  background: var(--card-dim);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  transition: all 0.12s ease;
+  &:active { transform: scale(0.92); }
+  &.active {
+    background: var(--primary);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(234, 62, 119, 0.25);
+  }
+}
+.task-sheet__actions {
   display: flex;
   gap: 12px;
-  margin-top: 20px;
+  margin-top: 4px;
 }
-.modal-btn {
+.task-sheet__btn {
   flex: 1;
-  height: 40px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
+  border-radius: var(--radius-btn);
   transition: transform 0.12s ease, opacity 0.12s ease;
   &:active { transform: scale(0.94); opacity: 0.85; }
+  &--cancel { background: var(--card-dim); }
+  &--confirm { background: var(--primary); }
+  &.disabled { opacity: 0.4; pointer-events: none; }
 }
-.modal-btn--cancel { background: var(--card-dim); }
-.modal-btn--confirm { background: var(--primary); }
-.modal-btn-text {
+
+/* H-5: 批量完成 */
+.task-sheet__select-bar {
+  padding: 4px 0;
+}
+.task-sheet__select-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: transform 0.12s ease;
+  &:active { transform: scale(0.95); }
+}
+.task-sheet__select-label {
   font-size: 14px;
   font-weight: 600;
+  color: var(--text-2);
+}
+.task-sheet__checkbox {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-checkbox);
+  border: 2px solid var(--text-4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  &.checked {
+    background: var(--green);
+    border-color: var(--green);
+  }
+}
+.task-sheet__dog-list {
+  max-height: 280px;
+}
+.task-sheet__dog-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(216, 203, 189, 0.2);
+  transition: transform 0.12s ease;
+  &:active { transform: scale(0.97); }
+  &:last-child { border-bottom: none; }
+}
+.task-sheet__dog-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--rose), var(--amber));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.task-sheet__dog-name-text {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.task-sheet__done-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--green);
+  background: var(--green-soft);
+  padding: 2px 8px;
+  border-radius: var(--radius-tag);
 }
 </style>

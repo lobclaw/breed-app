@@ -2,6 +2,7 @@
   犬只列表页 (D-1)
   设计稿：docs/ui/pages-list.html
   筛选 chips + 犬只卡片列表 + 状态标签 + FAB 添加
+  + D-5 高级筛选 Sheet
 -->
 <template>
   <view class="dog-list">
@@ -9,7 +10,7 @@
     <view class="dog-list__header">
       <view class="dog-list__header-row">
         <text class="dog-list__title">档案</text>
-        <text class="dog-list__filter-icon material-icons-round" @click="onFilterClick">filter_list</text>
+        <text class="dog-list__filter-icon material-icons-round" @click="showFilterSheet = true">filter_list</text>
       </view>
     </view>
 
@@ -33,6 +34,12 @@
         </view>
       </view>
     </scroll-view>
+
+    <!-- 已激活高级筛选提示 -->
+    <view v-if="hasAdvancedFilter" class="dog-list__filter-active">
+      <text class="dog-list__filter-active-text">已应用高级筛选</text>
+      <text class="dog-list__filter-active-clear" @click="resetAdvancedFilters">清除</text>
+    </view>
 
     <!-- 加载骨架屏 -->
     <view v-if="loading" class="dog-list__skeleton-wrap">
@@ -104,22 +111,103 @@
 
     <!-- 底部导航栏 -->
     <BNavBar current="dog" @fab-click="goToAdd" />
+
+    <!-- ==================== D-5: 高级筛选 Sheet ==================== -->
+    <BSheet v-model:visible="showFilterSheet" title="筛选">
+      <view class="filter-panel">
+        <!-- 性别 -->
+        <view class="filter-section">
+          <text class="filter-section__label">性别</text>
+          <view class="filter-pills">
+            <view
+              v-for="opt in genderOptions"
+              :key="opt.value"
+              class="filter-pill"
+              :class="{ 'filter-pill--active': advFilters.genders.includes(opt.value) }"
+              @click="toggleFilter('genders', opt.value)"
+            >
+              <text class="filter-pill__text">{{ opt.label }}</text>
+            </view>
+          </view>
+        </view>
+
+        <!-- 角色 -->
+        <view class="filter-section">
+          <text class="filter-section__label">角色</text>
+          <view class="filter-pills">
+            <view
+              v-for="opt in roleOptions"
+              :key="opt.value"
+              class="filter-pill"
+              :class="{ 'filter-pill--active': advFilters.roles.includes(opt.value) }"
+              @click="toggleFilter('roles', opt.value)"
+            >
+              <text class="filter-pill__text">{{ opt.label }}</text>
+            </view>
+          </view>
+        </view>
+
+        <!-- 去向 -->
+        <view class="filter-section">
+          <text class="filter-section__label">去向</text>
+          <view class="filter-pills">
+            <view
+              v-for="opt in dispositionOptions"
+              :key="opt.value"
+              class="filter-pill"
+              :class="{ 'filter-pill--active': advFilters.dispositions.includes(opt.value) }"
+              @click="toggleFilter('dispositions', opt.value)"
+            >
+              <text class="filter-pill__text">{{ opt.label }}</text>
+            </view>
+          </view>
+        </view>
+
+        <!-- 状态 -->
+        <view class="filter-section">
+          <text class="filter-section__label">状态</text>
+          <view class="filter-pills">
+            <view
+              v-for="opt in statusOptions"
+              :key="opt.value"
+              class="filter-pill"
+              :class="{ 'filter-pill--active': advFilters.statuses.includes(opt.value) }"
+              @click="toggleFilter('statuses', opt.value)"
+            >
+              <text class="filter-pill__text">{{ opt.label }}</text>
+            </view>
+          </view>
+        </view>
+
+        <!-- 按钮区 -->
+        <view class="filter-actions">
+          <view class="filter-actions__btn filter-actions__btn--primary" @click="applyAdvancedFilters">
+            <text class="filter-actions__btn-text" style="color: #fff;">应用筛选</text>
+          </view>
+          <view class="filter-actions__btn filter-actions__btn--ghost" @click="resetAdvancedFilters">
+            <text class="filter-actions__btn-text" style="color: var(--text-2);">重置</text>
+          </view>
+        </view>
+      </view>
+    </BSheet>
   </view>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import BTag from '@/components/base/BTag.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 import BNavBar from '@/components/layout/BNavBar.vue'
+import BSheet from '@/components/layout/BSheet.vue'
 import { useCloudCall } from '@/composables/useCloudCall'
 import type { DogWithStatus, DeriveStatusType } from '@/types/dog'
 
 const dogs = ref<DogWithStatus[]>([])
 const loading = ref(true)
 const activeFilter = ref('all')
+const showFilterSheet = ref(false)
 
 const { run: fetchDogs } = useCloudCall<{ data: DogWithStatus[] }>('dog-service', 'getDogListWithStatus')
 
@@ -130,12 +218,115 @@ const filterOptions = [
   { label: '外部种公', value: 'external' },
 ]
 
+// ==================== D-5: 高级筛选 ====================
+
+const genderOptions = [
+  { label: '公', value: '公' },
+  { label: '母', value: '母' },
+]
+
+const roleOptions = [
+  { label: '种狗', value: '种狗' },
+  { label: '幼崽', value: '幼崽' },
+  { label: '外部种公', value: '外部种公' },
+]
+
+const dispositionOptions = [
+  { label: '在养', value: '在养' },
+  { label: '待售', value: '待售' },
+  { label: '已预定', value: '已预定' },
+  { label: '已成交', value: '已成交' },
+  { label: '已退休', value: '已退休' },
+  { label: '已领养', value: '已领养' },
+  { label: '已赠送', value: '已赠送' },
+  { label: '已故', value: '已故' },
+]
+
+const statusOptions = [
+  { label: '发情中', value: '发情中' },
+  { label: '怀孕中', value: '怀孕中' },
+  { label: '哺乳中', value: '哺乳中' },
+  { label: '生病中', value: '生病中' },
+  { label: '用药中', value: '用药中' },
+]
+
+// 高级筛选状态
+const advFilters = reactive({
+  genders: [] as string[],
+  roles: [] as string[],
+  dispositions: [] as string[],
+  statuses: [] as string[],
+})
+
+// 已应用的高级筛选（仅在点击"应用筛选"后生效）
+const appliedFilters = reactive({
+  genders: [] as string[],
+  roles: [] as string[],
+  dispositions: [] as string[],
+  statuses: [] as string[],
+})
+
+const hasAdvancedFilter = computed(() => {
+  return appliedFilters.genders.length > 0
+    || appliedFilters.roles.length > 0
+    || appliedFilters.dispositions.length > 0
+    || appliedFilters.statuses.length > 0
+})
+
+function toggleFilter(group: 'genders' | 'roles' | 'dispositions' | 'statuses', value: string) {
+  const idx = advFilters[group].indexOf(value)
+  if (idx >= 0) {
+    advFilters[group].splice(idx, 1)
+  } else {
+    advFilters[group].push(value)
+  }
+}
+
+function applyAdvancedFilters() {
+  appliedFilters.genders = [...advFilters.genders]
+  appliedFilters.roles = [...advFilters.roles]
+  appliedFilters.dispositions = [...advFilters.dispositions]
+  appliedFilters.statuses = [...advFilters.statuses]
+  showFilterSheet.value = false
+}
+
+function resetAdvancedFilters() {
+  advFilters.genders = []
+  advFilters.roles = []
+  advFilters.dispositions = []
+  advFilters.statuses = []
+  appliedFilters.genders = []
+  appliedFilters.roles = []
+  appliedFilters.dispositions = []
+  appliedFilters.statuses = []
+  showFilterSheet.value = false
+}
+
 const filteredDogs = computed(() => {
-  if (activeFilter.value === 'all') return dogs.value
-  if (activeFilter.value === 'breeding') return dogs.value.filter(d => d.role === '种狗')
-  if (activeFilter.value === 'puppy') return dogs.value.filter(d => d.role === '幼崽')
-  if (activeFilter.value === 'external') return dogs.value.filter(d => d.role === '外部种公')
-  return dogs.value
+  let result = dogs.value
+
+  // 快捷筛选
+  if (activeFilter.value === 'breeding') result = result.filter(d => d.role === '种狗')
+  else if (activeFilter.value === 'puppy') result = result.filter(d => d.role === '幼崽')
+  else if (activeFilter.value === 'external') result = result.filter(d => d.role === '外部种公')
+
+  // 高级筛选
+  if (appliedFilters.genders.length > 0) {
+    result = result.filter(d => appliedFilters.genders.includes(d.gender))
+  }
+  if (appliedFilters.roles.length > 0) {
+    result = result.filter(d => appliedFilters.roles.includes(d.role))
+  }
+  if (appliedFilters.dispositions.length > 0) {
+    result = result.filter(d => appliedFilters.dispositions.includes(d.disposition || '在养'))
+  }
+  if (appliedFilters.statuses.length > 0) {
+    result = result.filter(d =>
+      d.statuses?.some(s => appliedFilters.statuses.includes(s.type))
+    )
+  }
+
+  return result
 })
 
 /** 状态类型 → 功能色映射 */
@@ -227,10 +418,6 @@ function goToAdd() {
 
 function onSearchClick() {
   // TODO: 搜索功能
-}
-
-function onFilterClick() {
-  // TODO: 高级筛选
 }
 
 async function loadDogs() {
@@ -330,6 +517,28 @@ onShow(() => {
 }
 .dog-list__chip--active .dog-list__chip-text {
   color: #FFFFFF;
+}
+
+/* ==================== 高级筛选已激活提示 ==================== */
+.dog-list__filter-active {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 10px 16px 0;
+  padding: 8px 12px;
+  background: var(--primary-soft);
+  border-radius: var(--radius-date);
+}
+.dog-list__filter-active-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+}
+.dog-list__filter-active-clear {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+  text-decoration: underline;
 }
 
 /* ==================== 骨架屏容器 ==================== */
@@ -521,5 +730,72 @@ onShow(() => {
   font-family: 'Material Icons Round';
   font-size: 28px;
   color: #FFFFFF;
+}
+
+/* ==================== D-5: 筛选面板样式 ==================== */
+.filter-panel {
+  padding-bottom: 16px;
+}
+.filter-section {
+  margin-bottom: 16px;
+}
+.filter-section__label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-3);
+  margin-bottom: 8px;
+}
+.filter-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.filter-pill {
+  padding: 6px 14px;
+  border-radius: var(--radius-tag);
+  font-size: 12px;
+  font-weight: 600;
+  border: 1.5px solid var(--text-4);
+  background: transparent;
+  color: var(--text-2);
+  transition: all 0.12s ease;
+  &:active { transform: scale(0.94); }
+}
+.filter-pill--active {
+  background: var(--primary-soft);
+  color: var(--primary);
+  border-color: var(--primary);
+  .filter-pill__text { color: var(--primary); }
+}
+.filter-pill__text {
+  font-size: 12px;
+  font-weight: 600;
+}
+.filter-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+.filter-actions__btn {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-btn);
+  transition: transform 0.12s ease, opacity 0.12s ease;
+  &:active { transform: scale(0.94); opacity: 0.85; }
+}
+.filter-actions__btn--primary {
+  background: var(--primary);
+}
+.filter-actions__btn--ghost {
+  background: transparent;
+  border: 1.5px solid var(--text-4);
+}
+.filter-actions__btn-text {
+  font-size: 15px;
+  font-weight: 600;
 }
 </style>

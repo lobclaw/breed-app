@@ -2,6 +2,7 @@
   犬只详情页 (D-2)
   设计稿：docs/ui/pages-dog-detail.html
   紧凑 Hero + 快捷统计 + Tab 切换（概览/繁育/健康/财务）
+  + D-6 ~ D-14 状态变更弹窗/Sheet
 -->
 <template>
   <!-- 加载骨架屏 -->
@@ -278,7 +279,7 @@
           <text class="dog-detail__action-sheet-desc">修改犬只基础信息</text>
         </view>
       </view>
-      <view class="dog-detail__action-sheet-item" @click="showMore = false">
+      <view class="dog-detail__action-sheet-item" @click="openStatusSheet">
         <view class="dog-detail__action-sheet-icon dog-detail__action-sheet-icon--amber">
           <text class="material-icons-round">flag</text>
         </view>
@@ -288,7 +289,7 @@
         </view>
       </view>
       <view class="dog-detail__action-sheet-sep" />
-      <view class="dog-detail__action-sheet-item" @click="showMore = false">
+      <view class="dog-detail__action-sheet-item" @click="openDeleteConfirm">
         <view class="dog-detail__action-sheet-icon dog-detail__action-sheet-icon--red">
           <text class="material-icons-round">delete_outline</text>
         </view>
@@ -298,6 +299,200 @@
         </view>
       </view>
     </view>
+
+    <!-- ==================== D-6: 快速标记状态 Sheet ==================== -->
+    <BSheet v-model:visible="showStatusSheet" title="标记状态">
+      <view class="status-sheet__dog-info">
+        <text class="status-sheet__dog-emoji">&#x1F436;</text>
+        <text class="status-sheet__dog-name">{{ dog.name || '未命名' }}</text>
+      </view>
+      <view class="status-grid">
+        <view class="status-card status-card--red" @click="selectIllness">
+          <text class="status-card__emoji">&#x1F912;</text>
+          <text class="status-card__label">生病</text>
+          <view class="status-card__pills">
+            <text class="status-card__pill">感冒</text>
+            <text class="status-card__pill">腹泻</text>
+            <text class="status-card__pill">皮肤病</text>
+            <text class="status-card__pill">其他</text>
+          </view>
+        </view>
+        <view class="status-card status-card--plum" @click="openMedication">
+          <text class="status-card__emoji">&#x1F48A;</text>
+          <text class="status-card__label">开始用药</text>
+        </view>
+        <view class="status-card status-card--green" @click="openRecoveryConfirm">
+          <text class="status-card__emoji">&#x2705;</text>
+          <text class="status-card__label">标记康复</text>
+        </view>
+        <view class="status-card status-card--amber" @click="openRetireConfirm">
+          <text class="status-card__emoji">&#x1F3E5;</text>
+          <text class="status-card__label">退休</text>
+        </view>
+      </view>
+      <view class="status-sheet__cancel" @click="showStatusSheet = false">
+        <text class="status-sheet__cancel-text">取消</text>
+      </view>
+    </BSheet>
+
+    <!-- ==================== D-7: 退休确认 Modal ==================== -->
+    <BModal
+      v-model:visible="showRetireModal"
+      title="标记退休"
+      confirm-text="确认退休"
+      @confirm="doRetire"
+    >
+      <view class="modal-form">
+        <view class="modal-form__group">
+          <text class="modal-form__label">退休日期 *</text>
+          <picker mode="date" :value="retireDate" @change="retireDate = $event.detail.value">
+            <view class="modal-form__input">
+              <text class="modal-form__input-text">{{ retireDate }}</text>
+              <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
+            </view>
+          </picker>
+        </view>
+        <view class="modal-form__group">
+          <text class="modal-form__label">退休原因（选填）</text>
+          <input v-model="retireReason" class="modal-form__text-input" placeholder="如：年龄过大/健康问题..." />
+        </view>
+      </view>
+    </BModal>
+
+    <!-- ==================== D-8: 已故确认 Modal ==================== -->
+    <BModal
+      v-model:visible="showDeceasedModal"
+      title="标记已故"
+      confirm-text="确认"
+      :danger="true"
+      @confirm="doDeceased"
+    >
+      <text class="modal-desc">此操作将取消所有未完成的提醒任务。</text>
+      <view class="modal-form">
+        <view class="modal-form__group">
+          <text class="modal-form__label">日期 *</text>
+          <picker mode="date" :value="deceasedDate" @change="deceasedDate = $event.detail.value">
+            <view class="modal-form__input">
+              <text class="modal-form__input-text">{{ deceasedDate }}</text>
+              <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
+            </view>
+          </picker>
+        </view>
+        <view class="modal-form__group">
+          <text class="modal-form__label">备注（可选）</text>
+          <input v-model="deceasedCause" class="modal-form__text-input" placeholder="死因等信息" />
+        </view>
+      </view>
+    </BModal>
+
+    <!-- ==================== D-9: 领养表单 Sheet ==================== -->
+    <BSheet v-model:visible="showAdoptionSheet" title="标记领养">
+      <view class="sheet-form">
+        <view class="sheet-form__group">
+          <text class="sheet-form__label">领养日期 *</text>
+          <picker mode="date" :value="adoptionDate" @change="adoptionDate = $event.detail.value">
+            <view class="sheet-form__input">
+              <text class="sheet-form__input-text">{{ adoptionDate }}</text>
+              <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
+            </view>
+          </picker>
+        </view>
+        <view class="sheet-form__group">
+          <text class="sheet-form__label">领养说明（选填）</text>
+          <input v-model="adoptionNotes" class="sheet-form__text-input" placeholder="备注信息..." />
+        </view>
+        <view class="sheet-form__group">
+          <text class="sheet-form__label">领养费（选填）</text>
+          <view class="sheet-form__price-input">
+            <text class="sheet-form__price-symbol">¥</text>
+            <input v-model="adoptionFee" class="sheet-form__price-value" type="digit" placeholder="0" />
+          </view>
+          <text class="sheet-form__helper">有领养费将自动录入一笔收入</text>
+        </view>
+        <view class="sheet-form__actions">
+          <view class="sheet-form__btn sheet-form__btn--primary" @click="doAdoption">
+            <text class="sheet-form__btn-text" style="color: #fff;">确认领养</text>
+          </view>
+          <view class="sheet-form__btn sheet-form__btn--cancel" @click="showAdoptionSheet = false">
+            <text class="sheet-form__btn-text" style="color: var(--text-2);">取消</text>
+          </view>
+        </view>
+      </view>
+    </BSheet>
+
+    <!-- ==================== D-10: 赠送表单 Sheet ==================== -->
+    <BSheet v-model:visible="showGiftSheet" title="标记赠送">
+      <view class="sheet-form">
+        <view class="sheet-form__group">
+          <text class="sheet-form__label">赠送日期 *</text>
+          <picker mode="date" :value="giftDate" @change="giftDate = $event.detail.value">
+            <view class="sheet-form__input">
+              <text class="sheet-form__input-text">{{ giftDate }}</text>
+              <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
+            </view>
+          </picker>
+        </view>
+        <view class="sheet-form__group">
+          <text class="sheet-form__label">受赠人信息（选填）</text>
+          <input v-model="giftRecipient" class="sheet-form__text-input" placeholder="受赠人姓名或联系方式..." />
+        </view>
+        <view class="sheet-form__actions">
+          <view class="sheet-form__btn sheet-form__btn--primary" @click="doGift">
+            <text class="sheet-form__btn-text" style="color: #fff;">确认赠送</text>
+          </view>
+          <view class="sheet-form__btn sheet-form__btn--cancel" @click="showGiftSheet = false">
+            <text class="sheet-form__btn-text" style="color: var(--text-2);">取消</text>
+          </view>
+        </view>
+      </view>
+    </BSheet>
+
+    <!-- ==================== D-11: 取消退休确认 Modal ==================== -->
+    <BModal
+      v-model:visible="showCancelRetireModal"
+      title="取消退休"
+      content="确认恢复在养状态？犬只将重新回到活跃种狗列表中。"
+      confirm-text="确认恢复"
+      @confirm="doCancelRetire"
+    />
+
+    <!-- ==================== D-12: 幼崽升级为种狗确认 Modal ==================== -->
+    <BModal
+      v-model:visible="showPromoteModal"
+      title="升级为种狗"
+      content="确认将此幼崽升级为种狗？角色将从「幼崽」变更为「种狗」，去向变为「在养」。"
+      confirm-text="确认升级"
+      @confirm="doPromote"
+    />
+
+    <!-- ==================== D-13: 康复确认 Modal ==================== -->
+    <BModal
+      v-model:visible="showRecoveryModal"
+      title="标记康复"
+      confirm-text="确认康复"
+      @confirm="doRecovery"
+    >
+      <text class="modal-desc">确认犬只已康复？将退出当前生病状态。</text>
+      <view class="modal-form">
+        <view class="modal-form__group">
+          <text class="modal-form__label">康复日期</text>
+          <picker mode="date" :value="recoveryDate" @change="recoveryDate = $event.detail.value">
+            <view class="modal-form__input">
+              <text class="modal-form__input-text">{{ recoveryDate }}</text>
+              <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
+            </view>
+          </picker>
+        </view>
+      </view>
+    </BModal>
+
+    <!-- ==================== D-14: 删除犬只确认 Modal ==================== -->
+    <BDeleteConfirm
+      v-model:visible="showDeleteModal"
+      title="删除犬只"
+      :content="`确认删除「${dog.name || '未命名'}」？删除后将移入回收站。`"
+      @confirm="doDelete"
+    />
   </view>
 </template>
 
@@ -306,6 +501,9 @@ import { ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
+import BSheet from '@/components/layout/BSheet.vue'
+import BModal from '@/components/layout/BModal.vue'
+import BDeleteConfirm from '@/components/layout/BDeleteConfirm.vue'
 import { useCloudCall } from '@/composables/useCloudCall'
 import type { Dog, DeriveStatus } from '@/types/dog'
 
@@ -347,10 +545,20 @@ const statusIconMap: Record<string, string> = {
 const { run: fetchDetail } = useCloudCall<{ data: Dog }>('dog-service', 'getDogDetail')
 const { run: fetchCycles } = useCloudCall<{ data: any[] }>('breeding-service', 'getCycleHistory')
 const { run: fetchHealth } = useCloudCall<{ data: any[] }>('health-service', 'getHealthHistory')
+const { run: updateDisposition } = useCloudCall('dog-service', 'updateDisposition', { successMessage: '操作成功' })
+const { run: updateStatus } = useCloudCall('dog-service', 'updateStatus', { successMessage: '状态已更新' })
+const { run: deleteDog } = useCloudCall('dog-service', 'deleteDog', { successMessage: '已删除' })
+const { run: promoteToBreeeder } = useCloudCall('dog-service', 'promoteToBreeder', { successMessage: '已升级为种狗' })
+
+// ==================== 工具函数 ====================
 
 function formatDate(ts: number) {
   const d = new Date(ts)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function todayStr() {
+  return formatDate(Date.now())
 }
 
 function formatAge(birthTs: number) {
@@ -409,6 +617,151 @@ function editDog() {
 function addRecord() {
   uni.navigateTo({ url: `/pages/record/breeding?dogId=${dogId}` })
 }
+
+// ==================== D-6: 快速标记状态 ====================
+
+const showStatusSheet = ref(false)
+
+function openStatusSheet() {
+  showMore.value = false
+  showStatusSheet.value = true
+}
+
+function selectIllness() {
+  showStatusSheet.value = false
+  // 跳转到疾病记录表单
+  uni.navigateTo({ url: `/pages/record/health?dogId=${dogId}&type=illness` })
+}
+
+function openMedication() {
+  showStatusSheet.value = false
+  uni.navigateTo({ url: `/pages/record/health?dogId=${dogId}&type=medication` })
+}
+
+// ==================== D-7: 退休确认 ====================
+
+const showRetireModal = ref(false)
+const retireDate = ref(todayStr())
+const retireReason = ref('')
+
+function openRetireConfirm() {
+  showStatusSheet.value = false
+  retireDate.value = todayStr()
+  retireReason.value = ''
+  showRetireModal.value = true
+}
+
+async function doRetire() {
+  await updateDisposition(dogId, '已退休', {
+    date: new Date(retireDate.value + 'T00:00:00+08:00').getTime(),
+    reason: retireReason.value || null,
+  })
+  showRetireModal.value = false
+  await loadData()
+}
+
+// ==================== D-8: 已故确认 ====================
+
+const showDeceasedModal = ref(false)
+const deceasedDate = ref(todayStr())
+const deceasedCause = ref('')
+
+async function doDeceased() {
+  await updateDisposition(dogId, '已故', {
+    date: new Date(deceasedDate.value + 'T00:00:00+08:00').getTime(),
+    cause: deceasedCause.value || null,
+  })
+  showDeceasedModal.value = false
+  await loadData()
+}
+
+// ==================== D-9: 领养表单 ====================
+
+const showAdoptionSheet = ref(false)
+const adoptionDate = ref(todayStr())
+const adoptionNotes = ref('')
+const adoptionFee = ref('')
+
+async function doAdoption() {
+  await updateDisposition(dogId, '已领养', {
+    date: new Date(adoptionDate.value + 'T00:00:00+08:00').getTime(),
+    notes: adoptionNotes.value || null,
+    fee: adoptionFee.value ? Number(adoptionFee.value) : null,
+  })
+  showAdoptionSheet.value = false
+  await loadData()
+}
+
+// ==================== D-10: 赠送表单 ====================
+
+const showGiftSheet = ref(false)
+const giftDate = ref(todayStr())
+const giftRecipient = ref('')
+
+async function doGift() {
+  await updateDisposition(dogId, '已赠送', {
+    date: new Date(giftDate.value + 'T00:00:00+08:00').getTime(),
+    recipient: giftRecipient.value || null,
+  })
+  showGiftSheet.value = false
+  await loadData()
+}
+
+// ==================== D-11: 取消退休 ====================
+
+const showCancelRetireModal = ref(false)
+
+async function doCancelRetire() {
+  await updateDisposition(dogId, '在养', {})
+  showCancelRetireModal.value = false
+  await loadData()
+}
+
+// ==================== D-12: 幼崽升级为种狗 ====================
+
+const showPromoteModal = ref(false)
+
+async function doPromote() {
+  await promoteToBreeeder(dogId)
+  showPromoteModal.value = false
+  await loadData()
+}
+
+// ==================== D-13: 康复确认 ====================
+
+const showRecoveryModal = ref(false)
+const recoveryDate = ref(todayStr())
+
+function openRecoveryConfirm() {
+  showStatusSheet.value = false
+  recoveryDate.value = todayStr()
+  showRecoveryModal.value = true
+}
+
+async function doRecovery() {
+  await updateStatus(dogId, 'recover', {
+    date: new Date(recoveryDate.value + 'T00:00:00+08:00').getTime(),
+  })
+  showRecoveryModal.value = false
+  await loadData()
+}
+
+// ==================== D-14: 删除犬只 ====================
+
+const showDeleteModal = ref(false)
+
+function openDeleteConfirm() {
+  showMore.value = false
+  showDeleteModal.value = true
+}
+
+async function doDelete() {
+  await deleteDog(dogId)
+  showDeleteModal.value = false
+  uni.navigateBack()
+}
+
+// ==================== 数据加载 ====================
 
 async function loadData() {
   loading.value = true
@@ -1065,5 +1418,216 @@ onLoad((query) => {
   height: 1px;
   background: rgba(216, 203, 189, 0.2);
   margin: 4px 24px;
+}
+
+/* ==================== D-6: 状态标记 Sheet ==================== */
+.status-sheet__dog-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.status-sheet__dog-emoji {
+  font-size: 20px;
+}
+.status-sheet__dog-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.status-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.status-card {
+  padding: 14px;
+  border-radius: var(--radius-card);
+  cursor: pointer;
+  transition: all 0.12s ease;
+  &:active { transform: scale(0.96); }
+}
+.status-card--red { background: var(--red-soft); }
+.status-card--plum { background: var(--plum-soft); }
+.status-card--green { background: var(--green-soft); }
+.status-card--amber { background: var(--amber-soft); }
+.status-card__emoji {
+  display: block;
+  font-size: 24px;
+  margin-bottom: 6px;
+}
+.status-card__label {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+  margin-bottom: 6px;
+}
+.status-card__pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.status-card__pill {
+  padding: 3px 8px;
+  border-radius: var(--radius-tag);
+  font-size: 10px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--text-2);
+}
+.status-sheet__cancel {
+  text-align: center;
+  padding: 8px;
+  margin-top: 4px;
+}
+.status-sheet__cancel-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+
+/* ==================== Modal 内表单样式 ==================== */
+.modal-desc {
+  display: block;
+  font-size: 14px;
+  color: var(--text-2);
+  text-align: center;
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+.modal-form {
+  margin-top: 4px;
+}
+.modal-form__group {
+  margin-bottom: 14px;
+  &:last-child { margin-bottom: 0; }
+}
+.modal-form__label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  margin-bottom: 6px;
+}
+.modal-form__input {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 44px;
+  padding: 0 14px;
+  border: 1.5px solid var(--text-4);
+  border-radius: var(--radius-date);
+  background: var(--bg);
+}
+.modal-form__input-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.modal-form__text-input {
+  width: 100%;
+  height: 44px;
+  border: 1.5px solid var(--text-4);
+  border-radius: var(--radius-date);
+  padding: 0 14px;
+  font-size: 14px;
+  color: var(--text-1);
+  background: var(--bg);
+}
+
+/* ==================== Sheet 内表单样式 ==================== */
+.sheet-form {
+  padding-bottom: 16px;
+}
+.sheet-form__group {
+  margin-bottom: 16px;
+  &:last-child { margin-bottom: 0; }
+}
+.sheet-form__label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  margin-bottom: 8px;
+}
+.sheet-form__input {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 44px;
+  padding: 0 14px;
+  border: 1.5px solid var(--text-4);
+  border-radius: var(--radius-date);
+  background: var(--bg);
+}
+.sheet-form__input-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.sheet-form__text-input {
+  width: 100%;
+  height: 44px;
+  border: 1.5px solid var(--text-4);
+  border-radius: var(--radius-date);
+  padding: 0 14px;
+  font-size: 14px;
+  color: var(--text-1);
+  background: var(--bg);
+}
+.sheet-form__price-input {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 44px;
+  border: 1.5px solid var(--text-4);
+  border-radius: var(--radius-date);
+  padding: 0 14px;
+  background: var(--bg);
+}
+.sheet-form__price-symbol {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-3);
+}
+.sheet-form__price-value {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-1);
+  border: none;
+  background: transparent;
+}
+.sheet-form__helper {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 6px;
+}
+.sheet-form__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 20px;
+}
+.sheet-form__btn {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-btn);
+  transition: transform 0.12s ease, opacity 0.12s ease;
+  &:active { transform: scale(0.94); opacity: 0.85; }
+}
+.sheet-form__btn--primary {
+  background: var(--primary);
+}
+.sheet-form__btn--cancel {
+  background: var(--card-dim);
+}
+.sheet-form__btn-text {
+  font-size: 15px;
+  font-weight: 600;
 }
 </style>
