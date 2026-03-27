@@ -58,7 +58,7 @@ export function useCloudCall<T = any>(
     }
 
     try {
-      const service = uniCloud.importObject(serviceName)
+      const service = uniCloud.importObject(serviceName, { customUI: true })
       const result = await (service as any)[methodName](...args)
 
       // 云对象返回 errCode 时表示业务错误
@@ -103,7 +103,7 @@ export async function cloudCall<T = any>(
   methodName: string,
   ...args: any[]
 ): Promise<T> {
-  const service = uniCloud.importObject(serviceName)
+  const service = uniCloud.importObject(serviceName, { customUI: true })
   const result = await (service as any)[methodName](...args)
 
   if (result && result.errCode) {
