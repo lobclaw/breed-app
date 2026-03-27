@@ -1,18 +1,34 @@
 <template>
   <view class="home">
-    <!-- 顶部问候 -->
-    <view class="home__header">
-      <view class="home__greeting">
-        <text class="home__greeting-title">犬舍管理</text>
-        <text class="home__greeting-sub">{{ formatDate(selectedDate) }}</text>
+    <!-- Header: 问候 + 头像 -->
+    <view class="header">
+      <view class="header-top">
+        <view class="greeting-text">
+          <text class="greeting-title">{{ greetingText }}</text>
+          <text class="greeting-sub">{{ formatFullDate(selectedDate) }} · 犬舍状态一览</text>
+        </view>
+        <view class="avatar">
+          <text class="material-icons-round" style="color: #fff; font-size: 22px;">pets</text>
+        </view>
       </view>
-    </view>
-
-    <!-- Zone 1: 状态摘要栏 -->
-    <view class="home__summary">
-      <BPill :count="counts.overdue" label="需处理" color="red" @click="scrollToSection('overdue')" />
-      <BPill :count="counts.today" label="今日" color="amber" @click="scrollToSection('today')" />
-      <BPill :count="counts.upcoming" label="本周" color="muted" @click="scrollToSection('upcoming')" />
+      <!-- 摘要 Pills: ● 需处理 2 -->
+      <view class="summary-pills">
+        <view class="pill pill-red" @click="scrollToSection('overdue')">
+          <view class="pill-dot" style="background: var(--red);" />
+          <text class="pill-label">需处理</text>
+          <text class="pill-num">{{ counts.overdue }}</text>
+        </view>
+        <view class="pill pill-amber" @click="scrollToSection('today')">
+          <view class="pill-dot" style="background: var(--amber);" />
+          <text class="pill-label">今日</text>
+          <text class="pill-num">{{ counts.today }}</text>
+        </view>
+        <view class="pill pill-dim" @click="scrollToSection('upcoming')">
+          <view class="pill-dot" style="background: var(--text-3);" />
+          <text class="pill-label">本周</text>
+          <text class="pill-num">{{ counts.upcoming }}</text>
+        </view>
+      </view>
     </view>
 
     <!-- 7天预览条 -->
@@ -23,52 +39,60 @@
       @toggle-calendar="toggleCalendar"
     />
 
-    <!-- Zone 2: 智能卡片区 -->
-    <scroll-view scroll-y class="home__cards" :scroll-into-view="scrollTarget">
+    <!-- 智能卡片区 -->
+    <scroll-view scroll-y class="card-area" :scroll-into-view="scrollTarget">
       <!-- 逾期 -->
-      <view v-if="overdueCards.length > 0" id="section-overdue" class="home__section">
-        <BSectionLabel title="需立即处理" color="red" :badge="counts.overdue" />
-        <SmartCard
-          v-for="card in overdueCards"
-          :key="card.id"
-          :card="card"
-          @complete="onComplete"
-          @postpone="onPostpone"
-          @batch-complete="onBatchComplete"
-          @action="onAction"
-        />
+      <view v-if="overdueCards.length > 0" id="section-overdue">
+        <view class="section-label">
+          <view class="section-dot" style="background: var(--red);" />
+          <text class="section-text">需立即处理</text>
+          <view class="section-badge"><text class="section-badge-text">{{ counts.overdue }}</text></view>
+        </view>
+        <view class="card-feed">
+          <SmartCard
+            v-for="card in overdueCards" :key="card.id" :card="card"
+            @complete="onComplete" @postpone="onPostpone"
+            @batch-complete="onBatchComplete" @action="onAction"
+          />
+        </view>
       </view>
 
       <!-- 今日 -->
-      <view v-if="todayCards.length > 0" id="section-today" class="home__section">
-        <BSectionLabel title="今日待办" color="amber" :badge="counts.today" />
-        <SmartCard
-          v-for="card in todayCards"
-          :key="card.id"
-          :card="card"
-          @complete="onComplete"
-          @postpone="onPostpone"
-          @batch-complete="onBatchComplete"
-          @action="onAction"
-        />
+      <view v-if="todayCards.length > 0" id="section-today">
+        <view class="section-label">
+          <view class="section-dot" style="background: var(--amber);" />
+          <text class="section-text">今日任务</text>
+          <view class="section-badge"><text class="section-badge-text">{{ counts.today }}</text></view>
+        </view>
+        <view class="card-feed">
+          <SmartCard
+            v-for="card in todayCards" :key="card.id" :card="card"
+            @complete="onComplete" @postpone="onPostpone"
+            @batch-complete="onBatchComplete" @action="onAction"
+          />
+        </view>
       </view>
 
       <!-- 即将到来 -->
-      <view v-if="upcomingCards.length > 0" id="section-upcoming" class="home__section">
-        <BSectionLabel title="即将到来" color="green" :badge="counts.upcoming" />
-        <SmartCard
-          v-for="card in upcomingCards"
-          :key="card.id"
-          :card="card"
-          @complete="onComplete"
-          @postpone="onPostpone"
-          @batch-complete="onBatchComplete"
-          @action="onAction"
-        />
+      <view v-if="upcomingCards.length > 0" id="section-upcoming">
+        <view class="section-label">
+          <view class="section-dot" style="background: var(--green);" />
+          <text class="section-text">即将到来</text>
+          <view class="section-badge"><text class="section-badge-text">{{ counts.upcoming }}</text></view>
+        </view>
+        <view class="card-feed">
+          <SmartCard
+            v-for="card in upcomingCards" :key="card.id" :card="card"
+            @complete="onComplete" @postpone="onPostpone"
+            @batch-complete="onBatchComplete" @action="onAction"
+          />
+        </view>
       </view>
 
       <!-- 加载骨架屏 -->
-      <BSkeleton v-if="loading" :rows="3" />
+      <view v-if="loading" class="card-feed">
+        <BSkeleton :rows="3" />
+      </view>
 
       <!-- 空状态 -->
       <BEmpty
@@ -80,70 +104,48 @@
     </scroll-view>
 
     <!-- FAB 快速记录按钮 -->
-    <view class="home__fab" @click="showActionSheet = true">
-      <text class="home__fab-icon">+</text>
+    <view class="fab" @click="showActionSheet = true">
+      <text class="material-icons-round" style="font-size: 28px; color: #fff;">add</text>
     </view>
 
     <!-- Action Sheet -->
-    <view class="home__action-sheet" v-if="showActionSheet" @click.self="showActionSheet = false">
-      <view class="home__action-sheet-content">
-        <view class="home__action-sheet-handle"><view class="home__action-sheet-bar" /></view>
-        <text class="home__action-sheet-title">快速记录</text>
-
-        <!-- 常用操作 -->
-        <view class="home__action-grid">
-          <view class="home__action-item" v-for="action in quickActions" :key="action.label" @click="doAction(action)">
-            <text class="home__action-icon">{{ action.icon }}</text>
-            <text class="home__action-label">{{ action.label }}</text>
+    <view class="sheet-mask" v-if="showActionSheet" @click.self="showActionSheet = false">
+      <view class="sheet-panel">
+        <view class="sheet-handle"><view class="sheet-bar" /></view>
+        <text class="sheet-title">快速记录</text>
+        <view class="action-grid">
+          <view class="action-item" v-for="action in quickActions" :key="action.label" @click="doAction(action)">
+            <text class="action-icon">{{ action.icon }}</text>
+            <text class="action-label">{{ action.label }}</text>
           </view>
         </view>
-
-        <!-- 全部记录类型 -->
-        <view class="home__action-all" @click="goToAllRecords">
-          <text class="home__action-all-text">全部记录类型</text>
-          <text class="home__action-all-arrow">›</text>
+        <view class="action-all" @click="goToAllRecords">
+          <text class="action-all-text">全部记录类型</text>
+          <text class="material-icons-round" style="font-size: 16px; color: var(--primary);">chevron_right</text>
         </view>
-
-        <view class="home__action-cancel" @click="showActionSheet = false">
-          <text>取消</text>
-        </view>
-      </view>
-    </view>
-
-    <!-- 快速完成 BottomSheet -->
-    <view class="home__quick-sheet" v-if="showQuickComplete" @click.self="showQuickComplete = false">
-      <view class="home__quick-sheet-content">
-        <view class="home__quick-sheet-handle"><view class="home__quick-sheet-bar" /></view>
-        <text class="home__quick-sheet-title">{{ quickCompleteTask?.title }}</text>
-        <text class="home__quick-sheet-sub">{{ quickCompleteTask?.dog_name }}</text>
-        <view class="home__quick-sheet-field">
-          <text class="home__quick-sheet-label">备注（选填）</text>
-          <input v-model="quickCompleteNotes" class="home__quick-sheet-input" placeholder="记录详情..." />
-        </view>
-        <view class="home__quick-sheet-actions">
-          <button class="home__quick-sheet-btn" @click="showQuickComplete = false">取消</button>
-          <button class="home__quick-sheet-btn home__quick-sheet-btn--primary" @click="confirmQuickComplete">确认完成</button>
+        <view class="action-cancel" @click="showActionSheet = false">
+          <text style="color: var(--text-3);">取消</text>
         </view>
       </view>
     </view>
 
     <!-- 推迟弹窗 -->
-    <view class="home__modal" v-if="showPostponeModal" @click.self="showPostponeModal = false">
-      <view class="home__modal-content">
-        <text class="home__modal-title">推迟任务</text>
-        <view class="home__modal-field">
-          <text class="home__modal-label">推迟到</text>
+    <view class="modal-mask" v-if="showPostponeModal" @click.self="showPostponeModal = false">
+      <view class="modal-panel">
+        <text class="modal-title">推迟任务</text>
+        <view class="modal-field">
+          <text class="modal-label">推迟到</text>
           <picker mode="date" :value="postponeDateStr" @change="onPostponeDateChange">
-            <text class="home__modal-picker">{{ postponeDateStr }}</text>
+            <text class="modal-picker">{{ postponeDateStr }}</text>
           </picker>
         </view>
-        <view class="home__modal-field">
-          <text class="home__modal-label">原因</text>
-          <input v-model="postponeReason" class="home__modal-input" placeholder="选填" />
+        <view class="modal-field">
+          <text class="modal-label">原因（选填）</text>
+          <input v-model="postponeReason" class="modal-input" placeholder="选填..." />
         </view>
-        <view class="home__modal-actions">
-          <button class="home__modal-btn" @click="showPostponeModal = false">取消</button>
-          <button class="home__modal-btn home__modal-btn--primary" @click="doPostpone">确认推迟</button>
+        <view class="modal-actions">
+          <view class="modal-btn modal-btn--cancel" @click="showPostponeModal = false"><text class="modal-btn-text" style="color: var(--text-2);">取消</text></view>
+          <view class="modal-btn modal-btn--confirm" @click="doPostpone"><text class="modal-btn-text" style="color: #fff;">确认推迟</text></view>
         </view>
       </view>
     </view>
@@ -157,8 +159,6 @@ import { useCloudCall } from '@/composables/useCloudCall'
 import { useAuth } from '@/composables/useAuth'
 import WeekStrip from '@/components/week-strip/WeekStrip.vue'
 import SmartCard from '@/components/smart-card/SmartCard.vue'
-import BPill from '@/components/base/BPill.vue'
-import BSectionLabel from '@/components/base/BSectionLabel.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 
@@ -219,9 +219,20 @@ function startOfDay(ts: number) {
   return d.getTime()
 }
 
-function formatDate(ts: number) {
+/** 问候语（按时段） */
+const greetingText = computed(() => {
+  const h = new Date().getHours()
+  if (h < 6) return '夜深了'
+  if (h < 12) return '早上好'
+  if (h < 18) return '下午好'
+  return '晚上好'
+})
+
+/** 完整日期：3月22日 周六 */
+const weekDays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+function formatFullDate(ts: number) {
   const d = new Date(ts)
-  return `${d.getMonth() + 1}月${d.getDate()}日`
+  return `${d.getMonth() + 1}月${d.getDate()}日 ${weekDays[d.getDay()]}`
 }
 
 const { run: fetchCards } = useCloudCall<{ data: any }>('task-service', 'getHomeCards')
@@ -329,17 +340,23 @@ onShow(async () => {
 </script>
 
 <style lang="scss" scoped>
+/* 首页 — 一比一还原 home-v1-final.html */
 .home {
   min-height: 100vh;
   background: var(--bg);
   padding-bottom: 100px;
 }
 
-/* 顶部问候 */
-.home__header {
-  padding: var(--space-header-top) var(--space-page) 0;
+/* ==================== HEADER ==================== */
+.header {
+  padding: 12px 20px 0;
 }
-.home__greeting-title {
+.header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.greeting-title {
   display: block;
   font-family: var(--font-display);
   font-size: 24px;
@@ -347,106 +364,113 @@ onShow(async () => {
   color: var(--text-1);
   line-height: 1.3;
 }
-.home__greeting-sub {
+.greeting-sub {
   display: block;
   font-size: 13px;
   color: var(--text-2);
   margin-top: 2px;
 }
-
-/* 状态摘要栏 */
-.home__summary {
-  display: flex;
-  gap: var(--space-pill-gap);
-  padding: 16px var(--space-page) 16px;
-}
-
-/* 卡片区 */
-.home__cards {
-  padding: 0 var(--space-card);
-}
-.home__section {
-  margin-bottom: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-card-gap);
-}
-
-/* 推迟弹窗 */
-.home__modal {
-  position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: var(--mask);
+.avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), var(--amber));
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 100;
-}
-.home__modal-content {
-  background: var(--card);
-  border-radius: var(--radius-card);
-  padding: 24px;
-  width: 85%;
-  max-width: 320px;
-}
-.home__modal-title {
-  font-family: var(--font-display);
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--text-1);
-  display: block;
-  margin-bottom: 20px;
-  text-align: center;
-}
-.home__modal-field { margin-bottom: 16px; }
-.home__modal-label {
-  font-size: 14px;
-  color: var(--text-2);
-  margin-bottom: 6px;
-  display: block;
-}
-.home__modal-picker {
-  font-size: 15px;
-  color: var(--text-1);
-  padding: 10px 14px;
-  border: 1.5px solid var(--text-4);
-  border-radius: var(--radius-row);
-  display: block;
-}
-.home__modal-input {
-  border: 1.5px solid var(--text-4);
-  border-radius: var(--radius-row);
-  padding: 10px 14px;
-  font-size: 15px;
-  color: var(--text-1);
-  width: 100%;
-}
-.home__modal-actions {
-  display: flex;
-  gap: 12px;
-  margin-top: 20px;
-}
-.home__modal-btn {
-  flex: 1;
-  height: 40px;
-  border-radius: var(--radius-btn);
-  font-size: 14px;
-  font-weight: 600;
-  background: var(--card-dim);
-  color: var(--text-2);
-  line-height: 40px;
-  padding: 0;
-  border: none;
-  transition: transform 0.12s ease, opacity 0.12s ease;
-  &:active { transform: scale(0.94); opacity: 0.85; }
-}
-.home__modal-btn--primary {
-  background: var(--primary);
-  color: #FFFFFF;
+  flex-shrink: 0;
 }
 
-/* FAB 按钮 */
-.home__fab {
+/* ==================== SUMMARY PILLS ==================== */
+.summary-pills {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  padding-bottom: 16px;
+}
+.pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 16px;
+  transition: transform 0.12s ease, filter 0.12s ease;
+  &:active { transform: scale(0.95); filter: brightness(0.95); }
+}
+.pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.pill-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+.pill-num {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+}
+.pill-red {
+  background: var(--red-soft);
+  .pill-label, .pill-num { color: var(--red); }
+}
+.pill-amber {
+  background: var(--amber-soft);
+  .pill-label, .pill-num { color: var(--amber); }
+}
+.pill-dim {
+  background: var(--card-dim);
+  .pill-label, .pill-num { color: var(--text-3); }
+}
+
+/* ==================== SECTION LABELS ==================== */
+.section-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 20px 10px;
+}
+.section-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.section-text {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-3);
+  letter-spacing: 0.5px;
+}
+.section-badge {
+  background: var(--card-dim);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+.section-badge-text {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-2);
+}
+
+/* ==================== CARD FEED ==================== */
+.card-area {
+  flex: 1;
+}
+.card-feed {
+  padding: 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+/* ==================== FAB ==================== */
+.fab {
   position: fixed;
   right: 20px;
   bottom: 100px;
@@ -457,19 +481,17 @@ onShow(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: var(--shadow-fab);
+  box-shadow: 0 4px 16px rgba(234, 62, 119, 0.3);
   z-index: 50;
-  transition: transform 0.15s ease;
-  &:active { transform: scale(0.88); }
-}
-.home__fab-icon {
-  font-size: 28px;
-  color: #FFFFFF;
-  line-height: 1;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  &:active {
+    transform: scale(0.88);
+    box-shadow: 0 2px 8px rgba(234, 62, 119, 0.2);
+  }
 }
 
-/* Action Sheet */
-.home__action-sheet {
+/* ==================== ACTION SHEET ==================== */
+.sheet-mask {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
   background: var(--mask);
@@ -477,24 +499,25 @@ onShow(async () => {
   display: flex;
   align-items: flex-end;
 }
-.home__action-sheet-content {
+.sheet-panel {
   background: var(--card);
   border-radius: 20px 20px 0 0;
   width: 100%;
   padding-bottom: env(safe-area-inset-bottom, 20px);
 }
-.home__action-sheet-handle {
+.sheet-handle {
   display: flex;
   justify-content: center;
   padding: 12px 0 8px;
 }
-.home__action-sheet-bar {
+.sheet-bar {
   width: 36px;
   height: 4px;
   background: var(--text-4);
   border-radius: 2px;
 }
-.home__action-sheet-title {
+.sheet-title {
+  display: block;
   font-family: var(--font-display);
   font-size: 18px;
   font-weight: 700;
@@ -502,12 +525,12 @@ onShow(async () => {
   text-align: center;
   padding: 8px 0 16px;
 }
-.home__action-grid {
+.action-grid {
   display: flex;
   flex-wrap: wrap;
-  padding: 0 var(--space-page);
+  padding: 0 20px;
 }
-.home__action-item {
+.action-item {
   width: 33.33%;
   display: flex;
   flex-direction: column;
@@ -516,106 +539,94 @@ onShow(async () => {
   transition: transform 0.12s ease;
   &:active { transform: scale(0.9); }
 }
-.home__action-icon { font-size: 28px; margin-bottom: 6px; }
-.home__action-label { font-size: 13px; color: var(--text-1); }
-.home__action-all {
+.action-icon { font-size: 28px; margin-bottom: 6px; }
+.action-label { font-size: 13px; color: var(--text-1); }
+.action-all {
   display: flex;
   justify-content: center;
   align-items: center;
   gap: 4px;
   padding: 16px;
   border-top: 1px solid var(--card-dim);
-  margin: 0 var(--space-page);
+  margin: 0 20px;
 }
-.home__action-all-text { font-size: 14px; color: var(--primary); }
-.home__action-all-arrow { font-size: 16px; color: var(--primary); }
-.home__action-cancel {
+.action-all-text { font-size: 14px; color: var(--primary); font-weight: 600; }
+.action-cancel {
   text-align: center;
   padding: 16px;
   border-top: 6px solid var(--bg);
   font-size: 15px;
-  color: var(--text-3);
 }
 
-/* Quick Complete Sheet */
-.home__quick-sheet {
+/* ==================== MODAL ==================== */
+.modal-mask {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
   background: var(--mask);
-  z-index: 200;
   display: flex;
-  align-items: flex-end;
-}
-.home__quick-sheet-content {
-  background: var(--card);
-  border-radius: 20px 20px 0 0;
-  width: 100%;
-  padding: 0 var(--space-page);
-  padding-bottom: env(safe-area-inset-bottom, 20px);
-}
-.home__quick-sheet-handle {
-  display: flex;
+  align-items: center;
   justify-content: center;
-  padding: 12px 0 8px;
+  z-index: 300;
 }
-.home__quick-sheet-bar {
-  width: 36px;
-  height: 4px;
-  background: var(--text-4);
-  border-radius: 2px;
+.modal-panel {
+  background: var(--card);
+  border-radius: 16px;
+  padding: 24px;
+  width: 85%;
+  max-width: 320px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
 }
-.home__quick-sheet-title {
+.modal-title {
+  display: block;
   font-family: var(--font-display);
   font-size: 18px;
   font-weight: 700;
   color: var(--text-1);
-  display: block;
   text-align: center;
-  padding-top: 8px;
+  margin-bottom: 20px;
 }
-.home__quick-sheet-sub {
-  font-size: 13px;
-  color: var(--text-2);
+.modal-field { margin-bottom: 16px; }
+.modal-label {
   display: block;
-  text-align: center;
-  margin-bottom: 16px;
-}
-.home__quick-sheet-field { margin-bottom: 16px; }
-.home__quick-sheet-label {
   font-size: 14px;
   color: var(--text-2);
-  display: block;
   margin-bottom: 6px;
 }
-.home__quick-sheet-input {
-  border: 1.5px solid var(--text-4);
-  border-radius: var(--radius-row);
-  padding: 10px 14px;
+.modal-picker {
+  display: block;
   font-size: 15px;
   color: var(--text-1);
-  width: 100%;
+  padding: 10px 14px;
+  border: 1.5px solid var(--text-4);
+  border-radius: 14px;
 }
-.home__quick-sheet-actions {
+.modal-input {
+  width: 100%;
+  font-size: 15px;
+  color: var(--text-1);
+  padding: 10px 14px;
+  border: 1.5px solid var(--text-4);
+  border-radius: 14px;
+}
+.modal-actions {
   display: flex;
   gap: 12px;
-  padding: 12px 0 16px;
+  margin-top: 20px;
 }
-.home__quick-sheet-btn {
+.modal-btn {
   flex: 1;
-  height: 42px;
-  border-radius: var(--radius-btn);
-  font-size: 14px;
-  font-weight: 600;
-  background: var(--card-dim);
-  color: var(--text-2);
-  line-height: 42px;
-  padding: 0;
-  border: none;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
   transition: transform 0.12s ease, opacity 0.12s ease;
   &:active { transform: scale(0.94); opacity: 0.85; }
 }
-.home__quick-sheet-btn--primary {
-  background: var(--primary);
-  color: #FFFFFF;
+.modal-btn--cancel { background: var(--card-dim); }
+.modal-btn--confirm { background: var(--primary); }
+.modal-btn-text {
+  font-size: 14px;
+  font-weight: 600;
 }
 </style>
