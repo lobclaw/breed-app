@@ -18,47 +18,30 @@
       </view>
     </view>
 
-    <!-- 犬只列表 -->
+    <!-- 可操作的犬只（sick_with_med + med_only，有 checkbox） -->
     <view class="health-list">
       <view
-        v-for="dog in card.dogs"
+        v-for="dog in actionableDogs"
         :key="dog.dogId"
         class="health-row"
-        :class="{
-          'health-row--done': dog.state !== 'sick_only' && (dog.completed || checkedDogs.has(dog.dogId)),
-          'health-row--sick': dog.state === 'sick_only',
-        }"
+        :class="{ 'health-row--done': dog.completed || checkedDogs.has(dog.dogId) }"
         @click="toggleDog(dog)"
       >
-        <!-- sick_only: 状态圆点 + 点击操作 -->
-        <template v-if="dog.state === 'sick_only'">
-          <view class="sick-dot" />
-          <text class="health-row__name">{{ dog.dogName }}</text>
-          <view class="health-row__info">
-            <text class="health-row__illness">{{ dog.illness }}</text>
-            <text class="health-row__badge health-row__badge--amber">{{ dog.treatmentStatus || '观察中' }}</text>
-            <text class="health-row__days">第{{ dog.daysSick }}天</text>
-          </view>
-          <text class="health-row__action" @click.stop="onSickAction(dog)">标记康复</text>
-        </template>
-
-        <!-- sick_with_med: checkbox + 病症 + 药品全信息 -->
-        <template v-else-if="dog.state === 'sick_with_med'">
+        <template v-if="dog.state === 'sick_with_med'">
           <view class="cb-box" :class="(dog.completed || checkedDogs.has(dog.dogId)) ? 'cb-box--done' : 'cb-box--empty'">
             <text v-if="dog.completed || checkedDogs.has(dog.dogId)" class="cb-check">✓</text>
           </view>
           <text class="health-row__name">{{ dog.dogName }}</text>
           <view class="health-row__info">
             <text class="health-row__illness">{{ dog.illness }}</text>
-            <text class="health-row__sep">·</text>
+            <text v-if="dog.treatmentStatus" class="health-row__badge health-row__badge--amber">{{ dog.treatmentStatus }}</text>
             <text class="health-row__drug">{{ dog.drugName }}</text>
             <text v-if="dog.dosageStr" class="health-row__dosage">{{ dog.dosageStr }}</text>
             <text v-if="dog.progress" class="health-row__tag">{{ dog.progress }}</text>
             <text v-if="dog.methodFreq" class="health-row__meta">{{ dog.methodFreq }}</text>
           </view>
+          <text v-if="!(dog.completed || checkedDogs.has(dog.dogId))" class="health-row__action" @click.stop="onSickAction(dog)">康复</text>
         </template>
-
-        <!-- med_only: checkbox + 药品全信息 -->
         <template v-else>
           <view class="cb-box" :class="(dog.completed || checkedDogs.has(dog.dogId)) ? 'cb-box--done' : 'cb-box--empty'">
             <text v-if="dog.completed || checkedDogs.has(dog.dogId)" class="cb-check">✓</text>
@@ -70,19 +53,56 @@
             <text v-if="dog.progress" class="health-row__tag">{{ dog.progress }}</text>
             <text v-if="dog.methodFreq" class="health-row__meta">{{ dog.methodFreq }}</text>
           </view>
+          <text v-if="!(dog.completed || checkedDogs.has(dog.dogId))" class="health-row__action health-row__action--stop" @click.stop="onStopMedication(dog)">停药</text>
         </template>
       </view>
     </view>
 
-    <!-- 按钮组（只在有用药犬只时显示完成/推迟） -->
-    <view v-if="medDogCount > 0" class="card-actions">
-      <view class="btn btn--filled btn--plum" @click="batchComplete">
-        <text class="btn-text btn-text--white">完成</text>
+    <!-- 观察中犬只（sick_only，无 checkbox） -->
+    <view v-if="sickOnlyDogs.length > 0" class="health-list health-list--sick">
+      <!-- ≥3 只：折叠时显示摘要栏，展开时隐藏 -->
+      <view v-if="sickOnlyDogs.length >= 3 && sickCollapsed" class="sick-collapse-bar" @click="toggleSickCollapse">
+        <view class="sick-dot" />
+        <text class="sick-collapse-text">{{ sickOnlyDogs.length }}只犬观察中</text>
+        <text class="material-icons-round sick-collapse-arrow">expand_more</text>
       </view>
-      <view class="btn btn--ghost" @click="batchPostpone">
-        <text class="btn-text btn-text--ghost">推迟</text>
+
+      <!-- 展开时显示完整列表 + 底部收起按钮 -->
+      <template v-if="!sickCollapsed || sickOnlyDogs.length < 3">
+        <view
+          v-for="dog in sickOnlyDogs"
+          :key="dog.dogId"
+          class="health-row health-row--sick"
+        >
+          <view class="sick-dot" />
+          <text class="health-row__name">{{ dog.dogName }}</text>
+          <view class="health-row__info">
+            <text class="health-row__illness">{{ dog.illness }}</text>
+            <text class="health-row__badge health-row__badge--amber">{{ dog.treatmentStatus || '观察中' }}</text>
+            <text class="health-row__days">第{{ dog.daysSick }}天</text>
+          </view>
+          <text class="health-row__action" @click.stop="onSickAction(dog)">康复</text>
+        </view>
+      </template>
+    </view>
+
+    <!-- 按钮组 -->
+    <view class="card-actions">
+      <view class="card-actions__btns">
+		  <view v-if="hasPendingMed" class="btn btn--filled btn--plum" @click="batchComplete">
+		    <text class="btn-text btn-text--white">完成</text>
+		  </view>
+		  <view v-if="hasPendingMed" class="btn btn--ghost" @click="batchPostpone">
+		    <text class="btn-text btn-text--ghost">推迟</text>
+		  </view>
+	  </view>
+      <view style="flex:1" />
+      <view v-if="!sickCollapsed && sickOnlyDogs.length >= 3" class="sick-collapse-btn" @click="toggleSickCollapse">
+        <text class="sick-collapse-btn__text">收起</text>
+        <text class="material-icons-round sick-collapse-btn__icon">expand_less</text>
       </view>
     </view>
+
   </view>
 </template>
 
@@ -97,20 +117,39 @@ const emit = defineEmits<{
   (e: 'action', payload: { type: string; data: any }): void
 }>()
 
+// 把犬只数据和可选操作传给父组件，由父组件渲染 BSheet
 function onSickAction(dog: any) {
-  uni.showActionSheet({
-    itemList: ['标记康复', '改为治疗中', '开始用药'],
-    success: (res) => {
-      if (res.tapIndex === 0) {
-        emit('action', { type: 'recover', data: { dogId: dog.dogId, dogName: dog.dogName, illnessId: dog.illnessId } })
-      } else if (res.tapIndex === 1) {
-        emit('action', { type: 'update_status', data: { dogId: dog.dogId, status: '治疗中', illnessId: dog.illnessId } })
-      } else if (res.tapIndex === 2) {
-        const dogList = [{ _id: dog.dogId, name: dog.dogName }]
-        uni.navigateTo({ url: `/pages/record/health-medication?batchDogs=${encodeURIComponent(JSON.stringify(dogList))}` })
-      }
-    },
-  })
+  const items: { icon: string; label: string; action: string }[] = []
+
+  items.push({ icon: 'check_circle', label: '标记康复', action: 'recover' })
+
+  if (dog.treatmentStatus === '观察中') {
+    items.push({ icon: 'medical_services', label: '开始治疗', action: 'update_status' })
+  }
+
+  if (dog.state === 'sick_only') {
+    items.push({ icon: 'medication', label: '开始用药', action: 'start_medication' })
+  }
+
+  emit('action', { type: 'show_sick_menu', data: { dog, items } })
+}
+
+function onStopMedication(dog: any) {
+  emit('action', { type: 'show_stop_confirm', data: { dogId: dog.dogId, dogName: dog.dogName, drugName: dog.drugName, dosageStr: dog.dosageStr, progress: dog.progress } })
+}
+
+// 分组：可操作（有 checkbox）vs 仅观察
+const actionableDogs = computed(() => (props.card.dogs || []).filter((d: any) => d.state !== 'sick_only'))
+const sickOnlyDogs = computed(() => (props.card.dogs || []).filter((d: any) => d.state === 'sick_only'))
+
+// 折叠状态（localStorage 持久化）
+const COLLAPSE_KEY = 'health_sick_collapsed'
+const _stored = uni.getStorageSync(COLLAPSE_KEY)
+const sickCollapsed = ref(_stored === '' ? true : _stored)
+
+function toggleSickCollapse() {
+  sickCollapsed.value = !sickCollapsed.value
+  uni.setStorageSync(COLLAPSE_KEY, sickCollapsed.value)
 }
 
 const checkedDogs = ref(new Set<string>())
@@ -133,6 +172,7 @@ const doneCount = computed(() => {
   const medDogs = (props.card.dogs || []).filter((d: any) => d.state !== 'sick_only')
   return medDogs.filter((d: any) => d.completed || checkedDogs.value.has(d.dogId)).length
 })
+const hasPendingMed = computed(() => doneCount.value < medDogCount.value)
 
 function batchComplete() {
   const taskIds = (props.card.tasks || []).map((t: any) => t._id)
@@ -213,9 +253,16 @@ function batchPostpone() {
 }
 .health-row__action {
   font-size: 11px; font-weight: 700; color: var(--green);
-  padding: 2px 8px; border-radius: 4px; background: var(--green-soft);
+  padding: 2px 8px; border-radius: 4px;
+  background: var(--green-soft);
+  box-shadow: 0 1px 4px rgba(61, 174, 111, 0.2);
   flex-shrink: 0;
-  &:active { opacity: 0.7; }
+  &:active { transform: scale(0.9); box-shadow: none; }
+  &--stop {
+    color: var(--text-2);
+    background: var(--card-dim);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+  }
 }
 .health-row__meta {
   font-size: 10px; color: var(--text-3);
@@ -241,14 +288,60 @@ function batchPostpone() {
 }
 .cb-check { font-size: 10px; color: #FFFFFF; font-weight: 700; }
 
-.card-actions { display: flex; gap: 8px; margin-top: 14px; }
+.card-actions { display: flex; align-items: flex-start; gap: 8px; margin-top: 2px; }
+.card-actions__btns { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
 .btn {
-  padding: 8px 18px; border-radius: 999px; border: none;
+  padding: 8px 18px; border-radius: 999px; border: 1.5px solid transparent;
+  min-width: 64px; box-sizing: border-box;
   display: flex; align-items: center; justify-content: center;
   transition: transform 0.12s ease, opacity 0.12s ease;
   &:active { transform: scale(0.94); opacity: 0.85; }
-  &--filled.btn--plum { background: var(--plum); }
-  &--ghost { background: transparent; border: 1.5px solid var(--text-4); }
+  &--filled.btn--plum { background: var(--plum); border-color: var(--plum); }
+  &--ghost { background: transparent; border-color: var(--text-4); }
 }
 .btn-text { font-family: var(--font-display); font-size: 13px; font-weight: 700; &--white { color: #FFFFFF; } &--ghost { color: var(--text-2); } }
+
+/* 观察中区域分隔 */
+.health-list--sick {
+  margin-top: 2px;
+  border-top: 0.5px solid var(--card-dim);
+  padding-top: 2px;
+}
+
+/* 折叠栏 */
+.sick-collapse-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+  &:active { opacity: 0.7; }
+}
+.sick-collapse-text {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.sick-collapse-arrow {
+  font-size: 18px;
+  color: var(--text-3);
+}
+
+/* 收起按钮 */
+.sick-collapse-btn {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  &:active { opacity: 0.6; }
+}
+.sick-collapse-btn__text {
+  font-size: 11px;
+  color: var(--text-3);
+  font-weight: 600;
+}
+.sick-collapse-btn__icon {
+  font-size: 14px;
+  color: var(--text-3);
+}
+
 </style>

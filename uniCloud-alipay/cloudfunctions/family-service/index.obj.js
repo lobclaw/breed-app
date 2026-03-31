@@ -15,6 +15,8 @@ const DEFAULT_SETTINGS = {
   default_deworming_interval_puppy: 14,
   default_deworming_interval_adult: 90,
   morning_summary_time: '07:00',
+  custom_vaccine_types: [],
+  custom_deworming_drugs: { internal: [], external: [], combo: [] },
 }
 
 module.exports = {

@@ -127,7 +127,7 @@ import BModal from '@/components/layout/BModal.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 import BFormOptions from '@/components/form/BFormOptions.vue'
 
-const { currentFamily } = useAuth()
+const { currentFamily, loadFamily } = useAuth()
 
 const selectedDogs = ref<any[]>([])
 const date = ref<number | null>(null)
@@ -159,7 +159,20 @@ const dewormingTypes = [
   { label: '内外同驱', value: 'combo' },
 ]
 
-const dewormDrugs = ['拜宠清', '海乐妙', '犬心保']
+const PRESET_DEWORMING_DRUGS: Record<string, string[]> = {
+  internal: ['拜宠清', '海乐妙', '犬心保'],
+  external: ['福来恩', '大宠爱'],
+  combo: ['超可信', '博来恩'],
+}
+// 根据当前选中的驱虫类型，合并预设 + 用户自定义药品
+const dewormDrugs = computed(() => {
+  const subtype = details.deworming_type || 'internal'
+  const preset = PRESET_DEWORMING_DRUGS[subtype] || []
+  const customSettings = currentFamily.value?.settings?.custom_deworming_drugs || {}
+  const custom = customSettings[subtype] || []
+  const all = [...preset, ...custom]
+  return [...new Set(all)]
+})
 const customDrug = ref('')
 const showCustomModal = ref(false)
 const customInput = ref('')
@@ -169,12 +182,28 @@ function addCustomDrug() {
   showCustomModal.value = true
 }
 
-function onCustomConfirm() {
-  if (customInput.value.trim()) {
-    customDrug.value = customInput.value.trim()
-    details.drug_name = customDrug.value
-  }
+const { run: updateFamilySettings } = useCloudCall('family-service', 'updateSettings')
+
+async function onCustomConfirm() {
+  const val = customInput.value.trim()
+  if (!val) { showCustomModal.value = false; return }
+
+  customDrug.value = val
+  details.drug_name = val
   showCustomModal.value = false
+
+  // 立即保存到 family settings
+  const subtype = details.deworming_type || 'internal'
+  const presetList = PRESET_DEWORMING_DRUGS[subtype] || []
+  if (!presetList.includes(val)) {
+    const customSettings = currentFamily.value?.settings?.custom_deworming_drugs || {}
+    const existing = customSettings[subtype] || []
+    if (!existing.includes(val)) {
+      const updated = { ...customSettings, [subtype]: [...existing, val] }
+      await updateFamilySettings({ custom_deworming_drugs: updated })
+      await loadFamily()
+    }
+  }
 }
 
 const canSubmit = computed(() => {
@@ -286,6 +315,8 @@ async function submit() {
         })
       }
 
+      // 如果有自定义药品，刷新家庭设置以便下次显示
+      if (customDrug.value) loadFamily()
       setTimeout(() => uni.navigateBack(), 1000)
     }
   } finally {

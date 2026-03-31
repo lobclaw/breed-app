@@ -35,6 +35,51 @@ async function getFamilySettings(familyId) {
 }
 
 /**
+ * 保存自定义疫苗/驱虫类型到家庭设置
+ * 预设类型不保存，只保存用户新增的
+ */
+const PRESET_VACCINE_TYPES = ['卫佳5', '卫佳8', '卫佳10', '狂犬']
+const PRESET_DEWORMING_DRUGS = {
+  internal: ['拜宠清', '海乐妙', '犬心保'],
+  external: ['福来恩', '大宠爱'],
+  combo: ['超可信', '博来恩'],
+}
+
+async function saveCustomType(familyId, type, details) {
+  try {
+    if (type === 'vaccination' && details?.vaccine_type) {
+      const vt = details.vaccine_type
+      if (PRESET_VACCINE_TYPES.includes(vt)) return
+      // 先读取已有自定义类型，去重后再写入
+      const { data: familyData } = await db.collection('families').doc(familyId).field({ settings: true }).get()
+      const family = familyData[0] || familyData || {}
+      const existing = family.settings?.custom_vaccine_types || []
+      if (existing.includes(vt)) return
+      await db.collection('families').doc(familyId).update({
+        'settings.custom_vaccine_types': dbCmd.push([vt]),
+        updated_at: Date.now(),
+      })
+    }
+    if (type === 'deworming' && details?.drug_name) {
+      const drug = details.drug_name
+      const subtype = details.deworming_type || 'internal'
+      const presetList = PRESET_DEWORMING_DRUGS[subtype] || []
+      if (presetList.includes(drug)) return
+      const { data: familyData } = await db.collection('families').doc(familyId).field({ settings: true }).get()
+      const family = familyData[0] || familyData || {}
+      const existing = family.settings?.custom_deworming_drugs?.[subtype] || []
+      if (existing.includes(drug)) return
+      await db.collection('families').doc(familyId).update({
+        [`settings.custom_deworming_drugs.${subtype}`]: dbCmd.push([drug]),
+        updated_at: Date.now(),
+      })
+    }
+  } catch (e) {
+    console.log('[saveCustomType] failed:', e.message)
+  }
+}
+
+/**
  * 检查是否已有同类型的 pending 任务在 ±7 天内
  */
 async function hasDuplicateTask(familyId, dogId, taskType, dueDate) {
@@ -272,6 +317,9 @@ module.exports = {
     }
     const { id: recordId } = await db.collection('health_records').add(recordData)
 
+    // 保存自定义类型到家庭设置（如果是新类型）
+    await saveCustomType(familyId, data.type, data.details)
+
     // 自动完成该犬同类型的 pending 待办（在创建新提醒之前）
     const completedTasks = await autoCompletePendingTasks(familyId, data.dog_id, data.type, data.details)
 
@@ -402,6 +450,25 @@ module.exports = {
       })
     }
 
+    // 如有费用 → 创建 expense
+    if (data.cost && data.cost > 0) {
+      await db.collection('expenses').add({
+        family_id: familyId,
+        dog_id: data.dog_id,
+        dog_name: dog.name,
+        category: '医疗',
+        sub_category: '用药',
+        amount: data.cost,
+        date: startDate,
+        notes: `${data.drug_name} ${data.duration_days}天`,
+        source_type: 'medication_task',
+        source_id: medicationId,
+        created_by: this.uid,
+        created_at: now,
+        updated_at: now,
+      })
+    }
+
     return { data: { medicationId } }
   },
 
@@ -478,6 +545,40 @@ module.exports = {
     })
 
     return { message: '用药已提前结束' }
+  },
+
+  /**
+   * 按犬只停止所有进行中的用药（从首页健康关注卡调用）
+   */
+  async endMedicationByDog(dogId) {
+    if (!dogId) throw new Error('缺少犬只 ID')
+
+    const now = Date.now()
+    const familyId = this.familyId
+
+    // 找到该犬所有进行中的用药方案
+    const { data: meds } = await db.collection('medication_tasks')
+      .where({ dog_id: dogId, family_id: familyId, status: '进行中' })
+      .get()
+
+    let cancelled = 0
+    for (const med of meds) {
+      await db.collection('medication_tasks').doc(med._id).update({
+        status: '已取消',
+        updated_at: now,
+      })
+      // 取消剩余 pending 任务
+      await db.collection('tasks').where({
+        medication_task_id: med._id,
+        status: 'pending',
+      }).update({
+        status: 'cancelled',
+        updated_at: now,
+      })
+      cancelled++
+    }
+
+    return { message: `已停止 ${cancelled} 个用药方案` }
   },
 
   /**

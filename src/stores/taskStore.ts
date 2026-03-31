@@ -10,6 +10,7 @@ interface TaskCard {
   id: string
   cardType: string
   priority: string
+  overdueDays?: number
   dogName?: string
   dogId?: string
   groupTitle?: string
@@ -22,15 +23,14 @@ const STORAGE_KEY = 'recent_actions'
 
 export const useTaskStore = defineStore('tasks', {
   state: () => ({
-    overdueCards: [] as TaskCard[],
-    todayCards: [] as TaskCard[],
-    counts: { overdue: 0, today: 0 },
+    cards: [] as TaskCard[],
+    counts: { today: 0, week: 0, month30: 0, hasOverdue: false },
     loaded: false,
   }),
 
   // @ts-ignore
   unistorage: {
-    paths: ['overdueCards', 'todayCards', 'counts'],
+    paths: ['cards', 'counts'],
   },
 
   actions: {
@@ -39,11 +39,12 @@ export const useTaskStore = defineStore('tasks', {
       try {
         const res = await cloudCall<{ data: any }>('task-service', 'getHomeCards')
         if (res?.data) {
-          this.overdueCards = res.data.overdue || []
-          this.todayCards = res.data.today || []
+          this.cards = res.data.cards || []
           this.counts = {
-            overdue: res.data.counts?.overdue || 0,
             today: res.data.counts?.today || 0,
+            week: res.data.counts?.week || 0,
+            month30: res.data.counts?.month30 || 0,
+            hasOverdue: res.data.counts?.hasOverdue || false,
           }
           this.loaded = true
         }
@@ -52,7 +53,7 @@ export const useTaskStore = defineStore('tasks', {
 
     /** 确保数据可用 */
     async ensure() {
-      if (this.loaded || this.overdueCards.length + this.todayCards.length > 0) {
+      if (this.loaded || this.cards.length > 0) {
         this.loaded = true
         this.fetchFromServer()
       } else {
@@ -87,19 +88,14 @@ export const useTaskStore = defineStore('tasks', {
 
     /** 本地移除卡片（乐观更新） */
     removeCardByTaskId(taskId: string) {
-      const lists = [this.overdueCards, this.todayCards] as TaskCard[][]
-      for (const list of lists) {
-        const idx = list.findIndex(c => c.tasks?.some((t: any) => t._id === taskId) || c.id === taskId)
-        if (idx >= 0) {
-          const card = list[idx]
-          if (!card.tasks || card.tasks.length <= 1) {
-            list.splice(idx, 1)
-            if (card.priority === 'overdue') this.counts.overdue = Math.max(0, this.counts.overdue - 1)
-            else this.counts.today = Math.max(0, this.counts.today - 1)
-          } else {
-            card.tasks = card.tasks.filter((t: any) => t._id !== taskId)
-          }
-          break
+      const idx = this.cards.findIndex(c => c.tasks?.some((t: any) => t._id === taskId) || c.id === taskId)
+      if (idx >= 0) {
+        const card = this.cards[idx]
+        if (!card.tasks || card.tasks.length <= 1) {
+          this.cards.splice(idx, 1)
+          this.counts.today = Math.max(0, this.counts.today - 1)
+        } else {
+          card.tasks = card.tasks.filter((t: any) => t._id !== taskId)
         }
       }
     },
@@ -120,11 +116,10 @@ export const useTaskStore = defineStore('tasks', {
       const slots: any[] = []
       const usedUrls = new Set<string>()
 
-      // 槽位 1：待办（排除健康关注卡，它没有批量录入入口）
-      const allTasks = [...this.overdueCards, ...this.todayCards]
-        .filter((c: any) => c.cardType !== 'health_attention')
-      if (allTasks.length > 0) {
-        const task = allTasks[0]
+      // 槽位 1：待办（排除健康关注卡）
+      const actionableCards = this.cards.filter((c: any) => c.cardType !== 'health_attention')
+      if (actionableCards.length > 0) {
+        const task = actionableCards[0]
         slots.push({
           materialIcon: 'assignment_turned_in',
           iconColor: task.priority === 'overdue' ? 'red' : 'amber',
@@ -166,7 +161,6 @@ export const useTaskStore = defineStore('tasks', {
       const t = task.tasks?.[0]
       const taskType = t?.type || ''
 
-      // batch 卡片：传批量犬只 + taskIds（和 BatchCard.goProcess 一致）
       if (task.cardType === 'batch' && task.dogs?.length > 0) {
         const dogList = task.dogs
           .filter((d: any) => !d.completed)
@@ -182,7 +176,6 @@ export const useTaskStore = defineStore('tasks', {
         return `${page}?batchDogs=${dogsParam}&taskIds=${taskIds}`
       }
 
-      // 个体卡片：传 dogId
       const dogId = task.dogId || task.dog_id
       const dogParam = dogId ? `?dogId=${dogId}` : ''
       if (!t) return '/pages/record/health-vaccination' + dogParam

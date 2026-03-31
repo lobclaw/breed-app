@@ -115,7 +115,7 @@ import BDogPicker from '@/components/form/BDogPicker.vue'
 import BModal from '@/components/layout/BModal.vue'
 import BFormOptions from '@/components/form/BFormOptions.vue'
 
-const { currentFamily } = useAuth()
+const { currentFamily, loadFamily } = useAuth()
 
 const selectedDogs = ref<any[]>([])
 const date = ref<number | null>(null)
@@ -142,7 +142,13 @@ const computedReminderDays = computed(() => {
   return Math.min(puppyDays, adultDays)
 })
 
-const vaccineTypes = ['卫佳5', '卫佳8', '卫佳10', '狂犬']
+const PRESET_VACCINE_TYPES = ['卫佳5', '卫佳8', '卫佳10', '狂犬']
+// 合并预设 + 用户自定义类型（去重）
+const vaccineTypes = computed(() => {
+  const custom = currentFamily.value?.settings?.custom_vaccine_types || []
+  const all = [...PRESET_VACCINE_TYPES, ...custom]
+  return [...new Set(all)]
+})
 const customVaccine = ref('')
 const showCustomModal = ref(false)
 const customInput = ref('')
@@ -152,12 +158,24 @@ function addCustomVaccine() {
   showCustomModal.value = true
 }
 
-function onCustomConfirm() {
-  if (customInput.value.trim()) {
-    customVaccine.value = customInput.value.trim()
-    details.vaccine_type = customVaccine.value
-  }
+const { run: updateFamilySettings } = useCloudCall('family-service', 'updateSettings')
+
+async function onCustomConfirm() {
+  const val = customInput.value.trim()
+  if (!val) { showCustomModal.value = false; return }
+
+  customVaccine.value = val
+  details.vaccine_type = val
   showCustomModal.value = false
+
+  // 立即保存到 family settings（不等表单提交）
+  if (!PRESET_VACCINE_TYPES.includes(val)) {
+    const existing = currentFamily.value?.settings?.custom_vaccine_types || []
+    if (!existing.includes(val)) {
+      await updateFamilySettings({ custom_vaccine_types: [...existing, val] })
+      await loadFamily() // 刷新本地缓存
+    }
+  }
 }
 
 
@@ -260,6 +278,8 @@ async function submit() {
         })
       }
     }
+    // 如果有自定义疫苗类型，刷新家庭设置以便下次显示
+    if (customVaccine.value) loadFamily()
     setTimeout(() => uni.navigateBack(), 1000)
   } finally {
     submitting.value = false

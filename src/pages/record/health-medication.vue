@@ -98,6 +98,18 @@
         </view>
       </view>
 
+      <!-- 费用（选填） -->
+      <view class="field-group">
+        <view class="field-label">
+          <text>费用</text>
+          <text class="field-label__optional">（选填）</text>
+        </view>
+        <view class="input-prefix-wrapper">
+          <text class="input-prefix">¥</text>
+          <input v-model="costInput" class="form-input form-input--prefixed" type="digit" placeholder="请输入金额" />
+        </view>
+      </view>
+
       <!-- 注意事项 -->
       <view class="field-group">
         <view class="field-label">
@@ -215,6 +227,7 @@ const method = ref('oral')
 const frequency = ref('once_daily')
 const durationDays = ref('')
 const notes = ref('')
+const costInput = ref('')
 const submitting = ref(false)
 
 // 日期
@@ -334,6 +347,10 @@ async function submit() {
     }
 
     const freqMap: Record<string, number> = { once_daily: 1, twice_daily: 2, three_daily: 3 }
+    const cost = costInput.value ? parseFloat(costInput.value) : null
+    const perDogCost = cost && selectedDogs.value.length > 1
+      ? Math.round(cost / selectedDogs.value.length * 100) / 100
+      : cost
     for (const dog of selectedDogs.value) {
       await startMedication({
         dog_id: dog._id,
@@ -345,6 +362,7 @@ async function submit() {
         duration_days: parseInt(durationDays.value),
         actual_start_date: date.value,
         notes: notes.value || null,
+        cost: perDogCost,
       })
     }
     uni.showToast({

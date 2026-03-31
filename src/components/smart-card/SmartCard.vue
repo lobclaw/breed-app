@@ -1,10 +1,15 @@
 <template>
   <!-- 智能卡片壳：根据 card.cardType 分发到具体卡片 -->
-  <view class="smart-card-wrap" :class="{ 'smart-card--completing': completing }">
+  <view class="smart-card-wrap" :class="{ 'smart-card--completing': completing, 'smart-card--overdue': card.priority === 'overdue' }">
+  <!-- 逾期标记 -->
+  <view v-if="card.priority === 'overdue' && card.overdueDays" class="overdue-badge">
+    <text class="material-icons-round overdue-badge-icon">schedule</text>
+    <text class="overdue-badge-text">逾期{{ card.overdueDays }}天</text>
+  </view>
   <DogCard v-if="card.cardType === 'dog'" :card="card" @complete="onComplete" @postpone="onPostpone" @action="onAction" />
   <CareGroupCard v-else-if="card.cardType === 'care_group'" :card="card" @complete="onComplete" @batch-complete="onBatchComplete" />
   <BatchCard v-else-if="card.cardType === 'batch'" :card="card" @complete="onComplete" @postpone="onPostpone" @batch-complete="onBatchComplete" />
-  <MedicationCard v-else-if="card.cardType === 'health_attention' || card.cardType === 'medication'" :card="card" @complete="onComplete" @postpone="onPostpone" @batch-complete="onBatchComplete" />
+  <MedicationCard v-else-if="card.cardType === 'health_attention' || card.cardType === 'medication'" :card="card" @complete="onComplete" @postpone="onPostpone" @batch-complete="onBatchComplete" @action="onAction" />
   </view>
 </template>
 
@@ -15,9 +20,10 @@ import BatchCard from './BatchCard.vue'
 import MedicationCard from './MedicationCard.vue'
 
 export interface SmartCardData {
-  cardType: 'dog' | 'care_group' | 'batch' | 'medication'
+  cardType: 'dog' | 'care_group' | 'batch' | 'medication' | 'health_attention'
   id: string
   priority: 'overdue' | 'today' | 'upcoming'
+  overdueDays?: number
   tasks: any[]
   dogName?: string
   dogId?: string
@@ -34,13 +40,13 @@ defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: 'complete', taskId: string, allDone?: boolean): void
+  (e: 'complete', taskId: string, mode?: boolean | string): void
   (e: 'postpone', taskIds: string | string[], title?: string): void
   (e: 'batch-complete', taskIds: string[]): void
   (e: 'action', payload: { type: string; data: any }): void
 }>()
 
-function onComplete(taskId: string, allDone?: boolean) { emit('complete', taskId, allDone) }
+function onComplete(taskId: string, mode?: boolean | string) { emit('complete', taskId, mode) }
 function onPostpone(taskIds: string | string[], title?: string) { emit('postpone', taskIds, title) }
 function onBatchComplete(taskIds: string[]) { emit('batch-complete', taskIds) }
 function onAction(payload: { type: string; data: any }) { emit('action', payload) }
@@ -58,5 +64,27 @@ function onAction(payload: { type: string; data: any }) { emit('action', payload
   transform: translateX(-30%) scale(0.9);
   opacity: 0;
   pointer-events: none;
+}
+
+.smart-card--overdue {
+  :deep(.card) {
+    border-left: 3px solid var(--red);
+  }
+}
+
+.overdue-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px 0;
+}
+.overdue-badge-icon {
+  font-size: 13px;
+  color: var(--red);
+}
+.overdue-badge-text {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--red);
 }
 </style>

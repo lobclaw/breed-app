@@ -1,39 +1,47 @@
 <!--
-  WeekStrip — 7天日期预览条
-  设计稿：home-v1-final.html .day-strip 区域
-  月份标题 + 7天格子（星期标签 + 日期数字 + 事件圆点）
-  今日高亮：品牌色底 + 白字 + 粉色阴影
+  WeekStrip — 周历条（周一到周日）
+  过去日期灰色不可点击，今天高亮，未来日期可点击
+  参考 Things 3 / Apple Reminders 面向未来的设计
 -->
 <template>
   <view class="day-strip-wrap">
-    <!-- 月份标题：2026年3月 · -->
+    <!-- 月份标题 -->
     <view class="month-header" @click="$emit('toggle-calendar')">
       <text class="month-text">{{ monthLabel }}</text>
       <text class="month-arrow">·</text>
     </view>
 
-    <!-- 7天格子 -->
+    <!-- 周一到周日 -->
     <view class="day-strip">
       <view
         v-for="day in days"
         :key="day.ts"
         class="day-cell"
-        :class="{ 'today': day.ts === selectedDate || (day.isToday && day.ts === selectedDate) }"
-        @click="$emit('select', day.ts)"
+        :class="{
+          'today': day.ts === selectedDate,
+          'past': day.isPast,
+        }"
+        @click="onDayClick(day)"
       >
         <!-- 星期标签 -->
-        <text class="day-label" :class="{ 'day-label--today': day.isToday && day.ts === selectedDate }">
+        <text class="day-label" :class="{
+          'day-label--today': day.isToday && day.ts === selectedDate,
+          'day-label--past': day.isPast,
+        }">
           {{ day.label }}
         </text>
         <!-- 日期数字方块 -->
         <view class="day-num" :class="{ 'day-num--today': day.ts === selectedDate }">
-          <text class="day-num-text" :class="{ 'day-num-text--today': day.ts === selectedDate }">
+          <text class="day-num-text" :class="{
+            'day-num-text--today': day.ts === selectedDate,
+            'day-num-text--past': day.isPast,
+          }">
             {{ day.date }}
           </text>
         </view>
-        <!-- 事件圆点 -->
+        <!-- 事件圆点（过去日期不显示） -->
         <view class="event-dots">
-          <view v-if="day.count > 0" class="event-dot" />
+          <view v-if="!day.isPast && day.count > 0" class="event-dot" />
         </view>
       </view>
     </view>
@@ -48,7 +56,7 @@ const props = defineProps<{
   dayCounts?: Record<number, number>
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   (e: 'select', ts: number): void
   (e: 'toggle-calendar'): void
 }>()
@@ -63,16 +71,26 @@ function startOfDay(ts: number): number {
 
 const today = computed(() => startOfDay(Date.now()))
 
+// 计算本周一的时间戳
+function getMonday(ts: number): number {
+  const d = new Date(ts)
+  const day = d.getDay() // 0=日 1=一 ... 6=六
+  const diff = day === 0 ? -6 : 1 - day // 周日时回退6天，其他回退到周一
+  d.setDate(d.getDate() + diff)
+  d.setHours(0, 0, 0, 0)
+  return d.getTime()
+}
+
 const days = computed(() => {
   const result = []
   const DAY_MS = 86400000
-  // 显示以今天为中心的7天（前3天 + 今天 + 后3天）
-  const start = today.value - 3 * DAY_MS
+  const mondayTs = getMonday(today.value)
 
   for (let i = 0; i < 7; i++) {
-    const ts = start + i * DAY_MS
+    const ts = mondayTs + i * DAY_MS
     const d = new Date(ts)
     const isToday = ts === today.value
+    const isPast = ts < today.value
     const count = props.dayCounts?.[ts] || 0
 
     result.push({
@@ -80,6 +98,7 @@ const days = computed(() => {
       date: d.getDate(),
       label: isToday ? '今' : WEEK_LABELS[d.getDay()],
       isToday,
+      isPast,
       count,
     })
   }
@@ -91,10 +110,14 @@ const monthLabel = computed(() => {
   const d = new Date(props.selectedDate || today.value)
   return `${d.getFullYear()}年${d.getMonth() + 1}月`
 })
+
+function onDayClick(day: any) {
+  if (day.isPast) return // 过去日期不可点击
+  emit('select', day.ts)
+}
 </script>
 
 <style lang="scss" scoped>
-/* 一比一还原 home-v1-final.html .day-strip */
 .day-strip-wrap {
   background: transparent;
 }
@@ -132,7 +155,7 @@ const monthLabel = computed(() => {
   gap: 4px;
   width: 40px;
   transition: transform 0.12s ease;
-  &:active { transform: scale(0.9); }
+  &:active:not(.past) { transform: scale(0.9); }
 }
 
 /* 星期标签 */
@@ -145,6 +168,9 @@ const monthLabel = computed(() => {
   &--today {
     color: var(--primary);
     font-weight: 700;
+  }
+  &--past {
+    color: var(--text-4, #ccc);
   }
 }
 
@@ -170,6 +196,9 @@ const monthLabel = computed(() => {
 
   &--today {
     color: #FFFFFF;
+  }
+  &--past {
+    color: var(--text-4, #ccc);
   }
 }
 

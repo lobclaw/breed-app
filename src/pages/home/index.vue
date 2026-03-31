@@ -11,22 +11,22 @@
           <text class="material-icons-round" style="color: #fff; font-size: 22px;">pets</text>
         </view>
       </view>
-      <!-- 摘要 Pills: ● 需处理 2 -->
+      <!-- 摘要 Pills: 今日 / 本周 / 30天 -->
       <view class="summary-pills">
-        <view class="pill pill-red" @click="scrollToSection('overdue')">
-          <view class="pill-dot" style="background: var(--red);" />
-          <text class="pill-label">需处理</text>
-          <text class="pill-num">{{ counts.overdue }}</text>
-        </view>
-        <view class="pill pill-amber" @click="scrollToSection('today')">
-          <view class="pill-dot" style="background: var(--amber);" />
+        <view class="pill" :class="counts.hasOverdue ? 'pill-red' : 'pill-amber'" @click="scrollToSection('today')">
+          <view class="pill-dot" :style="{ background: counts.hasOverdue ? 'var(--red)' : 'var(--amber)' }" />
           <text class="pill-label">今日</text>
           <text class="pill-num">{{ counts.today }}</text>
         </view>
         <view class="pill pill-dim">
           <view class="pill-dot" style="background: var(--text-3);" />
           <text class="pill-label">本周</text>
-          <text class="pill-num">{{ weekCount }}</text>
+          <text class="pill-num">{{ counts.week }}</text>
+        </view>
+        <view class="pill pill-dim">
+          <view class="pill-dot" style="background: var(--text-3);" />
+          <text class="pill-label">30天</text>
+          <text class="pill-num">{{ counts.month30 }}</text>
         </view>
       </view>
     </view>
@@ -41,18 +41,17 @@
 
     <!-- 智能卡片区 -->
     <scroll-view scroll-y class="card-area" :scroll-into-view="scrollTarget">
-      <!-- ===== 今日模式：三区 ===== -->
+      <!-- ===== 今日模式：单列表（逾期在最上面，今日紧随其后） ===== -->
       <template v-if="viewMode === 'today'">
-        <!-- 逾期 -->
-        <view v-if="overdueCards.length > 0" id="section-overdue">
+        <view v-if="cards.length > 0" id="section-today">
           <view class="section-label">
-            <view class="section-dot" style="background: var(--red);" />
-            <text class="section-text">需立即处理</text>
-            <view class="section-badge"><text class="section-badge-text">{{ counts.overdue }}</text></view>
+            <view class="section-dot" :style="{ background: counts.hasOverdue ? 'var(--red)' : 'var(--amber)' }" />
+            <text class="section-text">{{ counts.hasOverdue ? '今日待办（含逾期）' : '今日任务' }}</text>
+            <view class="section-badge"><text class="section-badge-text">{{ counts.today }}</text></view>
           </view>
           <view class="card-feed">
             <SmartCard
-              v-for="card in overdueCards" :key="card.id" :card="card"
+              v-for="card in cards" :key="card.id" :card="card"
               :completing="completingCards.has(card.id)"
               @complete="onComplete" @postpone="onPostpone"
               @batch-complete="onBatchComplete" @action="onAction"
@@ -60,25 +59,9 @@
           </view>
         </view>
 
-        <!-- 今日 -->
-        <view v-if="todayCards.length > 0" id="section-today">
-          <view class="section-label">
-            <view class="section-dot" style="background: var(--amber);" />
-            <text class="section-text">今日任务</text>
-            <view class="section-badge"><text class="section-badge-text">{{ counts.today }}</text></view>
-          </view>
-          <view class="card-feed">
-            <SmartCard
-              v-for="card in todayCards" :key="card.id" :card="card"
-              @complete="onComplete" @postpone="onPostpone"
-              @batch-complete="onBatchComplete" @action="onAction"
-            />
-          </view>
-        </view>
-
-        <!-- 空状态（今日模式） -->
+        <!-- 空状态 -->
         <BEmpty
-          v-if="!loading && overdueCards.length === 0 && todayCards.length === 0"
+          v-if="!loading && cards.length === 0"
           icon="pets"
           title="犬群一切正常"
           description="暂无待办事项"
@@ -242,6 +225,41 @@
         </view>
       </view>
     </BSheet>
+
+    <!-- 健康关注卡：操作菜单 -->
+    <BSheet v-model:visible="showSickMenu" :title="sickMenuDog?.dogName || ''">
+      <view class="sick-menu-body">
+        <view
+          v-for="(item, idx) in sickMenuItems"
+          :key="idx"
+          class="sick-menu-item"
+          @click="onSickMenuSelect(item)"
+        >
+          <text class="material-icons-round sick-menu-item__icon">{{ item.icon }}</text>
+          <text class="sick-menu-item__label">{{ item.label }}</text>
+        </view>
+      </view>
+    </BSheet>
+
+    <!-- 健康关注卡：停止用药确认 -->
+    <BSheet v-model:visible="showStopConfirm" title="">
+      <view class="stop-confirm-body">
+        <view class="stop-confirm-icon-wrap">
+          <text class="material-icons-round stop-confirm-icon">medication_liquid</text>
+        </view>
+        <text class="stop-confirm-title">停止用药</text>
+        <text class="stop-confirm-desc">确定停止 <text class="stop-confirm-bold">{{ stopConfirmData?.dogName }}</text> 的 <text class="stop-confirm-bold">{{ stopConfirmData?.drugName || '用药' }}</text> 吗？</text>
+        <text class="stop-confirm-sub">{{ [stopConfirmData?.dosageStr, stopConfirmData?.progress].filter(Boolean).join(' · ') }}{{ stopConfirmData?.progress ? ' · 剩余任务将被取消' : '剩余用药任务将被取消' }}</text>
+        <view class="stop-confirm-actions">
+          <view class="stop-confirm-btn stop-confirm-btn--cancel" @click="showStopConfirm = false">
+            <text>继续用药</text>
+          </view>
+          <view class="stop-confirm-btn stop-confirm-btn--danger" @click="confirmStopMedication">
+            <text style="color: #fff;">确认停止</text>
+          </view>
+        </view>
+      </view>
+    </BSheet>
   </view>
 </template>
 
@@ -263,12 +281,16 @@ const { hasFamily, loadFamily } = useAuth()
 const taskStore = useTaskStore()
 
 // stale-while-revalidate：先用 taskStore 缓存渲染，后台刷新
-const overdueCards = ref<any[]>(taskStore.overdueCards)
-const todayCards = ref<any[]>(taskStore.todayCards)
-const counts = reactive({ overdue: taskStore.counts.overdue || 0, today: taskStore.counts.today || 0 })
+const cards = ref<any[]>(taskStore.cards)
+const counts = reactive({
+  today: taskStore.counts.today || 0,
+  week: taskStore.counts.week || 0,
+  month30: taskStore.counts.month30 || 0,
+  hasOverdue: taskStore.counts.hasOverdue || false,
+})
 const dayCards = ref<any[]>([])
 const viewMode = ref<'today' | 'date'>('today')
-const hasCachedData = overdueCards.value.length + todayCards.value.length > 0
+const hasCachedData = cards.value.length > 0
 const loading = ref(!hasCachedData)
 const scrollTarget = ref('')
 const dayCounts = ref<Record<number, number>>({})
@@ -276,17 +298,6 @@ const dayCounts = ref<Record<number, number>>({})
 // 选中日期（0点 timestamp）
 const selectedDate = ref(startOfDay(Date.now()))
 const isSelectedToday = computed(() => selectedDate.value === startOfDay(Date.now()))
-
-// 本周任务数：从 dayCounts 中汇总未来 7 天（不含今天，避免和"今日"重复）
-const weekCount = computed(() => {
-  const todayTs = startOfDay(Date.now())
-  const DAY = 86400000
-  let total = 0
-  for (let i = 1; i <= 7; i++) {
-    total += dayCounts.value[todayTs + i * DAY] || 0
-  }
-  return total
-})
 
 // H-3: 快速完成
 const showQuickComplete = ref(false)
@@ -388,35 +399,40 @@ function scrollToSection(section: string) {
   scrollTarget.value = `section-${section}`
 }
 
-/** 加载今日模式（逾期 + 今日） */
+/** 加载今日卡片（逾期+今日合并为单列表） */
 async function loadTodayCards() {
-  const hasData = overdueCards.value.length + todayCards.value.length > 0
+  const hasData = cards.value.length > 0
   if (!hasData) loading.value = true
 
   const result = await fetchCards()
   if (result?.data) {
-    overdueCards.value = result.data.overdue || []
-    todayCards.value = result.data.today || []
-    counts.overdue = result.data.counts?.overdue || 0
+    cards.value = result.data.cards || []
     counts.today = result.data.counts?.today || 0
+    counts.week = result.data.counts?.week || 0
+    counts.month30 = result.data.counts?.month30 || 0
+    counts.hasOverdue = result.data.counts?.hasOverdue || false
     // 同步到 taskStore
-    taskStore.overdueCards = overdueCards.value
-    taskStore.todayCards = todayCards.value
-    taskStore.counts = { overdue: counts.overdue, today: counts.today }
+    taskStore.cards = cards.value
+    taskStore.counts = { today: counts.today, week: counts.week, month30: counts.month30, hasOverdue: counts.hasOverdue }
     taskStore.loaded = true
+    // 确保今天的 dayCounts 红点反映健康关注卡
+    if (cards.value.length > 0) {
+      const todayTs = startOfDay(Date.now())
+      dayCounts.value[todayTs] = Math.max(dayCounts.value[todayTs] || 0, 1)
+    }
   }
   loading.value = false
 }
 
-/** 一次性加载 7 天卡片缓存 */
+/** 加载未来日期的卡片缓存（今天+未来6天，用于 WeekStrip 点击） */
 async function loadWeekCache() {
   const DAY_MS = 86400000
   const todayTs = startOfDay(Date.now())
-  const start = todayTs - 3 * DAY_MS
-  const end = todayTs + 3 * DAY_MS + DAY_MS - 1
+  // 只缓存今天之后的未来日期（过去日期不可点击）
+  const start = todayTs + DAY_MS
+  const end = todayTs + 7 * DAY_MS - 1 // 未来 6 天
   const result = await fetchWeekCards(start, end)
   if (result?.data) {
-    // 后端返回的 key 是字符串，转为 number
     const cache: Record<number, any[]> = {}
     for (const [k, v] of Object.entries(result.data)) {
       cache[Number(k)] = v as any[]
@@ -427,12 +443,18 @@ async function loadWeekCache() {
 
 async function loadDateCounts() {
   const DAY_MS = 86400000
-  const start = startOfDay(Date.now()) - 3 * DAY_MS
-  const end = startOfDay(Date.now()) + 8 * DAY_MS - 1 // 覆盖前3天 + 今天 + 后7天
-  const result = await fetchDateCounts(start, end)
+  const todayTs = startOfDay(Date.now())
+  // 只查询今天到本周日的范围（过去日期不显示红点）
+  const end = todayTs + 7 * DAY_MS - 1
+  const result = await fetchDateCounts(todayTs, end)
   if (result?.data) {
     dayCounts.value = result.data
   }
+}
+
+/** 并行加载所有首页数据 */
+function loadAll() {
+  return Promise.all([loadTodayCards(), loadWeekCache(), loadDateCounts()])
 }
 
 function onDateSelect(ts: number) {
@@ -457,7 +479,7 @@ function toggleCalendar() {
 const completingCards = ref(new Set<string>())
 
 function removeCardLocally(taskId: string) {
-  const lists = [overdueCards, todayCards, dayCards]
+  const lists = [cards, dayCards]
   for (const list of lists) {
     const idx = list.value.findIndex(c => c.tasks?.some((t: any) => t._id === taskId) || c.id === taskId)
     if (idx < 0) continue
@@ -469,15 +491,13 @@ function removeCardLocally(taskId: string) {
         const currentIdx = list.value.findIndex(c => c.id === card.id)
         if (currentIdx >= 0) list.value.splice(currentIdx, 1)
         completingCards.value.delete(card.id)
-        if (card.priority === 'overdue') counts.overdue = Math.max(0, counts.overdue - 1)
-        else counts.today = Math.max(0, counts.today - 1)
+        counts.today = Math.max(0, counts.today - 1)
       }, 450)
     } else {
       card.tasks = remainingTasks
     }
     break
   }
-  // 同步更新 weekCache
   syncWeekCache(taskId)
 }
 
@@ -502,30 +522,33 @@ function syncWeekCache(taskId: string) {
   }
 }
 
-async function onComplete(taskId: string, allDone?: boolean) {
-  if (allDone === true) {
-    // 批量卡片全部勾完 → 动画移除整张卡片
+async function onComplete(taskId: string, mode?: boolean | string) {
+  // 批量卡片全部勾完
+  if (mode === true) {
     removeCardLocally(taskId)
     doCompleteTask(taskId)
     return
   }
-  if (allDone === false) {
-    // 批量卡片部分勾选 → 只调接口，不移除卡片（本地 checkbox 已更新）
+  // 批量卡片部分勾选
+  if (mode === false) {
     doCompleteTask(taskId)
     return
   }
-  // DogCard 的完成按钮 → 打开快速完成 Sheet (H-3)
-  const allCards = [...overdueCards.value, ...todayCards.value, ...dayCards.value]
-  const card = allCards.find(c => c.tasks?.some((t: any) => t._id === taskId))
-  if (card) {
-    const task = card.tasks?.find((t: any) => t._id === taskId)
-    quickCompleteTask.value = { ...task, dog_name: card.dogName }
-    quickCompleteNotes.value = ''
-    quickCompleteDate.value = startOfDay(Date.now())
-    showQuickComplete.value = true
+  // DogCard "完成" (mode='auto'): 一键完成 + 自动创建记录
+  if (mode === 'auto') {
+    removeCardLocally(taskId)
+    doCompleteTask(taskId, true) // autoRecord=true
+    uni.showToast({ title: '已完成并记录', icon: 'success', duration: 1500 })
     return
   }
-  // 兜底：直接完成
+  // DogCard "跳过" (mode='skip'): 仅标记 done，不创建记录
+  if (mode === 'skip') {
+    removeCardLocally(taskId)
+    doCompleteTask(taskId)
+    uni.showToast({ title: '已跳过', icon: 'none', duration: 1500 })
+    return
+  }
+  // 兜底
   removeCardLocally(taskId)
   doCompleteTask(taskId)
 }
@@ -538,7 +561,7 @@ function onPostpone(taskIds: string | string[], title?: string) {
   postponeQuick.value = 'tomorrow'
 
   const firstId = Array.isArray(taskIds) ? taskIds[0] : taskIds
-  const allCards = [...overdueCards.value, ...todayCards.value, ...dayCards.value]
+  const allCards = [...cards.value, ...dayCards.value]
   const card = allCards.find(c => c.tasks?.some((t: any) => t._id === firstId))
   const task = card?.tasks?.find((t: any) => t._id === firstId)
 
@@ -568,7 +591,7 @@ async function doPostpone() {
 
   if (ids.length > 1) {
     // 批量推迟：找到卡片直接整张移除
-    const lists = [overdueCards, todayCards, dayCards]
+    const lists = [cards, dayCards]
     for (const list of lists) {
       const idx = list.value.findIndex(c => c.tasks?.some((t: any) => ids.includes(t._id)))
       if (idx >= 0) {
@@ -578,10 +601,8 @@ async function doPostpone() {
           const ci = list.value.findIndex(c => c.id === card.id)
           if (ci >= 0) list.value.splice(ci, 1)
           completingCards.value.delete(card.id)
-          if (card.priority === 'overdue') counts.overdue = Math.max(0, counts.overdue - 1)
-          else counts.today = Math.max(0, counts.today - 1)
+          counts.today = Math.max(0, counts.today - 1)
         }, 450)
-        // 同步 taskStore（用第一条 ID 定位整张卡片）
         taskStore.removeCardByTaskId(ids[0])
         break
       }
@@ -624,30 +645,66 @@ async function onBatchComplete(payload: any) {
 }
 
 const { run: updateIllnessStatus } = useCloudCall('health-service', 'updateIllnessStatus')
+const { run: endMedication } = useCloudCall('health-service', 'endMedicationByDog')
+
+// 健康关注卡：操作菜单状态
+const showSickMenu = ref(false)
+const sickMenuDog = ref<any>(null)
+const sickMenuItems = ref<any[]>([])
+
+// 健康关注卡：停止用药确认状态
+const showStopConfirm = ref(false)
+const stopConfirmData = ref<any>(null)
 
 function onAction(payload: { type: string; data: any }) {
   if (payload.type === 'viewDog' && payload.data?.dogId) {
     uni.navigateTo({ url: `/pages/dog/detail?id=${payload.data.dogId}` })
+  } else if (payload.type === 'show_sick_menu') {
+    // 打开操作菜单 BSheet
+    sickMenuDog.value = payload.data.dog
+    sickMenuItems.value = payload.data.items
+    showSickMenu.value = true
+  } else if (payload.type === 'show_stop_confirm') {
+    // 打开停止用药确认 BSheet
+    stopConfirmData.value = payload.data
+    showStopConfirm.value = true
   } else if (payload.type === 'recover' && payload.data?.illnessId) {
-    // 标记康复
-    uni.showModal({
-      title: '确认康复',
-      content: `确定 ${payload.data.dogName} 已经康复了吗？`,
-      success: async (res) => {
-        if (res.confirm) {
-          await updateIllnessStatus(payload.data.illnessId, '已康复')
-          uni.showToast({ title: '已标记康复', icon: 'success' })
-          // 刷新首页
-          await Promise.all([loadTodayCards(), loadWeekCache(), loadDateCounts()])
-        }
-      },
+    updateIllnessStatus(payload.data.illnessId, '已康复').then(() => {
+      uni.showToast({ title: '已标记康复', icon: 'success' })
+      loadAll()
     })
   } else if (payload.type === 'update_status' && payload.data?.illnessId) {
-    // 更新治疗状态
     updateIllnessStatus(payload.data.illnessId, payload.data.status).then(() => {
       uni.showToast({ title: '已更新', icon: 'success' })
-      Promise.all([loadTodayCards(), loadWeekCache(), loadDateCounts()])
+      loadAll()
     })
+  } else if (payload.type === 'stop_medication' && payload.data?.dogId) {
+    endMedication(payload.data.dogId).then(() => {
+      uni.showToast({ title: '已停止用药', icon: 'success' })
+      loadAll()
+    })
+  }
+}
+
+function onSickMenuSelect(item: any) {
+  showSickMenu.value = false
+  const dog = sickMenuDog.value
+  if (!dog) return
+
+  if (item.action === 'recover') {
+    onAction({ type: 'recover', data: { dogId: dog.dogId, dogName: dog.dogName, illnessId: dog.illnessId } })
+  } else if (item.action === 'update_status') {
+    onAction({ type: 'update_status', data: { dogId: dog.dogId, status: '治疗中', illnessId: dog.illnessId } })
+  } else if (item.action === 'start_medication') {
+    const dogList = [{ _id: dog.dogId, name: dog.dogName }]
+    uni.navigateTo({ url: `/pages/record/health-medication?batchDogs=${encodeURIComponent(JSON.stringify(dogList))}` })
+  }
+}
+
+function confirmStopMedication() {
+  showStopConfirm.value = false
+  if (stopConfirmData.value) {
+    onAction({ type: 'stop_medication', data: stopConfirmData.value })
   }
 }
 
@@ -679,7 +736,7 @@ async function confirmBatchComplete() {
     : selectedIds
   await doBatchComplete(taskIdsToComplete)
   showBatchComplete.value = false
-  await Promise.all([loadTodayCards(), loadWeekCache(), loadDateCounts()])
+  await loadAll()
 }
 
 onShow(async () => {
@@ -695,8 +752,7 @@ onShow(async () => {
   selectedDate.value = startOfDay(Date.now())
   viewMode.value = 'today'
   dayCards.value = []
-  // 并行加载：今日卡片 + 周缓存 + 日期计数
-  await Promise.all([loadTodayCards(), loadWeekCache(), loadDateCounts()])
+  await loadAll()
 })
 </script>
 
@@ -1019,5 +1075,48 @@ onShow(async () => {
   background: var(--green-soft);
   padding: 2px 8px;
   border-radius: var(--radius-tag);
+}
+
+/* 健康关注操作菜单 */
+.sick-menu-body { padding: 0 0 20px; }
+.sick-menu-item {
+  display: flex; align-items: center; gap: 14px;
+  padding: 16px 20px;
+  border-bottom: 0.5px solid var(--card-dim);
+  &:last-child { border-bottom: none; }
+  &:active { background: var(--card-dim); }
+}
+.sick-menu-item__icon { font-size: 20px; color: var(--primary); }
+.sick-menu-item__label { font-size: 15px; font-weight: 600; color: var(--text-1); }
+
+/* 停止用药确认 */
+.stop-confirm-body { padding: 4px 20px 24px; text-align: center; }
+.stop-confirm-icon-wrap {
+  width: 52px; height: 52px; border-radius: 16px;
+  background: var(--red-soft);
+  margin: 0 auto 14px;
+  display: flex; align-items: center; justify-content: center;
+}
+.stop-confirm-icon { font-size: 26px; color: var(--red); }
+.stop-confirm-title {
+  display: block; font-size: 18px; font-weight: 800;
+  color: var(--text-1); font-family: var(--font-display);
+  margin-bottom: 10px;
+}
+.stop-confirm-desc {
+  display: block; font-size: 15px; color: var(--text-2); line-height: 1.6;
+}
+.stop-confirm-bold { font-weight: 700; color: var(--text-1); }
+.stop-confirm-sub {
+  display: block; font-size: 13px; color: var(--text-3); margin-top: 6px;
+}
+.stop-confirm-actions { display: flex; gap: 12px; margin-top: 24px; }
+.stop-confirm-btn {
+  flex: 1; padding: 14px; border-radius: 14px; text-align: center;
+  font-size: 15px; font-weight: 700;
+  transition: transform 0.12s, opacity 0.12s;
+  &:active { transform: scale(0.96); opacity: 0.85; }
+  &--cancel { background: var(--card-dim); color: var(--text-2); }
+  &--danger { background: var(--red); color: #fff; }
 }
 </style>

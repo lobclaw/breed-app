@@ -5,7 +5,7 @@
 -->
 <template>
   <view class="card" :class="card.priority === 'overdue' ? 'card--red' : 'card--blue'">
-    <view class="card-header">
+    <view class="card-header" @click="goProcess">
       <view class="card-icon" :class="card.priority === 'overdue' ? 'card-icon--red' : 'card-icon--blue'">
         <text style="font-size: 20px;">💉</text>
       </view>
@@ -42,16 +42,16 @@
       </view>
     </view>
 
-    <!-- 批量操作按钮 -->
+    <!-- 操作按钮 -->
     <view class="card-actions">
-      <view class="btn btn--filled btn--blue" @click="goProcess">
-        <text class="btn-text btn-text--white">批量处理</text>
-      </view>
       <view class="btn btn--ghost-green" @click="batchComplete">
         <text class="btn-text btn-text--green">完成</text>
       </view>
       <view class="btn btn--ghost" @click="batchPostpone">
         <text class="btn-text btn-text--ghost">推迟</text>
+      </view>
+      <view class="btn-skip" @click="batchSkip">
+        <text class="btn-skip-text">跳过</text>
       </view>
     </view>
   </view>
@@ -135,6 +135,12 @@ function batchComplete() {
   const taskIds = props.card.tasks.filter((t: any) => t.status === 'pending').map((t: any) => t._id)
   emit('batch-complete', taskIds)
 }
+
+function batchSkip() {
+  // 跳过所有：仅标记 done，不创建记录
+  const taskIds = props.card.tasks.filter((t: any) => t.status === 'pending').map((t: any) => t._id)
+  emit('batch-complete', taskIds)
+}
 </script>
 
 <style lang="scss" scoped>
@@ -146,10 +152,11 @@ function batchComplete() {
   &::before { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 0; }
   > * { position: relative; z-index: 1; }
   &--blue { border-left-color: var(--blue); &::before { background: linear-gradient(135deg, var(--blue-soft) 0%, transparent 40%); } }
+  &--red { border-left-color: var(--red); &::before { background: linear-gradient(135deg, var(--red-soft) 0%, transparent 40%); } }
 }
 
 .card-header { display: flex; align-items: flex-start; gap: 12px; }
-.card-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; &--blue { background: var(--icon-blue); } }
+.card-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; &--blue { background: var(--icon-blue); } &--red { background: var(--icon-red); } }
 .card-title-area { flex: 1; }
 .card-name { display: block; font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--text-1); }
 .card-sub { display: block; font-size: 12px; color: var(--text-2); margin-top: 1px; }
@@ -187,4 +194,6 @@ function batchComplete() {
   &--ghost-green { background: transparent; border: 1.5px solid var(--green); }
 }
 .btn-text { font-family: var(--font-display); font-size: 13px; font-weight: 700; &--white { color: #FFFFFF; } &--ghost { color: var(--text-2); } &--green { color: var(--green); } }
+.btn-skip { padding: 8px 12px; &:active { opacity: 0.5; } }
+.btn-skip-text { font-size: 12px; color: var(--text-3); }
 </style>

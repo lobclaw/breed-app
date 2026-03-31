@@ -1,11 +1,11 @@
 <!--
   DogCard — 个体犬只卡片
-  设计稿：home-v1-final.html Card 1 (bar-red/green)
-  左色条 + 渐变色晕 + 图标 + 犬名 + 状态标签 + 操作按钮
+  健康类：完成(自动创建记录) + 推迟 + 跳过。点卡片→跳转表单
+  繁育类：推迟 + 跳过。点卡片→跳转表单（唯一处理入口）
 -->
 <template>
-  <view class="card" :class="`card--${barColor}`" @click="$emit('action', { type: 'viewDog', data: { dogId: card.dogId } })">
-    <!-- 头部：图标 + 名称区 -->
+  <view class="card" :class="`card--${barColor}`" @click="goRecordTask(visibleTasks[0])">
+    <!-- 头部 -->
     <view class="card-header">
       <view class="card-icon" :class="`card-icon--${barColor}`">
         <text style="font-size: 20px;">🐩</text>
@@ -16,14 +16,13 @@
       </view>
     </view>
 
-    <!-- 任务标签（可点击跳转录入） -->
+    <!-- 任务标签 -->
     <view v-if="card.tasks?.length" class="tags">
       <view
         v-for="task in visibleTasks"
         :key="task._id"
-        class="tag tag--clickable"
+        class="tag"
         :class="`tag--${taskColor(task)}`"
-        @click.stop="goRecordTask(task)"
       >
         <text class="tag-text">{{ task.title }}</text>
       </view>
@@ -31,11 +30,15 @@
 
     <!-- 操作按钮 -->
     <view class="card-actions">
-      <view class="btn btn--ghost-green" @click.stop="$emit('complete', visibleTasks[0]?._id)">
+      <!-- 健康类才显示"完成"按钮 -->
+      <view v-if="isHealthType" class="btn btn--ghost-green" @click.stop="$emit('complete', visibleTasks[0]?._id, 'auto')">
         <text class="btn-text btn-text--green">完成</text>
       </view>
       <view class="btn btn--ghost" @click.stop="$emit('postpone', visibleTasks[0]?._id)">
         <text class="btn-text btn-text--ghost">推迟</text>
+      </view>
+      <view class="btn-skip" @click.stop="$emit('complete', visibleTasks[0]?._id, 'skip')">
+        <text class="btn-skip-text">跳过</text>
       </view>
     </view>
   </view>
@@ -44,14 +47,18 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
+const HEALTH_TYPES = ['vaccination', 'deworming', 'medication']
+
 const props = defineProps<{ card: any }>()
 defineEmits<{
-  (e: 'complete', taskId: string): void
+  (e: 'complete', taskId: string, mode?: string): void
   (e: 'postpone', taskId: string): void
   (e: 'action', payload: { type: string; data: any }): void
 }>()
 
 const visibleTasks = computed(() => (props.card.tasks || []).slice(0, 3))
+const firstTaskType = computed(() => visibleTasks.value[0]?.type || '')
+const isHealthType = computed(() => HEALTH_TYPES.includes(firstTaskType.value))
 
 const barColor = computed(() => {
   if (props.card.priority === 'overdue') return 'red'
@@ -88,7 +95,6 @@ function taskColor(task: any) {
 </script>
 
 <style lang="scss" scoped>
-/* 卡片基础 — 一比一还原 home-v1-final.html .card */
 .card {
   position: relative;
   background: var(--card);
@@ -136,26 +142,28 @@ function taskColor(task: any) {
   &--amber { background: var(--amber-soft); box-shadow: 0 1px 4px rgba(232, 155, 62, 0.2); .tag-text { color: var(--amber); } }
   &--green { background: var(--green-soft); box-shadow: 0 1px 4px rgba(61, 174, 111, 0.2); .tag-text { color: var(--green); } }
   &--rose { background: var(--rose-soft); box-shadow: 0 1px 4px rgba(234, 62, 119, 0.2); .tag-text { color: var(--rose); } }
-  &--clickable {
-    transition: transform 0.12s ease, box-shadow 0.12s ease;
-    &:active { transform: scale(0.9); box-shadow: none; }
-  }
 }
 .tag-text { font-size: 11px; font-weight: 600; }
 
-.card-actions { display: flex; gap: 8px; margin-top: 14px; }
+.card-actions { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
 .btn {
   padding: 8px 18px; border-radius: 999px; border: none;
   transition: transform 0.12s ease, opacity 0.12s ease;
   &:active { transform: scale(0.94); opacity: 0.85; }
-  &--filled { &.btn--red { background: var(--red); } &.btn--green { background: var(--green); } &.btn--amber { background: var(--amber); } &.btn--rose { background: var(--rose); } }
   &--ghost { background: transparent; border: 1.5px solid var(--text-4); }
   &--ghost-green { background: transparent; border: 1.5px solid var(--green); }
 }
 .btn-text {
   font-family: var(--font-display); font-size: 13px; font-weight: 700;
-  &--white { color: #FFFFFF; }
   &--ghost { color: var(--text-2); }
   &--green { color: var(--green); }
+}
+.btn-skip {
+  padding: 8px 12px;
+  &:active { opacity: 0.5; }
+}
+.btn-skip-text {
+  font-size: 12px;
+  color: var(--text-3);
 }
 </style>
