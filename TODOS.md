@@ -166,6 +166,72 @@
 **Why:** 繁育场景 90% 是内驱常规驱虫，默认值减少操作。多天疗程（球虫/滴虫）本质是用药疗程，驱虫表单只能录单次。
 **Effort:** S（前端改 health-deworming.vue 默认值 + 标签文案）
 
-## 下一步
+### TODO-20: 财务列表筛选全部不生效（BUG）
+**What:** 财务页月份切换、收入/支出 tab、分类筛选三个维度均不生效，始终显示全部数据。
+**根因：** 后端 `finance-service.getTransactionList` 只处理 `startDate`/`endDate` 参数，前端传的 `month`/`year`/`type`/`category` 全部被忽略。
+**需修复：**
+- 后端 `getTransactionList` 接收 `{ month, year, type, category }` 并构建正确的日期范围查询 + 类型/分类过滤
+- 收入(`incomes`)和支出(`expenses`)分开按类型过滤（全部时两表都查，收入只查 incomes，支出只查 expenses）
+- 分类筛选：expenses 按 `category` 过滤，incomes 不过滤（分类仅适用于支出）
+**Effort:** S（纯后端，改 getTransactionList 约 20 行）
 
-开始 Phase 1 第一批开发，按 `08-implementation-plan.md` 的 Step 0-10 执行。
+### TODO-21: 财务汇总和统计不随月份变化（BUG）
+**What:** 财务主页汇总卡片（本月收入/支出/净利润）和财务统计页，切换月份后数据不更新，始终显示当前月。
+**根因：** 后端 `getFinancialSummary(period)` 接收的是整个对象 `{period, month, year}`，但内部做 `period === 'yearly'` 字符串比较（永远 false），并始终用 `new Date()` 作为时间基准，完全忽略传入的 month/year。
+**需修复：**
+- 后端 `getFinancialSummary` 解构 `{ period, month, year }` 并按 month/year 计算 startDate/endDate
+- 年度模式下按 year 计算全年范围
+**Effort:** S（纯后端，改 getFinancialSummary 约 10 行）
+
+### TODO-22: 财务统计页 UI 优化
+**What:** `finance/stats.vue` UI 与设计稿差距明显，需要按设计稿重新排版：
+- 汇总卡片样式（2x2 网格当前过于简陋）
+- 支出分类和收入来源的条形图样式（颜色、圆角、间距）
+- 月度/年度切换控件样式
+- 月份选择器与主页保持一致
+**Why:** 统计页是财务模块的核心数据呈现，当前实现信息密度低、可读性差。
+**Effort:** M（前端 stats.vue 样式调整，TODO-21 修完后数据自然正确）
+
+### TODO-23: 财务分类筛选弹窗样式优化
+**What:** 财务页的分类筛选 BSheet（点击 tune 图标弹出）样式需对齐设计稿：
+- 当前是简单列表行，需要改为 pill-select 风格（胶囊圆角、选中高亮）
+- "全部分类"放在最前面
+- 支出分类和收入分类按当前 activeFilter（收入/支出 tab）动态显示对应选项
+**Why:** 收入没有 category 字段，当 tab 选"收入"时显示支出分类是误导性的。
+**Effort:** S（前端 index.vue 分类选项动态化 + pill 样式）
+
+### TODO-24: 用药方案库优化（骨架屏 + 缓存 + 新建弹窗）
+**What:**
+1. **骨架屏**：当前 `<BSkeleton :rows="3" />` 是通用占位，需改为按真实卡片比例的骨架（方案名行 + 两个 tag 行）
+2. **缓存优先**：有 protocolStore 缓存时直接显示（无骨架屏闪烁），后台静默刷新
+3. **新建改为 BSheet**：当前点击"新建"展开页面内嵌表单（`showAdd = true`），改为从底部弹出 BSheet，包含：方案名、药品名、疗程天数、给药方式/频率、备注、保存按钮
+**Why:** 内嵌表单破坏列表布局，BSheet 是 app 统一交互模式（和首页停止用药确认一致）。
+**Effort:** M（骨架屏 S + 缓存策略 S + 新建改 BSheet M）
+
+### TODO-25: 合作代理人新建改为 BSheet
+**What:** `sale/agents.vue` 点击"新建"目前是 `showAdd = true` 展开页面内嵌表单，和用药方案库是同一问题。改为从底部弹出 BSheet，包含：代理人姓名、联系方式（选填）、保存/取消按钮。编辑现有代理人也应走同一 BSheet（复用，editingId 控制标题和操作）。
+**Why:** 内嵌表单出现在列表下方，布局突兀，和 app 整体 BSheet 交互模式不一致。
+**Effort:** S（和 TODO-24 同模式，改 agents.vue）
+
+### TODO-26: 护理规则三个问题
+**What:**
+1. **验证失败弹窗自动关闭（BUG）**：BModal 的 `confirm()` 方法硬编码 `emit('update:visible', false)`，无论 `@confirm` 回调验证是否通过都会关闭弹窗。修复：BModal 增加 `:manual-close` prop（默认 false），设为 true 时 confirm 只 emit 事件不自动关闭，由父组件控制 visible。care-rules.vue 中验证失败时不设 `showModal = false`，验证通过后手动关闭。
+2. **新建/启用/删除后刷新慢（BUG）**：`addCareRule` / `removeCareRule` 后调用 `loadFamily()` 走网络全量重载，操作有明显延迟。改为乐观更新：直接修改 `currentFamily.value.care_rules` 数组 + 同步本地缓存，无需等待网络。
+3. **启用模板按钮无反馈**：点击"+ 启用"后等待 loadFamily() 期间没有加载状态，应加 loading 状态或改为乐观更新（同上）。
+**Effort:** M（BModal 改 1 个组件 S + care-rules.vue 乐观更新 M）
+
+### TODO-27: 护理规则删除弹窗 UI 优化 + 乐观删除
+**What:**
+1. **删除确认弹窗改用 BDeleteConfirm**：当前用 `uni.showModal`（原生系统弹窗），项目已有 `BDeleteConfirm` 组件（警告图标 + 红色确认按钮 + "30天内可恢复"提示）完全没有使用。直接替换。
+2. **乐观删除**：当前点击确认后调用 `removeCareRule` + `loadFamily()`，列表等网络请求完成才消失，体感很卡。改为：立即从 `currentFamily.value.care_rules` 数组中 splice 该项（乐观更新），然后后台静默调用接口；接口失败时恢复并 toast 提示。
+**Why:** BDeleteConfirm 是专为此场景设计的组件，不用是浪费。乐观删除是用户期望的即时反馈。
+**Effort:** S（care-rules.vue 改 removeRule 约 15 行 + 引入 BDeleteConfirm）
+
+### TODO-28: 支出分类管理三个问题
+**What:**
+1. **骨架屏按真实布局**：当前 `<BSkeleton :rows="3" />` 是通用占位，真实的 `cat-card` 是"drag handle + 分类名称 + 编辑/删除按钮"横排布局。骨架屏应改为与此匹配的行内结构。
+2. **乐观更新代替清缓存**：当前 `saveCat`/`removeCat` 成功后都是 `uni.removeStorageSync(CACHE_KEY)` + `load()`（清缓存再走网络），体感慢。改为乐观更新：直接修改 `categories.value` 数组 + `uni.setStorageSync` 更新缓存，接口在后台静默执行；失败时恢复并 toast。
+3. **新建/编辑改为 BSheet**：当前 `showAddForm = true` 展开页面内嵌表单。改为 BSheet 弹出，包含：分类名称输入框 + 保存/取消按钮。编辑和新建复用同一 BSheet（editingId 区分标题）。
+**Why:** 三个问题和 TODO-24/25/26 同一类型，统一交互模式，统一体验。
+**Effort:** M（骨架屏 S + 乐观更新 S + BSheet 改造 S，共约 60 行）
+
