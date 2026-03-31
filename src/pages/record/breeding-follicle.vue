@@ -130,7 +130,7 @@ const submitting = ref(false)
 const follicleResults = ['发育中', '已成熟', '发育不良', '其他']
 
 const canSubmit = computed(() => {
-  return !!date.value && !!details.left_count
+  return !!date.value && !!details.left_count && !!selectedDog.value
 })
 
 const { run: addRecord } = useCloudCall('breeding-service', 'addBreedingRecord', {

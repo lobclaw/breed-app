@@ -78,7 +78,7 @@ const reminderDate = ref<number | null>(null)
 const submitting = ref(false)
 
 const canSubmit = computed(() => {
-  return !!date.value
+  return !!date.value && !!selectedDog.value
 })
 
 const { run: addRecord } = useCloudCall('breeding-service', 'addBreedingRecord', {

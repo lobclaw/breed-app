@@ -147,7 +147,7 @@ const manualDueDate = ref<number | null>(null)
 const matingMethods = ['自然交配', '人工授精']
 
 const canSubmit = computed(() => {
-  return !!date.value && !!selectedSire.value
+  return !!date.value && !!selectedSire.value && !!selectedDog.value
 })
 
 const estimatedCheckDate = computed(() => {

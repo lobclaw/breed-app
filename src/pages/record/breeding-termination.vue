@@ -91,7 +91,7 @@ const submitting = ref(false)
 const terminationTypes = ['流产', '死胎', '医疗终止', '确认未怀孕']
 
 const canSubmit = computed(() => {
-  return !!date.value
+  return !!date.value && !!selectedDog.value
 })
 
 const { run: addRecord } = useCloudCall('breeding-service', 'addBreedingRecord', {

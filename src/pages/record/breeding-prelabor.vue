@@ -125,7 +125,7 @@ const showTempWarning = computed(() => {
 })
 
 const canSubmit = computed(() => {
-  return !!date.value
+  return !!date.value && !!selectedDog.value
 })
 
 const { run: addRecord } = useCloudCall('breeding-service', 'addBreedingRecord', {
