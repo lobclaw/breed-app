@@ -52,6 +52,7 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = []) {
       dogName: ill.dog_name || ill._dog_name || '',
       state: 'sick_only',
       illness: ill.details?.condition || '生病',
+      severity: ill.details?.severity || '轻微',
       illnessId: ill._id,
       daysSick,
       treatmentStatus: ill.details?.treatment_status || '观察中',

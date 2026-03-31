@@ -4,8 +4,13 @@
     <view class="page-header">
       <view class="page-header__row">
         <text class="page-header__title">财务</text>
-        <view class="page-header__icon" @click="goToStats">
-          <text class="material-icons-round" style="font-size: 22px; color: var(--text-2);">bar_chart</text>
+        <view class="page-header__actions">
+          <view class="page-header__btn" @click="showAddSheet = true">
+            <text class="material-icons-round" style="font-size: 22px; color: var(--primary);">add</text>
+          </view>
+          <view class="page-header__icon" @click="goToStats">
+            <text class="material-icons-round" style="font-size: 22px; color: var(--text-2);">bar_chart</text>
+          </view>
         </view>
       </view>
       <!-- 月份选择 -->
@@ -41,12 +46,12 @@
         :key="f.value"
         class="filter-tab"
         :class="{ 'filter-tab--active': activeFilter === f.value }"
-        @click="activeFilter = f.value; loadData()"
+        @click="switchFilter(f.value)"
       >
         <text>{{ f.label }}</text>
       </view>
-      <view style="margin-left: auto; padding-right: 4px;" @click="showCategoryFilter = true">
-        <text class="material-icons-round" style="font-size: 22px; color: var(--text-2);">tune</text>
+      <view v-if="activeFilter !== 'income'" style="margin-left: auto; padding-right: 4px;" @click="showCategoryFilter = true">
+        <text class="material-icons-round" :style="{ fontSize: '22px', color: selectedCategory ? 'var(--primary)' : 'var(--text-2)' }">tune</text>
       </view>
     </view>
 
@@ -92,29 +97,50 @@
       description="点击右下角 + 开始记录"
     />
 
-    <!-- 悬浮 FAB -->
-    <view class="page-fab" @click="goToAdd">
-      <text class="material-icons-round" style="font-size: 28px; color: #fff;">add</text>
-    </view>
+    <!-- 添加收支 Sheet -->
+    <BSheet v-model:visible="showAddSheet" title="添加记录" height="auto">
+      <view class="add-sheet">
+        <view class="add-sheet__item" @click="goToExpenseAdd">
+          <view class="add-sheet__icon add-sheet__icon--expense">
+            <text class="material-icons-round" style="font-size: 20px; color: var(--red);">remove_circle</text>
+          </view>
+          <view class="add-sheet__info">
+            <text class="add-sheet__title">记录支出</text>
+            <text class="add-sheet__desc">食品、医疗、日常开销等</text>
+          </view>
+          <text class="material-icons-round" style="font-size: 18px; color: var(--text-4);">chevron_right</text>
+        </view>
+        <view class="add-sheet__item" @click="goToIncomeAdd">
+          <view class="add-sheet__icon add-sheet__icon--income">
+            <text class="material-icons-round" style="font-size: 20px; color: var(--green);">add_circle</text>
+          </view>
+          <view class="add-sheet__info">
+            <text class="add-sheet__title">记录收入</text>
+            <text class="add-sheet__desc">幼犬销售、定金等</text>
+          </view>
+          <text class="material-icons-round" style="font-size: 18px; color: var(--text-4);">chevron_right</text>
+        </view>
+      </view>
+    </BSheet>
 
     <!-- 分类筛选 Sheet -->
-    <BSheet v-model:visible="showCategoryFilter" title="按分类筛选" height="45%">
+    <BSheet v-model:visible="showCategoryFilter" title="按分类筛选" height="auto">
       <view class="category-filter">
         <view
-          v-for="cat in categoryOptions"
-          :key="cat"
-          class="category-filter__item"
-          :class="{ 'category-filter__item--active': selectedCategory === cat }"
-          @click="applyCategory(cat)"
-        >
-          <text>{{ cat }}</text>
-        </view>
-        <view
-          class="category-filter__item"
-          :class="{ 'category-filter__item--active': !selectedCategory }"
+          class="category-pill"
+          :class="{ 'category-pill--active': !selectedCategory }"
           @click="applyCategory('')"
         >
-          <text>全部分类</text>
+          <text class="category-pill__text">全部分类</text>
+        </view>
+        <view
+          v-for="cat in expenseCategoryOptions"
+          :key="cat"
+          class="category-pill"
+          :class="{ 'category-pill--active': selectedCategory === cat }"
+          @click="applyCategory(cat)"
+        >
+          <text class="category-pill__text">{{ cat }}</text>
         </view>
       </view>
     </BSheet>
@@ -138,9 +164,27 @@ const transactions = ref<any[]>([])
 const loading = ref(false)
 const activeFilter = ref('')
 const showCategoryFilter = ref(false)
+const showAddSheet = ref(false)
 const selectedCategory = ref('')
 
-const categoryOptions = ['食品', '营养品', '消耗品', '日常用品', '固定开销', '交通', '医疗', '配种费', '生产', '其他']
+const DEFAULT_EXPENSE_CATEGORIES = ['食品', '营养品', '消耗品', '日常用品', '固定开销', '交通', '医疗', '配种费', '其他']
+const customExpenseCategories = ref<string[]>([])
+const expenseCategoryOptions = computed(() => [...DEFAULT_EXPENSE_CATEGORIES, ...customExpenseCategories.value])
+
+const { run: fetchCategories } = useCloudCall<{ data: Array<{ name: string; is_default: boolean }> }>('finance-service', 'getExpenseCategories')
+
+async function loadCategories() {
+  const res = await fetchCategories()
+  if (res?.data) {
+    customExpenseCategories.value = res.data.filter((c: any) => !c.is_default).map((c: any) => c.name)
+  }
+}
+
+function switchFilter(type: string) {
+  activeFilter.value = type
+  if (type === 'income') selectedCategory.value = ''
+  loadData()
+}
 
 function applyCategory(cat: string) {
   selectedCategory.value = cat
@@ -219,6 +263,16 @@ function goToStats() {
   uni.navigateTo({ url: '/pages/finance/stats' })
 }
 
+function goToExpenseAdd() {
+  showAddSheet.value = false
+  uni.navigateTo({ url: '/pages/finance/expense-add' })
+}
+
+function goToIncomeAdd() {
+  showAddSheet.value = false
+  uni.navigateTo({ url: '/pages/finance/income-add' })
+}
+
 function goToTxDetail(tx: any) {
   if (tx._txType === 'expense') {
     uni.navigateTo({ url: '/pages/finance/expense-detail?id=' + tx._id })
@@ -257,6 +311,7 @@ async function loadData() {
 
 onShow(() => {
   loadData()
+  loadCategories()
 })
 </script>
 
@@ -282,6 +337,23 @@ onShow(() => {
     font-size: 24px;
     font-weight: 800;
     color: var(--text-1);
+  }
+
+  &__actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  &__btn {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background 0.12s ease;
+    &:active { background: var(--primary-soft); }
   }
 
   &__icon {
@@ -508,44 +580,75 @@ onShow(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 4px 0 20px;
+  padding: 4px var(--space-page) 24px;
+}
 
-  &__item {
-    padding: 8px 16px;
-    border-radius: var(--radius-btn);
-    background: var(--card-dim);
+.category-pill {
+  padding: 7px 16px;
+  border-radius: 999px;
+  background: var(--card-dim);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  transition: all 0.12s ease;
+  &:active { transform: scale(0.94); }
+
+  &--active {
+    background: var(--primary-soft);
+    color: var(--primary);
+  }
+
+  &__text {
     font-size: 13px;
     font-weight: 600;
-    color: var(--text-2);
-    transition: all 0.12s ease;
-
-    &:active { transform: scale(0.94); }
-
-    &--active {
-      background: var(--primary);
-      color: #fff;
-    }
+    color: inherit;
   }
 }
 
-/* ==================== PAGE FAB ==================== */
-.page-fab {
-  position: fixed;
-  bottom: 100px;
-  right: 20px;
-  width: 54px;
-  height: 54px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--primary), var(--amber));
+/* ==================== ADD SHEET ==================== */
+.add-sheet {
+  padding: 0 var(--space-page) var(--space-page);
   display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: var(--shadow-fab);
-  z-index: 50;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-  &:active {
-    transform: scale(0.88);
-    box-shadow: 0 2px 8px rgba(234, 62, 119, 0.2);
+  flex-direction: column;
+  gap: 8px;
+
+  &__item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    background: var(--card-dim);
+    border-radius: var(--radius-card);
+    transition: opacity 0.12s ease;
+    &:active { opacity: 0.75; }
+  }
+
+  &__icon {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-icon);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    &--expense { background: var(--red-soft); }
+    &--income { background: var(--green-soft); }
+  }
+
+  &__info { flex: 1; }
+
+  &__title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-1);
+    display: block;
+  }
+
+  &__desc {
+    font-size: 12px;
+    color: var(--text-3);
+    margin-top: 2px;
+    display: block;
   }
 }
 </style>

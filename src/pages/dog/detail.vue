@@ -140,7 +140,7 @@
                 <text class="material-icons-round">{{ healthIcon(record.type) }}</text>
               </view>
               <view class="dog-detail__rec-body">
-                <text class="dog-detail__rec-title">{{ typeLabel(record.type) }}<text v-if="record.notes"> · {{ record.notes }}</text></text>
+                <text class="dog-detail__rec-title">{{ typeLabel(record.type) }}<text v-if="recordSubtitle(record)"> · {{ recordSubtitle(record) }}</text></text>
                 <text class="dog-detail__rec-sub">{{ formatDate(record.date) }}</text>
               </view>
               <text class="material-icons-round dog-detail__rec-chevron">chevron_right</text>
@@ -285,7 +285,7 @@
                 <text class="material-icons-round">{{ healthIcon(record.type) }}</text>
               </view>
               <view class="dog-detail__rec-body">
-                <text class="dog-detail__rec-title">{{ typeLabel(record.type) }}<text v-if="record.notes"> · {{ record.notes }}</text></text>
+                <text class="dog-detail__rec-title">{{ typeLabel(record.type) }}<text v-if="recordSubtitle(record)"> · {{ recordSubtitle(record) }}</text></text>
                 <text class="dog-detail__rec-sub">{{ formatDate(record.date) }}</text>
               </view>
               <text class="material-icons-round dog-detail__rec-chevron">chevron_right</text>
@@ -766,6 +766,14 @@ function typeLabel(type: string) {
     illness: '疾病',
   }
   return map[type] || type
+}
+
+/** 记录副标题：病名/疫苗型号/驱虫药，优先 details 字段，fallback notes */
+function recordSubtitle(record: any) {
+  if (record.type === 'illness') return record.details?.condition || record.notes || null
+  if (record.type === 'vaccination') return record.details?.vaccine_name || record.notes || null
+  if (record.type === 'deworming') return record.details?.drug_name || record.notes || null
+  return record.notes || null
 }
 
 function healthIcon(type: string) {
@@ -1571,17 +1579,24 @@ onLoad((query) => {
 .dog-detail__rec-body {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 .dog-detail__rec-title {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-1);
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .dog-detail__rec-sub {
   font-size: 11px;
   font-weight: 500;
   color: var(--text-3);
-  margin-top: 1px;
+  margin-top: 2px;
+  display: block;
 }
 .dog-detail__rec-chevron {
   font-family: 'Material Icons Round';

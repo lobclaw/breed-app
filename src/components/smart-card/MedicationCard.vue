@@ -74,7 +74,7 @@
           :key="dog.dogId"
           class="health-row health-row--sick"
         >
-          <view class="sick-dot" />
+          <view class="sick-dot" :class="`sick-dot--${sickDotClass(dog)}`" />
           <text class="health-row__name">{{ dog.dogName }}</text>
           <view class="health-row__info">
             <text class="health-row__illness">{{ dog.illness }}</text>
@@ -150,6 +150,13 @@ const sickCollapsed = ref(_stored === '' ? true : _stored)
 function toggleSickCollapse() {
   sickCollapsed.value = !sickCollapsed.value
   uni.setStorageSync(COLLAPSE_KEY, sickCollapsed.value)
+}
+
+function sickDotClass(dog: any): 'gray' | 'amber' | 'red' {
+  const s = dog?.severity
+  if (s === '严重') return 'red'
+  if (s === '中等') return 'amber'
+  return 'gray'
 }
 
 const checkedDogs = ref(new Set<string>())
@@ -271,11 +278,16 @@ function batchPostpone() {
 /* 生病状态圆点 */
 .sick-dot {
   width: 18px; height: 18px; border-radius: 50%;
-  background: var(--red-soft); display: flex; align-items: center; justify-content: center;
+  display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
-  &::after {
-    content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--red);
-  }
+  &::after { content: ''; width: 8px; height: 8px; border-radius: 50%; }
+
+  /* 轻微 → 灰色 */
+  &--gray { background: var(--card-dim); &::after { background: var(--text-3); } }
+  /* 中等 → 琥珀 */
+  &--amber { background: var(--amber-soft); &::after { background: var(--amber); } }
+  /* 严重 → 红色 */
+  &--red { background: var(--red-soft); &::after { background: var(--red); } }
 }
 
 /* Checkbox */

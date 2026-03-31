@@ -97,7 +97,12 @@ module.exports = {
     for (const illness of illnesses) {
       const dogId = illness.dog_id
       if (!dogStatuses[dogId]) dogStatuses[dogId] = []
-      dogStatuses[dogId].push({ type: '生病中', recordId: illness._id })
+      dogStatuses[dogId].push({
+        type: '生病中',
+        label: illness.details?.condition || '生病中',
+        severity: illness.details?.severity || '轻微',
+        recordId: illness._id,
+      })
     }
 
     // 用药状态（可叠加）

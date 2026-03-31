@@ -716,6 +716,45 @@ module.exports = {
   /**
    * 获取某犬的体重历史
    */
+  /**
+   * 单犬体重录入
+   */
+  async addWeightRecord({ dog_id, weight, date, notes } = {}) {
+    if (!dog_id) throw new Error('缺少犬只 ID')
+    if (!weight || Number(weight) <= 0) throw new Error('请输入有效体重')
+
+    const now = Date.now()
+    const familyId = this.familyId
+
+    const { data: dogs } = await db.collection('dogs')
+      .where({ _id: dog_id, family_id: familyId, deleted_at: null })
+      .get()
+    if (!dogs || dogs.length === 0) throw new Error('犬只不存在')
+
+    await db.collection('dog_weights').add({
+      dog_id,
+      weight: Number(weight),
+      date: date || now,
+      notes: notes || null,
+      family_id: familyId,
+      created_by: this.uid,
+      created_at: now,
+      updated_at: now,
+    })
+
+    // 更新犬只 latest_weight（取最新日期的记录）
+    const { data: latest } = await db.collection('dog_weights')
+      .where({ dog_id, family_id: familyId })
+      .orderBy('date', 'desc')
+      .limit(1)
+      .get()
+    if (latest?.[0]?.weight) {
+      await db.collection('dogs').doc(dog_id).update({ latest_weight: latest[0].weight })
+    }
+
+    return { message: '已保存' }
+  },
+
   async getWeightHistory(dogId) {
     if (!dogId) throw new Error('缺少犬只 ID')
 

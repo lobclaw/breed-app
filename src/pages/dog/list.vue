@@ -10,7 +10,12 @@
     <view class="dog-list__header">
       <view class="dog-list__header-row">
         <text class="dog-list__title">档案</text>
-        <text class="dog-list__filter-icon material-icons-round" @click="showFilterSheet = true">filter_list</text>
+        <view class="dog-list__header-actions">
+          <view class="dog-list__header-add" @click="goToAdd">
+            <text class="material-icons-round" style="font-size: 22px; color: var(--primary);">add</text>
+          </view>
+          <text class="dog-list__filter-icon material-icons-round" @click="showFilterSheet = true">filter_list</text>
+        </view>
       </view>
     </view>
 
@@ -97,7 +102,7 @@
           <BTag
             v-for="(status, idx) in dog.statuses"
             :key="idx"
-            :label="status.type"
+            :label="status.label || status.type"
             :color="statusColor(status.type)"
           />
         </view>
@@ -108,15 +113,10 @@
         v-if="filteredDogs.length === 0"
         icon="pets"
         title="暂无犬只"
-        description="点击右下角添加第一只犬"
+        description="点击右上角 + 添加第一只犬"
         action-text="添加犬只"
         @action="goToAdd"
       />
-    </view>
-
-    <!-- 页面级 FAB -->
-    <view class="dog-list__fab" @click="goToAdd">
-      <text class="dog-list__fab-icon material-icons-round">add</text>
     </view>
 
     <!-- 底部导航栏 -->
@@ -481,10 +481,26 @@ onShow(() => {
   color: var(--text-1);
   line-height: 1.3;
 }
+.dog-list__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.dog-list__header-add {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background 0.12s ease;
+  &:active { background: var(--primary-soft); }
+}
 .dog-list__filter-icon {
   font-family: 'Material Icons Round';
   font-size: 24px;
   color: var(--text-2);
+  padding: 6px;
 }
 
 /* ==================== 搜索栏 ==================== */
@@ -749,31 +765,6 @@ onShow(() => {
   flex-wrap: wrap;
 }
 
-/* ==================== 页面级 FAB ==================== */
-.dog-list__fab {
-  position: fixed;
-  bottom: 100px;
-  right: 20px;
-  width: 54px;
-  height: 54px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--primary), var(--amber));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: var(--shadow-fab);
-  z-index: 5;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-  &:active {
-    transform: scale(0.88);
-    box-shadow: 0 2px 8px rgba(234, 62, 119, 0.2);
-  }
-}
-.dog-list__fab-icon {
-  font-family: 'Material Icons Round';
-  font-size: 28px;
-  color: #FFFFFF;
-}
 
 /* ==================== D-5: 筛选面板样式 ==================== */
 .filter-panel {
