@@ -13,7 +13,7 @@
 -->
 <template>
   <view v-if="visible" class="b-delete-confirm">
-    <view class="b-delete-confirm__mask" @click="cancel" />
+    <view class="b-delete-confirm__mask" @click="cancel" @touchmove.prevent />
     <view class="b-delete-confirm__panel" :class="{ 'b-delete-confirm__panel--open': animOpen }">
       <!-- 警告图标 -->
       <view class="b-delete-confirm__icon-wrap">

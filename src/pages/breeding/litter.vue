@@ -40,6 +40,10 @@
                 <BTag v-if="!litter.weaned_at" label="断奶需确认" color="amber" />
               </view>
             </view>
+            <view v-if="litter.birth_notes" class="info-row">
+              <text class="info-label">经验心得</text>
+              <text class="info-value">{{ litter.birth_notes }}</text>
+            </view>
           </view>
         </view>
 
@@ -141,6 +145,22 @@
         </view>
       </view>
     </template>
+
+    <!-- 共享输入弹窗 -->
+    <BModal
+      v-model:visible="showPrompt"
+      :title="promptTitle"
+      :content="promptContent"
+      @confirm="handlePromptConfirm"
+    >
+      <view class="custom-input-wrap">
+        <input
+          v-model="promptInput"
+          class="custom-input"
+          :placeholder="promptPlaceholder"
+        />
+      </view>
+    </BModal>
   </view>
 </template>
 
@@ -155,6 +175,7 @@ import BButton from '@/components/base/BButton.vue'
 import BSectionLabel from '@/components/base/BSectionLabel.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
+import BModal from '@/components/layout/BModal.vue'
 
 const litter = ref<any>(null)
 const puppies = ref<any[]>([])
@@ -165,6 +186,35 @@ let litterId = ''
 const { run: fetchDetail } = useCloudCall<{ data: any }>('breeding-service', 'getLitterDetail')
 const { run: doWeaning } = useCloudCall('breeding-service', 'confirmWeaning', { successMessage: '已确认断奶' })
 const { run: doAddPuppy } = useCloudCall('breeding-service', 'addPuppyToLitter', { successMessage: '已添加' })
+const { run: doUpdateBirthDate } = useCloudCall('breeding-service', 'updateBirthDate', { successMessage: '已更新' })
+const { run: doUpdateNotes } = useCloudCall('breeding-service', 'updateLitter', { successMessage: '备注已更新' })
+
+// 共享输入弹窗状态
+const showPrompt = ref(false)
+const promptTitle = ref('')
+const promptContent = ref('')
+const promptPlaceholder = ref('')
+const promptInput = ref('')
+let promptResolve: ((val: string) => Promise<void>) | null = null
+
+function openPrompt(title: string, placeholder: string, value: string, callback: (val: string) => Promise<void>, content = '') {
+  promptTitle.value = title
+  promptContent.value = content
+  promptPlaceholder.value = placeholder
+  promptInput.value = value
+  promptResolve = callback
+  showPrompt.value = true
+}
+
+async function handlePromptConfirm() {
+  if (promptResolve) {
+    try {
+      await promptResolve(promptInput.value)
+    } catch (e: any) {
+      uni.showToast({ title: e.message || '操作失败', icon: 'none' })
+    }
+  }
+}
 
 const soldCount = computed(() => puppies.value.filter(p => p.disposition === 'sold').length)
 const hasProfit = computed(() => litter.value && ((litter.value.income || 0) > 0 || (litter.value.expense || 0) > 0))
@@ -184,7 +234,34 @@ function goWeightEntry() {
 }
 
 function onEdit() {
-  // 可扩展：编辑窝信息
+  uni.showActionSheet({
+    itemList: ['修改生产日期', '修改备注'],
+    success: (res) => {
+      if (res.tapIndex === 0) {
+        openPrompt(
+          '修改生产日期',
+          formatDate(litter.value?.birth_date),
+          formatDate(litter.value?.birth_date),
+          async (val) => {
+            const newDate = new Date(val + 'T00:00:00+08:00').getTime()
+            await doUpdateBirthDate(litterId, newDate)
+            loadData()
+          },
+          '生产日期只能调整 ±3 天',
+        )
+      } else if (res.tapIndex === 1) {
+        openPrompt(
+          '修改备注',
+          '输入备注内容',
+          litter.value?.birth_notes || '',
+          async (val) => {
+            await doUpdateNotes(litterId, { birth_notes: val || '' })
+            loadData()
+          },
+        )
+      }
+    },
+  })
 }
 
 function puppyEmoji(puppy: any) {
@@ -242,17 +319,15 @@ async function confirmWeaning() {
 }
 
 function addPuppy() {
-  uni.showModal({
-    title: '添加幼崽',
-    editable: true,
-    placeholderText: '幼崽名称（选填）',
-    success: async (res) => {
-      if (res.confirm) {
-        await doAddPuppy(litterId, { name: res.content || '' })
-        loadData()
-      }
+  openPrompt(
+    '添加幼崽',
+    '幼崽名称（选填）',
+    '',
+    async (val) => {
+      await doAddPuppy(litterId, { name: val || '' })
+      loadData()
     },
-  })
+  )
 }
 
 onLoad((query) => {

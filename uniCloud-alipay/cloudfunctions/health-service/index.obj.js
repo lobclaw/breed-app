@@ -27,56 +27,115 @@ async function getFamilySettings(familyId) {
   const family = data[0] || data
   return family.settings || {
     default_weaning_days: 45,
-    default_vaccine_interval: 21,
+    default_vaccine_interval_puppy: 21,
+    default_vaccine_interval_adult: 365,
     default_deworming_interval_puppy: 14,
     default_deworming_interval_adult: 90,
   }
+}
+
+/**
+ * 检查是否已有同类型的 pending 任务在 ±7 天内
+ */
+async function hasDuplicateTask(familyId, dogId, taskType, dueDate) {
+  const WEEK = 7 * 86400000
+  const { total } = await db.collection('tasks')
+    .where({
+      family_id: familyId,
+      dog_id: dogId,
+      type: taskType,
+      status: 'pending',
+      due_date: dbCmd.gte(dueDate - WEEK).and(dbCmd.lte(dueDate + WEEK)),
+    })
+    .count()
+  return total > 0
+}
+
+/**
+ * 录入健康记录后，自动完成该犬同类型的 pending 任务
+ * 匹配规则：同犬 + 同类型 + 子类型匹配（或任务无子类型）
+ * 返回已完成的任务列表（用于前端提示）
+ */
+async function autoCompletePendingTasks(familyId, dogId, type, details) {
+  const now = Date.now()
+
+  // 查该犬同类型的 pending 任务，按到期日排序，只取最近 1 条
+  const { data: tasks } = await db.collection('tasks')
+    .where({
+      family_id: familyId,
+      dog_id: dogId,
+      type: type,
+      status: 'pending',
+    })
+    .orderBy('due_date', 'asc')
+    .limit(5)
+    .get()
+
+  if (!tasks || tasks.length === 0) return []
+
+  // 找第一条子类型匹配的任务
+  for (const task of tasks) {
+    let match = false
+    if (type === 'vaccination') {
+      // 任一方无子类型视为通配，或两方匹配
+      match = !task.details?.vaccine_type || !details?.vaccine_type || task.details.vaccine_type === details.vaccine_type
+    } else if (type === 'deworming') {
+      match = !task.details?.deworming_type || !details?.deworming_type || task.details.deworming_type === details.deworming_type
+    } else {
+      match = true
+    }
+
+    if (match) {
+      await db.collection('tasks').doc(task._id).update({
+        status: 'completed',
+        completed_at: now,
+        updated_at: now,
+      })
+      return [{ _id: task._id, dog_name: task.dog_name, title: task.title }]
+    }
+  }
+  return []
 }
 
 async function generateReminders(familyId, type, data, dog, recordId) {
   const now = Date.now()
   const settings = await getFamilySettings(familyId)
 
-  if (type === 'vaccination' && data.details?.next_reminder_date) {
+  if (type === 'vaccination') {
+    const vaccineInterval = (dog.role === '种狗' || dog.role === '外部种公')
+      ? (settings.default_vaccine_interval_adult || 365)
+      : (settings.default_vaccine_interval_puppy || 21)
+    const dueDate = data.details?.next_reminder_date || (data.date + (vaccineInterval * 86400000))
+    // 去重：该犬 ±7 天内已有同类型 pending 任务则不创建
+    if (await hasDuplicateTask(familyId, dog._id, 'vaccination', dueDate)) return
+
     await db.collection('tasks').add({
       card_type: 'individual',
       dog_id: dog._id,
       dog_name: dog.name,
       type: 'vaccination',
       title: `${dog.name} · 下次疫苗`,
-      due_date: data.details.next_reminder_date,
+      due_date: dueDate,
       status: 'pending',
       priority: 'upcoming',
       source_record_id: recordId,
       source_collection: 'health_records',
       family_id: familyId,
       postpone_count: 0,
-      created_at: now,
-      updated_at: now,
-    })
-  } else if (type === 'vaccination') {
-    // 默认间隔
-    await db.collection('tasks').add({
-      card_type: 'individual',
-      dog_id: dog._id,
-      dog_name: dog.name,
-      type: 'vaccination',
-      title: `${dog.name} · 下次疫苗`,
-      due_date: data.date + (settings.default_vaccine_interval * 86400000),
-      status: 'pending',
-      priority: 'upcoming',
-      source_record_id: recordId,
-      source_collection: 'health_records',
-      family_id: familyId,
-      postpone_count: 0,
+      details: { vaccine_type: data.details?.vaccine_type || null },
       created_at: now,
       updated_at: now,
     })
   }
 
   if (type === 'deworming') {
+    const dewormInterval = (dog.role === '种狗' || dog.role === '外部种公')
+      ? (settings.default_deworming_interval_adult || 90)
+      : (settings.default_deworming_interval_puppy || 14)
     const nextDate = data.details?.next_reminder_date ||
-      (data.date + (settings.default_deworming_interval_adult * 86400000))
+      (data.date + (dewormInterval * 86400000))
+
+    if (await hasDuplicateTask(familyId, dog._id, 'deworming', nextDate)) return
 
     await db.collection('tasks').add({
       card_type: 'individual',
@@ -85,6 +144,26 @@ async function generateReminders(familyId, type, data, dog, recordId) {
       type: 'deworming',
       title: `${dog.name} · 下次驱虫`,
       due_date: nextDate,
+      status: 'pending',
+      priority: 'upcoming',
+      source_record_id: recordId,
+      source_collection: 'health_records',
+      family_id: familyId,
+      postpone_count: 0,
+      details: { deworming_type: data.details?.deworming_type || null, drug_name: data.details?.drug_name || null },
+      created_at: now,
+      updated_at: now,
+    })
+  }
+
+  if (type === 'illness' && data.details?.next_reminder_date) {
+    await db.collection('tasks').add({
+      card_type: 'individual',
+      dog_id: dog._id,
+      dog_name: dog.name,
+      type: 'illness',
+      title: `${dog.name} · 复查提醒`,
+      due_date: data.details.next_reminder_date,
       status: 'pending',
       priority: 'upcoming',
       source_record_id: recordId,
@@ -142,6 +221,21 @@ module.exports = {
    * 录入健康记录（vaccination/deworming/illness）
    * 自动生成下次提醒任务 + 创建费用
    */
+  /**
+   * 更新疾病记录的治疗状态（标记康复/改为治疗中等）
+   */
+  async updateIllnessStatus(recordId, newStatus) {
+    const familyId = this.familyId
+    await db.collection('health_records').where({
+      _id: recordId,
+      family_id: familyId,
+    }).update({
+      'details.treatment_status': newStatus,
+      updated_at: Date.now(),
+    })
+    return { data: { success: true } }
+  },
+
   async addHealthRecord(data) {
     if (!data.type) throw new Error('请选择记录类型')
     if (!data.dog_id) throw new Error('请选择犬只')
@@ -178,15 +272,20 @@ module.exports = {
     }
     const { id: recordId } = await db.collection('health_records').add(recordData)
 
-    // 生成下次提醒任务
-    await generateReminders(familyId, data.type, data, dog, recordId)
+    // 自动完成该犬同类型的 pending 待办（在创建新提醒之前）
+    const completedTasks = await autoCompletePendingTasks(familyId, data.dog_id, data.type, data.details)
+
+    // 生成下次提醒任务（skip_reminder 时跳过）
+    if (!data.skip_reminder) {
+      await generateReminders(familyId, data.type, data, dog, recordId)
+    }
 
     // 如有费用 → 创建 expense
     if (data.cost && data.cost > 0) {
       await createExpense(familyId, this.uid, data, dog, recordId)
     }
 
-    return { data: { recordId } }
+    return { data: { recordId, completedTasks } }
   },
 
   /**
@@ -209,6 +308,36 @@ module.exports = {
   /**
    * 开始连续用药
    */
+  /**
+   * 检查犬只是否已有同药名的进行中用药任务
+   */
+  async checkDuplicateMedication(dogId, drugName) {
+    if (!dogId || !drugName) return { data: null }
+    const { data: existing } = await db.collection('medication_tasks')
+      .where({
+        family_id: this.familyId,
+        dog_id: dogId,
+        drug_name: drugName,
+        status: '进行中',
+      })
+      .limit(1)
+      .get()
+    if (existing && existing.length > 0) {
+      const task = existing[0]
+      const daysPassed = Math.max(1, Math.ceil((Date.now() - task.actual_start_date) / 86400000))
+      return {
+        data: {
+          exists: true,
+          dogName: task.dog_name || '',
+          drugName: task.drug_name,
+          day: daysPassed,
+          totalDays: task.duration_days,
+        }
+      }
+    }
+    return { data: null }
+  },
+
   async startMedication(data) {
     if (!data.dog_id) throw new Error('请选择犬只')
     if (!data.drug_name) throw new Error('请填写药品名称')
@@ -253,12 +382,21 @@ module.exports = {
         dog_name: dog.name,
         medication_task_id: medicationId,
         type: 'medication',
-        title: `${dog.name} · ${data.drug_name} 第${day + 1}天/${data.duration_days}天`,
+        title: `${dog.name} · ${data.drug_name}`,
         due_date: startDate + day * 86400000,
         status: 'pending',
         priority: day === 0 ? 'today' : 'upcoming',
         family_id: familyId,
         postpone_count: 0,
+        details: {
+          drug_name: data.drug_name,
+          dosage: data.dosage || null,
+          dosage_unit: data.dosage_unit || null,
+          method: data.method || '口服',
+          frequency: data.frequency || 1,
+          day: day + 1,
+          total_days: data.duration_days,
+        },
         created_at: now,
         updated_at: now,
       })
@@ -436,6 +574,42 @@ module.exports = {
     }
 
     return { data: { count: weights.length } }
+  },
+
+  /**
+   * 获取健康记录详情
+   */
+  async getHealthRecordDetail({ id }) {
+    if (!id) throw new Error('缺少记录 ID')
+
+    const { data: records } = await db.collection('health_records')
+      .where({ _id: id, family_id: this.familyId })
+      .get()
+    if (!records || records.length === 0) throw new Error('记录不存在')
+
+    return records[0]
+  },
+
+  /**
+   * 更新健康记录
+   */
+  async updateHealthRecord({ id, date, cost, notes, details }) {
+    if (!id) throw new Error('缺少记录 ID')
+
+    const { data: records } = await db.collection('health_records')
+      .where({ _id: id, family_id: this.familyId })
+      .get()
+    if (!records || records.length === 0) throw new Error('记录不存在')
+
+    const updateData = { updated_at: Date.now() }
+    if (date !== undefined) updateData.date = date
+    if (cost !== undefined) updateData.cost = cost
+    if (notes !== undefined) updateData.notes = notes
+    if (details !== undefined) updateData.details = details
+
+    await db.collection('health_records').doc(id).update(updateData)
+
+    return { message: '已更新' }
   },
 
   /**

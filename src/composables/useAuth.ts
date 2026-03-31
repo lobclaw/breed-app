@@ -12,6 +12,25 @@ const currentUser = ref<{ uid: string; token: string } | null>(null)
 const currentFamily = ref<Family | null>(null)
 const isInitialized = ref(false)
 
+const FAMILY_CACHE_KEY = 'breed_family_cache'
+
+function cacheFamily(family: Family | null) {
+  if (family) {
+    uni.setStorageSync(FAMILY_CACHE_KEY, JSON.stringify(family))
+  } else {
+    uni.removeStorageSync(FAMILY_CACHE_KEY)
+  }
+}
+
+function restoreFamilyFromCache(): Family | null {
+  try {
+    const raw = uni.getStorageSync(FAMILY_CACHE_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
 export function useAuth() {
   const isLoggedIn = computed(() => !!currentUser.value)
   const hasFamily = computed(() => !!currentFamily.value)
@@ -49,6 +68,7 @@ export function useAuth() {
     uni.$on('uni-id-pages-logout', () => {
       currentUser.value = null
       currentFamily.value = null
+      cacheFamily(null)
     })
 
     try {
@@ -57,11 +77,19 @@ export function useAuth() {
 
       if (info.uid && info.tokenExpired > Date.now()) {
         currentUser.value = { uid: info.uid, token }
-        await loadFamily()
+        // 先从缓存恢复，页面瞬间渲染正确状态
+        const cached = restoreFamilyFromCache()
+        if (cached) {
+          currentFamily.value = cached
+        }
+        isInitialized.value = true
+        // 后台静默刷新最新数据
+        loadFamily()
+      } else {
+        isInitialized.value = true
       }
     } catch {
       // 静默失败，uni-id-pages 的 uniIdRouter 会自动跳转登录页
-    } finally {
       isInitialized.value = true
     }
   }
@@ -73,8 +101,10 @@ export function useAuth() {
     try {
       const result = await cloudCall<{ data: Family }>('family-service', 'getFamilyInfo')
       currentFamily.value = result.data
+      cacheFamily(result.data)
     } catch (e: any) {
       currentFamily.value = null
+      cacheFamily(null)
       // 区分"没有家庭"和网络错误
       const code = e.code || e.errCode
       if (code && code !== 'NO_FAMILY') {

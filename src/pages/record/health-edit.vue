@@ -29,12 +29,19 @@
             >
               <text>{{ vt }}</text>
             </view>
+            <view
+              v-if="customVaccine"
+              class="pill-option"
+              :class="{ active: details.vaccine_type === customVaccine }"
+              @click="details.vaccine_type = customVaccine"
+            >
+              <text>{{ customVaccine }}</text>
+            </view>
+            <view class="pill-add" @click="addCustomVaccine">
+              <text class="material-icons-round" style="font-size: 14px;">add</text>
+              <text>自定义</text>
+            </view>
           </view>
-          <input
-            v-model="details.vaccine_type"
-            class="form-input form-input--mt"
-            placeholder="或输入自定义疫苗名称"
-          />
         </view>
 
         <view class="field-group">
@@ -74,7 +81,7 @@
             <text>备注</text>
             <text class="field-label__optional">（选填）</text>
           </view>
-          <textarea v-model="form.notes" class="form-textarea" placeholder="输入备注信息..." />
+          <textarea v-model="form.notes" class="form-textarea" :auto-height="true" placeholder="输入备注信息..." />
         </view>
       </template>
 
@@ -82,12 +89,12 @@
       <template v-if="form.type === 'deworming'">
         <view class="field-group">
           <view class="field-label"><text>驱虫类型</text></view>
-          <view class="segmented-control">
+          <view class="pill-select">
             <view
               v-for="dt in dewormingTypes"
               :key="dt.value"
-              class="seg-option"
-              :class="{ active: details.deworming_type === dt.value }"
+              class="pill-select__item"
+              :class="{ 'pill-select__item--active': details.deworming_type === dt.value }"
               @click="details.deworming_type = dt.value"
             >
               <text>{{ dt.label }}</text>
@@ -107,12 +114,19 @@
             >
               <text>{{ drug }}</text>
             </view>
+            <view
+              v-if="customDrug"
+              class="pill-option"
+              :class="{ active: details.drug_name === customDrug }"
+              @click="details.drug_name = customDrug"
+            >
+              <text>{{ customDrug }}</text>
+            </view>
+            <view class="pill-add" @click="addCustomDrug">
+              <text class="material-icons-round" style="font-size: 14px;">add</text>
+              <text>自定义</text>
+            </view>
           </view>
-          <input
-            v-model="details.drug_name"
-            class="form-input form-input--mt"
-            placeholder="或输入自定义药品名称"
-          />
         </view>
 
         <view class="field-group">
@@ -141,7 +155,7 @@
             <text>备注</text>
             <text class="field-label__optional">（选填）</text>
           </view>
-          <textarea v-model="form.notes" class="form-textarea" placeholder="输入备注信息..." />
+          <textarea v-model="form.notes" class="form-textarea" :auto-height="true" placeholder="输入备注信息..." />
         </view>
       </template>
 
@@ -164,12 +178,12 @@
 
         <view class="field-group">
           <view class="field-label"><text>严重程度</text></view>
-          <view class="segmented-control">
+          <view class="pill-select">
             <view
               v-for="s in severityLevels"
               :key="s"
-              class="seg-option"
-              :class="{ active: details.severity === s }"
+              class="pill-select__item"
+              :class="{ 'pill-select__item--active': details.severity === s }"
               @click="details.severity = s"
             >
               <text>{{ s }}</text>
@@ -189,12 +203,12 @@
 
         <view class="field-group">
           <view class="field-label"><text>治疗状态</text></view>
-          <view class="segmented-control">
+          <view class="pill-select">
             <view
               v-for="s in treatmentStatuses"
               :key="s"
-              class="seg-option"
-              :class="{ active: details.treatment_status === s }"
+              class="pill-select__item"
+              :class="{ 'pill-select__item--active': details.treatment_status === s }"
               @click="details.treatment_status = s"
             >
               <text>{{ s }}</text>
@@ -218,22 +232,54 @@
             <text>备注</text>
             <text class="field-label__optional">（选填）</text>
           </view>
-          <textarea v-model="form.notes" class="form-textarea" placeholder="描述症状详情..." />
+          <textarea v-model="form.notes" class="form-textarea" :auto-height="true" placeholder="描述症状详情..." />
         </view>
       </template>
 
-      <!-- 提交按钮 -->
-      <view class="submit-area">
-        <button
-          class="submit-btn"
-          :loading="submitting"
-          :disabled="!canSubmit"
-          @click="submit"
-        >
-          保存修改
-        </button>
-      </view>
     </view>
+
+    <!-- 固定底部按钮 -->
+    <view class="fixed-bottom">
+      <button
+        class="submit-btn"
+        :loading="submitting"
+        :disabled="!canSubmit || submitting"
+        @click="submit"
+      >
+        保存修改
+      </button>
+    </view>
+
+    <!-- 自定义疫苗输入弹窗 -->
+    <BModal
+      v-model:visible="showVaccineModal"
+      title="自定义疫苗"
+      @confirm="onVaccineConfirm"
+    >
+      <view class="custom-input-wrap">
+        <input
+          v-model="vaccineInput"
+          class="custom-input"
+          placeholder="输入疫苗名称"
+          :focus="showVaccineModal"
+        />
+      </view>
+    </BModal>
+    <!-- 自定义药品输入弹窗 -->
+    <BModal
+      v-model:visible="showDrugModal"
+      title="自定义药品"
+      @confirm="onDrugConfirm"
+    >
+      <view class="custom-input-wrap">
+        <input
+          v-model="drugInput"
+          class="custom-input"
+          placeholder="输入药品名称"
+          :focus="showDrugModal"
+        />
+      </view>
+    </BModal>
   </view>
 </template>
 
@@ -242,6 +288,7 @@ import { ref, reactive, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
+import BModal from '@/components/layout/BModal.vue'
 
 let recordId = ''
 
@@ -266,6 +313,22 @@ const typeLabels: Record<string, string> = {
 const typeLabel = computed(() => typeLabels[form.type] || form.type)
 
 const vaccineTypes = ['卫佳5', '卫佳8', '卫佳10', '狂犬']
+const customVaccine = ref('')
+const showVaccineModal = ref(false)
+const vaccineInput = ref('')
+
+function addCustomVaccine() {
+  vaccineInput.value = ''
+  showVaccineModal.value = true
+}
+
+function onVaccineConfirm() {
+  if (vaccineInput.value.trim()) {
+    customVaccine.value = vaccineInput.value.trim()
+    details.vaccine_type = customVaccine.value
+  }
+  showVaccineModal.value = false
+}
 
 const dewormingTypes = [
   { label: '内驱', value: 'internal' },
@@ -274,6 +337,22 @@ const dewormingTypes = [
 ]
 
 const dewormDrugs = ['拜宠清', '海乐妙', '犬心保']
+const customDrug = ref('')
+const showDrugModal = ref(false)
+const drugInput = ref('')
+
+function addCustomDrug() {
+  drugInput.value = ''
+  showDrugModal.value = true
+}
+
+function onDrugConfirm() {
+  if (drugInput.value.trim()) {
+    customDrug.value = drugInput.value.trim()
+    details.drug_name = customDrug.value
+  }
+  showDrugModal.value = false
+}
 
 const conditionTypes = ['感冒', '腹泻', '寄生虫', '皮肤病', '眼部', '骨骼', '犬瘟', '细小', '其他']
 const severityLevels = ['轻微', '中等', '严重']
@@ -390,11 +469,6 @@ onLoad((query) => {
 </script>
 
 <style lang="scss" scoped>
-.page {
-  min-height: 100vh;
-  background: var(--bg);
-  padding-bottom: 40px;
-}
 
 .loading-state {
   display: flex;
@@ -405,13 +479,6 @@ onLoad((query) => {
 .loading-text {
   font-size: 14px;
   color: var(--text-3);
-}
-
-.form-body {
-  padding: 0 var(--space-page);
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
 }
 
 /* ---- Type Display ---- */
@@ -427,189 +494,8 @@ onLoad((query) => {
   align-items: center;
 }
 
-/* ---- Field Group ---- */
-.field-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.field-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-3);
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-
-  &__optional {
-    font-size: 12px;
-    font-weight: 400;
-    color: var(--text-3);
-  }
-}
-
-/* ---- Text inputs ---- */
-.form-input {
-  height: 48px;
-  border-radius: 14px;
-  border: 1px solid var(--text-4);
-  background: var(--card);
-  padding: 0 16px;
-  font-size: 14px;
-  color: var(--text-1);
-  font-family: var(--font-body);
-  outline: none;
-  display: flex;
-  align-items: center;
-  transition: border-color 0.2s;
-
-  &::placeholder {
-    color: var(--text-3);
-  }
-
-  &--picker {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  &__suffix {
-    font-size: 18px;
-    color: var(--text-3);
-  }
-
-  &--prefixed {
-    padding-left: 34px;
-  }
-
-  &--mt {
-    margin-top: 8px;
-  }
-}
-
-/* ---- Textarea ---- */
-.form-textarea {
-  border-radius: 14px;
-  border: 1px solid var(--text-4);
-  background: var(--card);
-  padding: 14px 16px;
-  font-size: 14px;
-  color: var(--text-1);
-  font-family: var(--font-body);
-  outline: none;
-  resize: none;
-  min-height: 80px;
-  line-height: 1.5;
-
-  &::placeholder {
-    color: var(--text-3);
-  }
-}
-
-/* ---- Prefix wrapper ---- */
-.input-prefix-wrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.input-prefix {
-  position: absolute;
-  left: 16px;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text-3);
-  pointer-events: none;
-  z-index: 1;
-}
-
-/* ---- Segmented control ---- */
-.segmented-control {
-  display: flex;
-  gap: 0;
-  border-radius: var(--radius-btn);
-  background: var(--card-dim);
-  padding: 3px;
-  overflow: hidden;
-}
-
-.seg-option {
-  flex: 1;
-  text-align: center;
-  padding: 10px 10px;
-  border-radius: var(--radius-btn);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-2);
-  transition: all 0.2s ease;
-  white-space: nowrap;
-
-  &.active {
-    background: var(--primary);
-    color: white;
-    box-shadow: 0 2px 8px rgba(234, 62, 119, 0.2);
-  }
-}
-
-/* ---- Pill options ---- */
-.pill-options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.pill-option {
-  padding: 8px 16px;
-  border-radius: var(--radius-btn);
-  background: var(--card-dim);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-2);
-  transition: all 0.2s ease;
-
-  &.active {
-    background: var(--primary);
-    color: white;
-  }
-}
-
-/* ---- Helper text ---- */
+/* ---- Helper text (margin override) ---- */
 .helper-text {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-3);
   margin-top: -4px;
-}
-
-/* ---- Submit area ---- */
-.submit-area {
-  padding: 8px 0 20px;
-}
-
-.submit-btn {
-  height: 50px;
-  border-radius: var(--radius-btn);
-  border: none;
-  font-size: 15px;
-  font-weight: 700;
-  color: white;
-  background: var(--primary);
-  box-shadow: 0 4px 16px rgba(234, 62, 119, 0.25);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-display);
-  transition: all 0.12s ease;
-  width: 100%;
-
-  &:active {
-    transform: scale(0.94);
-    opacity: 0.85;
-  }
-
-  &[disabled] {
-    opacity: 0.4;
-  }
 }
 </style>

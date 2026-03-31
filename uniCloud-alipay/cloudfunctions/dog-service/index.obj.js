@@ -166,6 +166,26 @@ module.exports = {
     }
 
     const { id } = await db.collection('dogs').add(dogData)
+
+    // 如有购入价格，自动创建费用记录
+    if (data.purchase_price && data.purchase_price > 0) {
+      await db.collection('expenses').add({
+        total_amount: data.purchase_price,
+        category: '购入',
+        date: data.purchase_date || now,
+        notes: `购入${data.role === '外部种公' ? '外部种公' : '种犬'}：${data.name || ''}`,
+        linked_dog_ids: [id],
+        dog_names: [data.name || ''],
+        source_type: 'auto',
+        source_record_id: id,
+        family_id: this.familyId,
+        created_by: this.uid,
+        deleted_at: null,
+        created_at: now,
+        updated_at: now,
+      })
+    }
+
     return { data: { _id: id } }
   },
 

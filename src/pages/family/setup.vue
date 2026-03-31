@@ -44,7 +44,7 @@
         color="primary"
         size="large"
         :loading="creating"
-        :disabled="!canSubmit"
+        :disabled="!canSubmit || submitting"
         style="width: 100%; margin-top: 20px;"
         @click="create"
       >
@@ -57,12 +57,19 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useAuth } from '@/composables/useAuth'
+import { useCloudCall } from '@/composables/useCloudCall'
 import BButton from '@/components/base/BButton.vue'
 
 const { createFamily } = useAuth()
 const familyName = ref('')
 const inviteCode = ref('')
 const creating = ref(false)
+
+const { run: joinFamily } = useCloudCall('family-service', 'joinFamily', {
+  successMessage: '加入成功',
+  showLoading: true,
+  loadingText: '加入中...',
+})
 
 const canSubmit = computed(() => familyName.value.trim() || inviteCode.value.trim())
 
@@ -71,8 +78,10 @@ async function create() {
   creating.value = true
   try {
     if (inviteCode.value.trim()) {
-      // 加入已有家庭（后续实现 joinFamily）
-      uni.showToast({ title: '加入功能开发中', icon: 'none' })
+      await joinFamily({ invite_code: inviteCode.value.trim() })
+      setTimeout(() => {
+        uni.reLaunch({ url: '/pages/home/index' })
+      }, 1000)
     } else {
       await createFamily(familyName.value.trim())
       uni.showToast({ title: '创建成功', icon: 'success' })

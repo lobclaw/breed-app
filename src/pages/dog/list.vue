@@ -15,9 +15,19 @@
     </view>
 
     <!-- 搜索栏 -->
-    <view class="dog-list__search" @click="onSearchClick">
+    <view class="dog-list__search">
       <text class="dog-list__search-icon material-icons-round">search</text>
-      <text class="dog-list__search-placeholder">搜索犬只...</text>
+      <input
+        v-model="searchKeyword"
+        class="dog-list__search-input"
+        placeholder="搜索犬只..."
+        confirm-type="search"
+      />
+      <text
+        v-if="searchKeyword"
+        class="dog-list__search-clear material-icons-round"
+        @click="searchKeyword = ''"
+      >close</text>
     </view>
 
     <!-- 筛选 chips -->
@@ -110,7 +120,7 @@
     </view>
 
     <!-- 底部导航栏 -->
-    <BNavBar current="dog" @fab-click="goToAdd" />
+    <BNavBar current="dog" />
 
     <!-- ==================== D-5: 高级筛选 Sheet ==================== -->
     <BSheet v-model:visible="showFilterSheet" title="筛选">
@@ -209,7 +219,8 @@ const loading = ref(true)
 const activeFilter = ref('all')
 const showFilterSheet = ref(false)
 
-const { run: fetchDogs } = useCloudCall<{ data: DogWithStatus[] }>('dog-service', 'getDogListWithStatus')
+import { useDogStore } from '@/stores/dogStore'
+const dogStore = useDogStore()
 
 const filterOptions = [
   { label: '全部', value: 'all' },
@@ -304,6 +315,12 @@ function resetAdvancedFilters() {
 
 const filteredDogs = computed(() => {
   let result = dogs.value
+
+  // 搜索过滤
+  if (searchKeyword.value.trim()) {
+    const kw = searchKeyword.value.trim().toLowerCase()
+    result = result.filter(d => d.name?.toLowerCase().includes(kw))
+  }
 
   // 快捷筛选
   if (activeFilter.value === 'breeding') result = result.filter(d => d.role === '种狗')
@@ -416,17 +433,24 @@ function goToAdd() {
   uni.navigateTo({ url: '/pages/dog/add' })
 }
 
-function onSearchClick() {
-  // TODO: 搜索功能
-}
+
+const searchKeyword = ref('')
 
 async function loadDogs() {
-  loading.value = true
-  const result = await fetchDogs()
-  if (result?.data) {
-    dogs.value = result.data
+  // 有缓存：瞬间显示
+  if (dogStore.list.length > 0) {
+    dogs.value = dogStore.list
+    loading.value = false
+    // 后台刷新
+    dogStore.fetchFromServer().then(() => {
+      dogs.value = dogStore.list
+    })
+  } else {
+    loading.value = true
+    await dogStore.ensure()
+    dogs.value = dogStore.list
+    loading.value = false
   }
-  loading.value = false
 }
 
 onShow(() => {
@@ -466,12 +490,13 @@ onShow(() => {
 /* ==================== 搜索栏 ==================== */
 .dog-list__search {
   margin: 12px 16px 0;
+  height: 44px;
   display: flex;
   align-items: center;
   gap: 8px;
   background: var(--card);
   border-radius: var(--radius-btn);
-  padding: 10px 16px;
+  padding: 0 16px;
   box-shadow: var(--shadow);
 }
 .dog-list__search-icon {
@@ -482,6 +507,22 @@ onShow(() => {
 .dog-list__search-placeholder {
   font-size: 14px;
   color: var(--text-3);
+}
+.dog-list__search-input {
+  flex: 1;
+  height: 44px;
+  line-height: 44px;
+  font-size: 14px;
+  color: var(--text-1);
+  background: transparent;
+  border: none;
+  outline: none;
+  font-family: var(--font-body);
+}
+.dog-list__search-clear {
+  font-size: 18px;
+  color: var(--text-3);
+  padding: 4px;
 }
 
 /* ==================== 筛选 chips ==================== */
@@ -654,6 +695,7 @@ onShow(() => {
   min-width: 0;
 }
 .dog-list__card-name {
+  display: block;
   font-size: 15px;
   font-weight: 700;
   color: var(--text-1);
@@ -663,6 +705,7 @@ onShow(() => {
   white-space: nowrap;
 }
 .dog-list__card-sub {
+  display: block;
   font-size: 12px;
   color: var(--text-2);
   margin-top: 1px;

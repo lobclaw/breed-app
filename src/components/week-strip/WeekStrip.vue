@@ -31,14 +31,9 @@
             {{ day.date }}
           </text>
         </view>
-        <!-- 事件圆点（最多3个） -->
+        <!-- 事件圆点 -->
         <view class="event-dots">
-          <view
-            v-for="(dot, idx) in day.dots"
-            :key="idx"
-            class="event-dot"
-            :style="{ background: dot }"
-          />
+          <view v-if="day.count > 0" class="event-dot" />
         </view>
       </view>
     </view>
@@ -60,9 +55,6 @@ defineEmits<{
 
 const WEEK_LABELS = ['日', '一', '二', '三', '四', '五', '六']
 
-/** 事件圆点颜色：根据数量映射 */
-const DOT_COLORS = ['var(--red)', 'var(--amber)', 'var(--green)']
-
 function startOfDay(ts: number): number {
   const d = new Date(ts)
   d.setHours(0, 0, 0, 0)
@@ -83,21 +75,12 @@ const days = computed(() => {
     const isToday = ts === today.value
     const count = props.dayCounts?.[ts] || 0
 
-    // 生成事件圆点（按数量分配颜色）
-    const dots: string[] = []
-    if (count > 0) {
-      dots.push(DOT_COLORS[0])
-      if (count > 2) dots.push(DOT_COLORS[1])
-      if (count > 4) dots.push(DOT_COLORS[2])
-    }
-
     result.push({
       ts,
       date: d.getDate(),
       label: isToday ? '今' : WEEK_LABELS[d.getDay()],
       isToday,
       count,
-      dots,
     })
   }
 
@@ -193,13 +176,13 @@ const monthLabel = computed(() => {
 /* 事件圆点 */
 .event-dots {
   display: flex;
-  gap: 3px;
+  justify-content: center;
   height: 6px;
-  align-items: center;
 }
 .event-dot {
-  width: 4px;
-  height: 4px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
+  background: var(--red);
 }
 </style>

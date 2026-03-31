@@ -7,19 +7,9 @@
     <!-- 页面标题栏 -->
     <BPageHeader title="录入临产监测" :subtitle="headerSubtitle" />
 
-    <!-- 犬只选择卡片 -->
-    <view class="prelabor-monitor__dog-card" @click="showDogPicker = true">
-      <view class="prelabor-monitor__dog-card-bg" />
-      <view class="prelabor-monitor__dog-info">
-        <view class="prelabor-monitor__avatar">
-          <text class="material-icons-round" style="font-size: 22px; color: #FFFFFF;">pets</text>
-        </view>
-        <view class="prelabor-monitor__dog-detail">
-          <text class="prelabor-monitor__dog-name">{{ selectedDog?.name || '点击选择犬只' }}</text>
-          <text class="prelabor-monitor__dog-meta">{{ selectedDog?.meta || '请先选择一只犬' }}</text>
-        </view>
-      </view>
-      <text class="material-icons-round" style="font-size: 20px; color: var(--text-4); position: relative; z-index: 1;">chevron_right</text>
+    <!-- 犬只选择 -->
+    <view class="prelabor-monitor__dog-picker">
+      <BDogPicker v-model="selectedDog" roleFilter="种狗" genderFilter="母" title="选择种母" />
     </view>
 
     <!-- 主要内容 -->
@@ -147,8 +137,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onLoad } from '@dcloudio/uni-app'
+import { ref, computed, watch, onLoad } from '@dcloudio/uni-app'
+import { useCloudCall } from '@/composables/useCloudCall'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
+import BDogPicker from '@/components/form/BDogPicker.vue'
 
 interface TempRecord {
   temp: number
@@ -156,9 +148,7 @@ interface TempRecord {
   time: number
 }
 
-const dogId = ref('')
-const selectedDog = ref<{ name: string; meta: string; id: string } | null>(null)
-const showDogPicker = ref(false)
+const selectedDog = ref<any>(null)
 
 // 体温
 const temperature = ref('')
@@ -179,9 +169,14 @@ const selectedSymptoms = ref<string[]>([])
 // 备注
 const notes = ref('')
 
+// 当选择犬只变化时加载体温历史
+watch(selectedDog, (dog) => {
+  if (dog?._id) loadTempHistory(dog._id)
+})
+
 // 计算属性
 const headerSubtitle = computed(() => {
-  if (selectedDog.value) return selectedDog.value.meta
+  if (selectedDog.value) return `${selectedDog.value.gender || ''} · ${selectedDog.value.role || ''}`
   return ''
 })
 
@@ -204,35 +199,15 @@ const showLaborAlert = computed(() => {
 
 onLoad((query: any) => {
   if (query?.dogId) {
-    dogId.value = query.dogId
-    loadDogInfo(query.dogId)
     loadTempHistory(query.dogId)
-  }
-  if (query?.dogName) {
     selectedDog.value = {
-      id: query.dogId || '',
-      name: query.dogName,
-      meta: query.dogMeta || '马尔济斯 · 种母',
+      _id: query.dogId,
+      name: query?.dogName || '',
+      gender: '母',
+      role: '种狗',
     }
   }
 })
-
-async function loadDogInfo(id: string) {
-  try {
-    const db = uniCloud.database()
-    const res = await db.collection('dogs').doc(id).get()
-    const dog = res.result?.data?.[0]
-    if (dog) {
-      selectedDog.value = {
-        id: dog._id,
-        name: dog.name,
-        meta: `${dog.breed || '马尔济斯'} · 种母 · ${dog.due_date ? '距预产期' + getDaysUntil(dog.due_date) + '天' : ''}`,
-      }
-    }
-  } catch (e) {
-    console.error('加载犬只信息失败', e)
-  }
-}
 
 async function loadTempHistory(id: string) {
   try {
@@ -252,10 +227,6 @@ async function loadTempHistory(id: string) {
   } catch (e) {
     console.error('加载体温记录失败', e)
   }
-}
-
-function getDaysUntil(ts: number): number {
-  return Math.ceil((ts - Date.now()) / 86400000)
 }
 
 function formatTimeLabel(ts: number): string {
@@ -300,6 +271,12 @@ function pickTime() {
   })
 }
 
+const { run: addBreedingRecord } = useCloudCall('breeding-service', 'addBreedingRecord', {
+  successMessage: '保存成功',
+  showLoading: true,
+  loadingText: '保存中...',
+})
+
 async function handleSave() {
   if (!selectedDog.value) {
     uni.showToast({ title: '请选择犬只', icon: 'none' })
@@ -311,27 +288,20 @@ async function handleSave() {
     return
   }
 
-  uni.showLoading({ title: '保存中...' })
-  try {
-    const db = uniCloud.database()
-    await db.collection('health_records').add({
-      type: 'prelabor_monitor',
-      dog_id: selectedDog.value.id,
+  const res = await addBreedingRecord({
+    type: 'pre_labor',
+    dog_id: selectedDog.value._id,
+    date: recordTime.value.getTime(),
+    details: {
       temperature: temp,
       symptoms: selectedSymptoms.value,
-      notes: notes.value,
-      record_time: recordTime.value.getTime(),
-      created_at: Date.now(),
-    })
-    uni.hideLoading()
-    uni.showToast({ title: '保存成功', icon: 'success' })
+    },
+    notes: notes.value || null,
+  })
+  if (res) {
     setTimeout(() => {
       uni.navigateBack({ delta: 1 })
     }, 1200)
-  } catch (e) {
-    uni.hideLoading()
-    console.error('保存失败', e)
-    uni.showToast({ title: '保存失败', icon: 'none' })
   }
 }
 </script>
@@ -341,65 +311,9 @@ async function handleSave() {
   min-height: 100vh;
   background: var(--bg);
 
-  /* 犬只选择卡片 */
-  &__dog-card {
-    margin: 0 var(--space-page) 12px;
-    background: var(--card);
-    border-radius: var(--radius-card);
-    padding: 14px 16px;
-    box-shadow: var(--shadow);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    position: relative;
-    overflow: hidden;
-    transition: all 0.15s ease;
-    &:active { transform: scale(0.975); }
-  }
-
-  &__dog-card-bg {
-    position: absolute;
-    top: 0; left: 0; width: 100%; height: 100%;
-    background: linear-gradient(135deg, var(--rose-soft) 0%, transparent 40%);
-    border-radius: var(--radius-card);
-    pointer-events: none;
-  }
-
-  &__dog-info {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    position: relative;
-    z-index: 1;
-  }
-
-  &__avatar {
-    width: 42px;
-    height: 42px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #ea3e77, #e89b3e);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-  }
-
-  &__dog-detail {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  &__dog-name {
-    font-size: 15px;
-    font-weight: 700;
-    color: var(--text-1);
-  }
-
-  &__dog-meta {
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--text-3);
+  /* 犬只选择器区域 */
+  &__dog-picker {
+    padding: 0 var(--space-page) 12px;
   }
 
   /* 内容 */

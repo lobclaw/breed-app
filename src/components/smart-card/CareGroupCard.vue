@@ -4,9 +4,9 @@
   左色条 + 图标 + 群组标题 + 犬只行列表 + 批量完成按钮
 -->
 <template>
-  <view class="card card--rose">
+  <view class="card" :class="card.priority === 'overdue' ? 'card--red' : 'card--rose'">
     <view class="card-header">
-      <view class="card-icon card-icon--rose">
+      <view class="card-icon" :class="card.priority === 'overdue' ? 'card-icon--red' : 'card-icon--rose'">
         <text style="font-size: 20px;">🤰</text>
       </view>
       <view class="card-title-area">
@@ -59,8 +59,7 @@ function statusClass(dog: any) {
   border-left: 3.5px solid transparent;
   box-shadow: var(--shadow);
   overflow: hidden;
-  transition: transform 0.15s ease;
-  &:active { transform: scale(0.975); }
+  /* 群组卡片整体不可点击，不加按压反馈 */
 
   &::before { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 0; }
   > * { position: relative; z-index: 1; }

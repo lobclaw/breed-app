@@ -39,8 +39,8 @@
 
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 
 interface SettingItem {
@@ -51,19 +51,26 @@ interface SettingItem {
   inputType?: string
 }
 
+const { currentFamily, loadFamily } = useAuth()
+
 const editingKey = ref('')
 const editingValue = ref('')
 const saving = ref(false)
 
+// 直接从内存中的 currentFamily 读取，无需请求
+function getSettingValue(key: string, fallback: string): string {
+  const val = currentFamily.value?.settings?.[key as keyof typeof currentFamily.value.settings]
+  return val != null ? String(val) : fallback
+}
+
 const settingsItems = reactive<SettingItem[]>([
-  { key: 'default_weaning_days', label: '默认断奶龄', unit: '天', value: '45' },
-  { key: 'vaccine_interval_days', label: '疫苗间隔', unit: '天', value: '21' },
-  { key: 'puppy_deworming_interval_days', label: '幼犬驱虫间隔', unit: '天', value: '14' },
-  { key: 'adult_deworming_interval_days', label: '成犬驱虫间隔', unit: '天', value: '30' },
-  { key: 'morning_summary_time', label: '晨间摘要时间', value: '07:00', inputType: 'text' },
+  { key: 'default_weaning_days', label: '默认断奶龄', unit: '天', value: getSettingValue('default_weaning_days', '45') },
+  { key: 'default_vaccine_interval_puppy', label: '幼犬疫苗间隔', unit: '天', value: getSettingValue('default_vaccine_interval_puppy', '21') },
+  { key: 'default_vaccine_interval_adult', label: '种狗疫苗间隔', unit: '天', value: getSettingValue('default_vaccine_interval_adult', '365') },
+  { key: 'default_deworming_interval_puppy', label: '幼犬驱虫间隔', unit: '天', value: getSettingValue('default_deworming_interval_puppy', '14') },
+  { key: 'default_deworming_interval_adult', label: '种狗驱虫间隔', unit: '天', value: getSettingValue('default_deworming_interval_adult', '90') },
 ])
 
-const { run: getSettings } = useCloudCall<{ data: Record<string, any> }>('family-service', 'getSettings')
 const { run: updateSettings } = useCloudCall('family-service', 'updateSettings', {
   successMessage: '已保存',
   showLoading: true,
@@ -93,23 +100,12 @@ async function saveAll() {
       }
     }
     await updateSettings(data)
+    // 保存后同步内存缓存
+    await loadFamily()
   } finally {
     saving.value = false
   }
 }
-
-async function loadSettings() {
-  const res = await getSettings()
-  if (res?.data) {
-    for (const item of settingsItems) {
-      if (res.data[item.key] != null) {
-        item.value = String(res.data[item.key])
-      }
-    }
-  }
-}
-
-onShow(() => loadSettings())
 </script>
 
 <style lang="scss" scoped>

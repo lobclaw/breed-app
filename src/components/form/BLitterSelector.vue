@@ -46,6 +46,7 @@
 
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
+import { useCloudCall } from '@/composables/useCloudCall'
 import BSheet from '../layout/BSheet.vue'
 import BSkeleton from '../feedback/BSkeleton.vue'
 import BEmpty from '../feedback/BEmpty.vue'
@@ -78,6 +79,8 @@ const loading = ref(false)
 const litters = ref<Litter[]>([])
 const selected = ref('')
 
+const { run: fetchAllLitters } = useCloudCall<{ data: any[] }>('breeding-service', 'getAllLitters')
+
 watch(() => props.visible, async (val) => {
   if (val) {
     await fetchLitters()
@@ -87,23 +90,16 @@ watch(() => props.visible, async (val) => {
 async function fetchLitters() {
   loading.value = true
   try {
-    const db = uniCloud.database()
-    const res = await db.collection('litters')
-      .where(props.familyId ? `family_id == "${props.familyId}"` : '1==1')
-      .orderBy('birth_date', 'desc')
-      .limit(50)
-      .get()
-
-    litters.value = (res.result?.data || []).map((item: any) => ({
+    const res = await fetchAllLitters()
+    litters.value = (res?.data || []).map((item: any) => ({
       _id: item._id,
       damName: item.dam_name,
       litterNumber: item.litter_number,
       birthDate: item.birth_date,
-      puppyCount: item.puppy_count,
+      puppyCount: item.total_born,
       ...item,
     }))
   } catch (e) {
-    console.error('获取窝列表失败', e)
     litters.value = []
   } finally {
     loading.value = false

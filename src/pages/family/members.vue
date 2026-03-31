@@ -1,14 +1,11 @@
 <template>
   <view class="page">
     <!-- 顶栏 -->
-    <BPageHeader title="家庭成员" />
-
-    <!-- 骨架屏 -->
-    <BSkeleton v-if="loading" :rows="3" :avatar="true" />
+    <BPageHeader title="家庭管理" />
 
     <!-- 空状态 -->
     <BEmpty
-      v-if="!loading && memberList.length === 0"
+      v-if="memberList.length === 0"
       icon="group"
       title="暂无成员"
       description="邀请家人一起管理犬舍"
@@ -16,55 +13,102 @@
       @action="goToInvite"
     />
 
-    <!-- 成员列表 -->
-    <view class="list" v-if="memberList.length > 0">
-      <view v-for="member in memberList" :key="member.user_id" class="member-card">
-        <view class="member-left">
-          <view class="member-avatar" :class="`member-avatar--${member.role}`">
-            <text class="material-icons-round" style="font-size: 20px; color: #fff;">person</text>
-          </view>
-          <view class="member-info">
-            <text class="member-name">{{ member.nickname || member.user_id }}</text>
-            <BTag :label="roleLabel(member.role)" :color="roleColor(member.role)" />
+    <template v-else>
+      <!-- 犬舍信息卡 -->
+      <view class="info-card">
+        <view class="info-row" @click="editFamilyName">
+          <text class="info-row-label">犬舍名称</text>
+          <view class="info-row-value" style="display: flex; align-items: center; gap: 6px;">
+            <text>{{ familyName || '未设置' }}</text>
+            <text class="material-icons-round" style="font-size: 16px; color: var(--text-3);">edit</text>
           </view>
         </view>
+        <view class="info-row">
+          <text class="info-row-label">创建日期</text>
+          <text class="info-row-value">{{ createdDate }}</text>
+        </view>
+      </view>
 
-        <view v-if="member.role !== 'creator'" class="member-actions">
-          <view class="action-btn" @click="changeRole(member)">
-            <text class="material-icons-round" style="font-size: 18px; color: var(--blue);">swap_horiz</text>
+      <!-- 成员区头部 -->
+      <view class="section-header">
+        <text class="section-header__title">成员</text>
+        <text class="section-header__count">{{ memberList.length }}人</text>
+      </view>
+
+      <!-- 成员列表 -->
+      <view class="list">
+        <view v-for="member in memberList" :key="member.user_id" class="member-card">
+          <view class="member-left">
+            <view class="member-avatar" :class="`member-avatar--${member.role}`">
+              <text class="material-icons-round" style="font-size: 20px; color: #fff;">person</text>
+            </view>
+            <view class="member-info">
+              <text class="member-name">{{ member.nickname || member.user_id }}</text>
+              <BTag :label="roleLabel(member.role)" :color="roleColor(member.role)" />
+            </view>
           </view>
-          <view class="action-btn action-btn--danger" @click="remove(member)">
-            <text class="material-icons-round" style="font-size: 18px;">person_remove</text>
+
+          <view v-if="member.role !== 'creator'" class="member-actions">
+            <view class="action-btn" @click="changeRole(member)">
+              <text class="material-icons-round" style="font-size: 18px; color: var(--blue);">swap_horiz</text>
+            </view>
+            <view class="action-btn action-btn--danger" @click="remove(member)">
+              <text class="material-icons-round" style="font-size: 18px;">person_remove</text>
+            </view>
           </view>
         </view>
       </view>
-    </view>
 
-    <!-- 底部邀请按钮 -->
-    <view class="footer">
-      <button class="invite-btn" @click="goToInvite">
-        <text class="material-icons-round" style="font-size: 18px; margin-right: 6px;">person_add</text>
-        <text>邀请新成员</text>
-      </button>
-    </view>
+      <!-- 底部邀请按钮 -->
+      <view class="action-area">
+        <button class="submit-btn" @click="goToInvite">
+          <text class="material-icons-round" style="font-size: 18px; margin-right: 6px;">person_add</text>
+          <text>邀请新成员</text>
+        </button>
+      </view>
+      <text class="hint-text">生成邀请链接，对方点击后加入犬舍</text>
+    </template>
+
+    <!-- 修改犬舍名称弹窗 -->
+    <BModal
+      v-model:visible="showNameModal"
+      title="修改犬舍名称"
+      @confirm="onNameConfirm"
+    >
+      <view class="custom-input-wrap">
+        <input
+          v-model="nameInput"
+          class="custom-input"
+          placeholder="请输入犬舍名称"
+        />
+      </view>
+    </BModal>
   </view>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { ref, computed } from 'vue'
+import { useAuth } from '@/composables/useAuth'
 import { useCloudCall } from '@/composables/useCloudCall'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BTag from '@/components/base/BTag.vue'
-import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
+import BModal from '@/components/layout/BModal.vue'
 
-const memberList = ref<any[]>([])
-const loading = ref(true)
+const { currentFamily, loadFamily } = useAuth()
 
-const { run: fetchMembers } = useCloudCall<{ data: any[] }>('family-service', 'getMemberList')
+const memberList = computed(() =>
+  (currentFamily.value?.members || []).filter(m => m.status === 'active')
+)
+const familyName = computed(() => currentFamily.value?.name || '')
+const createdDate = computed(() => formatDate(currentFamily.value?.created_at))
+
+const showNameModal = ref(false)
+const nameInput = ref('')
+
 const { run: updateRole } = useCloudCall('family-service', 'updateMemberRole', { successMessage: '已更新' })
 const { run: removeMember } = useCloudCall('family-service', 'removeMember', { successMessage: '已移除' })
+const { run: doUpdateFamilyName } = useCloudCall('family-service', 'updateFamilyName', { successMessage: '已更新' })
 
 function roleLabel(role: string) {
   const labels: Record<string, string> = { creator: '创建者', admin: '管理员', helper: '协助者' }
@@ -76,11 +120,22 @@ function roleColor(role: string) {
   return map[role] || 'green'
 }
 
-async function load() {
-  loading.value = true
-  const res = await fetchMembers()
-  if (res?.data) memberList.value = res.data
-  loading.value = false
+function formatDate(ts?: number): string {
+  if (!ts) return ''
+  const d = new Date(ts)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function editFamilyName() {
+  nameInput.value = familyName.value
+  showNameModal.value = true
+}
+
+async function onNameConfirm() {
+  if (nameInput.value.trim()) {
+    await doUpdateFamilyName(nameInput.value.trim())
+    await loadFamily()
+  }
 }
 
 async function changeRole(member: any) {
@@ -92,7 +147,7 @@ async function changeRole(member: any) {
     success: async (res) => {
       if (res.confirm) {
         await updateRole(member.user_id, newRole)
-        load()
+        await loadFamily()
       }
     }
   })
@@ -105,7 +160,7 @@ async function remove(member: any) {
     success: async (res) => {
       if (res.confirm) {
         await removeMember(member.user_id)
-        load()
+        await loadFamily()
       }
     }
   })
@@ -114,15 +169,48 @@ async function remove(member: any) {
 function goToInvite() {
   uni.navigateTo({ url: '/pages/family/invite' })
 }
-
-onShow(() => load())
 </script>
 
 <style lang="scss" scoped>
-.page {
-  min-height: 100vh;
-  background: var(--bg);
-  padding-bottom: 100px;
+/* 犬舍信息卡 */
+.info-card {
+  margin: 0 var(--space-page) 16px;
+  background: var(--card);
+  border-radius: var(--radius-card);
+  padding: 4px 16px;
+  box-shadow: var(--shadow);
+}
+
+/* 区域头部 */
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px var(--space-page) 10px;
+
+  &__title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-2);
+    letter-spacing: 0.5px;
+  }
+
+  &__count {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--primary);
+    background: var(--primary-soft);
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+}
+
+/* 提示文字 */
+.hint-text {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-3);
+  padding: 0 var(--space-page);
 }
 
 /* 成员列表 */
@@ -163,7 +251,7 @@ onShow(() => load())
   flex-shrink: 0;
 
   &--creator {
-    background: linear-gradient(135deg, #ea3e77, #e89b3e);
+    background: linear-gradient(135deg, var(--primary), var(--amber));
   }
 
   &--admin {
@@ -217,38 +305,6 @@ onShow(() => load())
       color: var(--red);
       background: var(--red-soft);
     }
-  }
-}
-
-/* 底部邀请按钮 */
-.footer {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: 12px var(--space-page);
-  padding-bottom: calc(12px + env(safe-area-inset-bottom));
-  background: var(--bg);
-}
-
-.invite-btn {
-  width: 100%;
-  height: 50px;
-  border-radius: var(--radius-btn);
-  background: var(--primary);
-  color: #fff;
-  font-family: var(--font-display);
-  font-size: 15px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: var(--shadow-fab);
-  transition: all 0.12s ease;
-
-  &:active {
-    transform: scale(0.94);
-    opacity: 0.85;
   }
 }
 </style>

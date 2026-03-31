@@ -6,29 +6,69 @@
     </view>
 
     <!-- 个人信息卡片 -->
-    <view class="profile-card">
+    <view :class="['profile-card', { 'profile-card--inactive': isInitialized && !hasFamily }]">
       <view class="profile-info">
         <view class="profile-avatar">
-          <text class="material-icons-round" style="color: #fff; font-size: 32px;">person</text>
+          <text class="material-icons-round" style="color: #fff; font-size: 28px;">person</text>
         </view>
-        <view>
-          <text class="profile-name">{{ userName || '未登录' }}</text>
-          <text v-if="roleLabel" class="profile-role">{{ roleLabel }}</text>
-        </view>
-      </view>
-      <view class="profile-family" v-if="familyName">
-        <view>
-          <text class="profile-family__label">犬舍名称</text>
-          <view class="profile-family__row">
-            <text class="profile-family__name">{{ familyName }}</text>
+        <view v-if="isInitialized" class="profile-info__body">
+          <text class="profile-name">{{ hasFamily ? familyName : '未创建家庭' }}</text>
+          <view class="profile-sub">
+            <text v-if="hasFamily" class="profile-nickname">{{ userName }}</text>
+            <text v-if="roleLabel" class="profile-role">{{ roleLabel }}</text>
           </view>
         </view>
-        <text class="material-icons-round" style="font-size: 20px; color: var(--text-3);" @click="goTo('/pages/family/edit')">edit</text>
+        <text v-if="hasFamily" class="material-icons-round profile-edit-icon" @click="editNickname">edit</text>
+      </view>
+      <!-- 数据摘要 -->
+      <view v-if="hasFamily" class="profile-stats">
+        <view class="profile-stats__item">
+          <text class="profile-stats__value">{{ stats.dogCount }}</text>
+          <text class="profile-stats__label">总犬数</text>
+        </view>
+        <view class="profile-stats__divider" />
+        <view class="profile-stats__item">
+          <text class="profile-stats__value">{{ stats.pregnantLitters }}</text>
+          <text class="profile-stats__label">在孕窝数</text>
+        </view>
+        <view class="profile-stats__divider" />
+        <view class="profile-stats__item">
+          <text class="profile-stats__value">{{ monthlyIncomeLabel }}</text>
+          <text class="profile-stats__label">本月收入</text>
+        </view>
       </view>
     </view>
 
-    <!-- 犬舍管理 -->
-    <view class="menu-section">
+    <!-- 未创建家庭时的引导 -->
+    <view v-if="isInitialized && !hasFamily" class="menu-section">
+      <view class="no-family-card">
+        <view class="no-family-card__icon">
+          <text class="material-icons-round" style="font-size: 32px; color: var(--primary);">pets</text>
+        </view>
+        <text class="no-family-card__title">开始管理你的犬舍</text>
+        <text class="no-family-card__desc">创建或加入家庭后即可使用全部功能</text>
+        <view class="no-family-card__actions">
+          <button class="no-family-card__btn" @click="goTo('/pages/family/setup')">创建家庭</button>
+          <button class="no-family-card__btn no-family-card__btn--outline" @click="goTo('/pages/family/join')">加入家庭</button>
+        </view>
+      </view>
+
+      <view class="menu-group" style="margin-top: 16px;">
+        <view class="menu-item" @click="goTo('/pages/profile/about')">
+          <text class="material-icons-round mi-icon">info</text>
+          <text class="mi-label">关于</text>
+          <text class="material-icons-round mi-arrow">chevron_right</text>
+        </view>
+        <view class="menu-item" @click="doLogout">
+          <text class="material-icons-round mi-icon" style="color: var(--red);">logout</text>
+          <text class="mi-label mi-label--red">退出登录</text>
+          <text class="material-icons-round mi-arrow">chevron_right</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 已有家庭时的完整菜单 -->
+    <view v-else class="menu-section">
       <text class="menu-group-label">犬舍管理</text>
       <view class="menu-group">
         <view class="menu-item" @click="goTo('/pages/family/members')">
@@ -86,6 +126,11 @@
           <text class="mi-label">回收站</text>
           <text class="material-icons-round mi-arrow">chevron_right</text>
         </view>
+        <view class="menu-item" @click="goTo('/pages/profile/operation-log')">
+          <text class="material-icons-round mi-icon">history</text>
+          <text class="mi-label">操作日志</text>
+          <text class="material-icons-round mi-arrow">chevron_right</text>
+        </view>
       </view>
 
       <!-- 其他 -->
@@ -104,24 +149,90 @@
       </view>
     </view>
 
+    <!-- 修改昵称弹窗 -->
+    <BModal
+      v-model:visible="showNicknameModal"
+      title="修改昵称"
+      @confirm="onNicknameConfirm"
+    >
+      <view class="custom-input-wrap">
+        <input v-model="nicknameInput" class="custom-input" placeholder="请输入昵称" />
+      </view>
+    </BModal>
+
     <!-- 底部导航栏 -->
     <BNavBar current="profile" />
   </view>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, reactive, computed } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import { useAuth } from '@/composables/useAuth'
+import { useCloudCall } from '@/composables/useCloudCall'
 import BNavBar from '@/components/layout/BNavBar.vue'
+import BModal from '@/components/layout/BModal.vue'
 
-const { currentFamily, userRole, logout } = useAuth()
+const { currentFamily, currentUser, userRole, isInitialized, logout, loadFamily } = useAuth()
 
+const hasFamily = computed(() => !!currentFamily.value)
 const familyName = computed(() => currentFamily.value?.name || '')
-const userName = computed(() => currentFamily.value?.creator_name || familyName.value || '未创建家庭')
+const userName = computed(() => {
+  const uid = currentUser.value?.uid
+  if (!uid || !currentFamily.value) return '未创建家庭'
+  const member = currentFamily.value.members.find(m => m.user_id === uid)
+  return member?.nickname || familyName.value || '未创建家庭'
+})
 const roleLabel = computed(() => {
   const map: Record<string, string> = { creator: '创建者', admin: '管理员', helper: '协助者' }
   return map[userRole.value || ''] || ''
 })
+
+// 数据摘要
+const stats = reactive({ dogCount: 0, pregnantLitters: 0, monthlyIncome: 0 })
+const monthlyIncomeLabel = computed(() => {
+  const v = stats.monthlyIncome
+  if (v >= 10000) return `¥${(v / 10000).toFixed(1)}w`
+  return `¥${v}`
+})
+
+const { run: fetchDogs } = useCloudCall<{ data: any[] }>('dog-service', 'getDogListWithStatus')
+const { run: fetchLitters } = useCloudCall<{ data: any[] }>('breeding-service', 'getActiveLitters')
+const { run: fetchFinance } = useCloudCall<{ data: any }>('finance-service', 'getFinancialSummary')
+
+async function loadStats() {
+  if (!hasFamily.value) return
+  const [dogRes, litterRes, finRes] = await Promise.all([
+    fetchDogs({}).catch(() => null),
+    fetchLitters().catch(() => null),
+    fetchFinance('month').catch(() => null),
+  ])
+  stats.dogCount = dogRes?.data?.length || 0
+  stats.pregnantLitters = litterRes?.data?.filter((l: any) => !l.weaning_date)?.length || 0
+  stats.monthlyIncome = finRes?.data?.totalIncome || 0
+}
+
+onShow(() => loadStats())
+
+const { run: doUpdateNickname } = useCloudCall('family-service', 'updateNickname', { successMessage: '昵称已更新' })
+
+// 昵称编辑
+const showNicknameModal = ref(false)
+const nicknameInput = ref('')
+
+function editNickname() {
+  const uid = currentUser.value?.uid
+  const member = currentFamily.value?.members.find(m => m.user_id === uid)
+  nicknameInput.value = member?.nickname || ''
+  showNicknameModal.value = true
+}
+
+async function onNicknameConfirm() {
+  if (nicknameInput.value.trim()) {
+    await doUpdateNickname(nicknameInput.value.trim())
+    await loadFamily()
+  }
+}
 
 function goTo(url: string) {
   uni.navigateTo({ url })
@@ -161,73 +272,111 @@ function doLogout() {
 /* ==================== PROFILE CARD ==================== */
 .profile-card {
   margin: 16px 16px 0;
-  background: var(--card);
+  background: linear-gradient(135deg, #c42d62 0%, #e85d7a 100%);
   border-radius: var(--radius-card);
   padding: 20px;
-  box-shadow: var(--shadow);
+  box-shadow: 0 6px 24px rgba(196, 45, 98, 0.25);
+
+  &--inactive {
+    background: linear-gradient(135deg, #d4889e 0%, #e8a7b8 100%);
+    box-shadow: 0 4px 16px rgba(234, 62, 119, 0.12);
+  }
 }
 
 .profile-info {
   display: flex;
   align-items: center;
   gap: 14px;
+
+  &__body {
+    flex: 1;
+    min-width: 0;
+  }
 }
 
 .profile-avatar {
-  width: 64px;
-  height: 64px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--primary), var(--amber));
+  background: rgba(255, 255, 255, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.4);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
 
+.profile-edit-icon {
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.6);
+  padding: 6px;
+  flex-shrink: 0;
+}
+
 .profile-name {
   font-family: var(--font-display);
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 800;
-  color: var(--text-1);
+  color: #fff;
   display: block;
+  letter-spacing: 0.5px;
+}
+
+.profile-sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 5px;
+}
+
+.profile-nickname {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .profile-role {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--primary);
-  background: var(--primary-soft);
-  padding: 2px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 2px 8px;
   border-radius: var(--radius-tag);
-  display: inline-block;
-  margin-top: 4px;
 }
 
-.profile-family {
+/* ==================== PROFILE STATS ==================== */
+.profile-stats {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-top: 16px;
+  margin-top: 18px;
   padding-top: 16px;
-  border-top: 1px solid var(--card-dim);
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
 
-  &__label {
-    font-size: 12px;
-    color: var(--text-3);
+  &__item {
+    flex: 1;
+    text-align: center;
+  }
+
+  &__value {
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight: 800;
+    color: #fff;
     display: block;
   }
 
-  &__row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+  &__label {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.6);
     margin-top: 2px;
+    display: block;
   }
 
-  &__name {
-    font-size: 15px;
-    font-weight: 700;
-    color: var(--text-1);
+  &__divider {
+    width: 1px;
+    height: 28px;
+    background: rgba(255, 255, 255, 0.15);
+    flex-shrink: 0;
   }
 }
 
@@ -291,5 +440,68 @@ function doLogout() {
   font-family: 'Material Icons Round';
   font-size: 18px;
   color: var(--text-4);
+}
+
+/* ==================== NO FAMILY CARD ==================== */
+.no-family-card {
+  background: var(--card);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow);
+  padding: 32px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+
+  &__icon {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: var(--primary-soft);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 16px;
+  }
+
+  &__title {
+    font-family: var(--font-display);
+    font-size: 17px;
+    font-weight: 800;
+    color: var(--text-1);
+    display: block;
+  }
+
+  &__desc {
+    font-size: 13px;
+    color: var(--text-3);
+    margin-top: 6px;
+    display: block;
+  }
+
+  &__actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 20px;
+  }
+
+  &__btn {
+    height: 42px;
+    padding: 0 28px;
+    border-radius: var(--radius-btn);
+    font-size: 14px;
+    font-weight: 700;
+    border: none;
+    color: #fff;
+    background: var(--primary);
+    box-shadow: 0 2px 8px rgba(234, 62, 119, 0.2);
+
+    &--outline {
+      background: transparent;
+      color: var(--primary);
+      border: 1.5px solid var(--primary);
+      box-shadow: none;
+    }
+  }
 }
 </style>

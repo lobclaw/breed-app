@@ -3,7 +3,7 @@
   将同类型任务聚合，支持批量勾选完成
 -->
 <template>
-  <view class="batch-page">
+  <view class="page">
     <BPageHeader title="批量处理" />
 
     <!-- 加载骨架屏 -->
@@ -61,26 +61,79 @@
           </view>
         </view>
       </view>
+
+      <!-- 录入信息 -->
+      <view class="form-body" v-if="taskGroups.length > 0">
+        <!-- 疫苗类型（仅 vaccination） -->
+        <view v-if="passedType === 'vaccination'" class="field-group">
+          <view class="field-label"><text>疫苗类型</text></view>
+          <view class="pill-select">
+            <view v-for="vt in vaccineTypes" :key="vt" class="pill-select__item" :class="{'pill-select__item--active': formData.vaccine_type === vt}" @click="formData.vaccine_type = vt">
+              <text>{{ vt }}</text>
+            </view>
+          </view>
+        </view>
+
+        <!-- 驱虫药品（仅 deworming） -->
+        <view v-if="passedType === 'deworming'" class="field-group">
+          <view class="field-label"><text>驱虫药品</text></view>
+          <view class="pill-select">
+            <view v-for="drug in dewormDrugs" :key="drug" class="pill-select__item" :class="{'pill-select__item--active': formData.drug_name === drug}" @click="formData.drug_name = drug">
+              <text>{{ drug }}</text>
+            </view>
+          </view>
+        </view>
+
+        <!-- 驱虫类型（仅 deworming） -->
+        <view v-if="passedType === 'deworming'" class="field-group">
+          <view class="field-label"><text>驱虫类型</text></view>
+          <view class="pill-select">
+            <view v-for="dt in dewormingTypes" :key="dt.value" class="pill-select__item" :class="{'pill-select__item--active': formData.deworming_type === dt.value}" @click="formData.deworming_type = dt.value">
+              <text>{{ dt.label }}</text>
+            </view>
+          </view>
+        </view>
+
+        <!-- 日期 -->
+        <view class="field-group">
+          <view class="field-label"><text>日期</text></view>
+          <picker mode="date" :value="dateStr" @change="onDateChange">
+            <view class="form-input form-input--picker">
+              <text>{{ dateStr }}</text>
+              <text class="material-icons-round form-input__suffix">calendar_today</text>
+            </view>
+          </picker>
+        </view>
+
+        <!-- 费用（选填） -->
+        <view class="field-group">
+          <view class="field-label"><text>费用</text><text class="field-label__optional">（选填，自动均分）</text></view>
+          <view class="input-prefix-wrapper">
+            <text class="input-prefix">¥</text>
+            <input v-model="costInput" class="form-input form-input--prefixed" type="digit" placeholder="总费用，自动按勾选数量均分" />
+          </view>
+          <text v-if="costInput && selected.size > 0" class="helper-text">
+            每只均摊：¥{{ perDogCost }}
+          </text>
+        </view>
+      </view>
     </view>
 
     <!-- 底部固定操作栏 -->
-    <view v-if="!loading && taskGroups.length > 0" class="batch-page__bottom">
-      <view class="batch-page__bottom-inner">
-        <view
-          class="batch-page__complete-btn"
-          :class="{ 'batch-page__complete-btn--disabled': selected.size === 0 }"
-          @click="batchComplete"
-        >
-          <text class="material-icons-round batch-page__complete-icon">check_circle</text>
-          <text class="batch-page__complete-text">完成选中 ({{ selected.size }})</text>
-        </view>
-      </view>
+    <view v-if="!loading && taskGroups.length > 0" class="fixed-bottom">
+      <button
+        class="submit-btn"
+        :disabled="selected.size === 0"
+        @click="batchComplete"
+      >
+        确认完成 ({{ selected.size }}只)
+      </button>
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
@@ -106,10 +159,43 @@ interface TaskGroup {
 const loading = ref(true)
 const taskGroups = ref<TaskGroup[]>([])
 const selected = reactive(new Set<string>())
+let passedTaskIds: string[] = []
+let passedType = ''
 
-const { run: fetchBatchTasks } = useCloudCall<{ data: TaskGroup[] }>('reminder-service', 'getBatchTasks')
-const { run: completeTasks } = useCloudCall('reminder-service', 'batchComplete', {
-  successMessage: '批量完成成功',
+const formData = reactive({
+  vaccine_type: '',
+  drug_name: '',
+  deworming_type: 'internal',
+})
+const costInput = ref('')
+const formDate = ref(Date.now())
+
+const vaccineTypes = ['卫佳5', '卫佳8', '卫佳10', '狂犬']
+const dewormDrugs = ['拜宠清', '海乐妙', '犬心保']
+const dewormingTypes = [
+  { label: '内驱', value: 'internal' },
+  { label: '外驱', value: 'external' },
+  { label: '内外同驱', value: 'combo' },
+]
+
+const dateStr = computed(() => {
+  const d = new Date(formDate.value)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+})
+
+function onDateChange(e: any) {
+  formDate.value = new Date(e.detail.value + 'T00:00:00+08:00').getTime()
+}
+
+const perDogCost = computed(() => {
+  const total = parseFloat(costInput.value)
+  if (!total || selected.size === 0) return '0'
+  return (Math.round(total / selected.size * 100) / 100).toFixed(2)
+})
+
+const { run: fetchTasks } = useCloudCall<{ data: any[] }>('task-service', 'getTasksByIds')
+const { run: completeTasks } = useCloudCall('task-service', 'batchCompleteTask')
+const { run: addRecord } = useCloudCall('health-service', 'addHealthRecord', {
   showLoading: true,
   loadingText: '处理中...',
 })
@@ -139,42 +225,102 @@ function toggleItem(id: string) {
 
 async function batchComplete() {
   if (selected.size === 0) return
+
   const ids = Array.from(selected)
-  const res = await completeTasks({ taskIds: ids })
-  if (res) {
-    // 移除已完成的项
-    ids.forEach(id => selected.delete(id))
-    await loadData()
-    // 如果没有剩余任务，返回上一页
-    if (taskGroups.value.length === 0) {
-      uni.navigateBack()
+  const cost = costInput.value ? parseFloat(costInput.value) : null
+  const perCost = cost && selected.size > 0
+    ? Math.round(cost / selected.size * 100) / 100
+    : null
+
+  // 获取选中项的犬只信息
+  const selectedItems = taskGroups.value.flatMap(g => g.items).filter(item => ids.includes(item.id))
+
+  // 为每只选中的犬创建健康记录
+  for (const item of selectedItems) {
+    const details: Record<string, any> = {}
+    if (passedType === 'vaccination' && formData.vaccine_type) {
+      details.vaccine_type = formData.vaccine_type
     }
+    if (passedType === 'deworming') {
+      details.deworming_type = formData.deworming_type
+      if (formData.drug_name) details.drug_name = formData.drug_name
+    }
+
+    await addRecord({
+      type: passedType,
+      dog_id: item.dogId,
+      date: formDate.value,
+      cost: perCost,
+      notes: null,
+      details,
+    })
   }
+
+  // 标记任务完成
+  await completeTasks(ids)
+
+  // 更新 UI
+  taskGroups.value.forEach(g => {
+    g.items = g.items.filter(item => !ids.includes(item.id))
+  })
+  taskGroups.value = taskGroups.value.filter(g => g.items.length > 0)
+  ids.forEach(id => selected.delete(id))
+
+  uni.showToast({ title: `已完成 ${selectedItems.length} 条记录`, icon: 'success' })
+  if (taskGroups.value.length === 0) {
+    setTimeout(() => uni.navigateBack(), 1000)
+  }
+}
+
+const typeLabels: Record<string, { title: string; icon: string; color: string }> = {
+  vaccination: { title: '疫苗', icon: 'vaccines', color: 'blue' },
+  deworming: { title: '驱虫', icon: 'shield', color: 'teal' },
+  illness: { title: '疾病', icon: 'sick', color: 'plum' },
+  breeding_milestone: { title: '繁育', icon: 'favorite', color: 'rose' },
+  medication: { title: '用药', icon: 'medication', color: 'plum' },
 }
 
 async function loadData() {
   loading.value = true
   try {
-    const res = await fetchBatchTasks()
-    if (res?.data) {
-      taskGroups.value = res.data
+    if (passedTaskIds.length > 0) {
+      const res = await fetchTasks(passedTaskIds)
+      if (res?.data) {
+        const meta = typeLabels[passedType] || { title: passedType, icon: 'assignment', color: 'green' }
+        taskGroups.value = [{
+          type: passedType,
+          title: meta.title,
+          icon: meta.icon,
+          color: meta.color,
+          items: res.data.map((t: any) => ({
+            id: t._id,
+            dogId: t.dog_id,
+            dogName: t.dog_name || '未知',
+            detail: t.title || '',
+            taskType: t.type,
+          })),
+        }]
+        // 默认全选
+        taskGroups.value[0].items.forEach(item => selected.add(item.id))
+      }
     }
   } finally {
     loading.value = false
   }
 }
 
-onLoad(() => {
+onLoad((query) => {
+  passedType = query?.type || ''
+  passedTaskIds = query?.taskIds ? query.taskIds.split(',') : []
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  formDate.value = today.getTime()
   loadData()
 })
 </script>
 
 <style lang="scss" scoped>
-.batch-page {
-  min-height: 100vh;
-  background: var(--bg);
-  padding-bottom: 100px;
-}
+/* 使用全局 .page 类 */
 
 /* ---- 任务分组列表 ---- */
 .batch-page__body {
@@ -340,52 +486,6 @@ onLoad(() => {
   display: block;
 }
 
-/* ---- 底部固定操作栏 ---- */
-.batch-page__bottom {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: var(--card);
-  box-shadow: 0 -2px 12px rgba(234, 62, 119, 0.06);
-  z-index: 100;
-}
-
-.batch-page__bottom-inner {
-  padding: 12px var(--space-page) env(safe-area-inset-bottom, 20px);
-}
-
-.batch-page__complete-btn {
-  height: 50px;
-  border-radius: var(--radius-btn);
-  background: var(--primary);
-  box-shadow: var(--shadow-fab);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  transition: all 0.12s ease;
-
-  &:active {
-    transform: scale(0.94);
-    opacity: 0.85;
-  }
-
-  &--disabled {
-    opacity: 0.4;
-    pointer-events: none;
-  }
-}
-
-.batch-page__complete-icon {
-  font-size: 20px;
-  color: #fff;
-}
-
-.batch-page__complete-text {
-  font-family: var(--font-display);
-  font-size: 15px;
-  font-weight: 700;
-  color: #fff;
-}
+/* 使用全局 .form-body 类（flex + gap: 16px） */
+/* 使用全局 .fixed-bottom + .submit-btn 类 */
 </style>

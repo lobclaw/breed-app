@@ -77,7 +77,7 @@ iOS + Android（跨平台开发）
   "breed": "String",             // 品种
   "birth_date": "Number",          // timestamp 毫秒数
   "purchase_date": "Number",       // 选填，timestamp 毫秒数
-  "purchase_price": "Number",    // 选填，同步财务模块
+  "purchase_price": "Number",    // 选填，同步财务模块。有值时 createDog 自动创建 expense 记录（category=购入）
   "latest_weight": "Number",     // 缓存字段，单位：克（g），从体重记录同步最新值
   "family_id": "String",         // foreignKey → families
   "origin_litter_id": "String",  // 选填，幼崽创建时自动填入所属窝 ID，升级为种狗后继续保留。foreignKey → litters
@@ -457,7 +457,7 @@ disposition 变为已赠送时，填入 `disposition_date`（赠送日期）和 
     "end_date": "Number",               // 选填，timestamp 毫秒数，康复时填入
     "condition": "String",             // 病症：感冒/腹泻/皮肤病/犬瘟/细小等
     "severity": "String",              // 严重程度，选填
-    "treatment_status": "String"       // 治疗中 / 已康复 / 慢性管理
+    "treatment_status": "String"       // 观察中 / 治疗中 / 已康复 / 慢性管理
   }
 }
 ```
@@ -581,7 +581,8 @@ disposition 变为已赠送时，填入 `disposition_date`（赠送日期）和 
   ],
   "settings": {
     "default_weaning_days": "Number",    // 默认断奶龄（天），默认 45
-    "default_vaccine_interval": "Number", // 默认疫苗间隔（天），默认 21
+    "default_vaccine_interval_puppy": "Number",  // 幼犬疫苗间隔（天），默认 21
+    "default_vaccine_interval_adult": "Number",  // 成犬疫苗间隔（天），默认 365
     "default_deworming_interval_puppy": "Number", // 幼犬驱虫间隔（天），默认 14
     "default_deworming_interval_adult": "Number", // 成犬驱虫间隔（天），默认 90
     "morning_summary_time": "String",    // 晨间摘要推送时间，默认 "07:00"
@@ -634,3 +635,212 @@ disposition 变为已赠送时，填入 `disposition_date`（赠送日期）和 
 - 均不填 → 共用开销（如房租、狗粮、水电）
 
 **source_type=auto 的费用在财务模块中为只读**，修改需回到来源记录操作。
+
+**多犬费用处理：**
+
+- 通过 linked_dog_ids 数组关联多只犬
+- 不存储分摊金额，动态计算：total_amount / linked_dog_ids.length
+- 修改总额自动生效、增删关联犬自动生效
+- 不支持不均分——如需精确分配，录两笔
+
+**默认支出分类（可自定义增删改）：**
+
+食品、营养品、消耗品、日常用品、固定开销、交通、医疗、配种费、其他
+
+**繁育记录费用自动同步：**
+
+繁育流程中录入费用时（配种费、孕检费、生产费等），系统自动创建 Expense 记录：
+
+- source_type = 'auto'
+- linked_cycle_id = 对应周期
+- 用户无需手动操作
+- 财务页面可见所有费用，不会遗漏
+- **自动创建的记录（source_type=auto）在财务模块 UI 中为只读**，需要在来源模块修改
+
+---
+
+### 2.9 收入记录（incomes 集合）
+
+所有收入统一记录在 incomes 集合中，SaleRecord 不再参与财务计算。
+
+```json
+{
+  "_id": "ObjectId",
+  "dog_id": "String",           // foreignKey → dogs（选填）
+  "dog_name": "String",         // 冗余字段
+  "type": "String",             // 销售 / 定金保留 / 领养 / 退款 / 其他
+  "amount": "Number",           // 金额，退款为负数
+  "date": "Number",             // timestamp 毫秒数
+  "source_sale_id": "String",   // 选填，来源销售记录，foreignKey → sale_records
+  "notes": "String",
+  "family_id": "String",        // foreignKey → families
+  "created_by": "String",       // foreignKey → users
+  "deleted_at": "Number | null",    // timestamp 毫秒数，默认 null
+  "created_at": "Number",          // timestamp 毫秒数，forceDefaultValue: $env.now
+  "updated_at": "Number"           // timestamp 毫秒数
+}
+```
+
+#### 自动生成 Income 的触发规则
+
+| 触发事件 | 云对象操作 |
+|---------|-----------|
+| SaleRecord 进入「已成交」 | 创建 Income(type=销售, amount=received_amount) |
+| SaleRecord 退款 | 创建 Income(type=退款, amount=-refund_amount) |
+| SaleRecord 定金取消（保留） | 创建 Income(type=定金保留, amount=deposit_kept_amount) |
+| 犬只领养（有费用） | 创建 Income(type=领养, amount=领养费) |
+| SaleRecord 编辑 received_amount | 更新对应 Income.amount |
+| SaleRecord 编辑 deposit_kept_amount | 更新对应 Income.amount |
+| SaleRecord 编辑 refund_amount | 更新对应 Income.amount |
+
+**财务页面展示统一流水时：** 查询 incomes 表（收入，红色）+ Expense 表（支出，绿色），按日期合并排序。中式记账：红色=进账/吉利，绿色=出账。
+
+---
+
+### 2.10 销售记录（sale_records 集合）
+
+```json
+{
+  "_id": "ObjectId",
+  "dog_id": "String",           // foreignKey → dogs
+  "dog_name": "String",         // 冗余字段，用于列表展示避免联表查询
+  "status": "String",           // 待售/已预定/已成交/已退款/定金取消
+  "floor_price": "Number",      // 底价
+  "deposit_amount": "Number",   // 定金金额，选填
+  "deposit_date": "Number",     // 定金日期，timestamp 毫秒数，选填
+  "agreed_price": "Number",     // 预定时谈好的价格，选填
+  "received_amount": "Number",  // 到手价，已成交时必填
+  "seller_agent_id": "String",  // foreignKey → agents（代理人，选填）
+  "platform": "String",         // 平台，选填
+  "date": "Number",             // 成交日期，timestamp 毫秒数，选填，已成交时必填
+  "delivery_date": "Number",    // 交付日期，timestamp 毫秒数，选填
+  "buyer_info": "String",       // 买家信息，选填
+  "refund_amount": "Number",    // 退款金额，选填
+  "refund_reason": "String",    // 退款原因，选填
+  "refund_date": "Number",      // 退款日期，timestamp 毫秒数，选填
+  "deposit_kept_amount": "Number", // 定金取消时保留的金额，选填
+  "notes": "String",
+  "created_by": "String",       // foreignKey → users
+  "deleted_at": "Number | null",    // timestamp 毫秒数，默认 null
+  "created_at": "Number",          // timestamp 毫秒数，forceDefaultValue: $env.now
+  "updated_at": "Number",          // timestamp 毫秒数
+  "family_id": "String"         // foreignKey → families
+}
+```
+
+#### 销售三阶段流程
+
+**阶段一「待售」：**
+
+- 设定底价
+
+**阶段二「已预定」：**
+
+- 定金金额（必填）
+- 定金日期
+- 买家信息（选填）
+- 成交价（选填——已谈好就填，没谈好先空着）
+- 到手价（选填）
+- 卖出人/代理人（选填）
+- 平台（选填）
+
+**阶段三「已成交」：**
+
+- 已预定阶段填过的字段自动带入，用户确认或修改
+- 到手价（必填，其余选填）
+- 交付日期
+- 完成后自动生成收入记录
+
+**收入统计规则：** 只有「已成交」的到手价才计入实际收入。已预定阶段填了价格的，在窝统计里可以展示预计收入（不计入实际利润）。
+
+**到手价 < 底价时，系统标红提示「低于底价」。**
+
+#### 平台预设选项
+
+按此顺序排列：线下、微信、小红书、抖音、快手、闲鱼
+
+支持用户自定义添加新平台。
+
+#### 退款处理
+
+在销售记录上增加「退款」操作，原始记录保留：
+
+- 全额退款：幼崽状态从「已售」回退为「待售」或「在养」，该笔收入归零
+- 部分退款：幼崽状态不变，实际收入 = 到手价 - 退款金额
+- 退款原因选填
+- 窝利润和种母投资回报自动重新计算
+
+#### 定金取消
+
+| 场景 | 处理 | 幼崽状态 |
+|------|------|---------|
+| 买家取消，定金不退（你留下） | 定金保留金额计为收入 | 回到「待售」 |
+| 买家取消，定金退还 | 无收入 | 回到「待售」 |
+| 买家取消，定金部分退还 | 实际保留金额计为收入 | 回到「待售」 |
+
+> **退款/定金取消后的 SaleRecord 为终态**，不可重新进入「已预定」或「已成交」。如需重新销售该犬，创建新的 SaleRecord。一只犬可以有多条 SaleRecord（历史记录）。
+
+#### 代理人/中间人管理
+
+**agents 集合**（独立集合，不嵌入其他文档）
+
+```json
+{
+  "_id": "ObjectId",
+  "name": "String",
+  "contact_info": "String",     // 联系方式，选填
+  "family_id": "String",        // foreignKey → families
+  "deleted_at": "Number | null",    // timestamp 毫秒数，默认 null
+  "created_at": "Number",          // timestamp 毫秒数，forceDefaultValue: $env.now
+  "updated_at": "Number"           // timestamp 毫秒数
+}
+```
+
+- 简单联系人列表
+- SaleRecord.seller_agent_id 关联代理人
+- 代理人详情页展示：经手中的交易、待收款汇总、历史已完成交易
+- 代理人列表同时作为销售记录「卖出人」字段的预设选项
+- 入口：销售记录的「卖出人」字段中管理，或「我的」页面「合作代理人」入口
+
+---
+
+### 2.11 统计报表
+
+> **所有统计数据均通过 MongoDB 聚合管道（aggregation pipeline）实时计算，不做预计算存储。** 在 30-50 只犬的规模下，聚合查询为毫秒级响应。不在 litter 或 dog 文档上存储 stats 字段。
+
+**第一层：单窝利润**
+
+```
+收入 = sum(incomes.amount where dog_id in 该窝幼崽)
+支出 = linked_cycle_id=该窝周期的Expense（繁育过程费用）
+     + linked_litter_id=该窝的Expense（窝级别费用）
+     + 该窝各幼崽通过linked_dog_ids关联的Expense（幼崽个体费用）
+净利润 = 收入 - 支出
+```
+
+**第二层：单只种母投资回报**
+
+```
+sum(incomes.amount for puppies across all litters of this dam)
+- 买入价格（purchase_price）
+- 所有窝总支出
+- 该犬通过linked_dog_ids关联的个体费用（疫苗/驱虫/医疗）
+= 该种母累计净收益
+```
+
+**第三层：月度/年度总账**
+
+```
+月度净利润 = sum(incomes.amount) - sum(expenses.total_amount)
+```
+
+**第四层：未来预估**
+
+- 系统综合以下信息给出建议值：
+  - 历史数据（每只种母平均多久一窝）
+  - 当前在役种母数量
+  - 年轻犬只是否到达可繁育年龄（根据历史平均首次配种年龄推算，有发情记录的更精准）
+- 用户可手动修改所有预估参数
+- 依赖数据积累，V1先做好数据录入和前三层统计，预估功能在数据积累后开启
+
+**每只幼崽均摊成本：** 窝直接成本 / 存活幼崽数 = 平均每只成本。定价参考。存活幼崽数为 0 时不计算均摊（显示「无存活幼崽」），窝成本全部归入种母投资回报。

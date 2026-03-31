@@ -23,10 +23,10 @@
           <text class="pill-label">今日</text>
           <text class="pill-num">{{ counts.today }}</text>
         </view>
-        <view class="pill pill-dim" @click="scrollToSection('upcoming')">
+        <view class="pill pill-dim">
           <view class="pill-dot" style="background: var(--text-3);" />
           <text class="pill-label">本周</text>
-          <text class="pill-num">{{ counts.upcoming }}</text>
+          <text class="pill-num">{{ weekCount }}</text>
         </view>
       </view>
     </view>
@@ -41,128 +41,84 @@
 
     <!-- 智能卡片区 -->
     <scroll-view scroll-y class="card-area" :scroll-into-view="scrollTarget">
-      <!-- 逾期 -->
-      <view v-if="overdueCards.length > 0" id="section-overdue">
-        <view class="section-label">
-          <view class="section-dot" style="background: var(--red);" />
-          <text class="section-text">需立即处理</text>
-          <view class="section-badge"><text class="section-badge-text">{{ counts.overdue }}</text></view>
+      <!-- ===== 今日模式：三区 ===== -->
+      <template v-if="viewMode === 'today'">
+        <!-- 逾期 -->
+        <view v-if="overdueCards.length > 0" id="section-overdue">
+          <view class="section-label">
+            <view class="section-dot" style="background: var(--red);" />
+            <text class="section-text">需立即处理</text>
+            <view class="section-badge"><text class="section-badge-text">{{ counts.overdue }}</text></view>
+          </view>
+          <view class="card-feed">
+            <SmartCard
+              v-for="card in overdueCards" :key="card.id" :card="card"
+              :completing="completingCards.has(card.id)"
+              @complete="onComplete" @postpone="onPostpone"
+              @batch-complete="onBatchComplete" @action="onAction"
+            />
+          </view>
         </view>
-        <view class="card-feed">
-          <SmartCard
-            v-for="card in overdueCards" :key="card.id" :card="card"
-            @complete="onComplete" @postpone="onPostpone"
-            @batch-complete="onBatchComplete" @action="onAction"
-          />
-        </view>
-      </view>
 
-      <!-- 今日 -->
-      <view v-if="todayCards.length > 0" id="section-today">
-        <view class="section-label">
-          <view class="section-dot" style="background: var(--amber);" />
-          <text class="section-text">今日任务</text>
-          <view class="section-badge"><text class="section-badge-text">{{ counts.today }}</text></view>
+        <!-- 今日 -->
+        <view v-if="todayCards.length > 0" id="section-today">
+          <view class="section-label">
+            <view class="section-dot" style="background: var(--amber);" />
+            <text class="section-text">今日任务</text>
+            <view class="section-badge"><text class="section-badge-text">{{ counts.today }}</text></view>
+          </view>
+          <view class="card-feed">
+            <SmartCard
+              v-for="card in todayCards" :key="card.id" :card="card"
+              @complete="onComplete" @postpone="onPostpone"
+              @batch-complete="onBatchComplete" @action="onAction"
+            />
+          </view>
         </view>
-        <view class="card-feed">
-          <SmartCard
-            v-for="card in todayCards" :key="card.id" :card="card"
-            @complete="onComplete" @postpone="onPostpone"
-            @batch-complete="onBatchComplete" @action="onAction"
-          />
-        </view>
-      </view>
 
-      <!-- 即将到来 -->
-      <view v-if="upcomingCards.length > 0" id="section-upcoming">
-        <view class="section-label">
-          <view class="section-dot" style="background: var(--green);" />
-          <text class="section-text">即将到来</text>
-          <view class="section-badge"><text class="section-badge-text">{{ counts.upcoming }}</text></view>
+        <!-- 空状态（今日模式） -->
+        <BEmpty
+          v-if="!loading && overdueCards.length === 0 && todayCards.length === 0"
+          icon="pets"
+          title="犬群一切正常"
+          description="暂无待办事项"
+        />
+      </template>
+
+      <!-- ===== 指定日期模式：单列 ===== -->
+      <template v-else>
+        <view v-if="dayCards.length > 0">
+          <view class="section-label">
+            <view class="section-dot" style="background: var(--blue);" />
+            <text class="section-text">{{ formatFullDate(selectedDate) }}</text>
+            <view class="section-badge"><text class="section-badge-text">{{ dayCards.length }}</text></view>
+          </view>
+          <view class="card-feed">
+            <SmartCard
+              v-for="card in dayCards" :key="card.id" :card="card"
+              @complete="onComplete" @postpone="onPostpone"
+              @batch-complete="onBatchComplete" @action="onAction"
+            />
+          </view>
         </view>
-        <view class="card-feed">
-          <SmartCard
-            v-for="card in upcomingCards" :key="card.id" :card="card"
-            @complete="onComplete" @postpone="onPostpone"
-            @batch-complete="onBatchComplete" @action="onAction"
-          />
-        </view>
-      </view>
+
+        <!-- 空状态（指定日期） -->
+        <BEmpty
+          v-if="!loading && dayCards.length === 0"
+          icon="event_available"
+          :title="formatFullDate(selectedDate)"
+          description="当天没有待办事项"
+        />
+      </template>
 
       <!-- 加载骨架屏 -->
       <view v-if="loading" class="card-feed">
         <BSkeleton :rows="3" />
       </view>
-
-      <!-- 空状态 -->
-      <BEmpty
-        v-if="!loading && overdueCards.length === 0 && todayCards.length === 0 && upcomingCards.length === 0"
-        icon="pets"
-        title="犬群一切正常"
-        description="暂无待办事项"
-      />
     </scroll-view>
 
     <!-- 底部导航栏 -->
-    <BNavBar current="home" @fab-click="showActionSheet = true" />
-
-    <!-- ==================== FAB Action Sheet (R-0) ==================== -->
-    <view v-if="showActionSheet" class="sheet-mask" @click.self="showActionSheet = false">
-      <view class="sheet-panel">
-        <view class="sheet-handle"><view class="sheet-bar" /></view>
-
-        <!-- 智能推荐区 -->
-        <text class="sheet-section-title">智能推荐</text>
-        <view class="rec-list">
-          <view
-            v-for="rec in smartRecommendations"
-            :key="rec.label"
-            class="rec-card"
-            @click="doAction(rec)"
-          >
-            <view class="rec-icon" :class="`rec-icon--${rec.iconColor}`">
-              <text class="material-icons-round">{{ rec.materialIcon }}</text>
-            </view>
-            <view class="rec-text">
-              <text class="rec-title">{{ rec.label }}</text>
-              <text class="rec-sub">{{ rec.sub }}</text>
-            </view>
-            <view class="rec-right">
-              <view v-if="rec.tag" class="rec-tag" :class="`rec-tag--${rec.tagColor}`">
-                <text class="rec-tag-text">{{ rec.tag }}</text>
-              </view>
-              <text class="material-icons-round rec-chevron">chevron_right</text>
-            </view>
-          </view>
-        </view>
-
-        <view class="sheet-separator" />
-
-        <!-- 常用录入（4 个快捷按钮） -->
-        <text class="sheet-section-title">常用录入</text>
-        <view class="quick-actions">
-          <view
-            v-for="qa in quickActionBtns"
-            :key="qa.label"
-            class="quick-action-btn"
-            @click="doAction(qa)"
-          >
-            <view class="qa-icon" :class="`qa-icon--${qa.iconColor}`">
-              <text class="material-icons-round">{{ qa.materialIcon }}</text>
-            </view>
-            <text class="qa-label">{{ qa.label }}</text>
-          </view>
-        </view>
-
-        <view class="sheet-separator" />
-
-        <!-- 全部记录类型 -->
-        <view class="sheet-footer-link" @click="goToAllRecords">
-          <text class="sheet-footer-link-text">全部记录类型</text>
-          <text class="material-icons-round" style="font-size: 16px; color: var(--primary);">arrow_forward</text>
-        </view>
-      </view>
-    </view>
+    <BNavBar current="home" />
 
     <!-- H-3: 快速完成任务 Sheet -->
     <BSheet v-model:visible="showQuickComplete" title="完成任务">
@@ -201,10 +157,18 @@
     <!-- H-4: 推迟任务 Sheet -->
     <BSheet v-model:visible="showPostponeModal" title="推迟任务">
       <view class="task-sheet">
+        <!-- 犬只信息 -->
+        <view v-if="postponeTaskInfo" class="postpone-info">
+          <text class="postpone-info__text">{{ postponeTaskInfo.title ? postponeTaskInfo.dogName + ' · ' + postponeTaskInfo.title : postponeTaskInfo.dogName }}</text>
+          <view v-if="postponeTaskInfo.isOverdue" class="postpone-info__tag">
+            <text>逾期{{ postponeTaskInfo.overdueDays }}天</text>
+          </view>
+        </view>
+
         <view class="task-sheet__field">
           <text class="task-sheet__label">推迟到</text>
           <picker mode="date" :value="postponeDateStr" @change="onPostponeDateChange">
-            <view class="task-sheet__picker">
+            <view class="form-input form-input--picker">
               <text>{{ postponeDateStr }}</text>
               <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
             </view>
@@ -221,16 +185,12 @@
             </view>
           </view>
         </view>
-        <view class="task-sheet__field">
-          <text class="task-sheet__label">原因（选填）</text>
-          <input v-model="postponeReason" class="task-sheet__input" placeholder="选填..." />
-        </view>
         <view class="task-sheet__actions">
-          <view class="task-sheet__btn task-sheet__btn--cancel" @click="showPostponeModal = false">
-            <text style="color: var(--text-2); font-size: 14px; font-weight: 600;">取消</text>
-          </view>
           <view class="task-sheet__btn task-sheet__btn--confirm" @click="doPostpone">
             <text style="color: #fff; font-size: 14px; font-weight: 600;">确认推迟</text>
+          </view>
+          <view class="task-sheet__btn task-sheet__btn--cancel" @click="showPostponeModal = false">
+            <text style="color: var(--text-2); font-size: 14px; font-weight: 600;">取消</text>
           </view>
         </view>
       </view>
@@ -297,70 +257,36 @@ import BEmpty from '@/components/feedback/BEmpty.vue'
 import BNavBar from '@/components/layout/BNavBar.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import BIconBox from '@/components/base/BIconBox.vue'
+import { useTaskStore } from '@/stores/taskStore'
 
 const { hasFamily, loadFamily } = useAuth()
+const taskStore = useTaskStore()
 
-const showActionSheet = ref(false)
-
-// 智能推荐（基于上下文的 3 条推荐）
-const smartRecommendations = [
-  {
-    materialIcon: 'vaccines',
-    iconColor: 'blue',
-    label: '豆豆第3窝 · 第二针疫苗',
-    sub: '今日待办 · 点击直接录入',
-    tag: '待办',
-    tagColor: 'amber',
-    url: '/pages/record/health',
-  },
-  {
-    materialIcon: 'payments',
-    iconColor: 'green',
-    label: '支出录入',
-    sub: '最近常用',
-    tag: '常用',
-    tagColor: 'dim',
-    url: '/pages/finance/expense-add',
-  },
-  {
-    materialIcon: 'monitor_weight',
-    iconColor: 'teal',
-    label: '花花第3窝 · 记录体重',
-    sub: '上次记录 3 天前',
-    tag: '建议',
-    tagColor: 'green',
-    url: '/pages/record/health',
-  },
-]
-
-// 常用录入快捷按钮（4 个）
-const quickActionBtns = [
-  { materialIcon: 'payments', iconColor: 'green', label: '支出', url: '/pages/finance/expense-add' },
-  { materialIcon: 'vaccines', iconColor: 'blue', label: '疫苗', url: '/pages/record/health' },
-  { materialIcon: 'shield', iconColor: 'teal', label: '驱虫', url: '/pages/record/health' },
-  { materialIcon: 'monitor_weight', iconColor: 'teal', label: '体重', url: '/pages/record/health' },
-]
-
-function doAction(action: { url: string }) {
-  showActionSheet.value = false
-  uni.navigateTo({ url: action.url })
-}
-
-function goToAllRecords() {
-  showActionSheet.value = false
-  uni.navigateTo({ url: '/pages/record/index' })
-}
-
-const overdueCards = ref<any[]>([])
-const todayCards = ref<any[]>([])
-const upcomingCards = ref<any[]>([])
-const counts = reactive({ overdue: 0, today: 0, upcoming: 0 })
-const loading = ref(true)
+// stale-while-revalidate：先用 taskStore 缓存渲染，后台刷新
+const overdueCards = ref<any[]>(taskStore.overdueCards)
+const todayCards = ref<any[]>(taskStore.todayCards)
+const counts = reactive({ overdue: taskStore.counts.overdue || 0, today: taskStore.counts.today || 0 })
+const dayCards = ref<any[]>([])
+const viewMode = ref<'today' | 'date'>('today')
+const hasCachedData = overdueCards.value.length + todayCards.value.length > 0
+const loading = ref(!hasCachedData)
 const scrollTarget = ref('')
 const dayCounts = ref<Record<number, number>>({})
 
 // 选中日期（0点 timestamp）
 const selectedDate = ref(startOfDay(Date.now()))
+const isSelectedToday = computed(() => selectedDate.value === startOfDay(Date.now()))
+
+// 本周任务数：从 dayCounts 中汇总未来 7 天（不含今天，避免和"今日"重复）
+const weekCount = computed(() => {
+  const todayTs = startOfDay(Date.now())
+  const DAY = 86400000
+  let total = 0
+  for (let i = 1; i <= 7; i++) {
+    total += dayCounts.value[todayTs + i * DAY] || 0
+  }
+  return total
+})
 
 // H-3: 快速完成
 const showQuickComplete = ref(false)
@@ -379,9 +305,8 @@ function onQuickCompleteDateChange(e: any) {
 
 // H-4: 推迟弹窗
 const showPostponeModal = ref(false)
-const postponeTaskId = ref('')
+const postponeTaskId = ref<string | string[]>('')
 const postponeDate = ref(Date.now() + 86400000)
-const postponeReason = ref('')
 const postponeQuick = ref('tomorrow')
 
 const postponeDateStr = computed(() => {
@@ -451,66 +376,182 @@ function formatFullDate(ts: number) {
 
 const { run: fetchCards } = useCloudCall<{ data: any }>('task-service', 'getHomeCards')
 const { run: fetchDateCounts } = useCloudCall<{ data: any }>('task-service', 'getDateCounts')
-const { run: doCompleteTask } = useCloudCall('task-service', 'completeTask', { successMessage: '已完成' })
+const { run: fetchWeekCards } = useCloudCall<{ data: any }>('task-service', 'getWeekCards')
+const { run: doCompleteTask } = useCloudCall('task-service', 'completeTask')
 const { run: doPostponeTask } = useCloudCall('task-service', 'postponeTask')
-const { run: doBatchComplete } = useCloudCall('task-service', 'batchCompleteTask', { successMessage: '已完成' })
+const { run: doBatchComplete } = useCloudCall('task-service', 'batchCompleteTask')
+
+// 7天卡片缓存：{ [dayTimestamp]: Card[] }
+const weekCache = ref<Record<number, any[]>>({})
 
 function scrollToSection(section: string) {
   scrollTarget.value = `section-${section}`
 }
 
-async function loadCards() {
-  loading.value = true
-  const result = await fetchCards(selectedDate.value)
+/** 加载今日模式（逾期 + 今日） */
+async function loadTodayCards() {
+  const hasData = overdueCards.value.length + todayCards.value.length > 0
+  if (!hasData) loading.value = true
+
+  const result = await fetchCards()
   if (result?.data) {
     overdueCards.value = result.data.overdue || []
     todayCards.value = result.data.today || []
-    upcomingCards.value = result.data.upcoming || []
     counts.overdue = result.data.counts?.overdue || 0
     counts.today = result.data.counts?.today || 0
-    counts.upcoming = result.data.counts?.upcoming || 0
+    // 同步到 taskStore
+    taskStore.overdueCards = overdueCards.value
+    taskStore.todayCards = todayCards.value
+    taskStore.counts = { overdue: counts.overdue, today: counts.today }
+    taskStore.loaded = true
   }
   loading.value = false
 }
 
+/** 一次性加载 7 天卡片缓存 */
+async function loadWeekCache() {
+  const DAY_MS = 86400000
+  const todayTs = startOfDay(Date.now())
+  const start = todayTs - 3 * DAY_MS
+  const end = todayTs + 3 * DAY_MS + DAY_MS - 1
+  const result = await fetchWeekCards(start, end)
+  if (result?.data) {
+    // 后端返回的 key 是字符串，转为 number
+    const cache: Record<number, any[]> = {}
+    for (const [k, v] of Object.entries(result.data)) {
+      cache[Number(k)] = v as any[]
+    }
+    weekCache.value = cache
+  }
+}
+
 async function loadDateCounts() {
   const DAY_MS = 86400000
-  const start = startOfDay(Date.now()) - 2 * DAY_MS
-  const end = start + 14 * DAY_MS
+  const start = startOfDay(Date.now()) - 3 * DAY_MS
+  const end = startOfDay(Date.now()) + 8 * DAY_MS - 1 // 覆盖前3天 + 今天 + 后7天
   const result = await fetchDateCounts(start, end)
   if (result?.data) {
     dayCounts.value = result.data
   }
 }
 
-async function onDateSelect(ts: number) {
+function onDateSelect(ts: number) {
   selectedDate.value = ts
-  await loadCards()
+  const todayTs = startOfDay(Date.now())
+  if (ts === todayTs) {
+    // 切回今天：显示今日模式
+    viewMode.value = 'today'
+    dayCards.value = []
+  } else {
+    // 其他日期：从缓存读取，零延迟
+    viewMode.value = 'date'
+    dayCards.value = weekCache.value[ts] || []
+  }
 }
 
 function toggleCalendar() {
-  // 月历展开功能后续迭代
+  uni.showToast({ title: '月历功能后续迭代', icon: 'none' })
 }
 
-async function onComplete(taskId: string, card?: any) {
-  // 如果卡片有信息，打开快速完成 Sheet (H-3)
+// 乐观更新：标记正在消失的卡片
+const completingCards = ref(new Set<string>())
+
+function removeCardLocally(taskId: string) {
+  const lists = [overdueCards, todayCards, dayCards]
+  for (const list of lists) {
+    const idx = list.value.findIndex(c => c.tasks?.some((t: any) => t._id === taskId) || c.id === taskId)
+    if (idx < 0) continue
+    const card = list.value[idx]
+    const remainingTasks = card.tasks?.filter((t: any) => t._id !== taskId) || []
+    if (remainingTasks.length === 0) {
+      completingCards.value.add(card.id)
+      setTimeout(() => {
+        const currentIdx = list.value.findIndex(c => c.id === card.id)
+        if (currentIdx >= 0) list.value.splice(currentIdx, 1)
+        completingCards.value.delete(card.id)
+        if (card.priority === 'overdue') counts.overdue = Math.max(0, counts.overdue - 1)
+        else counts.today = Math.max(0, counts.today - 1)
+      }, 450)
+    } else {
+      card.tasks = remainingTasks
+    }
+    break
+  }
+  // 同步更新 weekCache
+  syncWeekCache(taskId)
+}
+
+/** 从 weekCache 中移除指定 task */
+function syncWeekCache(taskId: string) {
+  for (const [dayTs, cards] of Object.entries(weekCache.value)) {
+    const cardIdx = (cards as any[]).findIndex(c => c.tasks?.some((t: any) => t._id === taskId))
+    if (cardIdx < 0) continue
+    const card = (cards as any[])[cardIdx]
+    const remaining = card.tasks?.filter((t: any) => t._id !== taskId) || []
+    if (remaining.length === 0) {
+      (cards as any[]).splice(cardIdx, 1)
+    } else {
+      card.tasks = remaining
+    }
+    // 更新 dayCounts
+    const ts = Number(dayTs)
+    if (dayCounts.value[ts]) {
+      dayCounts.value[ts] = Math.max(0, dayCounts.value[ts] - 1)
+    }
+    break
+  }
+}
+
+async function onComplete(taskId: string, allDone?: boolean) {
+  if (allDone === true) {
+    // 批量卡片全部勾完 → 动画移除整张卡片
+    removeCardLocally(taskId)
+    doCompleteTask(taskId)
+    return
+  }
+  if (allDone === false) {
+    // 批量卡片部分勾选 → 只调接口，不移除卡片（本地 checkbox 已更新）
+    doCompleteTask(taskId)
+    return
+  }
+  // DogCard 的完成按钮 → 打开快速完成 Sheet (H-3)
+  const allCards = [...overdueCards.value, ...todayCards.value, ...dayCards.value]
+  const card = allCards.find(c => c.tasks?.some((t: any) => t._id === taskId))
   if (card) {
-    quickCompleteTask.value = card
+    const task = card.tasks?.find((t: any) => t._id === taskId)
+    quickCompleteTask.value = { ...task, dog_name: card.dogName }
     quickCompleteNotes.value = ''
     quickCompleteDate.value = startOfDay(Date.now())
     showQuickComplete.value = true
     return
   }
-  await doCompleteTask(taskId)
-  await loadCards()
-  await loadDateCounts()
+  // 兜底：直接完成
+  removeCardLocally(taskId)
+  doCompleteTask(taskId)
 }
 
-function onPostpone(taskId: string) {
-  postponeTaskId.value = taskId
+const postponeTaskInfo = ref<any>(null)
+
+function onPostpone(taskIds: string | string[], title?: string) {
+  postponeTaskId.value = taskIds
   postponeDate.value = Date.now() + 86400000
-  postponeReason.value = ''
   postponeQuick.value = 'tomorrow'
+
+  const firstId = Array.isArray(taskIds) ? taskIds[0] : taskIds
+  const allCards = [...overdueCards.value, ...todayCards.value, ...dayCards.value]
+  const card = allCards.find(c => c.tasks?.some((t: any) => t._id === firstId))
+  const task = card?.tasks?.find((t: any) => t._id === firstId)
+
+  // 批量推迟显示批量标题，单条显示犬名
+  const isBatch = Array.isArray(taskIds) && taskIds.length > 1
+  postponeTaskInfo.value = {
+    dogName: isBatch ? (title || card?.groupTitle || '') : (card?.dogName || task?.dog_name || ''),
+    title: isBatch ? '' : (task?.title || card?.groupTitle || ''),
+    isOverdue: card?.priority === 'overdue',
+    overdueDays: card?.priority === 'overdue' && task?.due_date
+      ? Math.ceil((Date.now() - task.due_date) / 86400000)
+      : 0,
+  }
   showPostponeModal.value = true
 }
 
@@ -520,10 +561,43 @@ function onPostponeDateChange(e: any) {
 }
 
 async function doPostpone() {
-  await doPostponeTask(postponeTaskId.value, postponeDate.value, postponeReason.value || null)
+  const taskIds = postponeTaskId.value
   showPostponeModal.value = false
-  await loadCards()
-  await loadDateCounts()
+
+  const ids = Array.isArray(taskIds) ? taskIds : [taskIds]
+
+  if (ids.length > 1) {
+    // 批量推迟：找到卡片直接整张移除
+    const lists = [overdueCards, todayCards, dayCards]
+    for (const list of lists) {
+      const idx = list.value.findIndex(c => c.tasks?.some((t: any) => ids.includes(t._id)))
+      if (idx >= 0) {
+        const card = list.value[idx]
+        completingCards.value.add(card.id)
+        setTimeout(() => {
+          const ci = list.value.findIndex(c => c.id === card.id)
+          if (ci >= 0) list.value.splice(ci, 1)
+          completingCards.value.delete(card.id)
+          if (card.priority === 'overdue') counts.overdue = Math.max(0, counts.overdue - 1)
+          else counts.today = Math.max(0, counts.today - 1)
+        }, 450)
+        // 同步 taskStore（用第一条 ID 定位整张卡片）
+        taskStore.removeCardByTaskId(ids[0])
+        break
+      }
+    }
+    // 同步 weekCache（只用第一条 ID 定位卡片，避免重复减计数）
+    syncWeekCache(ids[0])
+  } else {
+    // 单条推迟
+    removeCardLocally(ids[0])
+    syncWeekCache(ids[0])
+  }
+
+  // 后台静默调接口
+  for (const id of ids) {
+    doPostponeTask(id, postponeDate.value)
+  }
 }
 
 async function onBatchComplete(payload: any) {
@@ -532,7 +606,6 @@ async function onBatchComplete(payload: any) {
     batchCompleteTitle.value = payload.title || '批量完成'
     batchDogList.value = payload.dogs
     batchTaskIds = payload.taskIds || []
-    // 重置选择状态
     Object.keys(batchSelected).forEach(k => delete batchSelected[k])
     payload.dogs.forEach((d: any) => {
       if (!d.completed) batchSelected[d.id] = false
@@ -540,31 +613,56 @@ async function onBatchComplete(payload: any) {
     showBatchComplete.value = true
     return
   }
-  // 兼容旧数组方式
+  // 数组方式（BatchCard/MedicationCard 的"完成"按钮）— 用第一条 ID 移除整张卡片
   const taskIds = Array.isArray(payload) ? payload : []
-  await doBatchComplete(taskIds)
-  await loadCards()
-  await loadDateCounts()
+  if (taskIds.length > 0) {
+    removeCardLocally(taskIds[0])
+    syncWeekCache(taskIds[0])
+    taskStore.removeCardByTaskId(taskIds[0])
+  }
+  doBatchComplete(taskIds)
 }
+
+const { run: updateIllnessStatus } = useCloudCall('health-service', 'updateIllnessStatus')
 
 function onAction(payload: { type: string; data: any }) {
   if (payload.type === 'viewDog' && payload.data?.dogId) {
     uni.navigateTo({ url: `/pages/dog/detail?id=${payload.data.dogId}` })
+  } else if (payload.type === 'recover' && payload.data?.illnessId) {
+    // 标记康复
+    uni.showModal({
+      title: '确认康复',
+      content: `确定 ${payload.data.dogName} 已经康复了吗？`,
+      success: async (res) => {
+        if (res.confirm) {
+          await updateIllnessStatus(payload.data.illnessId, '已康复')
+          uni.showToast({ title: '已标记康复', icon: 'success' })
+          // 刷新首页
+          await Promise.all([loadTodayCards(), loadWeekCache(), loadDateCounts()])
+        }
+      },
+    })
+  } else if (payload.type === 'update_status' && payload.data?.illnessId) {
+    // 更新治疗状态
+    updateIllnessStatus(payload.data.illnessId, payload.data.status).then(() => {
+      uni.showToast({ title: '已更新', icon: 'success' })
+      Promise.all([loadTodayCards(), loadWeekCache(), loadDateCounts()])
+    })
   }
 }
 
 async function confirmQuickComplete() {
   if (!quickCompleteTask.value) return
-  await doCompleteTask(
-    quickCompleteTask.value._id || quickCompleteTask.value.id,
-    quickCompleteDate.value,
-    quickCompleteNotes.value || null,
-  )
+  const taskId = quickCompleteTask.value._id || quickCompleteTask.value.id
   showQuickComplete.value = false
+
+  // 乐观更新：立即触发消失动画
+  removeCardLocally(taskId)
+
+  // 后台静默调接口
+  doCompleteTask(taskId, quickCompleteDate.value, quickCompleteNotes.value || null)
   quickCompleteNotes.value = ''
   quickCompleteTask.value = null
-  await loadCards()
-  await loadDateCounts()
 }
 
 async function confirmBatchComplete() {
@@ -581,8 +679,7 @@ async function confirmBatchComplete() {
     : selectedIds
   await doBatchComplete(taskIdsToComplete)
   showBatchComplete.value = false
-  await loadCards()
-  await loadDateCounts()
+  await Promise.all([loadTodayCards(), loadWeekCache(), loadDateCounts()])
 }
 
 onShow(async () => {
@@ -596,8 +693,10 @@ onShow(async () => {
     return
   }
   selectedDate.value = startOfDay(Date.now())
-  await loadCards()
-  await loadDateCounts()
+  viewMode.value = 'today'
+  dayCards.value = []
+  // 并行加载：今日卡片 + 周缓存 + 日期计数
+  await Promise.all([loadTodayCards(), loadWeekCache(), loadDateCounts()])
 })
 </script>
 
@@ -731,186 +830,6 @@ onShow(async () => {
   margin-bottom: 8px;
 }
 
-/* ==================== ACTION SHEET (R-0) ==================== */
-.sheet-mask {
-  position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: var(--mask);
-  z-index: 200;
-  display: flex;
-  align-items: flex-end;
-}
-.sheet-panel {
-  background: var(--card);
-  border-radius: 24px 24px 0 0;
-  width: 100%;
-  padding: 12px 20px 34px;
-  padding-bottom: env(safe-area-inset-bottom, 34px);
-  box-shadow: 0 -6px 30px rgba(234, 62, 119, 0.1);
-}
-.sheet-handle {
-  display: flex;
-  justify-content: center;
-  padding: 4px 0 12px;
-}
-.sheet-bar {
-  width: 36px;
-  height: 4px;
-  background: var(--text-4);
-  border-radius: 2px;
-}
-.sheet-section-title {
-  display: block;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-3);
-  letter-spacing: 0.5px;
-  margin-bottom: 10px;
-}
-.sheet-separator {
-  height: 0.5px;
-  background: var(--card-dim);
-  margin: 4px 0 16px;
-}
-
-/* ==================== RECOMMENDATION CARDS ==================== */
-.rec-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  margin-bottom: 20px;
-}
-.rec-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 0;
-  border-bottom: 0.5px solid var(--card-dim);
-  transition: background 0.12s ease;
-  &:last-child { border-bottom: none; }
-  &:active {
-    background: var(--bg);
-    border-radius: 12px;
-    margin: 0 -8px;
-    padding: 14px 8px;
-  }
-}
-.rec-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  .material-icons-round { font-size: 20px; }
-}
-.rec-icon--blue { background: var(--icon-blue); .material-icons-round { color: var(--blue); } }
-.rec-icon--green { background: var(--icon-green); .material-icons-round { color: var(--green); } }
-.rec-icon--teal { background: var(--icon-teal); .material-icons-round { color: var(--teal); } }
-.rec-icon--red { background: var(--icon-red); .material-icons-round { color: var(--red); } }
-.rec-icon--amber { background: var(--icon-amber); .material-icons-round { color: var(--amber); } }
-.rec-icon--rose { background: var(--icon-rose); .material-icons-round { color: var(--rose); } }
-.rec-icon--plum { background: var(--icon-plum); .material-icons-round { color: var(--plum); } }
-
-.rec-text {
-  flex: 1;
-  min-width: 0;
-}
-.rec-title {
-  display: block;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text-1);
-  line-height: 1.3;
-}
-.rec-sub {
-  display: block;
-  font-size: 12px;
-  color: var(--text-3);
-  margin-top: 2px;
-}
-.rec-right {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-.rec-tag {
-  padding: 3px 8px;
-  border-radius: var(--radius-tag);
-  white-space: nowrap;
-}
-.rec-tag-text {
-  font-size: 11px;
-  font-weight: 600;
-}
-.rec-tag--amber { background: var(--amber-soft); .rec-tag-text { color: var(--amber); } }
-.rec-tag--dim { background: var(--card-dim); .rec-tag-text { color: var(--text-3); } }
-.rec-tag--green { background: var(--green-soft); .rec-tag-text { color: var(--green); } }
-.rec-chevron {
-  color: var(--text-4);
-  font-size: 20px;
-  line-height: 1;
-}
-
-/* ==================== QUICK ACTION BUTTONS ==================== */
-.quick-actions {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 18px;
-}
-.quick-action-btn {
-  flex: 1;
-  height: 76px;
-  background: var(--card-dim);
-  border-radius: var(--radius-row);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  transition: transform 0.12s ease, filter 0.12s ease;
-  &:active { transform: scale(0.94); filter: brightness(0.95); }
-}
-.qa-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-icon);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  .material-icons-round { font-size: 18px; }
-}
-.qa-icon--green { background: var(--icon-green); .material-icons-round { color: var(--green); } }
-.qa-icon--blue { background: var(--icon-blue); .material-icons-round { color: var(--blue); } }
-.qa-icon--teal { background: var(--icon-teal); .material-icons-round { color: var(--teal); } }
-.qa-icon--amber { background: var(--icon-amber); .material-icons-round { color: var(--amber); } }
-.qa-icon--rose { background: var(--icon-rose); .material-icons-round { color: var(--rose); } }
-.qa-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-2);
-}
-
-/* ==================== FOOTER LINK ==================== */
-.sheet-footer-link {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 12px 0;
-  border: 1.5px solid var(--primary);
-  border-radius: var(--radius-btn);
-  transition: all 0.12s ease;
-  &:active { transform: scale(0.96); background: var(--primary-soft); }
-}
-.sheet-footer-link-text {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--primary);
-}
-
 /* ==================== TASK SHEETS (H-3, H-4, H-5) ==================== */
 .task-sheet {
   display: flex;
@@ -939,6 +858,33 @@ onShow(async () => {
   color: var(--text-2);
   margin-top: 2px;
 }
+/* ---- 推迟任务犬只信息 ---- */
+.postpone-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--card-dim);
+  border-radius: 12px;
+  margin-bottom: 16px;
+
+  &__text {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-1);
+  }
+
+  &__tag {
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--red-soft);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--red);
+  }
+}
+
 .task-sheet__field {
   display: flex;
   flex-direction: column;

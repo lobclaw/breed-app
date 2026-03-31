@@ -52,6 +52,17 @@
                 {{ record.images?.length ? `${record.images.length}张` : '—' }}
               </text>
             </view>
+            <!-- 图片预览 -->
+            <view v-if="record.images?.length" class="image-gallery">
+              <image
+                v-for="(img, idx) in record.images"
+                :key="idx"
+                :src="img"
+                class="image-thumb"
+                mode="aspectFill"
+                @click="previewImage(img)"
+              />
+            </view>
             <view class="info-row">
               <text class="info-row-label">备注</text>
               <text class="info-row-value" :style="{ color: record.notes ? 'var(--text-1)' : 'var(--text-3)' }">
@@ -140,8 +151,15 @@ async function loadRecord() {
   loading.value = false
 }
 
+function previewImage(url: string) {
+  uni.previewImage({
+    current: url,
+    urls: record.value?.images || [url],
+  })
+}
+
 function goEdit() {
-  uni.navigateTo({ url: `/pages/finance/expense-add?id=${recordId}` })
+  uni.navigateTo({ url: `/pages/finance/expense-edit?id=${recordId}` })
 }
 
 function goToDog(dogId: string) {
@@ -175,9 +193,8 @@ onLoad((query) => {
 </script>
 
 <style lang="scss" scoped>
+
 .page {
-  min-height: 100vh;
-  background: var(--bg);
   padding-bottom: 40px;
 }
 
@@ -219,24 +236,10 @@ onLoad((query) => {
   display: flex;
   flex-direction: column;
 }
-.info-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 0;
-  border-bottom: 1px solid rgba(216, 203, 189, 0.3);
-  &:last-child { border-bottom: none; }
-}
 .info-row-label {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-3);
   flex-shrink: 0;
 }
 .info-row-value {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-1);
   text-align: right;
   display: flex;
   align-items: center;
@@ -247,6 +250,21 @@ onLoad((query) => {
     text-align: right;
     line-height: 1.4;
   }
+}
+
+/* ==================== IMAGE GALLERY ==================== */
+.image-gallery {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 0 4px;
+}
+.image-thumb {
+  width: 72px;
+  height: 72px;
+  border-radius: 8px;
+  background: var(--card-dim);
+  object-fit: cover;
 }
 
 /* ==================== DOG CHIP ==================== */
@@ -291,16 +309,4 @@ onLoad((query) => {
   text-align: center;
 }
 
-/* ==================== ACTION AREA ==================== */
-.action-area {
-  padding: 16px 16px 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.btn-row {
-  display: flex;
-  gap: 10px;
-  :deep(.b-btn) { flex: 1; }
-}
 </style>

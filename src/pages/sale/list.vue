@@ -71,6 +71,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+
 import { onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import BNavBar from '@/components/layout/BNavBar.vue'
@@ -79,8 +80,13 @@ import BTag from '@/components/base/BTag.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 
-const sales = ref<any[]>([])
-const loading = ref(true)
+const CACHE_KEY = 'sale_list_cache'
+function readSaleCache(): any[] {
+  try { return JSON.parse(uni.getStorageSync(CACHE_KEY) || '[]') } catch { return [] }
+}
+
+const sales = ref<any[]>(readSaleCache())
+const loading = ref(sales.value.length === 0)
 const activeFilter = ref('')
 
 const statusFilters = [
@@ -95,11 +101,17 @@ const statusFilters = [
 const { run: fetchSales } = useCloudCall<{ data: any[] }>('finance-service', 'getSaleList')
 
 async function load() {
-  loading.value = true
+  if (sales.value.length === 0) loading.value = true
   const filters: any = {}
   if (activeFilter.value) filters.status = activeFilter.value
   const res = await fetchSales(filters)
-  if (res?.data) sales.value = res.data
+  if (res?.data) {
+    sales.value = res.data
+    // 只缓存"全部"筛选结果
+    if (!activeFilter.value) {
+      try { uni.setStorageSync(CACHE_KEY, JSON.stringify(res.data)) } catch { /* ignore */ }
+    }
+  }
   loading.value = false
 }
 

@@ -479,12 +479,40 @@ input[type="date"].form-input {
 input[type="date"].form-input::-webkit-calendar-picker-indicator {
   opacity: 0.4;
 }
+
+/* Pill 单选 (form options) */
+.pill-select {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0;
+}
+.pill-item {
+  padding: 10px 20px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: var(--card-dim);
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.pill-item:active {
+  transform: scale(0.94);
+}
+.pill-item.active {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 2px 10px rgba(234, 62, 119, 0.25);
+}
 </style>
 </head>
 <body>
 
 <!-- ======================== FORM 1: 产检记录 (R-6) ======================== -->
-<div class="frame-wrapper">
+<div class="frame-wrapper" id="R-6">
   <div class="frame-label">R-6 产检记录</div>
   <div class="phone-frame">
     <div class="phone-screen light">
@@ -564,7 +592,7 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator {
 <!-- R-7 临产监测已移至 pages-r7-monitor.html（新版，快速监测日志模式） -->
 
 <!-- ======================== FORM 2: 异常终止妊娠 (R-9) ======================== -->
-<div class="frame-wrapper">
+<div class="frame-wrapper" id="R-9">
   <div class="frame-label">R-9 异常终止妊娠</div>
   <div class="phone-frame">
     <div class="phone-screen light">
@@ -612,11 +640,11 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator {
         <!-- 终止类型 -->
         <div class="field-group">
           <div class="field-label">终止类型</div>
-          <div class="segmented-control">
-            <div class="seg-option active">流产</div>
-            <div class="seg-option">死胎</div>
-            <div class="seg-option">医疗终止</div>
-            <div class="seg-option">未怀孕</div>
+          <div class="pill-select">
+            <div class="pill-item active">流产</div>
+            <div class="pill-item">死胎</div>
+            <div class="pill-item">医疗终止</div>
+            <div class="pill-item">未怀孕</div>
           </div>
         </div>
 
@@ -649,7 +677,7 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator {
 </div>
 
 <!-- ======================== FORM 4: 收入录入 (R-17) ======================== -->
-<div class="frame-wrapper">
+<div class="frame-wrapper" id="R-17">
   <div class="frame-label">R-17 收入录入</div>
   <div class="phone-frame">
     <div class="phone-screen light">

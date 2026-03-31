@@ -161,6 +161,47 @@ async function postWriteVerify(recordId, collection) {
 }
 
 /**
+ * 计算窝号（动态排序，不存储）
+ * 按同一母犬的 birth_date 升序排列，返回序号（从 1 开始）
+ */
+async function computeLitterNumber(familyId, damId, birthDate) {
+  const { total } = await db.collection('litters')
+    .where({
+      dam_id: damId,
+      family_id: familyId,
+      birth_date: dbCmd.lt(birthDate),
+    })
+    .count()
+  return total + 1
+}
+
+/**
+ * 为窝列表批量计算窝号
+ * 输入已按 birth_date 排序的窝列表，按 dam_id 分组计算
+ */
+async function attachLitterNumbers(familyId, litters) {
+  // 按 dam_id 分组查询每个母犬的所有窝，一次性计算
+  const damIds = [...new Set(litters.map(l => l.dam_id))]
+  const damLittersMap = {}
+
+  for (const damId of damIds) {
+    const { data } = await db.collection('litters')
+      .where({ dam_id: damId, family_id: familyId })
+      .orderBy('birth_date', 'asc')
+      .field({ _id: true, birth_date: true })
+      .get()
+    damLittersMap[damId] = data
+  }
+
+  // 为每个窝分配序号
+  for (const litter of litters) {
+    const damLitters = damLittersMap[litter.dam_id] || []
+    const idx = damLitters.findIndex(l => l._id === litter._id)
+    litter.litter_number = idx >= 0 ? idx + 1 : 1
+  }
+}
+
+/**
  * 获取家庭设置
  */
 async function getFamilySettings(familyId) {
@@ -172,7 +213,8 @@ async function getFamilySettings(familyId) {
   const family = data[0] || data
   return family.settings || {
     default_weaning_days: 45,
-    default_vaccine_interval: 21,
+    default_vaccine_interval_puppy: 21,
+    default_vaccine_interval_adult: 365,
     default_deworming_interval_puppy: 14,
     default_deworming_interval_adult: 90,
   }
@@ -315,11 +357,17 @@ module.exports = {
       .where({ cycle_id: cycleId })
       .get()
 
+    // 动态计算窝号
+    const litter = litters.length > 0 ? litters[0] : null
+    if (litter) {
+      litter.litter_number = await computeLitterNumber(this.familyId, litter.dam_id, litter.birth_date)
+    }
+
     return {
       data: {
         cycle,
         records,
-        litter: litters.length > 0 ? litters[0] : null,
+        litter,
       }
     }
   },
@@ -586,6 +634,11 @@ module.exports = {
       .get()
     if (!litters || litters.length === 0) throw new Error('窝不存在')
 
+    const litter = litters[0]
+
+    // 动态计算窝号
+    litter.litter_number = await computeLitterNumber(this.familyId, litter.dam_id, litter.birth_date)
+
     // 获取幼崽
     const { data: puppies } = await db.collection('dogs')
       .where({ origin_litter_id: litterId, deleted_at: null })
@@ -593,7 +646,7 @@ module.exports = {
 
     return {
       data: {
-        litter: litters[0],
+        litter,
         puppies,
       }
     }
@@ -607,6 +660,9 @@ module.exports = {
       .where({ family_id: this.familyId, weaned_at: null })
       .orderBy('birth_date', 'desc')
       .get()
+
+    // 动态计算窝号
+    await attachLitterNumbers(this.familyId, litters)
 
     // 给每个窝带上幼崽列表
     for (const litter of litters) {
@@ -658,6 +714,123 @@ module.exports = {
     const { id } = await db.collection('dogs').add(dogData)
 
     return { data: { puppyId: id } }
+  },
+
+  /**
+   * 获取所有窝列表（含窝号，给选择器用）
+   */
+  async getAllLitters() {
+    const { data: litters } = await db.collection('litters')
+      .where({ family_id: this.familyId })
+      .orderBy('birth_date', 'desc')
+      .limit(50)
+      .get()
+
+    // 动态计算窝号
+    await attachLitterNumbers(this.familyId, litters)
+
+    return { data: litters }
+  },
+
+  /**
+   * 更新窝信息（备注等安全字段）
+   */
+  async updateLitter(litterId, data) {
+    if (!litterId) throw new Error('缺少窝 ID')
+
+    const { data: litters } = await db.collection('litters')
+      .where({ _id: litterId, family_id: this.familyId })
+      .get()
+    if (!litters || litters.length === 0) throw new Error('窝不存在')
+
+    // 只允许更新安全字段
+    const safeFields = ['birth_notes', 'notes']
+    const updateData = { updated_at: Date.now() }
+    for (const field of safeFields) {
+      if (data[field] !== undefined) {
+        updateData[field] = data[field]
+      }
+    }
+
+    await db.collection('litters').doc(litterId).update(updateData)
+
+    return { message: '窝信息已更新' }
+  },
+
+  /**
+   * 修改窝的生产日期（±3天限制）
+   */
+  async updateBirthDate(litterId, newBirthDate) {
+    if (!litterId) throw new Error('缺少窝 ID')
+    if (!newBirthDate) throw new Error('请选择新日期')
+
+    const { data: litters } = await db.collection('litters')
+      .where({ _id: litterId, family_id: this.familyId })
+      .get()
+    if (!litters || litters.length === 0) throw new Error('窝不存在')
+
+    const litter = litters[0]
+    const diffMs = Math.abs(newBirthDate - litter.birth_date)
+    const diffDays = diffMs / 86400000
+
+    if (diffDays > 3) {
+      throw new Error('生产日期只能调整 ±3 天，超出范围会影响窝号和关联费用')
+    }
+
+    const now = Date.now()
+
+    // 更新窝的生产日期
+    await db.collection('litters').doc(litterId).update({
+      birth_date: newBirthDate,
+      updated_at: now,
+    })
+
+    // 同步更新该窝所有幼崽的出生日期
+    await db.collection('dogs').where({
+      origin_litter_id: litterId,
+      deleted_at: null,
+    }).update({
+      birth_date: newBirthDate,
+      updated_at: now,
+    })
+
+    return { message: '生产日期已更新' }
+  },
+
+  /**
+   * 获取繁育记录详情
+   */
+  async getBreedingRecordDetail({ id }) {
+    if (!id) throw new Error('缺少记录 ID')
+
+    const { data: records } = await db.collection('breeding_records')
+      .where({ _id: id, family_id: this.familyId })
+      .get()
+    if (!records || records.length === 0) throw new Error('记录不存在')
+
+    return records[0]
+  },
+
+  /**
+   * 更新繁育记录
+   */
+  async updateBreedingRecord({ id, date, cost, notes, details }) {
+    if (!id) throw new Error('缺少记录 ID')
+
+    const { data: records } = await db.collection('breeding_records')
+      .where({ _id: id, family_id: this.familyId })
+      .get()
+    if (!records || records.length === 0) throw new Error('记录不存在')
+
+    const updateData = { updated_at: Date.now() }
+    if (date !== undefined) updateData.date = date
+    if (cost !== undefined) updateData.cost = cost
+    if (notes !== undefined) updateData.notes = notes
+    if (details !== undefined) updateData.details = details
+
+    await db.collection('breeding_records').doc(id).update(updateData)
+
+    return { message: '已更新' }
   },
 
   /**

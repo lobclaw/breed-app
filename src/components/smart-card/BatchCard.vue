@@ -4,9 +4,9 @@
   左色条(蓝) + 图标 + 标题 + checkbox 列表 + 进度条 + 批量按钮
 -->
 <template>
-  <view class="card card--blue">
+  <view class="card" :class="card.priority === 'overdue' ? 'card--red' : 'card--blue'">
     <view class="card-header">
-      <view class="card-icon card-icon--blue">
+      <view class="card-icon" :class="card.priority === 'overdue' ? 'card-icon--red' : 'card-icon--blue'">
         <text style="font-size: 20px;">💉</text>
       </view>
       <view class="card-title-area">
@@ -15,7 +15,7 @@
       </view>
       <!-- 分数角标 -->
       <view v-if="card.progress" class="fraction-badge">
-        <text class="fraction-badge-text">{{ pendingCount }}/{{ card.progress.total }}</text>
+        <text class="fraction-badge-text">{{ doneCount }}/{{ card.progress.total }}</text>
       </view>
     </view>
 
@@ -25,10 +25,11 @@
         v-for="dog in visibleDogs"
         :key="dog.dogId"
         class="checkbox-item"
-        :class="{ 'checkbox-item--checked': dog.completed }"
+        :class="{ 'checkbox-item--checked': dog.completed || checkedDogs.has(dog.dogId) }"
+        @click="toggleDog(dog)"
       >
-        <view class="cb-box" :class="dog.completed ? 'cb-box--done' : 'cb-box--empty'">
-          <text v-if="dog.completed" class="cb-check">✓</text>
+        <view class="cb-box" :class="(dog.completed || checkedDogs.has(dog.dogId)) ? 'cb-box--done' : 'cb-box--empty'">
+          <text v-if="dog.completed || checkedDogs.has(dog.dogId)" class="cb-check">✓</text>
         </view>
         <text class="cb-label">{{ dog.dogName }}</text>
       </view>
@@ -43,31 +44,91 @@
 
     <!-- 批量操作按钮 -->
     <view class="card-actions">
-      <view class="btn btn--filled btn--blue" @click="batchComplete">
-        <text class="btn-text btn-text--white">{{ pendingCount > 0 ? `批量处理剩余${pendingCount}只` : '全部完成 ✓' }}</text>
+      <view class="btn btn--filled btn--blue" @click="goProcess">
+        <text class="btn-text btn-text--white">批量处理</text>
       </view>
-      <view class="btn btn--ghost" @click="$emit('action', { type: 'viewAll' })">
-        <text class="btn-text btn-text--ghost">逐只查看</text>
+      <view class="btn btn--ghost-green" @click="batchComplete">
+        <text class="btn-text btn-text--green">完成</text>
+      </view>
+      <view class="btn btn--ghost" @click="batchPostpone">
+        <text class="btn-text btn-text--ghost">推迟</text>
       </view>
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import { useDogStore } from '@/stores/dogStore'
+
+const dogStore = useDogStore()
 
 const props = defineProps<{ card: any }>()
 const emit = defineEmits<{
-  (e: 'complete', taskId: string): void
+  (e: 'complete', taskId: string, allDone?: boolean): void
   (e: 'batch-complete', taskIds: string[]): void
+  (e: 'postpone', taskIds: string | string[], title?: string): void
   (e: 'action', payload: any): void
 }>()
 
+const checkedDogs = ref(new Set<string>())
+
+function toggleDog(dog: any) {
+  if (dog.completed || checkedDogs.value.has(dog.dogId)) return
+  const task = props.card.tasks?.find((t: any) => t.dog_id === dog.dogId || t.dogId === dog.dogId)
+  if (!task) return
+  checkedDogs.value.add(dog.dogId)
+  // 检查是否全部完成（后端已完成 + 本地勾选）
+  const allDogs = props.card.dogs || []
+  const allDone = allDogs.every((d: any) => d.completed || checkedDogs.value.has(d.dogId))
+  emit('complete', task._id, allDone)
+}
+
+function goProcess() {
+  const firstTask = props.card.tasks?.[0]
+  const taskType = firstTask?.type || ''
+  const dogs = props.card.dogs || []
+  const taskIds = props.card.tasks?.filter((t: any) => t.status === 'pending').map((t: any) => t._id).join(',')
+
+  // 构建犬只 JSON（同步传递，避免异步查询）
+  // 从 dogStore 补充 role 信息，用于表单动态计算提醒间隔
+  const dogStoreList = dogStore.list
+  const dogList = dogs.map((d: any) => {
+    const stored = dogStoreList.find((s: any) => s._id === d.dogId)
+    return { _id: d.dogId, name: d.dogName, role: stored?.role || '幼崽' }
+  })
+  const dogsParam = encodeURIComponent(JSON.stringify(dogList))
+
+  // 传递任务详情用于预填表单
+  const detailsParam = firstTask?.details
+    ? '&details=' + encodeURIComponent(JSON.stringify(firstTask.details))
+    : ''
+
+  const typePageMap: Record<string, string> = {
+    vaccination: '/pages/record/health-vaccination',
+    deworming: '/pages/record/health-deworming',
+    illness: '/pages/record/health-illness',
+  }
+  const page = typePageMap[taskType] || '/pages/record/health-vaccination'
+  uni.navigateTo({ url: `${page}?batchDogs=${dogsParam}&taskIds=${taskIds}${detailsParam}` })
+}
+
+function batchPostpone() {
+  const pendingTasks = props.card.tasks || []
+  if (pendingTasks.length === 0) return
+  const taskIds = pendingTasks.map((t: any) => t._id)
+  emit('postpone', taskIds, props.card.groupTitle || '批量推迟')
+}
+
 const visibleDogs = computed(() => (props.card.dogs || []).slice(0, 12))
-const pendingCount = computed(() => (props.card.progress?.total || 0) - (props.card.progress?.done || 0))
+const doneCount = computed(() => {
+  const backendDone = props.card.progress?.done || 0
+  return backendDone + checkedDogs.value.size
+})
+const pendingCount = computed(() => (props.card.progress?.total || 0) - doneCount.value)
 const progressPct = computed(() => {
   if (!props.card.progress) return 0
-  return Math.round((props.card.progress.done / props.card.progress.total) * 100)
+  return Math.round((doneCount.value / props.card.progress.total) * 100)
 })
 
 function batchComplete() {
@@ -81,7 +142,7 @@ function batchComplete() {
   position: relative; background: var(--card); border-radius: 16px;
   padding: 16px 16px 16px 18px; border-left: 3.5px solid transparent;
   box-shadow: var(--shadow); overflow: hidden;
-  transition: transform 0.15s ease; &:active { transform: scale(0.975); }
+  /* 批量卡片整体不可点击，不加按压反馈 */
   &::before { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 0; }
   > * { position: relative; z-index: 1; }
   &--blue { border-left-color: var(--blue); &::before { background: linear-gradient(135deg, var(--blue-soft) 0%, transparent 40%); } }
@@ -123,6 +184,7 @@ function batchComplete() {
   &:active { transform: scale(0.94); opacity: 0.85; }
   &--filled.btn--blue { background: var(--blue); }
   &--ghost { background: transparent; border: 1.5px solid var(--text-4); }
+  &--ghost-green { background: transparent; border: 1.5px solid var(--green); }
 }
-.btn-text { font-family: var(--font-display); font-size: 13px; font-weight: 700; &--white { color: #FFFFFF; } &--ghost { color: var(--text-2); } }
+.btn-text { font-family: var(--font-display); font-size: 13px; font-weight: 700; &--white { color: #FFFFFF; } &--ghost { color: var(--text-2); } &--green { color: var(--green); } }
 </style>

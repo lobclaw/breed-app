@@ -26,6 +26,9 @@ importers:
       pinia:
         specifier: ^2.1.7
         version: 2.3.1(typescript@4.9.5)(vue@3.5.31(typescript@4.9.5))
+      pinia-plugin-unistorage:
+        specifier: ^0.1.2
+        version: 0.1.2
       vue:
         specifier: ^3.4.21
         version: 3.5.31(typescript@4.9.5)
@@ -2762,6 +2765,9 @@ packages:
   pify@2.3.0:
     resolution: {integrity: sha512-udgsAY+fTnvv7kI7aaxbqwWNb0AHiB0qBO89PZKPkoTmGOgdbrHDKD+0B2X4uTfJ/FT1R09r9gTsjUjNJotuog==}
     engines: {node: '>=0.10.0'}
+
+  pinia-plugin-unistorage@0.1.2:
+    resolution: {integrity: sha512-WXit2cGnm5rG6CDTcLSLehNWhyJS/Yq7WEeeXAapZbCnqoPJxlszqg7rT8S+OP47az0h5nlajGo+LuyMxUQ2uw==}
 
   pinia@2.3.1:
     resolution: {integrity: sha512-khUlZSwt9xXCaTbbxFYBKDc/bWAGWJjOgvxETwkTN7KRm66EeT1ZdZj6i2ceh9sP2Pzqsbc704r2yngBrxBVug==}
@@ -6978,6 +6984,8 @@ snapshots:
   picomatch@4.0.4: {}
 
   pify@2.3.0: {}
+
+  pinia-plugin-unistorage@0.1.2: {}
 
   pinia@2.3.1(typescript@4.9.5)(vue@3.5.31(typescript@4.9.5)):
     dependencies:

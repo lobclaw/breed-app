@@ -8,7 +8,7 @@
 -->
 <template>
   <view v-if="visible" class="b-sheet" @click.self="close">
-    <view class="b-sheet__mask" @click="close" />
+    <view class="b-sheet__mask" @click="close" @touchmove.prevent />
     <view class="b-sheet__panel" :class="{ 'b-sheet__panel--open': animOpen }" :style="panelStyle">
       <!-- 把手 -->
       <view class="b-sheet__handle">
@@ -45,11 +45,22 @@ const emit = defineEmits<{ 'update:visible': [value: boolean] }>()
 
 const animOpen = ref(false)
 
+function lockScroll(lock: boolean) {
+  // #ifdef H5
+  document.body.style.overflow = lock ? 'hidden' : ''
+  // #endif
+  // #ifdef APP-PLUS || MP
+  // 小程序/App 通过 page-meta 或 @touchmove.prevent 处理
+  // #endif
+}
+
 watch(() => props.visible, (val) => {
   if (val) {
+    lockScroll(true)
     nextTick(() => { animOpen.value = true })
   } else {
     animOpen.value = false
+    lockScroll(false)
   }
 })
 

@@ -1,30 +1,30 @@
 <template>
   <view class="page">
-    <BPageHeader title="护理规则" />
-
-    <!-- 骨架屏 -->
-    <view v-if="loading" style="padding: 0 16px;">
-      <BSkeleton :rows="3" />
-    </view>
+    <BPageHeader title="护理规则">
+      <template #right>
+        <view class="header-add" @click="openAddModal">
+          <text class="material-icons-round" style="font-size: 18px;">add</text>
+          <text class="header-add__text">新建</text>
+        </view>
+      </template>
+    </BPageHeader>
 
     <!-- 规则列表 -->
-    <view v-else-if="rules.length > 0" class="rule-list">
-      <view v-for="rule in rules" :key="rule._id" class="rule-card">
+    <view v-if="rules.length > 0" class="rule-list">
+      <view
+        v-for="(rule, idx) in rules"
+        :key="idx"
+        class="rule-card"
+        :class="triggerColorClass(rule.status_trigger)"
+      >
         <view class="rule-card__header">
-          <view class="rule-card__trigger-badge">
-            <text class="material-icons-round" style="font-size: 16px; color: var(--amber);">bolt</text>
-            <text class="rule-card__trigger">{{ rule.trigger }}</text>
-          </view>
+          <text class="rule-card__title">{{ rule.task_description }}</text>
           <text
             class="material-icons-round rule-card__delete"
-            @click="removeRule(rule._id)"
+            @click="removeRule(idx)"
           >delete_outline</text>
         </view>
-        <text class="rule-card__desc">{{ rule.description }}</text>
-        <view v-if="rule.frequency" class="rule-card__meta">
-          <text class="material-icons-round" style="font-size: 14px; color: var(--text-3);">repeat</text>
-          <text class="rule-card__freq">{{ rule.frequency }}</text>
-        </view>
+        <text class="rule-card__meta">触发：{{ rule.status_trigger }} · {{ rule.frequency || '每日' }}</text>
       </view>
     </view>
 
@@ -34,106 +34,201 @@
       icon="rule"
       title="暂无护理规则"
       description="添加自动触发的护理任务规则"
-      actionText="+ 添加规则"
-      @action="showAddForm = true"
+      actionText="新建规则"
+      @action="openAddModal"
     />
 
-    <!-- 添加表单 -->
-    <view v-if="showAddForm" class="form-area">
-      <view class="form-card">
-        <view class="form-group">
-          <text class="form-label">触发条件 *</text>
-          <input v-model="form.trigger" class="form-input" placeholder="如：幼犬出生后第3天" />
+    <!-- 推荐模板 -->
+    <view class="template-section">
+      <text class="template-section__label">推荐模板</text>
+      <view v-for="(tpl, idx) in availableTemplates" :key="idx" class="template-card">
+        <view class="template-card__content">
+          <text class="template-card__title">{{ tpl.task_description }}</text>
+          <text class="template-card__meta">触发：{{ tpl.status_trigger }} · {{ tpl.frequency }}</text>
         </view>
-        <view class="form-group">
-          <text class="form-label">任务描述 *</text>
-          <input v-model="form.description" class="form-input" placeholder="如：首次驱虫" />
-        </view>
-        <view class="form-group">
-          <text class="form-label">频率 <text style="font-weight: 500; color: var(--text-3); font-size: 11px;">（选填）</text></text>
-          <input v-model="form.frequency" class="form-input" placeholder="如：每14天重复" />
-        </view>
-        <view class="form-actions">
-          <button class="form-btn form-btn--ghost" @click="cancelAdd">取消</button>
-          <button class="form-btn form-btn--primary" :disabled="!form.trigger || !form.description" @click="addRule">保存</button>
-        </view>
+        <button class="template-card__btn" @click="enableTemplate(tpl)">+ 启用</button>
       </view>
+      <text v-if="availableTemplates.length === 0" class="template-section__empty">所有模板已启用</text>
     </view>
 
-    <!-- FAB -->
-    <view class="page-fab" v-if="!showAddForm" @click="showAddForm = true">
-      <text class="material-icons-round" style="font-size: 28px; color: #fff;">add</text>
-    </view>
+    <!-- 新建规则弹窗 -->
+    <BModal
+      v-model:visible="showModal"
+      title="新建护理规则"
+      @confirm="onConfirm"
+    >
+      <view class="modal-form">
+        <!-- 触发条件 pill-select -->
+        <text class="modal-form__label">触发条件</text>
+        <view class="pill-select">
+          <text
+            v-for="opt in triggerOptions"
+            :key="opt"
+            class="pill-select__item"
+            :class="{ 'pill-select__item--active': form.status_trigger === opt }"
+            @click="selectTrigger(opt)"
+          >{{ opt }}</text>
+          <text
+            class="pill-select__item"
+            :class="{ 'pill-select__item--active': isCustomTrigger }"
+            @click="selectTrigger('自定义')"
+          >自定义</text>
+        </view>
+        <input
+          v-if="isCustomTrigger"
+          v-model="form.customTrigger"
+          class="modal-form__input"
+          placeholder="请输入触发条件"
+          style="margin-top: 8px;"
+        />
+
+        <!-- 任务描述 -->
+        <text class="modal-form__label" style="margin-top: 16px;">任务描述</text>
+        <input
+          v-model="form.task_description"
+          class="modal-form__input"
+          placeholder="如：每日喂钙铁"
+        />
+
+        <!-- 频率 -->
+        <text class="modal-form__label" style="margin-top: 16px;">频率</text>
+        <view class="pill-select">
+          <text
+            v-for="freq in frequencyOptions"
+            :key="freq"
+            class="pill-select__item"
+            :class="{ 'pill-select__item--active': form.frequency === freq }"
+            @click="form.frequency = freq"
+          >{{ freq }}</text>
+        </view>
+      </view>
+    </BModal>
   </view>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { ref, reactive, computed } from 'vue'
+import { useAuth } from '@/composables/useAuth'
 import { useCloudCall } from '@/composables/useCloudCall'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
-import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
+import BModal from '@/components/layout/BModal.vue'
 
-const rules = ref<any[]>([])
-const loading = ref(true)
-const showAddForm = ref(false)
+const { currentFamily, loadFamily } = useAuth()
 
+const rules = computed(() => currentFamily.value?.care_rules || [])
+
+const triggerOptions = ['怀孕中', '哺乳中', '生病中', '用药中']
+const frequencyOptions = ['每日', '每周', '每两周']
+
+const templates = [
+  { status_trigger: '怀孕中', task_description: '怀孕期每日喂钙铁', frequency: '每日' },
+  { status_trigger: '哺乳中', task_description: '哺乳期增加营养', frequency: '每日' },
+  { status_trigger: '生病中', task_description: '生病期每日量体温', frequency: '每日' },
+]
+
+// 过滤掉已启用的模板
+const availableTemplates = computed(() =>
+  templates.filter(tpl =>
+    !rules.value.some((r: any) =>
+      r.status_trigger === tpl.status_trigger && r.task_description === tpl.task_description
+    )
+  )
+)
+
+const showModal = ref(false)
 const form = reactive({
-  trigger: '',
-  description: '',
-  frequency: '',
+  status_trigger: '',
+  customTrigger: '',
+  task_description: '',
+  frequency: '每日',
 })
 
-const { run: fetchRules } = useCloudCall<{ data: any[] }>('family-service', 'getCareRules')
-const { run: createRule } = useCloudCall('family-service', 'addCareRule', { successMessage: '已添加' })
-const { run: deleteRule } = useCloudCall('family-service', 'removeCareRule', { successMessage: '已删除' })
+const isCustomTrigger = computed(() =>
+  form.status_trigger === '自定义' || (form.status_trigger && !triggerOptions.includes(form.status_trigger))
+)
 
-async function load() {
-  loading.value = true
-  const res = await fetchRules()
-  if (res?.data) rules.value = res.data
-  loading.value = false
+function selectTrigger(opt: string) {
+  if (opt === '自定义') {
+    form.status_trigger = '自定义'
+    form.customTrigger = ''
+  } else {
+    form.status_trigger = opt
+    form.customTrigger = ''
+  }
 }
 
-function cancelAdd() {
-  showAddForm.value = false
-  form.trigger = ''
-  form.description = ''
-  form.frequency = ''
+const { run: addCareRule } = useCloudCall('family-service', 'addCareRule', { successMessage: '已添加' })
+const { run: removeCareRule } = useCloudCall('family-service', 'removeCareRule', { successMessage: '已删除' })
+
+function openAddModal() {
+  form.status_trigger = ''
+  form.customTrigger = ''
+  form.task_description = ''
+  form.frequency = '每日'
+  showModal.value = true
 }
 
-async function addRule() {
-  await createRule({
-    trigger: form.trigger,
-    description: form.description,
-    frequency: form.frequency || null,
+function triggerColorClass(trigger: string) {
+  if (trigger.includes('怀孕') || trigger.includes('哺乳')) return 'rule-card--rose'
+  if (trigger.includes('生病') || trigger.includes('用药')) return 'rule-card--teal'
+  return 'rule-card--rose'
+}
+
+async function onConfirm() {
+  const trigger = isCustomTrigger.value ? form.customTrigger.trim() : form.status_trigger
+  if (!trigger || !form.task_description.trim()) {
+    uni.showToast({ title: '请填写触发条件和任务描述', icon: 'none' })
+    return
+  }
+  await addCareRule({
+    status_trigger: trigger,
+    task_description: form.task_description.trim(),
+    frequency: form.frequency,
   })
-  cancelAdd()
-  load()
+  await loadFamily()
 }
 
-async function removeRule(id: string) {
+async function enableTemplate(tpl: typeof templates[0]) {
+  await addCareRule({
+    status_trigger: tpl.status_trigger,
+    task_description: tpl.task_description,
+    frequency: tpl.frequency,
+  })
+  await loadFamily()
+}
+
+async function removeRule(index: number) {
   uni.showModal({
     title: '确认删除',
     content: '删除后不可恢复',
     success: async (res) => {
       if (res.confirm) {
-        await deleteRule(id)
-        load()
+        await removeCareRule(index)
+        await loadFamily()
       }
     },
   })
 }
-
-onShow(() => load())
 </script>
 
 <style lang="scss" scoped>
-.page {
-  min-height: 100vh;
-  background: var(--bg);
-  padding-bottom: 100px;
+/* ==================== HEADER ADD ==================== */
+.header-add {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--primary);
+  padding: 6px 14px 6px 10px;
+  border-radius: 20px;
+  background: var(--primary-soft);
+  transition: all 0.12s ease;
+  &:active { transform: scale(0.92); background: var(--icon-rose); }
+
+  &__text {
+    font-size: 13px;
+    font-weight: 700;
+  }
 }
 
 /* ==================== RULE LIST ==================== */
@@ -149,27 +244,29 @@ onShow(() => load())
   border-radius: var(--radius-card);
   padding: 16px;
   box-shadow: var(--shadow);
+  border-left: 4px solid var(--text-4);
+
+  &--rose {
+    border-left-color: var(--rose);
+    background: linear-gradient(135deg, var(--rose-soft) 0%, var(--card) 60%);
+  }
+
+  &--teal {
+    border-left-color: var(--teal);
+    background: linear-gradient(135deg, var(--teal-soft) 0%, var(--card) 60%);
+  }
 
   &__header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 10px;
+    margin-bottom: 6px;
   }
 
-  &__trigger-badge {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
-    border-radius: var(--radius-tag);
-    background: var(--amber-soft);
-  }
-
-  &__trigger {
-    font-size: 12px;
+  &__title {
+    font-size: 15px;
     font-weight: 700;
-    color: var(--amber);
+    color: var(--text-1);
   }
 
   &__delete {
@@ -182,101 +279,102 @@ onShow(() => load())
     &:active { background: var(--card-dim); }
   }
 
-  &__desc {
+  &__meta {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-3);
+    display: block;
+  }
+}
+
+/* ==================== TEMPLATE SECTION ==================== */
+.template-section {
+  padding: 24px 16px 0;
+
+  &__label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-3);
+    letter-spacing: 0.5px;
+    padding: 0 4px 10px;
+    display: block;
+  }
+
+  &__empty {
+    font-size: 13px;
+    color: var(--text-4);
+    text-align: center;
+    padding: 16px 0;
+    display: block;
+  }
+}
+
+.template-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border: 1.5px dashed var(--text-4);
+  border-radius: var(--radius-card);
+  background: var(--card-dim);
+  margin-bottom: 8px;
+
+  &__content {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__title {
     font-size: 14px;
     font-weight: 600;
-    color: var(--text-1);
+    color: var(--text-2);
     display: block;
-    line-height: 1.4;
   }
 
   &__meta {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    margin-top: 8px;
-  }
-
-  &__freq {
-    font-size: 12px;
+    font-size: 11px;
     color: var(--text-3);
+    display: block;
+    margin-top: 2px;
+  }
+
+  &__btn {
+    border-radius: var(--radius-btn);
+    border: 1.5px solid var(--primary);
+    background: transparent;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--primary);
+    flex-shrink: 0;
+    margin-left: 12px;
+    transition: all 0.12s ease;
+    &:active { transform: scale(0.94); background: var(--primary-soft); }
   }
 }
 
-/* ==================== FORM ==================== */
-.form-area { padding: 16px; }
+/* ==================== MODAL FORM ==================== */
+.modal-form {
+  margin-top: 8px;
 
-.form-card {
-  background: var(--card);
-  border-radius: var(--radius-card);
-  padding: 20px 16px;
-  box-shadow: var(--shadow);
-}
+  &__label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-2);
+    display: block;
+    margin-bottom: 8px;
+  }
 
-.form-group {
-  margin-bottom: 16px;
-  &:last-of-type { margin-bottom: 0; }
-}
-
-.form-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-2);
-  margin-bottom: 8px;
-  display: block;
-}
-
-.form-input {
-  width: 100%;
-  height: 44px;
-  border: 1.5px solid var(--text-4);
-  border-radius: var(--radius-date);
-  padding: 0 14px;
-  font-size: 15px;
-  color: var(--text-1);
-  background: var(--bg);
-  transition: border-color 0.2s;
-  &:focus { border-color: var(--primary); }
-}
-
-.form-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 16px;
-}
-
-.form-btn {
-  flex: 1;
-  height: 44px;
-  border-radius: var(--radius-btn);
-  font-family: var(--font-display);
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 44px;
-  padding: 0;
-  transition: transform 0.12s ease;
-  &:active { transform: scale(0.94); }
-
-  &--primary { background: var(--primary); color: #fff; }
-  &--ghost { background: transparent; border: 1.5px solid var(--text-4); color: var(--text-2); }
-  &[disabled] { opacity: 0.5; }
-}
-
-/* ==================== FAB ==================== */
-.page-fab {
-  position: fixed;
-  bottom: 40px;
-  right: 20px;
-  width: 54px;
-  height: 54px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--primary), var(--amber));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: var(--shadow-fab);
-  z-index: 50;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-  &:active { transform: scale(0.88); box-shadow: 0 2px 8px rgba(234, 62, 119, 0.2); }
+  &__input {
+    width: 100%;
+    height: 40px;
+    border: 1.5px solid var(--text-4);
+    border-radius: var(--radius-date);
+    padding: 0 12px;
+    font-size: 14px;
+    color: var(--text-1);
+    background: var(--bg);
+    transition: border-color 0.2s;
+    &:focus { border-color: var(--primary); }
+  }
 }
 </style>

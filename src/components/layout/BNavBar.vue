@@ -19,9 +19,12 @@
     </view>
 
     <!-- FAB 中央按钮 -->
-    <view class="b-nav__fab" @click="$emit('fab-click')">
+    <view class="b-nav__fab" @click="showFabSheet = true">
       <text class="b-nav__fab-icon material-icons-round">add</text>
     </view>
+
+    <!-- FAB Action Sheet -->
+    <BFabSheet v-model:visible="showFabSheet" />
 
     <!-- 财务 -->
     <view class="b-nav__item" :class="{ 'b-nav__item--active': current === 'finance' }" @click="switchTab('finance')">
@@ -38,12 +41,14 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
+import BFabSheet from './BFabSheet.vue'
+
 defineProps<{
-  /** 当前激活的 tab：home / dog / finance / profile */
   current: string
 }>()
 
-defineEmits<{ 'fab-click': [] }>()
+const showFabSheet = ref(false)
 
 const TAB_MAP: Record<string, string> = {
   home: '/pages/home/index',

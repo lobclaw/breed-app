@@ -25,8 +25,13 @@ onHide(() => {
 <style lang="scss">
 @import '@/styles/tokens.scss';
 @import '@/styles/fonts.scss';
+@import '@/styles/common.scss';
 
 /* 全局基础样式 */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
 page {
   background-color: var(--bg);
   color: var(--text-1);

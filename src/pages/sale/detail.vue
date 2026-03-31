@@ -73,7 +73,7 @@
             <text class="detail-label">定金</text>
             <view style="display: flex; align-items: center; gap: 6px;">
               <text class="detail-value" style="color: var(--red);">¥{{ sale.deposit_amount?.toLocaleString() }}</text>
-              <text v-if="sale.deposit_date" style="font-weight: 500; font-size: 12px; color: var(--text-3);">{{ formatDate(sale.deposit_date) }}</text>
+              <text v-if="sale.deposit_date" style="font-weight: 500; font-size: 12px; color: var(--text-3);">{{ formatDate(sale.deposit_date) }}(自动记录)</text>
             </view>
           </view>
           <view class="detail-row" v-if="sale.agreed_price">
@@ -92,6 +92,10 @@
             <text class="detail-label">退款金额</text>
             <text class="detail-value" style="color: var(--green);">¥{{ sale.refund_amount?.toLocaleString() }}</text>
           </view>
+          <view class="detail-row" v-if="sale.refund_date">
+            <text class="detail-label">退款日期</text>
+            <text class="detail-value">{{ formatDate(sale.refund_date) }}</text>
+          </view>
           <view class="detail-row" v-if="sale.deposit_kept_amount != null && sale.status === '定金取消'">
             <text class="detail-label">定金保留</text>
             <text class="detail-value">¥{{ sale.deposit_kept_amount?.toLocaleString() }}</text>
@@ -102,6 +106,14 @@
       <!-- 交易信息 -->
       <view class="detail-section">
         <view class="detail-card">
+          <view class="detail-row" v-if="sale.date && sale.date !== sale.created_at">
+            <text class="detail-label">成交日期</text>
+            <text class="detail-value">{{ formatDate(sale.date) }}</text>
+          </view>
+          <view class="detail-row" v-if="sale.created_at">
+            <text class="detail-label">创建日期</text>
+            <text class="detail-value">{{ formatDate(sale.created_at) }}</text>
+          </view>
           <view class="detail-row" v-if="sale.agent_name">
             <text class="detail-label">卖出人</text>
             <text class="detail-value">{{ sale.agent_name }}</text>
@@ -139,16 +151,16 @@
 
       <view class="action-area" v-if="sale.status === '已预定'">
         <button class="action-btn action-btn--filled-green" @click="showCompleteModal = true">完成交易</button>
-        <button class="action-btn action-btn--ghost-red" @click="showCancelModal = true">取消预定</button>
+        <button class="action-btn action-btn--ghost-red" @click="openCancelSheet">取消预定</button>
       </view>
 
       <view class="action-area" v-if="sale.status === '已成交'">
-        <button class="action-btn action-btn--ghost-red" @click="showRefundModal = true">退款</button>
+        <button class="action-btn action-btn--ghost-red" @click="openRefundSheet">退款</button>
       </view>
     </template>
 
     <!-- 收定金弹窗 -->
-    <view class="modal-mask" v-if="showDepositModal" @click.self="showDepositModal = false">
+    <view class="modal-mask" v-if="showDepositModal" @click.self="showDepositModal = false" @touchmove.prevent>
       <view class="modal-content">
         <text class="modal-title">收定金</text>
         <view class="modal-field">
@@ -177,6 +189,15 @@
             </view>
           </view>
         </view>
+        <view class="modal-field">
+          <text class="modal-label">选择代理人</text>
+          <view class="sheet-select" @click="openAgentSheet(depositForm.agent_id, (agent) => { depositForm.agent_id = agent._id; depositForm.agent_name = agent.name })">
+            <text :style="{ color: depositForm.agent_name ? 'var(--text-1)' : 'var(--text-3)' }">
+              {{ depositForm.agent_name || '选择代理人' }}
+            </text>
+            <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">chevron_right</text>
+          </view>
+        </view>
         <view class="modal-actions">
           <button class="modal-btn" @click="showDepositModal = false">取消</button>
           <button class="modal-btn modal-btn--primary" :disabled="!depositForm.deposit_amount" @click="doDeposit">确认</button>
@@ -185,12 +206,16 @@
     </view>
 
     <!-- 完成交易弹窗 -->
-    <view class="modal-mask" v-if="showCompleteModal" @click.self="showCompleteModal = false">
+    <view class="modal-mask" v-if="showCompleteModal" @click.self="showCompleteModal = false" @touchmove.prevent>
       <view class="modal-content">
         <text class="modal-title">完成交易</text>
         <view class="modal-field">
           <text class="modal-label">到手价(¥) *</text>
           <input v-model="completeForm.received_amount" type="digit" placeholder="必填" class="modal-input" />
+        </view>
+        <view class="modal-field">
+          <text class="modal-label">约定价(¥)</text>
+          <input v-model="completeForm.agreed_price" type="digit" placeholder="选填" class="modal-input" />
         </view>
         <view class="modal-field">
           <text class="modal-label">买家信息</text>
@@ -210,6 +235,12 @@
             </view>
           </view>
         </view>
+        <view class="modal-field">
+          <text class="modal-label">交付日期</text>
+          <picker mode="date" :value="completeForm.delivery_date" @change="completeForm.delivery_date = $event.detail.value">
+            <input :value="completeForm.delivery_date" placeholder="选填" class="modal-input" disabled />
+          </picker>
+        </view>
         <view class="modal-actions">
           <button class="modal-btn" @click="showCompleteModal = false">取消</button>
           <button class="modal-btn modal-btn--primary" :disabled="!completeForm.received_amount" @click="doComplete">确认</button>
@@ -217,24 +248,7 @@
       </view>
     </view>
 
-    <!-- 取消预定弹窗 -->
-    <view class="modal-mask" v-if="showCancelModal" @click.self="showCancelModal = false">
-      <view class="modal-content">
-        <text class="modal-title">取消预定</text>
-        <view class="modal-field">
-          <text class="modal-label">定金保留金额(¥)</text>
-          <input v-model="cancelForm.deposit_kept_amount" type="digit" placeholder="0 = 全额退还定金" class="modal-input" />
-        </view>
-        <view class="modal-field">
-          <text class="modal-label">取消原因</text>
-          <input v-model="cancelForm.refund_reason" placeholder="选填" class="modal-input" />
-        </view>
-        <view class="modal-actions">
-          <button class="modal-btn" @click="showCancelModal = false">取消</button>
-          <button class="modal-btn modal-btn--warn" @click="doCancel">确认取消</button>
-        </view>
-      </view>
-    </view>
+    <!-- 取消预定弹窗已迁移到 S-7 BSheet -->
 
     <!-- S-6: 退款表单 BSheet -->
     <BSheet :visible="showRefundSheet" title="退款" @update:visible="showRefundSheet = $event">
@@ -333,21 +347,7 @@
       </view>
     </BSheet>
 
-    <!-- S-8: 平台选择器 BSheet -->
-    <BSheet :visible="showPlatformSheet" title="选择平台" @update:visible="showPlatformSheet = $event">
-      <view class="platform-grid">
-        <view
-          v-for="p in platforms"
-          :key="p.label"
-          class="platform-grid__item"
-          :class="{ 'platform-grid__item--active': platformSheetValue === p.label }"
-          @click="selectPlatform(p.label)"
-        >
-          <text class="material-icons-round platform-grid__icon">{{ p.icon }}</text>
-          <text class="platform-grid__label">{{ p.label }}</text>
-        </view>
-      </view>
-    </BSheet>
+    <!-- S-8: 平台选择器已移除（定金/成交弹窗使用内联 pills） -->
 
     <!-- S-9: 代理人选择器 BSheet -->
     <BSheet :visible="showAgentSheet" title="选择代理人" @update:visible="showAgentSheet = $event">
@@ -406,24 +406,7 @@
       </view>
     </BModal>
 
-    <!-- 兼容旧退款弹窗（保留） -->
-    <view class="modal-mask" v-if="showRefundModal" @click.self="showRefundModal = false">
-      <view class="modal-content">
-        <text class="modal-title">退款</text>
-        <view class="modal-field">
-          <text class="modal-label">退款金额(¥) *</text>
-          <input v-model="refundForm.refund_amount" type="digit" :placeholder="`最多 ${sale?.received_amount || ''}`" class="modal-input" />
-        </view>
-        <view class="modal-field">
-          <text class="modal-label">退款原因</text>
-          <input v-model="refundForm.refund_reason" placeholder="选填" class="modal-input" />
-        </view>
-        <view class="modal-actions">
-          <button class="modal-btn" @click="showRefundModal = false">取消</button>
-          <button class="modal-btn modal-btn--warn" :disabled="!refundForm.refund_amount" @click="doRefund">确认退款</button>
-        </view>
-      </view>
-    </view>
+    <!-- 退款弹窗已迁移到 S-6 BSheet -->
   </view>
 </template>
 
@@ -443,8 +426,6 @@ const saleId = ref('')
 
 const showDepositModal = ref(false)
 const showCompleteModal = ref(false)
-const showCancelModal = ref(false)
-const showRefundModal = ref(false)
 
 const platforms = [
   { label: '线下', icon: 'storefront' },
@@ -474,10 +455,21 @@ const cancelSheetForm = reactive({
   refund_amount: '',
 })
 
-/* S-8: 平台选择器 */
-const showPlatformSheet = ref(false)
-const platformSheetValue = ref('')
-let platformCallback: ((val: string) => void) | null = null
+function openRefundSheet() {
+  refundSheetForm.type = 'full'
+  refundSheetForm.refund_amount = String(sale.value?.received_amount || '')
+  refundSheetForm.refund_reason = ''
+  refundSheetForm.refund_date = ''
+  showRefundSheet.value = true
+}
+
+function openCancelSheet() {
+  cancelSheetForm.reason = ''
+  cancelSheetForm.refund_amount = ''
+  showCancelSheet.value = true
+}
+
+/* S-8: 平台选择器已移除（内联 pills 替代） */
 
 /* S-9: 代理人选择器 */
 const showAgentSheet = ref(false)
@@ -496,23 +488,19 @@ const depositForm = reactive({
   agreed_price: '',
   buyer_info: '',
   platform: '',
+  agent_id: '',
+  agent_name: '',
 })
 
 const completeForm = reactive({
   received_amount: '',
+  agreed_price: '',
   buyer_info: '',
   platform: '',
+  delivery_date: '',
 })
 
-const cancelForm = reactive({
-  deposit_kept_amount: '',
-  refund_reason: '',
-})
-
-const refundForm = reactive({
-  refund_amount: '',
-  refund_reason: '',
-})
+// cancelForm 和 refundForm 已迁移到 S-6/S-7 BSheet
 
 const stepIndex = computed(() => {
   if (!sale.value) return -1
@@ -581,6 +569,8 @@ async function doDeposit() {
     agreed_price: depositForm.agreed_price ? parseFloat(depositForm.agreed_price) : null,
     buyer_info: depositForm.buyer_info || null,
     platform: depositForm.platform || null,
+    agent_id: depositForm.agent_id || null,
+    agent_name: depositForm.agent_name || null,
   })
   if (res) {
     showDepositModal.value = false
@@ -589,10 +579,38 @@ async function doDeposit() {
 }
 
 async function doComplete() {
+  const receivedAmount = parseFloat(completeForm.received_amount)
+
+  // 到手价低于底价时触发价格预警
+  const deliveryDate = completeForm.delivery_date
+    ? new Date(completeForm.delivery_date + 'T00:00:00+08:00').getTime()
+    : null
+
+  if (sale.value?.floor_price && receivedAmount < sale.value.floor_price) {
+    checkPriceWarning(receivedAmount, async () => {
+      const res = await completeSale(saleId.value, {
+        received_amount: receivedAmount,
+        agreed_price: completeForm.agreed_price ? parseFloat(completeForm.agreed_price) : null,
+        buyer_info: completeForm.buyer_info || null,
+        platform: completeForm.platform || null,
+        delivery_date: deliveryDate,
+        date: Date.now(),
+      })
+      if (res) {
+        showCompleteModal.value = false
+        load()
+      }
+    })
+    return
+  }
+
   const res = await completeSale(saleId.value, {
-    received_amount: parseFloat(completeForm.received_amount),
+    received_amount: receivedAmount,
+    agreed_price: completeForm.agreed_price ? parseFloat(completeForm.agreed_price) : null,
     buyer_info: completeForm.buyer_info || null,
     platform: completeForm.platform || null,
+    delivery_date: deliveryDate,
+    date: Date.now(),
   })
   if (res) {
     showCompleteModal.value = false
@@ -600,27 +618,7 @@ async function doComplete() {
   }
 }
 
-async function doCancel() {
-  const res = await cancelSale(saleId.value, {
-    deposit_kept_amount: cancelForm.deposit_kept_amount ? parseFloat(cancelForm.deposit_kept_amount) : 0,
-    refund_reason: cancelForm.refund_reason || null,
-  })
-  if (res) {
-    showCancelModal.value = false
-    load()
-  }
-}
-
-async function doRefund() {
-  const res = await cancelSale(saleId.value, {
-    refund_amount: parseFloat(refundForm.refund_amount),
-    refund_reason: refundForm.refund_reason || null,
-  })
-  if (res) {
-    showRefundModal.value = false
-    load()
-  }
-}
+// doCancel 和 doRefund 已迁移到 doCancelSheet 和 doRefundSheet
 
 /* S-6 退款提交 */
 async function doRefundSheet() {
@@ -629,6 +627,7 @@ async function doRefundSheet() {
   const res = await cancelSale(saleId.value, {
     refund_amount: amount,
     refund_reason: refundSheetForm.refund_reason || null,
+    refund_date: refundSheetForm.refund_date ? new Date(refundSheetForm.refund_date + 'T00:00:00+08:00').getTime() : Date.now(),
   })
   if (res) {
     showRefundSheet.value = false
@@ -648,19 +647,6 @@ async function doCancelSheet() {
     showCancelSheet.value = false
     load()
   }
-}
-
-/* S-8 平台选择 */
-function openPlatformSheet(currentVal: string, cb: (val: string) => void) {
-  platformSheetValue.value = currentVal
-  platformCallback = cb
-  showPlatformSheet.value = true
-}
-
-function selectPlatform(label: string) {
-  platformSheetValue.value = label
-  if (platformCallback) platformCallback(label)
-  showPlatformSheet.value = false
 }
 
 /* S-9 代理人选择 */

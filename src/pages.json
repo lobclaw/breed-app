@@ -71,9 +71,86 @@
 			}
 		},
 		{
+			"path": "pages/record/breeding-heat",
+			"style": {
+				"navigationBarTitleText": "发情记录",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/record/breeding-follicle",
+			"style": {
+				"navigationBarTitleText": "卵泡检查",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/record/breeding-mating",
+			"style": {
+				"navigationBarTitleText": "配种记录",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/record/breeding-pregnancy",
+			"style": {
+				"navigationBarTitleText": "孕检记录",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/record/breeding-prenatal",
+			"style": {
+				"navigationBarTitleText": "产检记录",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/record/breeding-prelabor",
+			"style": {
+				"navigationBarTitleText": "临产监测",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/record/breeding-termination",
+			"style": {
+				"navigationBarTitleText": "异常终止",
+				"navigationStyle": "custom"
+			}
+		},
+		{
 			"path": "pages/record/health",
 			"style": {
 				"navigationBarTitleText": "健康记录",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/record/health-vaccination",
+			"style": {
+				"navigationBarTitleText": "疫苗记录",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/record/health-deworming",
+			"style": {
+				"navigationBarTitleText": "驱虫记录",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/record/health-illness",
+			"style": {
+				"navigationBarTitleText": "疾病记录",
+				"navigationStyle": "custom"
+			}
+		},
+		{
+			"path": "pages/record/health-medication",
+			"style": {
+				"navigationBarTitleText": "用药任务",
 				"navigationStyle": "custom"
 			}
 		},
@@ -149,14 +226,7 @@
 		{
 			"path": "pages/finance/expense-add",
 			"style": {
-				"navigationBarTitleText": "录入支出",
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path": "pages/finance/income-add",
-			"style": {
-				"navigationBarTitleText": "录入收入",
+				"navigationBarTitleText": "记账",
 				"navigationStyle": "custom"
 			}
 		},

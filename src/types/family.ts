@@ -29,7 +29,8 @@ export interface CareRule {
 // 家庭设置
 export interface FamilySettings {
   default_weaning_days: number
-  default_vaccine_interval: number
+  default_vaccine_interval_puppy: number
+  default_vaccine_interval_adult: number
   default_deworming_interval_puppy: number
   default_deworming_interval_adult: number
   morning_summary_time: string

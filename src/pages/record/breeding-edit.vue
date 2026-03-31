@@ -32,7 +32,7 @@
             <text>备注</text>
             <text class="field-label__optional">（选填）</text>
           </view>
-          <textarea v-model="form.notes" class="form-textarea" placeholder="记录观察到的症状、行为变化等" />
+          <textarea v-model="form.notes" class="form-textarea" :auto-height="true" placeholder="记录观察到的症状、行为变化等" />
         </view>
       </template>
 
@@ -74,12 +74,12 @@
 
         <view class="field-group">
           <view class="field-label"><text>检查结果</text></view>
-          <view class="segmented-control">
+          <view class="pill-select">
             <view
               v-for="r in follicleResults"
               :key="r"
-              class="seg-option"
-              :class="{ active: details.result === r }"
+              class="pill-select__item"
+              :class="{ 'pill-select__item--active': details.result === r }"
               @click="details.result = r"
             >
               <text>{{ r }}</text>
@@ -103,7 +103,7 @@
             <text>备注</text>
             <text class="field-label__optional">（选填）</text>
           </view>
-          <textarea v-model="form.notes" class="form-textarea" placeholder="补充检查说明" />
+          <textarea v-model="form.notes" class="form-textarea" :auto-height="true" placeholder="补充检查说明" />
         </view>
       </template>
 
@@ -121,12 +121,12 @@
 
         <view class="field-group">
           <view class="field-label"><text>配种方式</text></view>
-          <view class="segmented-control">
+          <view class="pill-select">
             <view
               v-for="m in matingMethods"
               :key="m"
-              class="seg-option"
-              :class="{ active: details.method === m }"
+              class="pill-select__item"
+              :class="{ 'pill-select__item--active': details.method === m }"
               @click="details.method = m"
             >
               <text>{{ m }}</text>
@@ -150,7 +150,7 @@
             <text>备注</text>
             <text class="field-label__optional">（选填）</text>
           </view>
-          <textarea v-model="form.notes" class="form-textarea" placeholder="配种情况、注意事项等" />
+          <textarea v-model="form.notes" class="form-textarea" :auto-height="true" placeholder="配种情况、注意事项等" />
         </view>
       </template>
 
@@ -201,7 +201,7 @@
             <text>备注</text>
             <text class="field-label__optional">（选填）</text>
           </view>
-          <textarea v-model="form.notes" class="form-textarea" placeholder="检查结果详情、医生建议等" />
+          <textarea v-model="form.notes" class="form-textarea" :auto-height="true" placeholder="检查结果详情、医生建议等" />
         </view>
       </template>
 
@@ -219,7 +219,7 @@
 
         <view class="field-group">
           <view class="field-label"><text>检查结果</text></view>
-          <textarea v-model="details.results" class="form-textarea" placeholder="填写检查结果" />
+          <textarea v-model="details.results" class="form-textarea" :auto-height="true" placeholder="填写检查结果" />
         </view>
 
         <view class="field-group">
@@ -238,7 +238,7 @@
             <text>备注</text>
             <text class="field-label__optional">（选填）</text>
           </view>
-          <textarea v-model="form.notes" class="form-textarea" placeholder="补充说明" />
+          <textarea v-model="form.notes" class="form-textarea" :auto-height="true" placeholder="补充说明" />
         </view>
       </template>
 
@@ -286,7 +286,7 @@
             <text>备注</text>
             <text class="field-label__optional">（选填）</text>
           </view>
-          <textarea v-model="form.notes" class="form-textarea" placeholder="补充说明" />
+          <textarea v-model="form.notes" class="form-textarea" :auto-height="true" placeholder="补充说明" />
         </view>
       </template>
 
@@ -304,12 +304,12 @@
 
         <view class="field-group">
           <view class="field-label"><text>类型</text></view>
-          <view class="segmented-control">
+          <view class="pill-select">
             <view
               v-for="tt in terminationTypes"
               :key="tt"
-              class="seg-option"
-              :class="{ active: details.termination_type === tt }"
+              class="pill-select__item"
+              :class="{ 'pill-select__item--active': details.termination_type === tt }"
               @click="details.termination_type = tt"
             >
               <text>{{ tt }}</text>
@@ -322,21 +322,22 @@
             <text>备注</text>
             <text class="field-label__optional">（选填）</text>
           </view>
-          <textarea v-model="form.notes" class="form-textarea" placeholder="补充说明" />
+          <textarea v-model="form.notes" class="form-textarea" :auto-height="true" placeholder="补充说明" />
         </view>
       </template>
 
-      <!-- 提交按钮 -->
-      <view class="submit-area">
-        <button
-          class="submit-btn"
-          :loading="submitting"
-          :disabled="!canSubmit"
-          @click="submit"
-        >
-          保存修改
-        </button>
-      </view>
+    </view>
+
+    <!-- 固定底部按钮 -->
+    <view class="fixed-bottom">
+      <button
+        class="submit-btn"
+        :loading="submitting"
+        :disabled="!canSubmit || submitting"
+        @click="submit"
+      >
+        保存修改
+      </button>
     </view>
   </view>
 </template>
@@ -498,11 +499,6 @@ onLoad((query) => {
 </script>
 
 <style lang="scss" scoped>
-.page {
-  min-height: 100vh;
-  background: var(--bg);
-  padding-bottom: 40px;
-}
 
 .loading-state {
   display: flex;
@@ -513,13 +509,6 @@ onLoad((query) => {
 .loading-text {
   font-size: 14px;
   color: var(--text-3);
-}
-
-.form-body {
-  padding: 0 var(--space-page);
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
 }
 
 /* ---- Type Display ---- */
@@ -535,135 +524,9 @@ onLoad((query) => {
   align-items: center;
 }
 
-/* ---- Field Group ---- */
-.field-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.field-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-3);
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-
-  &__optional {
-    font-size: 12px;
-    font-weight: 400;
-    color: var(--text-3);
-  }
-}
-
-/* ---- Text inputs ---- */
-.form-input {
-  height: 48px;
-  border-radius: 14px;
-  border: 1px solid var(--text-4);
-  background: var(--card);
-  padding: 0 16px;
-  font-size: 14px;
-  color: var(--text-1);
-  font-family: var(--font-body);
-  outline: none;
-  display: flex;
-  align-items: center;
-  transition: border-color 0.2s;
-
-  &::placeholder {
-    color: var(--text-3);
-  }
-
-  &--picker {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  &__suffix {
-    font-size: 18px;
-    color: var(--text-3);
-  }
-
-  &--prefixed {
-    padding-left: 34px;
-  }
-}
-
-/* ---- Textarea ---- */
-.form-textarea {
-  border-radius: 14px;
-  border: 1px solid var(--text-4);
-  background: var(--card);
-  padding: 14px 16px;
-  font-size: 14px;
-  color: var(--text-1);
-  font-family: var(--font-body);
-  outline: none;
-  resize: none;
-  min-height: 80px;
-  line-height: 1.5;
-
-  &::placeholder {
-    color: var(--text-3);
-  }
-}
-
-/* ---- Inline Fields ---- */
+/* ---- Inline Fields (gap override) ---- */
 .inline-fields {
-  display: flex;
   gap: 10px;
-
-  &__item {
-    flex: 1;
-  }
-}
-
-/* ---- Prefix wrapper ---- */
-.input-prefix-wrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.input-prefix {
-  position: absolute;
-  left: 16px;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text-3);
-  pointer-events: none;
-  z-index: 1;
-}
-
-/* ---- Segmented control ---- */
-.segmented-control {
-  display: flex;
-  gap: 0;
-  border-radius: var(--radius-btn);
-  background: var(--card-dim);
-  padding: 3px;
-  overflow: hidden;
-}
-
-.seg-option {
-  flex: 1;
-  text-align: center;
-  padding: 10px 10px;
-  border-radius: var(--radius-btn);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-2);
-  transition: all 0.2s ease;
-  white-space: nowrap;
-
-  &.active {
-    background: var(--primary);
-    color: white;
-    box-shadow: 0 2px 8px rgba(234, 62, 119, 0.2);
-  }
 }
 
 /* ---- Toggle ---- */
@@ -708,34 +571,4 @@ onLoad((query) => {
   color: var(--text-1);
 }
 
-/* ---- Submit area ---- */
-.submit-area {
-  padding: 8px 0 20px;
-}
-
-.submit-btn {
-  height: 50px;
-  border-radius: var(--radius-btn);
-  border: none;
-  font-size: 15px;
-  font-weight: 700;
-  color: white;
-  background: var(--primary);
-  box-shadow: 0 4px 16px rgba(234, 62, 119, 0.25);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-display);
-  transition: all 0.12s ease;
-  width: 100%;
-
-  &:active {
-    transform: scale(0.94);
-    opacity: 0.85;
-  }
-
-  &[disabled] {
-    opacity: 0.4;
-  }
-}
 </style>

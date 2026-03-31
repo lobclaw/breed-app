@@ -24,10 +24,7 @@
         <!-- 选择种母 -->
         <view class="field-group">
           <view class="field-label"><text>选择种母</text></view>
-          <view class="dog-picker-empty" @click="pickDog">
-            <text class="material-icons-round">pets</text>
-            <text>点击选择犬只</text>
-          </view>
+          <BDogPicker v-model="selectedDog" roleFilter="种狗" genderFilter="母" title="选择种母" />
         </view>
 
         <!-- 发情开始日期 -->
@@ -73,10 +70,7 @@
       <template v-if="form.type === 'follicle_check'">
         <view class="field-group">
           <view class="field-label"><text>选择种母</text></view>
-          <view class="dog-picker-empty" @click="pickDog">
-            <text class="material-icons-round">pets</text>
-            <text>点击选择犬只</text>
-          </view>
+          <BDogPicker v-model="selectedDog" roleFilter="种狗" genderFilter="母" title="选择种母" />
         </view>
 
         <view class="field-group">
@@ -159,28 +153,12 @@
       <template v-if="form.type === 'mating'">
         <view class="field-group">
           <view class="field-label"><text>选择种母</text></view>
-          <view class="dog-picker-empty" @click="pickDog">
-            <text class="material-icons-round">pets</text>
-            <text>点击选择犬只</text>
-          </view>
+          <BDogPicker v-model="selectedDog" roleFilter="种狗" genderFilter="母" title="选择种母" />
         </view>
 
         <view class="field-group">
           <view class="field-label"><text>选择种公</text></view>
-          <view v-if="details.sire_name" class="dog-picker-selected" @click="pickSire">
-            <view class="dog-avatar dog-avatar--male">
-              <text class="material-icons-round">pets</text>
-            </view>
-            <view class="dog-info">
-              <text class="dog-name">{{ details.sire_name }}</text>
-              <text class="dog-breed">马尔济斯</text>
-            </view>
-            <text class="material-icons-round chevron">chevron_right</text>
-          </view>
-          <view v-else class="dog-picker-empty" @click="pickSire">
-            <text class="material-icons-round">pets</text>
-            <text>点击选择种公</text>
-          </view>
+          <BDogPicker v-model="selectedSire" genderFilter="公" title="选择种公" />
         </view>
 
         <view class="field-group">
@@ -262,10 +240,7 @@
       <template v-if="form.type === 'pregnancy_check'">
         <view class="field-group">
           <view class="field-label"><text>选择种母</text></view>
-          <view class="dog-picker-empty" @click="pickDog">
-            <text class="material-icons-round">pets</text>
-            <text>点击选择犬只</text>
-          </view>
+          <BDogPicker v-model="selectedDog" roleFilter="种狗" genderFilter="母" title="选择种母" />
         </view>
 
         <view class="field-group">
@@ -323,10 +298,7 @@
       <template v-if="form.type === 'prenatal_check'">
         <view class="field-group">
           <view class="field-label"><text>选择种母</text></view>
-          <view class="dog-picker-empty" @click="pickDog">
-            <text class="material-icons-round">pets</text>
-            <text>点击选择犬只</text>
-          </view>
+          <BDogPicker v-model="selectedDog" roleFilter="种狗" genderFilter="母" title="选择种母" />
         </view>
 
         <view class="field-group">
@@ -370,10 +342,7 @@
       <template v-if="form.type === 'pre_labor'">
         <view class="field-group">
           <view class="field-label"><text>选择种母</text></view>
-          <view class="dog-picker-empty" @click="pickDog">
-            <text class="material-icons-round">pets</text>
-            <text>点击选择犬只</text>
-          </view>
+          <BDogPicker v-model="selectedDog" roleFilter="种狗" genderFilter="母" title="选择种母" />
         </view>
 
         <view class="field-group">
@@ -436,10 +405,7 @@
       <template v-if="form.type === 'abnormal_termination'">
         <view class="field-group">
           <view class="field-label"><text>选择犬只</text></view>
-          <view class="dog-picker-empty" @click="pickDog">
-            <text class="material-icons-round">pets</text>
-            <text>点击选择犬只</text>
-          </view>
+          <BDogPicker v-model="selectedDog" roleFilter="种狗" genderFilter="母" title="选择种母" />
         </view>
 
         <view class="field-group">
@@ -488,12 +454,13 @@
       <button
         class="submit-btn"
         :loading="submitting"
-        :disabled="!canSubmit"
+        :disabled="!canSubmit || submitting"
         @click="submit"
       >
         保存记录
       </button>
     </view>
+
   </view>
 </template>
 
@@ -502,12 +469,11 @@ import { ref, reactive, computed, watch } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
+import BDogPicker from '@/components/form/BDogPicker.vue'
 
 let cycleId = ''
-let dogId = ''
-
-// 种公列表（配种时选择）
-const sires = ref<{ _id: string; name: string }[]>([])
+const selectedDog = ref<any>(null)
+const selectedSire = ref<any>(null)
 
 const form = reactive({
   type: 'heat' as string,
@@ -553,12 +519,6 @@ const dateStr = computed(() => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 })
 
-const heatStartStr = computed(() => {
-  if (!details.start_date) return ''
-  const d = new Date(details.start_date)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-})
-
 const showTempWarning = computed(() => {
   if (form.type !== 'pre_labor') return false
   const temp = parseFloat(details.temperature)
@@ -567,7 +527,7 @@ const showTempWarning = computed(() => {
 
 const canSubmit = computed(() => {
   if (!form.type || !form.date) return false
-  if (form.type === 'mating' && !details.sire_id) return false
+  if (form.type === 'mating' && !selectedSire.value) return false
   if (form.type === 'follicle_check' && !details.left_count) return false
   return true
 })
@@ -599,32 +559,6 @@ function onDateChange(e: any) {
   dateChipActive.value = ''
 }
 
-function onHeatStartChange(e: any) {
-  details.start_date = new Date(e.detail.value + 'T00:00:00+08:00').getTime()
-}
-
-function pickDog() {
-  // 犬只选择器 placeholder
-}
-
-function pickSire() {
-  // 种公选择器 placeholder
-}
-
-const sireIndex = computed(() => {
-  if (!details.sire_id) return 0
-  return Math.max(0, sires.value.findIndex(s => s._id === details.sire_id))
-})
-
-function onSireChange(e: any) {
-  const idx = e.detail.value
-  const sire = sires.value[idx]
-  if (sire) {
-    details.sire_id = sire._id
-    details.sire_name = sire.name
-  }
-}
-
 function buildDetails() {
   const d: Record<string, any> = {}
 
@@ -641,8 +575,8 @@ function buildDetails() {
   }
 
   if (form.type === 'mating') {
-    d.sire_id = details.sire_id
-    d.sire_name = details.sire_name
+    d.sire_id = selectedSire.value?._id || ''
+    d.sire_name = selectedSire.value?.name || ''
     d.method = details.method || '自然交配'
     d.mating_number = parseInt(details.mating_number) || 1
   }
@@ -682,7 +616,7 @@ async function submit() {
     const cost = costInput.value ? parseFloat(costInput.value) : null
     const res = await addRecord({
       type: form.type,
-      dog_id: dogId,
+      dog_id: selectedDog.value?._id || '',
       cycle_id: cycleId || undefined,
       date: form.date,
       cost: cost && cost > 0 ? cost : null,
@@ -698,208 +632,26 @@ async function submit() {
   }
 }
 
-const { run: loadSires } = useCloudCall<{ data: any[] }>('dog-service', 'getDogListWithStatus')
-
-async function fetchSires() {
-  const res = await loadSires({ gender: '公' })
-  if (res?.data) {
-    sires.value = res.data.map((d: any) => ({ _id: d._id, name: d.name }))
-  }
-}
-
 onLoad((query) => {
   cycleId = query?.cycleId || ''
-  dogId = query?.dogId || ''
+
+  // 如果 query 传入了有效的 type，设置表单类型
+  const validTypes = typeOptions.map(t => t.value)
+  if (query?.type && validTypes.includes(query.type)) {
+    form.type = query.type
+  }
 
   // 默认日期为今天
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   form.date = today.getTime()
-
-  // 预加载种公列表
-  fetchSires()
 })
 </script>
 
 <style lang="scss" scoped>
+
 .page {
-  min-height: 100vh;
-  background: var(--bg);
   padding-bottom: 40px;
-}
-
-.form-body {
-  padding: 0 var(--space-page);
-}
-
-/* ---- Field Group ---- */
-.field-group {
-  margin-bottom: 16px;
-}
-
-.field-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-3);
-  margin-bottom: 8px;
-  letter-spacing: 0.5px;
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-
-  &__optional {
-    font-size: 12px;
-    font-weight: 400;
-    color: var(--text-3);
-  }
-}
-
-/* ---- Text inputs ---- */
-.form-input {
-  width: 100%;
-  height: 48px;
-  border-radius: 14px;
-  border: 1px solid var(--text-4);
-  background: var(--card);
-  padding: 0 16px;
-  font-size: 15px;
-  font-family: var(--font-body);
-  color: var(--text-1);
-  outline: none;
-  transition: border-color 0.2s, background 0.2s;
-
-  &:focus {
-    background: var(--card-dim);
-    border-color: var(--primary);
-  }
-
-  &::placeholder {
-    color: var(--text-4);
-  }
-
-  &--prefixed {
-    padding-left: 34px;
-  }
-}
-
-/* ---- Textarea ---- */
-.form-textarea {
-  width: 100%;
-  min-height: 80px;
-  border-radius: 14px;
-  border: 1px solid var(--text-4);
-  background: var(--card);
-  padding: 14px 16px;
-  font-size: 15px;
-  font-family: var(--font-body);
-  color: var(--text-1);
-  outline: none;
-  resize: vertical;
-  transition: border-color 0.2s, background 0.2s;
-
-  &:focus {
-    background: var(--card-dim);
-    border-color: var(--primary);
-  }
-
-  &::placeholder {
-    color: var(--text-4);
-  }
-}
-
-/* ---- Prefix wrapper ---- */
-.input-prefix-wrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.input-prefix {
-  position: absolute;
-  left: 16px;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-3);
-  pointer-events: none;
-  z-index: 1;
-}
-
-/* ---- Dog picker ---- */
-.dog-picker-empty {
-  width: 100%;
-  height: 60px;
-  border-radius: 14px;
-  border: 1px dashed var(--text-4);
-  background: var(--card);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  transition: background 0.2s;
-
-  .material-icons-round {
-    font-size: 20px;
-    color: var(--text-4);
-  }
-
-  text:not(.material-icons-round) {
-    font-size: 14px;
-    color: var(--text-4);
-    font-weight: 500;
-  }
-}
-
-.dog-picker-selected {
-  width: 100%;
-  border-radius: 14px;
-  border: 1px solid var(--text-4);
-  background: var(--card);
-  padding: 12px 16px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  transition: background 0.2s;
-}
-
-.dog-avatar {
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--primary), var(--amber));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-
-  .material-icons-round {
-    color: white;
-    font-size: 22px;
-  }
-
-  &--male {
-    background: linear-gradient(135deg, var(--blue), var(--teal));
-  }
-}
-
-.dog-info {
-  flex: 1;
-}
-
-.dog-name {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--text-1);
-}
-
-.dog-breed {
-  font-size: 12px;
-  color: var(--text-2);
-  margin-top: 2px;
-}
-
-.chevron {
-  color: var(--text-4);
-  font-size: 20px;
 }
 
 /* ---- Segmented control ---- */
@@ -926,16 +678,6 @@ onLoad((query) => {
     background: var(--primary);
     color: #fff;
     box-shadow: 0 2px 8px rgba(234, 62, 119, 0.25);
-  }
-}
-
-/* ---- Inline fields ---- */
-.inline-fields {
-  display: flex;
-  gap: 12px;
-
-  &__item {
-    flex: 1;
   }
 }
 
@@ -1085,28 +827,8 @@ onLoad((query) => {
   margin-bottom: 16px;
 }
 
-/* ---- Submit button ---- */
+/* ---- Submit button (margin override) ---- */
 .submit-btn {
-  width: 100%;
-  height: 50px;
-  border-radius: var(--radius-btn);
-  border: none;
-  background: var(--primary);
-  color: #fff;
-  font-size: 15px;
-  font-weight: 700;
-  font-family: var(--font-display);
   margin-top: 24px;
-  transition: transform 0.12s ease, opacity 0.12s ease;
-  box-shadow: 0 4px 16px rgba(234, 62, 119, 0.3);
-
-  &:active {
-    transform: scale(0.94);
-    opacity: 0.85;
-  }
-
-  &[disabled] {
-    opacity: 0.4;
-  }
 }
 </style>

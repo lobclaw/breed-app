@@ -247,7 +247,36 @@ Header 顶部:       12px
   - Ghost:  透明底 + text-4 边框 1.5px + text-2 字
 ```
 
-### 7.5 Icon 方块
+### 7.5 Pill 单选（表单选项）
+
+```
+用途:      表单中从 N 个互斥选项中选一个（如生产方式、驱虫类型、检查结果）
+布局:      flex, flex-wrap: wrap, gap: 8px（独立 pill，不连体）
+内边距:    10px 20px
+圆角:      20px（胶囊形）
+字号:      13px / 600
+
+未选中态:
+  背景:    --card-dim（暖杏底）
+  文字:    --text-2
+  边框:    无
+
+选中态:
+  背景:    --primary（品牌色填充）
+  文字:    #fff
+  边框:    无
+  阴影:    0 2px 10px rgba(234, 62, 119, 0.25)
+
+交互:      按压 scale(0.94), 0.15s ease
+
+说明:
+  - 与 Segmented Control（连体分段控件）的区别：Pill 单选用于表单字段值选择，
+    Segmented Control 仅用于视图/标签页切换（如"疫苗/驱虫/疾病"类型 tab）
+  - Pill 单选与多选 Chip 使用相同的视觉样式，仅行为不同（单选 vs 多选）
+  - 日期快捷 Chip（今天/昨天/前天）是 Pill 单选的紧凑变体（padding 更小）
+```
+
+### 7.6 Icon 方块
 
 ```
 尺寸:      36px × 36px
@@ -257,7 +286,7 @@ Header 顶部:       12px
 暗色模式:  rgba([功能色], 0.2)
 ```
 
-### 7.6 群组行
+### 7.7 群组行
 
 ```
 背景:      --card-dim
@@ -268,7 +297,7 @@ Header 顶部:       12px
 状态:      12px/600 [功能色]
 ```
 
-### 7.7 日期格
+### 7.8 日期格
 
 ```
 尺寸:      40px 宽
@@ -278,7 +307,7 @@ Header 顶部:       12px
 事件圆点:  4px 圆, 3px 间距, 颜色跟随功能色
 ```
 
-### 7.8 Checkbox
+### 7.9 Checkbox
 
 ```
 尺寸:      18px × 18px
@@ -290,7 +319,7 @@ Header 顶部:       12px
   - 已完成: 12px/600 text-3 + 划线
 ```
 
-### 7.9 进度条
+### 7.10 进度条
 
 ```
 轨道:      5px 高, --card-dim 底, 999px 圆角
@@ -298,7 +327,7 @@ Header 顶部:       12px
 分数标签:  12px/800 [功能色]
 ```
 
-### 7.10 分区标题
+### 7.11 分区标题
 
 ```
 布局:      flex, align-items: center, gap: 8px
@@ -307,7 +336,7 @@ Header 顶部:       12px
 角标:      12px/800 text-2, card-dim 底, 999px 圆角, padding 2px 8px
 ```
 
-### 7.11 底部导航
+### 7.12 底部导航
 
 ```
 高度:      84px
@@ -330,6 +359,76 @@ FAB 位置:  margin-top: -10px（上浮）
 暗色:      gradient(#f05888 → #f0a84e)
 图标:      Material Icons Round pets, 22px, 白色
 ```
+
+### 7.13 表单控件（全局共享样式 — src/styles/common.scss）
+
+> **重要：** 所有页面使用全局 `common.scss` 中定义的样式，禁止在页面 scoped style 中重复定义。
+> 如需覆盖某个属性，在页面 scoped style 中只写差异部分。
+
+```
+输入框 (.form-input)
+  宽度:      100%
+  高度:      48px
+  圆角:      14px
+  边框:      1px solid --text-4
+  背景:      --card
+  内边距:    0 16px
+  字号:      14px / --font-body
+  聚焦态:    border-color → --primary
+
+文本域 (.form-textarea)
+  宽度:      100%
+  高度:      48px（自动撑开 :auto-height）
+  圆角:      14px
+  边框:      1px solid --text-4
+  内边距:    12px 16px
+
+字段组 (.field-group)
+  底部间距:  margin-bottom: 16px
+
+字段标签 (.field-label)
+  字号:      12px / 600
+  颜色:      --text-3
+  底部间距:  8px
+
+金额前缀 (.input-prefix-wrapper + .input-prefix)
+  前缀定位:  absolute, left: 16px
+  输入偏移:  padding-left: 34px
+
+固定底部按钮 (.fixed-bottom + .submit-btn)
+  定位:      fixed bottom
+  安全区:    env(safe-area-inset-bottom)
+  背景:      渐变透明 → --bg
+  按钮高度:  50px
+  按钮圆角:  --radius-btn
+  按钮颜色:  --primary + 粉色阴影
+
+详情信息行 (.info-row + .info-row-label + .info-row-value)
+  布局:      flex, space-between
+  底部边框:  1px solid rgba(216, 203, 189, 0.3)
+```
+
+**BFormOptions 组件（所有记录表单共用）：**
+- "标记为待办"开关：启用后创建任务而非记录，日期默认明天，提供今天/明天/后天 chips
+- "下次提醒"开关：默认 ON，可关闭（skip_reminder=true），在记录和待办模式下都可用
+- 自定义 toggle 样式：44px 高触控目标，开启态 --primary 背景，关闭态 --card-dim 背景
+
+**"+自定义" pill + BModal 模式：**
+- 在 pill 选择器末尾添加 "+自定义" pill 按钮
+- 点击打开 BModal 对话框（非 uni.showModal），包含文本输入框
+- 确认后新选项加入列表并选中
+
+**BDogPicker 多选模式：**
+- 健康记录表单（疫苗/驱虫/疾病）支持多选犬只
+- 选中犬只显示为横向滚动列表（彩色头像 + 名字 + 关闭按钮）
+- 费用字段自动按选中犬只数均分，显示 "共 X 只，每只 ¥Y"
+- 自包含模式：组件自渲染触发卡片（已选/空状态），v-model 支持单犬对象或犬只数组
+
+**样式层级规则：**
+- `tokens.scss` → CSS 变量（颜色/间距/圆角）
+- `common.scss` → 公共类（输入框/按钮/字段组/信息行）
+- `BFormOptions.vue` → 日期/待办/提醒组件内部样式
+- 页面 scoped style → 仅写页面特有样式或覆盖
 
 ---
 

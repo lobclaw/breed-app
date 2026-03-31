@@ -78,6 +78,16 @@
         <text>添加图片凭证（选填）</text>
       </view>
 
+      <!-- 照片预览 -->
+      <view v-if="photos.length" class="photo-preview-row">
+        <view v-for="(p, i) in photos" :key="i" class="photo-thumb-wrap">
+          <image :src="p" class="photo-thumb" mode="aspectFill" />
+          <view class="photo-thumb-del" @click.stop="photos.splice(i, 1)">
+            <text class="material-icons-round" style="font-size:14px;color:#fff;">close</text>
+          </view>
+        </view>
+      </view>
+
       <!-- 备注 -->
       <view class="note-section">
         <text class="note-label">备注（选填）</text>
@@ -88,16 +98,32 @@
         />
       </view>
 
-      <!-- 提交按钮 -->
+    </view>
+
+    <!-- 固定底部按钮 -->
+    <view class="fixed-bottom">
       <button
         class="submit-btn"
         :loading="submitting"
-        :disabled="!canSubmit"
+        :disabled="!canSubmit || submitting"
         @click="submit"
       >
         保存修改
       </button>
     </view>
+
+    <!-- 分类选择面板 -->
+    <BSheet v-model:visible="showCategorySheet" title="选择分类">
+      <view class="picker-pills">
+        <text
+          v-for="cat in categories"
+          :key="cat"
+          class="picker-pill"
+          :class="{ active: form.category === cat }"
+          @click="form.category = cat; showCategorySheet = false"
+        >{{ cat }}</text>
+      </view>
+    </BSheet>
   </view>
 </template>
 
@@ -106,11 +132,13 @@ import { ref, reactive, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
+import BSheet from '@/components/layout/BSheet.vue'
 
 let expenseId = ''
 
 const amountInput = ref('')
 const submitting = ref(false)
+const photos = ref<string[]>([])
 const loading = ref(true)
 const showCategorySheet = ref(false)
 const dateChipActive = ref('')
@@ -162,11 +190,18 @@ function onDateChange(e: any) {
 }
 
 function pickLink() {
-  // 关联选择器 placeholder
+  uni.showToast({ title: '关联记录功能开发中', icon: 'none' })
 }
 
 function addPhoto() {
-  // 拍照/相册 placeholder
+  uni.chooseImage({
+    count: 3,
+    sizeType: ['compressed'],
+    sourceType: ['album', 'camera'],
+    success: (res) => {
+      photos.value = [...photos.value, ...res.tempFilePaths]
+    },
+  })
 }
 
 const { run: getExpense } = useCloudCall('finance-service', 'getExpenseDetail', {
@@ -188,6 +223,7 @@ async function loadExpense(id: string) {
       form.category = data.category || '食品'
       form.date = data.date || Date.now()
       form.notes = data.notes || ''
+      photos.value = data.photos || data.images || []
     }
   } finally {
     loading.value = false
@@ -203,6 +239,8 @@ async function submit() {
       category: form.category,
       date: form.date,
       notes: form.notes || null,
+      images: photos.value,
+      source_type: 'manual',
     })
     if (res) uni.navigateBack()
   } finally {
@@ -221,11 +259,6 @@ onLoad((query) => {
 </script>
 
 <style lang="scss" scoped>
-.page {
-  min-height: 100vh;
-  background: var(--bg);
-  padding-bottom: 40px;
-}
 
 .loading-state {
   display: flex;
@@ -372,6 +405,68 @@ onLoad((query) => {
   }
 }
 
+/* ---- Photo preview ---- */
+.photo-preview-row {
+  display: flex;
+  gap: 8px;
+  padding: 10px 0 4px;
+  flex-wrap: wrap;
+}
+
+.photo-thumb-wrap {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.photo-thumb {
+  width: 100%;
+  height: 100%;
+}
+
+.photo-thumb-del {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---- Picker pills ---- */
+.picker-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 4px 24px;
+}
+
+.picker-pill {
+  padding: 8px 18px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 600;
+  background: var(--card-dim);
+  color: var(--text-2);
+  transition: all 0.12s ease;
+
+  &:active {
+    transform: scale(0.92);
+  }
+
+  &.active {
+    background: var(--primary);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(234, 62, 119, 0.25);
+  }
+}
+
 /* ---- Note section ---- */
 .note-section {
   padding: 14px 0 4px;
@@ -402,30 +497,4 @@ onLoad((query) => {
   }
 }
 
-/* ---- Submit button ---- */
-.submit-btn {
-  display: block;
-  width: 100%;
-  margin-top: 24px;
-  padding: 16px;
-  border: none;
-  border-radius: 16px;
-  font-size: 16px;
-  font-weight: 700;
-  color: #fff;
-  background: var(--green);
-  box-shadow: 0 4px 16px rgba(61, 174, 111, 0.25);
-  text-align: center;
-  font-family: var(--font-display);
-  transition: transform 0.12s ease, opacity 0.12s ease;
-
-  &:active {
-    transform: scale(0.94);
-    opacity: 0.85;
-  }
-
-  &[disabled] {
-    opacity: 0.4;
-  }
-}
 </style>

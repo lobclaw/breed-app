@@ -181,7 +181,11 @@ const { run: fetchSummary } = useCloudCall<{ data: any }>('finance-service', 'ge
 
 async function load() {
   loading.value = true
-  const res = await fetchSummary(period.value)
+  const res = await fetchSummary({
+    period: period.value,
+    month: currentMonth.value.getMonth() + 1,
+    year: currentMonth.value.getFullYear(),
+  })
   if (res?.data) {
     data.totalIncome = res.data.totalIncome || 0
     data.totalExpense = res.data.totalExpense || 0

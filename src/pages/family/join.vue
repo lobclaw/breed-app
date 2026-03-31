@@ -74,12 +74,15 @@ const { run: joinFamily } = useCloudCall<{ data: any }>('family-service', 'joinF
 
 async function doJoin() {
   joining.value = true
-  const res = await joinFamily(code.value)
-  if (res?.data) {
-    uni.showToast({ title: `已加入「${res.data.familyName}」`, icon: 'success' })
-    setTimeout(() => uni.switchTab({ url: '/pages/home/index' }), 1500)
+  try {
+    const res = await joinFamily({ invite_code: code.value })
+    if (res?.data) {
+      uni.showToast({ title: `已加入「${res.data.familyName}」`, icon: 'success' })
+      setTimeout(() => uni.switchTab({ url: '/pages/home/index' }), 1500)
+    }
+  } finally {
+    joining.value = false
   }
-  joining.value = false
 }
 </script>
 

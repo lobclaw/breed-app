@@ -807,12 +807,40 @@ input[type="date"].field-input::-webkit-calendar-picker-indicator {
 .puppy-card:nth-child(1) { animation-delay: 0.05s; }
 .puppy-card:nth-child(2) { animation-delay: 0.1s; }
 .puppy-card:nth-child(3) { animation-delay: 0.15s; }
+
+/* Pill 单选 (form options) */
+.pill-select {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0;
+}
+.pill-item {
+  padding: 10px 20px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: var(--card-dim);
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.pill-item:active {
+  transform: scale(0.94);
+}
+.pill-item.active {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 2px 10px rgba(234, 62, 119, 0.25);
+}
 </style>
 </head>
 <body>
 
 <!-- ==================== PAGE 1: BIRTH WIZARD STEP 1 (R-8a) ==================== -->
-<div class="frame-wrapper">
+<div class="frame-wrapper" id="R-8a">
   <div class="frame-label">R-8a 生产记录 Step 1</div>
   <div class="phone-frame">
     <div class="phone-screen light">
@@ -888,10 +916,10 @@ input[type="date"].field-input::-webkit-calendar-picker-indicator {
 
         <div class="form-field">
           <div class="field-label">生产方式</div>
-          <div class="segmented">
-            <div class="seg-option active">顺产</div>
-            <div class="seg-option">助产</div>
-            <div class="seg-option">剖腹产</div>
+          <div class="pill-select">
+            <div class="pill-item active">顺产</div>
+            <div class="pill-item">助产</div>
+            <div class="pill-item">剖腹产</div>
           </div>
         </div>
 
@@ -916,7 +944,7 @@ input[type="date"].field-input::-webkit-calendar-picker-indicator {
 </div>
 
 <!-- ==================== PAGE 2: BIRTH WIZARD STEP 2 (R-8b) ==================== -->
-<div class="frame-wrapper">
+<div class="frame-wrapper" id="R-8b">
   <div class="frame-label">R-8b 生产记录 Step 2</div>
   <div class="phone-frame">
     <div class="phone-screen light">
@@ -968,9 +996,9 @@ input[type="date"].field-input::-webkit-calendar-picker-indicator {
           <div class="puppy-fields">
             <div class="form-field">
               <div class="field-label">性别</div>
-              <div class="segmented">
-                <div class="seg-option active">公</div>
-                <div class="seg-option">母</div>
+              <div class="pill-select">
+                <div class="pill-item active">公</div>
+                <div class="pill-item">母</div>
               </div>
             </div>
             <div class="form-field">
@@ -1006,9 +1034,9 @@ input[type="date"].field-input::-webkit-calendar-picker-indicator {
           <div class="puppy-fields">
             <div class="form-field">
               <div class="field-label">性别</div>
-              <div class="segmented">
-                <div class="seg-option">公</div>
-                <div class="seg-option active">母</div>
+              <div class="pill-select">
+                <div class="pill-item">公</div>
+                <div class="pill-item active">母</div>
               </div>
             </div>
             <div class="form-field">
@@ -1044,9 +1072,9 @@ input[type="date"].field-input::-webkit-calendar-picker-indicator {
           <div class="puppy-fields">
             <div class="form-field">
               <div class="field-label">性别</div>
-              <div class="segmented">
-                <div class="seg-option active">公</div>
-                <div class="seg-option">母</div>
+              <div class="pill-select">
+                <div class="pill-item active">公</div>
+                <div class="pill-item">母</div>
               </div>
             </div>
             <div class="form-field">
@@ -1082,7 +1110,7 @@ input[type="date"].field-input::-webkit-calendar-picker-indicator {
 </div>
 
 <!-- ==================== PAGE 3: BIRTH WIZARD STEP 3 (R-8c) ==================== -->
-<div class="frame-wrapper">
+<div class="frame-wrapper" id="R-8c">
   <div class="frame-label">R-8c 生产记录 Step 3</div>
   <div class="phone-frame">
     <div class="phone-screen light">
@@ -1192,7 +1220,7 @@ input[type="date"].field-input::-webkit-calendar-picker-indicator {
 </div>
 
 <!-- ==================== PAGE 4: NEW DOG (D-3) ==================== -->
-<div class="frame-wrapper">
+<div class="frame-wrapper" id="D-3">
   <div class="frame-label">D-3 新建犬只</div>
   <div class="phone-frame">
     <div class="phone-screen light">
@@ -1236,9 +1264,9 @@ input[type="date"].field-input::-webkit-calendar-picker-indicator {
 
         <div class="form-field">
           <div class="field-label">性别</div>
-          <div class="segmented">
-            <div class="seg-option active">公</div>
-            <div class="seg-option">母</div>
+          <div class="pill-select">
+            <div class="pill-item active">公</div>
+            <div class="pill-item">母</div>
           </div>
         </div>
 

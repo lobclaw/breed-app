@@ -12,7 +12,7 @@
 -->
 <template>
   <view v-if="visible" class="b-modal">
-    <view class="b-modal__mask" @click="cancel" />
+    <view class="b-modal__mask" @click="cancel" @touchmove.prevent />
     <view class="b-modal__panel" :class="{ 'b-modal__panel--open': animOpen }">
       <text class="b-modal__title">{{ title }}</text>
       <text v-if="content" class="b-modal__content">{{ content }}</text>
@@ -54,9 +54,20 @@ const emit = defineEmits<{
 
 const animOpen = ref(false)
 
+function lockScroll(lock: boolean) {
+  // #ifdef H5
+  document.body.style.overflow = lock ? 'hidden' : ''
+  // #endif
+}
+
 watch(() => props.visible, (val) => {
-  if (val) nextTick(() => { animOpen.value = true })
-  else animOpen.value = false
+  if (val) {
+    lockScroll(true)
+    nextTick(() => { animOpen.value = true })
+  } else {
+    animOpen.value = false
+    lockScroll(false)
+  }
 })
 
 const btnClass = computed(() => props.danger ? 'b-modal__btn--danger' : '')

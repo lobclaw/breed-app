@@ -8,6 +8,8 @@
       <text class="material-icons-round">expand_more</text>
     </view>
 
+    <BLitterSelector v-model:visible="showLitterPickerVisible" @select="onLitterSelect" />
+
     <!-- 利润卡片 -->
     <view v-if="profitData" class="profit-card">
       <view class="profit-row">
@@ -105,6 +107,9 @@ import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
+import BLitterSelector from '@/components/form/BLitterSelector.vue'
+
+const showLitterPickerVisible = ref(false)
 
 interface ProfitData {
   totalIncome: number
@@ -164,7 +169,13 @@ function formatMoney(val: number): string {
 }
 
 function showLitterPicker() {
-  // 窝选择器 placeholder — 从窝列表中选择
+  showLitterPickerVisible.value = true
+}
+
+function onLitterSelect(litter: any) {
+  selectedLitterId.value = litter._id
+  selectedLitterName.value = `${litter.damName || litter.dam_name}第${litter.litterNumber || litter.litter_number || '?'}窝`
+  loadProfit(litter._id)
 }
 
 const { run: getLitterProfit } = useCloudCall('finance-service', 'getLitterProfit', {
@@ -447,22 +458,4 @@ onLoad((query) => {
   color: var(--text-2);
 }
 
-/* ---- Empty State ---- */
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 80px 0;
-  gap: 12px;
-}
-
-.empty-icon {
-  font-size: 48px;
-  color: var(--text-4);
-}
-
-.empty-text {
-  font-size: 14px;
-  color: var(--text-3);
-}
 </style>

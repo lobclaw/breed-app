@@ -26,28 +26,101 @@ function highestPriority(tasks) {
 
 /**
  * 智能合并任务为卡片
- * 合并优先级：窝级别 > 用药 > 护理群组 > 批量(3+同类同天) > 个体犬只
+ * 合并优先级：健康关注 > 窝级别 > 护理群组 > 批量(2+同类同天) > 个体犬只
+ * @param {Array} tasks - pending 任务
+ * @param {Array} todayCompleted - 今日已完成任务（用于保持批量卡片完整）
+ * @param {Array} activeIllnesses - 当前生病中的 health_records（可选）
  */
-function mergeTasks(tasks) {
+function mergeTasks(tasks, todayCompleted = [], activeIllnesses = []) {
   const cards = []
   const consumed = new Set()
+  const completedConsumed = new Set()
 
-  // 第 1 轮：用药卡片（medication 类型合并）
+  // 第 1 轮：健康关注卡（生病犬只 + 用药犬只合并）
   const medTasks = tasks.filter(t => t.type === 'medication')
+  const dogMap = new Map()
+
+  // 1a: 生病犬只 → sick_only
+  for (const ill of activeIllnesses) {
+    if (dogMap.has(ill.dog_id)) continue
+    const daysSick = Math.max(1, Math.ceil((Date.now() - (ill.date || ill.created_at)) / DAY_MS))
+    dogMap.set(ill.dog_id, {
+      dogId: ill.dog_id,
+      dogName: ill.dog_name || ill._dog_name || '',
+      state: 'sick_only',
+      illness: ill.details?.condition || '生病',
+      illnessId: ill._id,
+      daysSick,
+      treatmentStatus: ill.details?.treatment_status || '观察中',
+    })
+  }
+
+  // 1b: 用药犬只 → med_only 或升级 sick_only → sick_with_med
+  // 同犬多条 task 时，优先取当天的展示（逾期 task 仍影响卡片优先级但不覆盖展示）
   if (medTasks.length > 0) {
     medTasks.forEach(t => consumed.add(t._id))
-    const dogMap = new Map()
+
+    // 按犬只分组，每只犬取最适合展示的 task（当天 > 未来 > 逾期）
+    const dogBestTask = new Map()
+    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
+    const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999)
     for (const t of medTasks) {
-      if (!dogMap.has(t.dog_id)) {
-        dogMap.set(t.dog_id, { dogId: t.dog_id, dogName: t.dog_name, drugName: t.title })
+      const prev = dogBestTask.get(t.dog_id)
+      if (!prev) {
+        dogBestTask.set(t.dog_id, t)
+      } else {
+        // 当天的 task 优先级最高
+        const prevIsToday = prev.due_date >= todayStart.getTime() && prev.due_date <= todayEnd.getTime()
+        const currIsToday = t.due_date >= todayStart.getTime() && t.due_date <= todayEnd.getTime()
+        if (currIsToday && !prevIsToday) {
+          dogBestTask.set(t.dog_id, t)
+        }
       }
     }
+
+    for (const t of dogBestTask.values()) {
+      const d = t.details || {}
+      const drugName = d.drug_name || '用药'
+      const unitMap = { ml: 'ml', mg: 'mg', tablet: '片' }
+      const dosageStr = d.dosage ? `${d.dosage}${unitMap[d.dosage_unit] || d.dosage_unit || 'mg'}` : ''
+      const progress = d.day && d.total_days ? `${d.day}/${d.total_days}天` : ''
+      const methodMap = { oral: '口服', injection: '注射' }
+      const methodLabel = methodMap[d.method] || d.method || '口服'
+      const freq = typeof d.frequency === 'number' ? d.frequency : 1
+      const methodFreq = freq > 1 ? `${methodLabel}×${freq}` : methodLabel
+
+      if (dogMap.has(t.dog_id)) {
+        const existing = dogMap.get(t.dog_id)
+        if (existing.state === 'sick_only') {
+          existing.state = 'sick_with_med'
+          existing.drugName = drugName
+          existing.dosageStr = dosageStr
+          existing.progress = progress
+          existing.methodFreq = methodFreq
+        }
+      } else {
+        dogMap.set(t.dog_id, {
+          dogId: t.dog_id,
+          dogName: t.dog_name,
+          state: 'med_only',
+          drugName,
+          dosageStr,
+          progress,
+          methodFreq,
+        })
+      }
+    }
+  }
+
+  // 输出健康关注卡（始终在"今日任务"区，不进"需处理"区）
+  if (dogMap.size > 0) {
+    const dogs = Array.from(dogMap.values())
     cards.push({
-      cardType: 'medication',
-      id: 'med-' + Date.now(),
-      priority: highestPriority(medTasks),
-      groupTitle: '每日用药',
-      dogs: Array.from(dogMap.values()),
+      cardType: 'health_attention',
+      id: 'health-attention',
+      priority: 'today',
+      groupTitle: '健康关注',
+      dogs,
       tasks: medTasks,
       progress: null,
     })
@@ -111,10 +184,12 @@ function mergeTasks(tasks) {
     }
   }
 
-  // 第 4 轮：批量合并（同 type + 同天 + 3只以上）
+  // 第 4 轮：批量合并（同 type + 同天 + 2只以上，含今日已完成）
   const remaining = tasks.filter(t => !consumed.has(t._id))
+  // 将 pending 和今日已完成任务一起分组
+  const allForBatch = [...remaining, ...todayCompleted.filter(t => !completedConsumed.has(t._id))]
   const batchGroups = new Map()
-  for (const t of remaining) {
+  for (const t of allForBatch) {
     const dayKey = new Date(t.due_date).toDateString()
     const key = `${t.type}__${dayKey}`
     if (!batchGroups.has(key)) batchGroups.set(key, [])
@@ -122,23 +197,33 @@ function mergeTasks(tasks) {
   }
   for (const [, group] of batchGroups) {
     const dogIds = new Set(group.map(t => t.dog_id))
-    if (dogIds.size >= 3) {
-      group.forEach(t => consumed.add(t._id))
+    const pendingInGroup = group.filter(t => !t._completed)
+    // 总数 >= 2 且至少 1 条 pending 才出批量卡片
+    if (dogIds.size >= 2 && pendingInGroup.length > 0) {
+      group.forEach(t => {
+        if (t._completed) completedConsumed.add(t._id)
+        else consumed.add(t._id)
+      })
+      // 按犬只去重，同一只犬有 pending 则标记未完成，否则标记已完成
       const dogMap = new Map()
       for (const t of group) {
         if (!dogMap.has(t.dog_id)) {
-          dogMap.set(t.dog_id, { dogId: t.dog_id, dogName: t.dog_name, completed: false })
+          dogMap.set(t.dog_id, { dogId: t.dog_id, dogName: t.dog_name, completed: !!t._completed })
+        } else if (!t._completed) {
+          // 如果该犬还有 pending 任务，标记为未完成
+          dogMap.get(t.dog_id).completed = false
         }
       }
+      const doneCount = Array.from(dogMap.values()).filter(d => d.completed).length
       const dogs = Array.from(dogMap.values())
       cards.push({
         cardType: 'batch',
         id: `batch-${group[0].type}-${group[0].due_date}`,
-        priority: highestPriority(group),
+        priority: highestPriority(pendingInGroup),
         groupTitle: `${group[0].title} · ${dogs.length}只`,
         dogs,
-        tasks: group,
-        progress: { done: 0, total: dogs.length },
+        tasks: pendingInGroup,
+        progress: { done: doneCount, total: dogs.length },
       })
     }
   }
@@ -189,55 +274,76 @@ module.exports = {
    * 获取首页卡片数据（智能合并版）
    * 将 raw tasks 合并为 SmartCard 数据结构
    */
-  async getHomeCards(date) {
+  async getHomeCards() {
     const familyId = this.familyId
-    const now = date || Date.now()
 
-    const todayStart = new Date(now)
+    const todayStart = new Date()
     todayStart.setHours(0, 0, 0, 0)
-    const todayEnd = new Date(now)
+    const todayEnd = new Date()
     todayEnd.setHours(23, 59, 59, 999)
 
-    const weekLater = todayEnd.getTime() + 7 * DAY_MS
+    // 并行查询：pending 任务 + 今日已完成 + 当前生病犬只
+    const [pendingRes, completedRes, illnessRes] = await Promise.all([
+      db.collection('tasks')
+        .where({ family_id: familyId, status: 'pending', due_date: dbCmd.lte(todayEnd.getTime()) })
+        .orderBy('due_date', 'asc').limit(200).get(),
+      db.collection('tasks')
+        .where({ family_id: familyId, status: 'completed', completed_at: dbCmd.gte(todayStart.getTime()).and(dbCmd.lte(todayEnd.getTime())) })
+        .limit(100).get(),
+      db.collection('health_records')
+        .where({ family_id: familyId, type: 'illness', 'details.treatment_status': dbCmd.neq('已康复') })
+        .orderBy('date', 'desc').limit(50).get(),
+    ])
 
-    const { data: tasks } = await db.collection('tasks')
-      .where({
-        family_id: familyId,
-        status: 'pending',
-        due_date: dbCmd.lte(weekLater),
-      })
-      .orderBy('due_date', 'asc')
-      .limit(200)
-      .get()
+    const pendingTasks = pendingRes.data
+    const todayCompletedTasks = completedRes.data
+    let activeIllnesses = illnessRes.data || []
 
-    // 标记优先级
-    for (const task of tasks) {
-      if (task.due_date < todayStart.getTime()) {
-        task.priority = 'overdue'
-      } else if (task.due_date <= todayEnd.getTime()) {
-        task.priority = 'today'
-      } else {
-        task.priority = 'upcoming'
+    // 生病记录按犬只去重（取最新一条）
+    const illnessMap = new Map()
+    for (const ill of activeIllnesses) {
+      if (!illnessMap.has(ill.dog_id)) illnessMap.set(ill.dog_id, ill)
+    }
+    activeIllnesses = Array.from(illnessMap.values())
+
+    // 补充犬只名称（illness 记录不一定有 dog_name）
+    const illDogIds = activeIllnesses.filter(i => !i.dog_name).map(i => i.dog_id)
+    if (illDogIds.length > 0) {
+      const { data: dogs } = await db.collection('dogs')
+        .where({ _id: dbCmd.in(illDogIds) })
+        .field({ _id: true, name: true })
+        .get()
+      const nameMap = new Map(dogs.map(d => [d._id, d.name]))
+      for (const ill of activeIllnesses) {
+        if (!ill.dog_name) ill.dog_name = nameMap.get(ill.dog_id) || ''
       }
     }
 
-    // 智能合并为卡片
-    const cards = mergeTasks(tasks)
+    for (const task of pendingTasks) {
+      if (task.due_date < todayStart.getTime()) {
+        task.priority = 'overdue'
+      } else {
+        task.priority = 'today'
+      }
+      task._completed = false
+    }
+    for (const task of todayCompletedTasks) {
+      task.priority = 'today'
+      task._completed = true
+    }
 
-    // 按优先级分组
+    const cards = mergeTasks(pendingTasks, todayCompletedTasks, activeIllnesses)
+
     const overdue = cards.filter(c => c.priority === 'overdue')
     const today = cards.filter(c => c.priority === 'today')
-    const upcoming = cards.filter(c => c.priority === 'upcoming')
 
     return {
       data: {
         overdue: overdue.slice(0, 8),
         today: today.slice(0, 8),
-        upcoming: upcoming.slice(0, 8),
         counts: {
           overdue: overdue.length,
           today: today.length,
-          upcoming: upcoming.length,
         },
       }
     }
@@ -268,6 +374,68 @@ module.exports = {
     }
 
     return { data: counts }
+  },
+
+  /**
+   * 获取一周的卡片数据（前端缓存，日期切换零延迟）
+   * 返回 { [timestamp]: Card[] } 按天分组
+   */
+  async getWeekCards(startDate, endDate) {
+    const familyId = this.familyId
+
+    // 并行查询：周任务 + 当前生病犬只
+    const [taskRes, illnessRes] = await Promise.all([
+      db.collection('tasks')
+        .where({ family_id: familyId, status: 'pending', due_date: dbCmd.gte(startDate).and(dbCmd.lte(endDate)) })
+        .orderBy('due_date', 'asc').limit(200).get(),
+      db.collection('health_records')
+        .where({ family_id: familyId, type: 'illness', 'details.treatment_status': dbCmd.neq('已康复') })
+        .orderBy('date', 'desc').limit(50).get(),
+    ])
+
+    const tasks = taskRes.data
+    let activeIllnesses = illnessRes.data || []
+
+    // 生病记录按犬只去重
+    const illMap = new Map()
+    for (const ill of activeIllnesses) {
+      if (!illMap.has(ill.dog_id)) illMap.set(ill.dog_id, ill)
+    }
+    activeIllnesses = Array.from(illMap.values())
+
+    // 补充犬只名称
+    const illDogIds = activeIllnesses.filter(i => !i.dog_name).map(i => i.dog_id)
+    if (illDogIds.length > 0) {
+      const { data: dogs } = await db.collection('dogs')
+        .where({ _id: dbCmd.in(illDogIds) }).field({ _id: true, name: true }).get()
+      const nameMap = new Map(dogs.map(d => [d._id, d.name]))
+      for (const ill of activeIllnesses) {
+        if (!ill.dog_name) ill.dog_name = nameMap.get(ill.dog_id) || ''
+      }
+    }
+
+    // 按天分组，正确标记 overdue
+    const realTodayStart = new Date()
+    realTodayStart.setHours(0, 0, 0, 0)
+    const dayGroups = new Map()
+    for (const task of tasks) {
+      const d = new Date(task.due_date)
+      d.setHours(0, 0, 0, 0)
+      const key = d.getTime()
+      if (!dayGroups.has(key)) dayGroups.set(key, [])
+      task.priority = task.due_date < realTodayStart.getTime() ? 'overdue' : 'today'
+      task._completed = false
+      dayGroups.get(key).push(task)
+    }
+
+    // 每天独立合并为卡片（illness 只在今天及之后的日期显示）
+    const todayMs = realTodayStart.getTime()
+    const result = {}
+    for (const [dayTs, dayTasks] of dayGroups) {
+      result[dayTs] = mergeTasks(dayTasks, [], dayTs >= todayMs ? activeIllnesses : [])
+    }
+
+    return { data: result }
   },
 
   /**
@@ -351,6 +519,83 @@ module.exports = {
   },
 
   /**
+   * 手动创建任务（从健康记录表单的「标记为待办」创建）
+   */
+  async createManualTask(data) {
+    if (!data.title) throw new Error('请输入任务标题')
+    if (!data.due_date) throw new Error('请选择日期')
+
+    // 去重：同犬 + 同类型 + ±7天内已有 pending 任务则不创建
+    if (data.dog_id && data.type) {
+      const WEEK = 7 * 86400000
+      const { total } = await db.collection('tasks')
+        .where({
+          family_id: this.familyId,
+          dog_id: data.dog_id,
+          type: data.type,
+          status: 'pending',
+          due_date: dbCmd.gte(data.due_date - WEEK).and(dbCmd.lte(data.due_date + WEEK)),
+        })
+        .count()
+      if (total > 0) {
+        return { data: { taskId: null, skipped: true, message: '该犬已有同类型待办' } }
+      }
+    }
+
+    const now = Date.now()
+    const taskData = {
+      card_type: data.card_type || 'individual',
+      dog_id: data.dog_id || null,
+      dog_name: data.dog_name || '',
+      type: data.type || 'custom',
+      title: data.title,
+      due_date: data.due_date,
+      status: 'pending',
+      priority: data.due_date <= now ? 'overdue' : 'upcoming',
+      details: data.details || null,
+      source_record_id: null,
+      source_collection: null,
+      family_id: this.familyId,
+      postpone_count: 0,
+      created_by: this.uid,
+      created_at: now,
+      updated_at: now,
+    }
+
+    const { id } = await db.collection('tasks').add(taskData)
+    return { data: { taskId: id } }
+  },
+
+  /**
+   * 获取单个任务详情（供表单预填使用）
+   */
+  async getTasksByIds(taskIds) {
+    if (!taskIds || !Array.isArray(taskIds) || taskIds.length === 0) {
+      return { data: [] }
+    }
+
+    const { data } = await db.collection('tasks')
+      .where({
+        _id: dbCmd.in(taskIds),
+        family_id: this.familyId,
+      })
+      .get()
+
+    return { data: data || [] }
+  },
+
+  async getTask(taskId) {
+    if (!taskId) throw new Error('缺少任务 ID')
+
+    const { data } = await db.collection('tasks')
+      .where({ _id: taskId, family_id: this.familyId })
+      .get()
+    if (!data || data.length === 0) throw new Error('任务不存在')
+
+    return { data: data[0] }
+  },
+
+  /**
    * 按周期批量取消任务
    */
   async cancelTasksByCycle(cycleId) {
@@ -385,7 +630,9 @@ module.exports = {
     for (const family of families) {
       const familyId = family._id
       const settings = family.settings || {
-        default_vaccine_interval: 21,
+        default_vaccine_interval_puppy: 21,
+        default_vaccine_interval_adult: 365,
+        default_deworming_interval_puppy: 14,
         default_deworming_interval_adult: 90,
       }
 
@@ -456,6 +703,28 @@ module.exports = {
           })
           auditCount++
         }
+      }
+
+      // 审计 3：自动跳过逾期的每日用药 task
+      // 昨天没喂的药不需要"补做"，标记为 skipped，今天继续喂今天的
+      const todayStart = new Date()
+      todayStart.setHours(0, 0, 0, 0)
+      const { data: overdueMedTasks } = await db.collection('tasks')
+        .where({
+          family_id: familyId,
+          type: 'medication',
+          status: 'pending',
+          due_date: dbCmd.lt(todayStart.getTime()),
+        })
+        .limit(100)
+        .get()
+
+      for (const task of overdueMedTasks) {
+        await db.collection('tasks').doc(task._id).update({
+          status: 'skipped',
+          updated_at: now,
+        })
+        auditCount++
       }
     }
 

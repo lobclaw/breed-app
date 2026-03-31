@@ -1,6 +1,13 @@
 <template>
   <view class="page">
-    <BPageHeader title="支出分类管理" />
+    <BPageHeader title="支出分类管理">
+      <template #right>
+        <view v-if="!showAddForm" class="header-add" @click="showAddForm = true">
+          <text class="material-icons-round" style="font-size: 18px;">add</text>
+          <text class="header-add__text">新建</text>
+        </view>
+      </template>
+    </BPageHeader>
 
     <!-- 骨架屏 -->
     <view v-if="loading" style="padding: 0 16px;">
@@ -11,15 +18,16 @@
     <view v-else-if="categories.length > 0" class="cat-list">
       <view v-for="cat in categories" :key="cat._id || cat.name" class="cat-card">
         <view class="cat-card__left">
-          <view class="cat-card__icon-box" :style="{ background: cat.color || 'var(--amber-soft)' }">
-            <text class="material-icons-round" style="font-size: 20px;" :style="{ color: cat.icon_color || 'var(--amber)' }">{{ cat.icon || 'label' }}</text>
-          </view>
+          <text class="cat-card__drag">≡</text>
           <text class="cat-card__name">{{ cat.name }}</text>
-          <text v-if="cat.is_default" class="material-icons-round cat-card__lock">lock</text>
         </view>
-        <view class="cat-card__actions" v-if="!cat.is_default">
+        <view class="cat-card__actions">
           <text class="material-icons-round cat-card__edit" @click="startEdit(cat)">edit</text>
-          <text class="material-icons-round cat-card__delete" @click="removeCat(cat._id)">delete_outline</text>
+          <text
+            class="material-icons-round cat-card__delete"
+            :class="{ 'cat-card__delete--disabled': cat.is_default }"
+            @click="!cat.is_default && removeCat(cat._id)"
+          >delete_outline</text>
         </view>
       </view>
     </view>
@@ -30,9 +38,12 @@
       icon="category"
       title="暂无支出分类"
       description="添加自定义支出分类"
-      actionText="+ 添加分类"
+      actionText="新建分类"
       @action="showAddForm = true"
     />
+
+    <!-- 提示文字 -->
+    <text v-if="!loading && categories.length > 0" class="hint-text">预设分类不可删除</text>
 
     <!-- 添加/编辑表单 -->
     <view v-if="showAddForm" class="form-area">
@@ -41,20 +52,6 @@
           <text class="form-label">分类名称 *</text>
           <input v-model="form.name" class="form-input" placeholder="如：玩具、美容" />
         </view>
-        <view class="form-group">
-          <text class="form-label">图标</text>
-          <view class="icon-grid">
-            <view
-              v-for="ic in iconOptions"
-              :key="ic"
-              class="icon-grid__item"
-              :class="{ 'icon-grid__item--active': form.icon === ic }"
-              @click="form.icon = ic"
-            >
-              <text class="material-icons-round" style="font-size: 22px;">{{ ic }}</text>
-            </view>
-          </view>
-        </view>
         <view class="form-actions">
           <button class="form-btn form-btn--ghost" @click="cancelForm">取消</button>
           <button class="form-btn form-btn--primary" :disabled="!form.name" @click="saveCat">{{ editingId ? '更新' : '保存' }}</button>
@@ -62,10 +59,6 @@
       </view>
     </view>
 
-    <!-- FAB -->
-    <view class="page-fab" v-if="!showAddForm" @click="showAddForm = true">
-      <text class="material-icons-round" style="font-size: 28px; color: #fff;">add</text>
-    </view>
   </view>
 </template>
 
@@ -86,20 +79,20 @@ interface ExpenseCategory {
   is_default?: boolean
 }
 
-const categories = ref<ExpenseCategory[]>([])
-const loading = ref(true)
+const CACHE_KEY = 'expense_categories_cache'
+
+// 从缓存初始化
+function readCache(): ExpenseCategory[] {
+  try { return JSON.parse(uni.getStorageSync(CACHE_KEY) || '[]') } catch { return [] }
+}
+
+const categories = ref<ExpenseCategory[]>(readCache())
+const loading = ref(categories.value.length === 0)
 const showAddForm = ref(false)
 const editingId = ref('')
 
-const iconOptions = [
-  'restaurant', 'medication', 'vaccines', 'local_hospital',
-  'pets', 'home', 'shopping_bag', 'build',
-  'directions_car', 'cleaning_services', 'content_cut', 'spa',
-]
-
 const form = reactive({
   name: '',
-  icon: 'label',
 })
 
 const { run: fetchCategories } = useCloudCall<{ data: ExpenseCategory[] }>('finance-service', 'getExpenseCategories')
@@ -108,16 +101,18 @@ const { run: updateCategory } = useCloudCall('finance-service', 'updateExpenseCa
 const { run: deleteCategory } = useCloudCall('finance-service', 'removeExpenseCategory', { successMessage: '已删除' })
 
 async function load() {
-  loading.value = true
+  if (categories.value.length === 0) loading.value = true
   const res = await fetchCategories()
-  if (res?.data) categories.value = res.data
+  if (res?.data) {
+    categories.value = res.data
+    try { uni.setStorageSync(CACHE_KEY, JSON.stringify(res.data)) } catch { /* ignore */ }
+  }
   loading.value = false
 }
 
 function startEdit(cat: ExpenseCategory) {
   editingId.value = cat._id
   form.name = cat.name
-  form.icon = cat.icon || 'label'
   showAddForm.value = true
 }
 
@@ -125,16 +120,16 @@ function cancelForm() {
   showAddForm.value = false
   editingId.value = ''
   form.name = ''
-  form.icon = 'label'
 }
 
 async function saveCat() {
   if (editingId.value) {
-    await updateCategory(editingId.value, { name: form.name, icon: form.icon })
+    await updateCategory(editingId.value, { name: form.name })
   } else {
-    await addCategory({ name: form.name, icon: form.icon })
+    await addCategory({ name: form.name })
   }
   cancelForm()
+  try { uni.removeStorageSync(CACHE_KEY) } catch { /* ignore */ }
   load()
 }
 
@@ -145,6 +140,7 @@ async function removeCat(id: string) {
     success: async (res) => {
       if (res.confirm) {
         await deleteCategory(id)
+        try { uni.removeStorageSync(CACHE_KEY) } catch { /* ignore */ }
         load()
       }
     },
@@ -155,15 +151,9 @@ onShow(() => load())
 </script>
 
 <style lang="scss" scoped>
-.page {
-  min-height: 100vh;
-  background: var(--bg);
-  padding-bottom: 100px;
-}
-
 /* ==================== CATEGORY LIST ==================== */
 .cat-list {
-  padding: 0 16px;
+  padding: 0 var(--space-page);
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -184,25 +174,17 @@ onShow(() => load())
     gap: 12px;
   }
 
-  &__icon-box {
-    width: 38px;
-    height: 38px;
-    border-radius: var(--radius-icon);
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  &__drag {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-4);
+    line-height: 1;
   }
 
   &__name {
     font-size: 15px;
     font-weight: 600;
     color: var(--text-1);
-  }
-
-  &__lock {
-    font-family: 'Material Icons Round';
-    font-size: 14px;
-    color: var(--text-4);
   }
 
   &__actions {
@@ -229,32 +211,38 @@ onShow(() => load())
     border-radius: 50%;
     transition: background 0.15s;
     &:active { background: var(--card-dim); }
+
+    &--disabled {
+      color: var(--text-4);
+      pointer-events: none;
+    }
   }
 }
 
-/* ==================== ICON GRID ==================== */
-.icon-grid {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 8px;
-  margin-top: 8px;
+/* ==================== HINT TEXT ==================== */
+.hint-text {
+  display: block;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-3);
+  padding: 12px var(--space-page) 0;
+}
 
-  &__item {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 44px;
-    border-radius: var(--radius-icon);
-    background: var(--bg);
-    color: var(--text-3);
-    transition: all 0.15s ease;
-    &:active { transform: scale(0.9); }
+/* ==================== HEADER ADD ==================== */
+.header-add {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--primary);
+  padding: 6px 14px 6px 10px;
+  border-radius: 20px;
+  background: var(--primary-soft);
+  transition: all 0.12s ease;
+  &:active { transform: scale(0.92); background: var(--icon-rose); }
 
-    &--active {
-      background: var(--primary-soft);
-      color: var(--primary);
-      border: 1.5px solid var(--primary);
-    }
+  &__text {
+    font-size: 13px;
+    font-weight: 700;
   }
 }
 
@@ -315,23 +303,5 @@ onShow(() => load())
   &--primary { background: var(--primary); color: #fff; }
   &--ghost { background: transparent; border: 1.5px solid var(--text-4); color: var(--text-2); }
   &[disabled] { opacity: 0.5; }
-}
-
-/* ==================== FAB ==================== */
-.page-fab {
-  position: fixed;
-  bottom: 40px;
-  right: 20px;
-  width: 54px;
-  height: 54px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--primary), var(--amber));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: var(--shadow-fab);
-  z-index: 50;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-  &:active { transform: scale(0.88); box-shadow: 0 2px 8px rgba(234, 62, 119, 0.2); }
 }
 </style>

@@ -634,6 +634,34 @@ body {
   background: var(--amber-soft);
   color: var(--amber);
 }
+
+/* Pill 单选 (form options) */
+.pill-select {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0;
+}
+.pill-item {
+  padding: 10px 20px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: var(--card-dim);
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.pill-item:active {
+  transform: scale(0.94);
+}
+.pill-item.active {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 2px 10px rgba(234, 62, 119, 0.25);
+}
 </style>
 </head>
 <body>
@@ -749,10 +777,10 @@ body {
       <!-- Segmented Control: 外阴状态 -->
       <div>
         <div class="section-label rose-dot">外阴状态</div>
-        <div class="segmented-control">
-          <button class="segment-btn" onclick="selectSegment(this)">硬/肿胀</button>
-          <button class="segment-btn active" onclick="selectSegment(this)">开始软化</button>
-          <button class="segment-btn" onclick="selectSegment(this)">完全松软</button>
+        <div class="pill-select">
+          <div class="pill-item" onclick="selectPill(this)">硬/肿胀</div>
+          <div class="pill-item active" onclick="selectPill(this)">开始软化</div>
+          <div class="pill-item" onclick="selectPill(this)">完全松软</div>
         </div>
       </div>
 
@@ -817,6 +845,12 @@ function toggleChip(el) {
 
 function selectSegment(el) {
   const siblings = el.parentElement.querySelectorAll('.segment-btn');
+  siblings.forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function selectPill(el) {
+  const siblings = el.parentElement.querySelectorAll('.pill-item');
   siblings.forEach(s => s.classList.remove('active'));
   el.classList.add('active');
 }

@@ -518,12 +518,40 @@ input[type="date"].form-input {
 input[type="date"].form-input::-webkit-calendar-picker-indicator {
   opacity: 0.4;
 }
+
+/* Pill 单选 (form options) */
+.pill-select {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0;
+}
+.pill-item {
+  padding: 10px 20px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: var(--card-dim);
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.pill-item:active {
+  transform: scale(0.94);
+}
+.pill-item.active {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 2px 10px rgba(234, 62, 119, 0.25);
+}
 </style>
 </head>
 <body>
 
 <!-- ======================== FORM 1: 发情记录 (R-2) ======================== -->
-<div class="frame-wrapper">
+<div class="frame-wrapper" id="R-2">
   <div class="frame-label">R-2 发情记录</div>
   <div class="phone-frame">
     <div class="phone-screen light">
@@ -587,7 +615,7 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator {
 </div>
 
 <!-- ======================== FORM 2: 卵泡检查 (R-3) ======================== -->
-<div class="frame-wrapper">
+<div class="frame-wrapper" id="R-3">
   <div class="frame-label">R-3 卵泡检查</div>
   <div class="phone-frame">
     <div class="phone-screen light">
@@ -666,11 +694,11 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator {
         <!-- 检查结果 -->
         <div class="field-group">
           <div class="field-label">检查结果</div>
-          <div class="segmented-control">
-            <div class="seg-option">发育中</div>
-            <div class="seg-option active">已成熟</div>
-            <div class="seg-option">发育不良</div>
-            <div class="seg-option">其他</div>
+          <div class="pill-select">
+            <div class="pill-item">发育中</div>
+            <div class="pill-item active">已成熟</div>
+            <div class="pill-item">发育不良</div>
+            <div class="pill-item">其他</div>
           </div>
         </div>
 
@@ -697,7 +725,7 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator {
 </div>
 
 <!-- ======================== FORM 3: 配种记录 (R-4) ======================== -->
-<div class="frame-wrapper">
+<div class="frame-wrapper" id="R-4">
   <div class="frame-label">R-4 配种记录</div>
   <div class="phone-frame">
     <div class="phone-screen light">
@@ -765,9 +793,9 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator {
         <!-- 配种方式 -->
         <div class="field-group">
           <div class="field-label">配种方式</div>
-          <div class="segmented-control">
-            <div class="seg-option active">自然交配</div>
-            <div class="seg-option">人工授精</div>
+          <div class="pill-select">
+            <div class="pill-item active">自然交配</div>
+            <div class="pill-item">人工授精</div>
           </div>
         </div>
 
@@ -821,7 +849,7 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator {
 </div>
 
 <!-- ======================== FORM 4: 孕检记录 (R-5) ======================== -->
-<div class="frame-wrapper">
+<div class="frame-wrapper" id="R-5">
   <div class="frame-label">R-5 孕检记录</div>
   <div class="phone-frame">
     <div class="phone-screen light">

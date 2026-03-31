@@ -1,7 +1,14 @@
 <template>
   <view class="page">
     <!-- 顶栏 -->
-    <BPageHeader title="合作代理人" />
+    <BPageHeader title="合作代理人">
+      <template #right>
+        <view v-if="!showAdd" class="header-add" @click="showAdd = true">
+          <text class="material-icons-round" style="font-size: 18px;">add</text>
+          <text class="header-add__text">新建</text>
+        </view>
+      </template>
+    </BPageHeader>
 
     <!-- 骨架屏 -->
     <view v-if="loading" style="padding: 0 16px;">
@@ -31,7 +38,7 @@
       icon="handshake"
       title="暂无代理人"
       description="添加合作代理人，方便在销售记录中关联"
-      actionText="+ 添加代理人"
+      actionText="新建代理人"
       @action="showAdd = true"
     />
 
@@ -53,10 +60,6 @@
       </view>
     </view>
 
-    <!-- FAB -->
-    <view class="page-fab" v-if="!showAdd" @click="showAdd = true">
-      <text class="material-icons-round" style="font-size: 28px; color: #fff;">add</text>
-    </view>
   </view>
 </template>
 
@@ -68,8 +71,13 @@ import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 
-const agentList = ref<any[]>([])
-const loading = ref(true)
+const CACHE_KEY = 'agents_list_cache'
+function readAgentCache(): any[] {
+  try { return JSON.parse(uni.getStorageSync(CACHE_KEY) || '[]') } catch { return [] }
+}
+
+const agentList = ref<any[]>(readAgentCache())
+const loading = ref(agentList.value.length === 0)
 const showAdd = ref(false)
 const editingId = ref('')
 
@@ -77,12 +85,16 @@ const form = reactive({ name: '', contact_info: '' })
 
 const { run: fetchAgents } = useCloudCall<{ data: any[] }>('finance-service', 'getAgentList')
 const { run: addAgent } = useCloudCall('finance-service', 'addAgent', { successMessage: '已添加' })
+const { run: updateAgent } = useCloudCall('finance-service', 'updateAgent', { successMessage: '已更新' })
 const { run: removeAgent } = useCloudCall('finance-service', 'removeAgent', { successMessage: '已删除' })
 
 async function load() {
-  loading.value = true
+  if (agentList.value.length === 0) loading.value = true
   const res = await fetchAgents()
-  if (res?.data) agentList.value = res.data
+  if (res?.data) {
+    agentList.value = res.data
+    try { uni.setStorageSync(CACHE_KEY, JSON.stringify(res.data)) } catch { /* ignore */ }
+  }
   loading.value = false
 }
 
@@ -101,8 +113,13 @@ function cancelForm() {
 }
 
 async function save() {
-  await addAgent({ name: form.name, contact_info: form.contact_info || null })
+  if (editingId.value) {
+    await updateAgent(editingId.value, { name: form.name, contact_info: form.contact_info || null })
+  } else {
+    await addAgent({ name: form.name, contact_info: form.contact_info || null })
+  }
   cancelForm()
+  try { uni.removeStorageSync(CACHE_KEY) } catch { /* ignore */ }
   load()
 }
 
@@ -113,6 +130,7 @@ async function remove(id: string) {
     success: async (res) => {
       if (res.confirm) {
         await removeAgent(id)
+        try { uni.removeStorageSync(CACHE_KEY) } catch { /* ignore */ }
         load()
       }
     },
@@ -124,8 +142,6 @@ onShow(() => load())
 
 <style lang="scss" scoped>
 .page {
-  min-height: 100vh;
-  background: var(--bg);
   padding-bottom: 100px;
 }
 
@@ -231,16 +247,12 @@ onShow(() => load())
 }
 
 .form-input {
-  width: 100%;
   height: 44px;
   border: 1.5px solid var(--text-4);
   border-radius: var(--radius-date);
   padding: 0 14px;
   font-size: 15px;
-  color: var(--text-1);
   background: var(--bg);
-  transition: border-color 0.2s;
-  &:focus { border-color: var(--primary); }
 }
 
 .form-actions {
@@ -275,24 +287,21 @@ onShow(() => load())
   &[disabled] { opacity: 0.5; }
 }
 
-/* ==================== PAGE FAB ==================== */
-.page-fab {
-  position: fixed;
-  bottom: 40px;
-  right: 20px;
-  width: 54px;
-  height: 54px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--primary), var(--amber));
+/* ==================== HEADER ADD ==================== */
+.header-add {
   display: flex;
   align-items: center;
-  justify-content: center;
-  box-shadow: var(--shadow-fab);
-  z-index: 50;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-  &:active {
-    transform: scale(0.88);
-    box-shadow: 0 2px 8px rgba(234, 62, 119, 0.2);
+  gap: 3px;
+  color: var(--primary);
+  padding: 6px 14px 6px 10px;
+  border-radius: 20px;
+  background: var(--primary-soft);
+  transition: all 0.12s ease;
+  &:active { transform: scale(0.92); background: var(--icon-rose); }
+
+  &__text {
+    font-size: 13px;
+    font-weight: 700;
   }
 }
 </style>

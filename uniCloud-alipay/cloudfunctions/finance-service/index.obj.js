@@ -125,6 +125,34 @@ module.exports = {
   },
 
   /**
+   * 获取支出详情
+   */
+  async getExpenseDetail(id) {
+    if (!id) throw new Error('缺少记录 ID')
+
+    const { data: expenses } = await db.collection('expenses')
+      .where({ _id: id, family_id: this.familyId, deleted_at: null })
+      .get()
+    if (!expenses || expenses.length === 0) throw new Error('记录不存在')
+
+    return { data: expenses[0] }
+  },
+
+  /**
+   * 获取收入详情
+   */
+  async getIncomeDetail(id) {
+    if (!id) throw new Error('缺少记录 ID')
+
+    const { data: incomes } = await db.collection('incomes')
+      .where({ _id: id, family_id: this.familyId, deleted_at: null })
+      .get()
+    if (!incomes || incomes.length === 0) throw new Error('记录不存在')
+
+    return { data: incomes[0] }
+  },
+
+  /**
    * 软删除支出
    */
   async softDeleteExpense(id) {
@@ -723,6 +751,7 @@ module.exports = {
     const agentData = {
       family_id: this.familyId,
       name: data.name,
+      contact_info: data.contact_info || null,
       created_by: this.uid,
       deleted_at: null,
       created_at: now,
@@ -731,6 +760,27 @@ module.exports = {
 
     const { id } = await db.collection('agents').add(agentData)
     return { data: { agentId: id } }
+  },
+
+  /**
+   * 更新中间商信息
+   */
+  async updateAgent(id, data) {
+    if (!id) throw new Error('缺少中间商 ID')
+    if (!data.name) throw new Error('请填写中间商姓名')
+
+    const { data: agents } = await db.collection('agents')
+      .where({ _id: id, family_id: this.familyId, deleted_at: null })
+      .get()
+    if (!agents || agents.length === 0) throw new Error('中间商不存在')
+
+    await db.collection('agents').doc(id).update({
+      name: data.name,
+      contact_info: data.contact_info || null,
+      updated_at: Date.now(),
+    })
+
+    return { message: '已更新' }
   },
 
   /**
@@ -750,5 +800,26 @@ module.exports = {
     })
 
     return { message: '已删除' }
+  },
+
+  /**
+   * 获取支出分类（默认 + 自定义）
+   */
+  async getExpenseCategories() {
+    // 检查家庭是否有自定义分类
+    const { data } = await db.collection('families')
+      .doc(this.familyId)
+      .field({ settings: true })
+      .get()
+
+    const family = data[0] || data
+    const customCategories = family.settings?.custom_expense_categories || []
+
+    const categories = [
+      ...DEFAULT_EXPENSE_CATEGORIES.map(name => ({ name, is_default: true })),
+      ...customCategories.map(name => ({ name, is_default: false })),
+    ]
+
+    return { data: categories }
   },
 }

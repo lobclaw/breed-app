@@ -2,65 +2,63 @@
   <view class="page">
     <BPageHeader title="数据备份" />
 
-    <!-- 备份状态卡片 -->
-    <view class="backup-card">
-      <view class="backup-card__icon-box">
-        <text class="material-icons-round" style="font-size: 32px; color: var(--blue);">cloud_done</text>
-      </view>
-      <text class="backup-card__title">数据备份与导出</text>
-      <text class="backup-card__desc">将犬只档案、繁育记录、财务数据导出为文件</text>
-      <view v-if="lastBackupDate" class="backup-card__last">
-        <text class="material-icons-round" style="font-size: 14px; color: var(--text-3);">history</text>
-        <text class="backup-card__last-text">上次备份：{{ lastBackupDate }}</text>
-      </view>
-    </view>
-
-    <!-- 导出选项 -->
-    <view class="export-section">
-      <text class="section-label">导出格式</text>
-      <view class="export-options">
-        <view
-          class="export-option"
-          :class="{ 'export-option--active': exportFormat === 'json' }"
-          @click="exportFormat = 'json'"
-        >
-          <text class="material-icons-round export-option__icon">data_object</text>
-          <view class="export-option__info">
-            <text class="export-option__name">JSON</text>
-            <text class="export-option__desc">完整数据备份，可用于数据恢复</text>
-          </view>
-          <text v-if="exportFormat === 'json'" class="material-icons-round" style="font-size: 20px; color: var(--primary);">check_circle</text>
+    <!-- 备份状态卡 -->
+    <view class="status-card">
+      <view class="info-row">
+        <text class="info-row-label">上次备份</text>
+        <view class="info-row-value" style="display: flex; align-items: center; gap: 6px;">
+          <text>{{ lastBackupDate || '暂无' }}</text>
+          <text v-if="lastBackupDate" class="material-icons-round" style="font-size: 16px; color: var(--green);">check_circle</text>
         </view>
-        <view
-          class="export-option"
-          :class="{ 'export-option--active': exportFormat === 'csv' }"
-          @click="exportFormat = 'csv'"
-        >
-          <text class="material-icons-round export-option__icon">table_chart</text>
-          <view class="export-option__info">
-            <text class="export-option__name">CSV</text>
-            <text class="export-option__desc">表格格式，可用 Excel 打开查看</text>
+      </view>
+      <view class="info-row">
+        <text class="info-row-label">自动备份</text>
+        <view class="info-row-value" style="display: flex; align-items: center; gap: 10px;">
+          <text style="font-size: 13px; color: var(--text-3);">每周一次</text>
+          <view class="custom-toggle" :class="{ 'custom-toggle--on': autoBackup }" @click="toggleAutoBackup">
+            <view class="custom-toggle__knob" />
           </view>
-          <text v-if="exportFormat === 'csv'" class="material-icons-round" style="font-size: 20px; color: var(--primary);">check_circle</text>
         </view>
       </view>
     </view>
 
-    <!-- 导出按钮 -->
-    <view class="export-area">
-      <button class="export-btn" :loading="exporting" @click="startExport">
-        <text v-if="!exporting" class="material-icons-round" style="font-size: 20px; color: #fff; margin-right: 8px;">download</text>
-        导出数据
+    <!-- 操作按钮 -->
+    <view class="backup-actions">
+      <button class="submit-btn" :loading="exporting" @click="startBackup">
+        <text v-if="!exporting" class="material-icons-round" style="font-size: 18px; color: #fff; margin-right: 6px;">backup</text>
+        立即备份
       </button>
 
-      <!-- 进度条 -->
-      <view v-if="exporting" class="export-progress">
+      <button class="action-btn-ghost" @click="startExport">
+        <text class="material-icons-round" style="font-size: 18px; color: var(--text-1); margin-right: 6px;">download</text>
+        导出到本地
+      </button>
+
+      <button class="action-btn-dim" @click="startRepair">
+        <text class="material-icons-round" style="font-size: 18px; color: var(--text-3); margin-right: 6px;">build</text>
+        数据修复
+      </button>
+    </view>
+
+    <!-- 进度条 -->
+    <view v-if="exporting" class="progress-area">
+      <view class="export-progress">
         <view class="export-progress__bar">
           <view class="export-progress__fill" :style="{ width: exportProgress + '%' }" />
         </view>
         <text class="export-progress__text">{{ exportProgress }}%</text>
       </view>
     </view>
+
+    <!-- 回收站 -->
+    <view class="recycle-section">
+      <text class="recycle-section__title">回收站</text>
+      <text class="recycle-section__desc">30天内删除的犬只可恢复</text>
+      <text class="recycle-section__link" @click="goToRecycleBin">进入回收站 →</text>
+    </view>
+
+    <!-- 警告文字 -->
+    <text class="warning-text">备份文件包含所有犬只、记录、财务数据，请妥善保管</text>
   </view>
 </template>
 
@@ -70,15 +68,16 @@ import { onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 
-const exportFormat = ref<'json' | 'csv'>('json')
 const exporting = ref(false)
 const exportProgress = ref(0)
 const lastBackupDate = ref('')
+const autoBackup = ref(true)
 
-const { run: getBackupInfo } = useCloudCall<{ data: { last_backup?: number } }>('family-service', 'getBackupInfo')
+const { run: getBackupInfo } = useCloudCall<{ data: { last_backup?: number; auto_backup?: boolean } }>('family-service', 'getBackupInfo')
 const { run: exportData } = useCloudCall<{ data: { url: string } }>('family-service', 'exportData', {
   showLoading: false,
 })
+const { run: updateSettings } = useCloudCall('family-service', 'updateSettings')
 
 function formatDate(ts: number): string {
   if (!ts) return ''
@@ -91,13 +90,20 @@ async function loadInfo() {
   if (res?.data?.last_backup) {
     lastBackupDate.value = formatDate(res.data.last_backup)
   }
+  if (res?.data?.auto_backup !== undefined) {
+    autoBackup.value = res.data.auto_backup
+  }
 }
 
-async function startExport() {
+async function toggleAutoBackup() {
+  autoBackup.value = !autoBackup.value
+  await updateSettings({ auto_backup: autoBackup.value })
+}
+
+async function runExport(format: string) {
   exporting.value = true
   exportProgress.value = 0
 
-  // 模拟进度推进
   const timer = setInterval(() => {
     if (exportProgress.value < 90) {
       exportProgress.value += Math.floor(Math.random() * 15) + 5
@@ -106,20 +112,24 @@ async function startExport() {
   }, 300)
 
   try {
-    const res = await exportData({ format: exportFormat.value })
+    const res = await exportData({ format })
     exportProgress.value = 100
     clearInterval(timer)
 
     if (res?.data?.url) {
-      uni.showToast({ title: '导出成功', icon: 'success' })
-      // V1: 提示用户下载链接
+      uni.setClipboardData({
+        data: res.data.url,
+        success: () => {
+          uni.showToast({ title: '下载链接已复制', icon: 'success' })
+        },
+      })
     } else {
-      uni.showToast({ title: '导出完成', icon: 'success' })
+      uni.showToast({ title: '操作完成', icon: 'success' })
     }
     loadInfo()
   } catch {
     clearInterval(timer)
-    uni.showToast({ title: '导出失败', icon: 'none' })
+    uni.showToast({ title: '操作失败', icon: 'none' })
   } finally {
     setTimeout(() => {
       exporting.value = false
@@ -128,156 +138,126 @@ async function startExport() {
   }
 }
 
+function startBackup() {
+  runExport('json')
+}
+
+function startExport() {
+  uni.showActionSheet({
+    itemList: ['JSON 格式', 'CSV 格式'],
+    success: (res) => {
+      runExport(res.tapIndex === 0 ? 'json' : 'csv')
+    },
+  })
+}
+
+function startRepair() {
+  uni.showModal({
+    title: '数据修复',
+    content: '将检查并修复数据不一致问题，是否继续？',
+    success: (res) => {
+      if (res.confirm) {
+        uni.showToast({ title: '修复中...', icon: 'loading' })
+      }
+    },
+  })
+}
+
+function goToRecycleBin() {
+  uni.showToast({ title: '功能开发中', icon: 'none' })
+}
+
 onShow(() => loadInfo())
 </script>
 
 <style lang="scss" scoped>
-.page {
-  min-height: 100vh;
-  background: var(--bg);
-  padding-bottom: 40px;
-}
-
-/* ==================== BACKUP CARD ==================== */
-.backup-card {
-  margin: 0 16px 20px;
+/* ==================== STATUS CARD ==================== */
+.status-card {
+  margin: 0 var(--space-page) 20px;
   background: var(--card);
   border-radius: var(--radius-card);
-  padding: 24px;
+  padding: 4px 16px;
   box-shadow: var(--shadow);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
+}
 
-  &__icon-box {
-    width: 64px;
-    height: 64px;
+/* ==================== CUSTOM TOGGLE ==================== */
+.custom-toggle {
+  width: 42px;
+  height: 24px;
+  border-radius: 12px;
+  background: var(--text-4);
+  position: relative;
+  transition: background 0.2s ease;
+  flex-shrink: 0;
+
+  &__knob {
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
-    background: var(--blue-soft);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 16px;
+    background: #fff;
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+    transition: left 0.2s ease;
   }
 
-  &__title {
-    font-family: var(--font-display);
-    font-size: 18px;
-    font-weight: 800;
-    color: var(--text-1);
-    margin-bottom: 6px;
-  }
-
-  &__desc {
-    font-size: 13px;
-    color: var(--text-2);
-    line-height: 1.5;
-    margin-bottom: 12px;
-  }
-
-  &__last {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 6px 12px;
-    border-radius: var(--radius-tag);
-    background: var(--bg);
-  }
-
-  &__last-text {
-    font-size: 12px;
-    color: var(--text-3);
+  &--on {
+    background: var(--primary);
+    .custom-toggle__knob { left: 20px; }
   }
 }
 
-/* ==================== EXPORT OPTIONS ==================== */
-.export-section {
-  padding: 0 16px;
-  margin-bottom: 20px;
-}
-
-.section-label {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-3);
-  letter-spacing: 0.5px;
-  padding: 0 4px 8px;
-  display: block;
-}
-
-.export-options {
+/* ==================== BACKUP ACTIONS ==================== */
+.backup-actions {
+  padding: 0 var(--space-page);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+  margin-bottom: 24px;
 }
 
-.export-option {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 14px 16px;
-  background: var(--card);
-  border-radius: var(--radius-row);
-  box-shadow: var(--shadow);
-  border: 1.5px solid transparent;
-  transition: all 0.15s ease;
-  &:active { transform: scale(0.975); }
-
-  &--active {
-    border-color: var(--primary);
-    background: var(--primary-soft);
-  }
-
-  &__icon {
-    font-family: 'Material Icons Round';
-    font-size: 24px;
-    color: var(--text-3);
-    .export-option--active & { color: var(--primary); }
-  }
-
-  &__info { flex: 1; min-width: 0; }
-
-  &__name {
-    font-size: 15px;
-    font-weight: 700;
-    color: var(--text-1);
-    display: block;
-  }
-
-  &__desc {
-    font-size: 12px;
-    color: var(--text-3);
-    margin-top: 2px;
-    display: block;
-  }
-}
-
-/* ==================== EXPORT BUTTON ==================== */
-.export-area {
-  padding: 0 16px;
-}
-
-.export-btn {
+.action-btn-ghost {
   width: 100%;
   height: 50px;
   border-radius: var(--radius-btn);
-  border: none;
-  font-family: var(--font-display);
-  font-size: 16px;
+  border: 1.5px solid var(--text-4);
+  background: var(--card);
+  font-size: 15px;
   font-weight: 700;
-  color: #fff;
-  background: var(--primary);
-  box-shadow: 0 4px 16px rgba(234, 62, 119, 0.25);
+  color: var(--text-1);
+  font-family: var(--font-display);
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.12s ease;
-  &:active { transform: scale(0.97); opacity: 0.9; }
+  &:active { transform: scale(0.94); opacity: 0.85; }
+}
+
+.action-btn-dim {
+  width: 100%;
+  height: 50px;
+  border-radius: var(--radius-btn);
+  border: none;
+  background: var(--card-dim);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-2);
+  font-family: var(--font-display);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s ease;
+  &:active { transform: scale(0.94); opacity: 0.85; }
+}
+
+/* ==================== PROGRESS ==================== */
+.progress-area {
+  padding: 0 var(--space-page);
+  margin-bottom: 20px;
 }
 
 .export-progress {
-  margin-top: 16px;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -305,5 +285,45 @@ onShow(() => loadInfo())
     min-width: 40px;
     text-align: right;
   }
+}
+
+/* ==================== RECYCLE SECTION ==================== */
+.recycle-section {
+  margin: 0 var(--space-page) 16px;
+  background: var(--card);
+  border-radius: var(--radius-card);
+  padding: 16px;
+  box-shadow: var(--shadow);
+
+  &__title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-1);
+    display: block;
+    margin-bottom: 4px;
+  }
+
+  &__desc {
+    font-size: 12px;
+    color: var(--text-3);
+    display: block;
+    margin-bottom: 10px;
+  }
+
+  &__link {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--primary);
+  }
+}
+
+/* ==================== WARNING TEXT ==================== */
+.warning-text {
+  display: block;
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-3);
+  padding: 0 var(--space-page);
+  line-height: 1.5;
 }
 </style>

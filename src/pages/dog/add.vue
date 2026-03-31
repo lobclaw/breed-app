@@ -41,20 +41,20 @@
       <!-- 性别 -->
       <view class="form-field">
         <view class="field-label"><text>性别</text></view>
-        <view class="segmented">
+        <view class="pill-select">
           <view
-            class="seg-option"
-            :class="{ active: form.gender === '公', locked: form.role === '外部种公' && form.gender === '母' }"
-            @click="form.gender = '公'"
-          >
-            <text>公</text>
-          </view>
-          <view
-            class="seg-option"
-            :class="{ active: form.gender === '母', locked: form.role === '外部种公' }"
+            class="pill-select__item"
+            :class="{ 'pill-select__item--active': form.gender === '母', locked: form.role === '外部种公' }"
             @click="form.role !== '外部种公' && (form.gender = '母')"
           >
             <text>母</text>
+          </view>
+          <view
+            class="pill-select__item"
+            :class="{ 'pill-select__item--active': form.gender === '公', locked: form.role === '外部种公' && form.gender === '母' }"
+            @click="form.gender = '公'"
+          >
+            <text>公</text>
           </view>
         </view>
       </view>
@@ -62,12 +62,37 @@
       <!-- 品种 -->
       <view class="form-field">
         <view class="field-label"><text>品种</text></view>
-        <input v-model="form.breed" class="field-input" placeholder="如：马尔济斯" />
+        <view class="pill-select">
+          <view
+            v-for="b in breedOptions"
+            :key="b"
+            class="pill-select__item"
+            :class="{ 'pill-select__item--active': form.breed === b }"
+            @click="form.breed = b"
+          >
+            <text>{{ b }}</text>
+          </view>
+          <view
+            v-if="customBreed && !breedOptions.includes(customBreed)"
+            class="pill-select__item"
+            :class="{ 'pill-select__item--active': form.breed === customBreed }"
+            @click="form.breed = customBreed"
+          >
+            <text>{{ customBreed }}</text>
+          </view>
+          <view class="pill-select__add" @click="addCustomBreed">
+            <text class="material-icons-round" style="font-size: 14px;">add</text>
+            <text>自定义</text>
+          </view>
+        </view>
       </view>
 
       <!-- 出生日期 -->
       <view class="form-field">
-        <view class="field-label"><text>出生日期</text></view>
+        <view class="field-label">
+          <text>出生日期</text>
+          <text v-if="form.role === '外部种公'" class="field-label__optional">（选填）</text>
+        </view>
         <picker mode="date" :value="birthDateStr" @change="onBirthDateChange">
           <view class="field-input field-input--picker">
             <text :class="{ 'placeholder-text': !form.birth_date }">
@@ -76,6 +101,34 @@
             <text class="material-icons-round field-input__icon">calendar_today</text>
           </view>
         </picker>
+      </view>
+
+      <!-- 购入日期（种狗） -->
+      <view v-if="form.role === '种狗'" class="form-field">
+        <view class="field-label">
+          <text>购入日期</text>
+          <text class="field-label__optional">（选填）</text>
+        </view>
+        <picker mode="date" :value="purchaseDateStr" @change="onPurchaseDateChange">
+          <view class="field-input field-input--picker">
+            <text :class="{ 'placeholder-text': !form.purchase_date }">
+              {{ form.purchase_date ? purchaseDateStr : '年 / 月 / 日' }}
+            </text>
+            <text class="material-icons-round field-input__icon">calendar_today</text>
+          </view>
+        </picker>
+      </view>
+
+      <!-- 购入价格（种狗） -->
+      <view v-if="form.role === '种狗'" class="form-field">
+        <view class="field-label">
+          <text>购入价格</text>
+          <text class="field-label__optional">（选填）</text>
+        </view>
+        <view class="field-input-prefix">
+          <text class="field-input-prefix__symbol">¥</text>
+          <input v-model="purchasePriceInput" class="field-input field-input--prefixed" type="digit" placeholder="0" />
+        </view>
       </view>
 
       <!-- 外部种公额外字段 -->
@@ -92,41 +145,89 @@
       </view>
     </view>
 
-    <!-- 提交按钮 -->
-    <view class="btn-footer">
+    <!-- 固定底部按钮 -->
+    <view class="fixed-bottom">
       <button
-        class="btn-full"
-        :class="{ 'btn-full--disabled': !canSubmit }"
+        class="submit-btn"
         :loading="submitting"
-        :disabled="!canSubmit"
+        :disabled="!canSubmit || submitting"
         @click="submit"
       >
-        <text v-if="!isEdit" class="material-icons-round" style="font-size: 20px;">add_circle</text>
         {{ isEdit ? '保存修改' : '创建犬只' }}
       </button>
     </view>
+
+    <!-- 自定义品种弹窗 -->
+    <BModal
+      v-model:visible="showBreedModal"
+      title="自定义品种"
+      @confirm="onBreedConfirm"
+    >
+      <view class="custom-input-wrap">
+        <input
+          v-model="breedInput"
+          class="custom-input"
+          placeholder="输入品种名称"
+          :focus="showBreedModal"
+        />
+      </view>
+    </BModal>
   </view>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, watch } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
+import BModal from '@/components/layout/BModal.vue'
+import { useDogStore } from '@/stores/dogStore'
+
+const dogStore = useDogStore()
 
 const isEdit = ref(false)
 let editDogId = ''
 
 const form = reactive({
   name: '',
-  gender: '' as '公' | '母' | '',
+  gender: '母' as '公' | '母' | '',
   role: '种狗' as string,
   breed: '马尔济斯',
   birth_date: null as number | null,
+  purchase_date: null as number | null,
   owner_info: '',
 })
 
+const purchasePriceInput = ref('')
+
 const submitting = ref(false)
+
+const breedOptions = ['马尔济斯', '西施', '约克夏']
+const customBreed = ref('')
+const showBreedModal = ref(false)
+const breedInput = ref('')
+
+function addCustomBreed() {
+  breedInput.value = ''
+  showBreedModal.value = true
+}
+
+function onBreedConfirm() {
+  if (breedInput.value.trim()) {
+    customBreed.value = breedInput.value.trim()
+    form.breed = customBreed.value
+  }
+  showBreedModal.value = false
+}
+
+// 切换角色时自动设置性别
+watch(() => form.role, (role) => {
+  if (role === '外部种公') {
+    form.gender = '公'
+  } else {
+    form.gender = '母'
+  }
+})
 
 const roleOptions = [
   { label: '种狗', value: '种狗' },
@@ -137,10 +238,10 @@ const roleOptions = [
 const canSubmit = computed(() => {
   if (!form.gender) return false
   if (!form.role) return false
-  // 幼崽可以不填名称
   if (form.role !== '幼崽' && !form.name.trim()) return false
-  // 外部种公锁定为公
   if (form.role === '外部种公' && form.gender !== '公') return false
+  // 种狗和幼崽必须填出生日期，外部种公选填
+  if (form.role !== '外部种公' && !form.birth_date) return false
   return true
 })
 
@@ -155,6 +256,16 @@ function onBirthDateChange(e: any) {
   form.birth_date = new Date(dateStr + 'T00:00:00+08:00').getTime()
 }
 
+const purchaseDateStr = computed(() => {
+  if (!form.purchase_date) return ''
+  const d = new Date(form.purchase_date)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+})
+
+function onPurchaseDateChange(e: any) {
+  form.purchase_date = new Date(e.detail.value + 'T00:00:00+08:00').getTime()
+}
+
 const { run: createDog } = useCloudCall('dog-service', 'createDog', { successMessage: '已添加' })
 const { run: updateDog } = useCloudCall('dog-service', 'updateDog', { successMessage: '已更新' })
 const { run: fetchDetail } = useCloudCall<{ data: any }>('dog-service', 'getDogDetail')
@@ -163,23 +274,27 @@ async function submit() {
   submitting.value = true
 
   try {
+    const dogData = {
+      name: form.name.trim(),
+      gender: form.gender,
+      role: form.role,
+      breed: form.breed,
+      birth_date: form.birth_date,
+      purchase_date: form.purchase_date || null,
+      purchase_price: purchasePriceInput.value ? parseFloat(purchasePriceInput.value) : null,
+      owner_info: form.owner_info || null,
+    }
+
     if (isEdit.value) {
-      await updateDog(editDogId, {
-        gender: form.gender,
-        role: form.role,
-        breed: form.breed,
-        birth_date: form.birth_date,
-        owner_info: form.owner_info || null,
-      })
+      await updateDog(editDogId, dogData)
+      // 更新缓存
+      dogStore.updateDog(editDogId, dogData)
     } else {
-      await createDog({
-        name: form.name.trim(),
-        gender: form.gender,
-        role: form.role,
-        breed: form.breed,
-        birth_date: form.birth_date,
-        owner_info: form.owner_info || null,
-      })
+      const res = await createDog(dogData)
+      // 新增到缓存
+      if (res?.data?._id) {
+        dogStore.addDog({ _id: res.data._id, ...dogData } as any)
+      }
     }
 
     uni.navigateBack()
@@ -202,18 +317,15 @@ onLoad(async (query) => {
       form.role = dog.role
       form.breed = dog.breed || ''
       form.birth_date = dog.birth_date
+      form.purchase_date = dog.purchase_date || null
       form.owner_info = dog.owner_info || ''
+      if (dog.purchase_price) purchasePriceInput.value = String(dog.purchase_price)
     }
   }
 })
 </script>
 
 <style lang="scss" scoped>
-.page {
-  min-height: 100vh;
-  background: var(--bg);
-  padding-bottom: 100px;
-}
 
 /* ---- 角色选择器 ---- */
 .role-selector {
@@ -281,18 +393,14 @@ onLoad(async (query) => {
 }
 
 .field-label {
-  font-size: 12px;
   font-weight: 700;
   color: var(--text-2);
   margin-bottom: 6px;
-  display: flex;
   align-items: center;
-  gap: 4px;
 
   &__optional {
     font-size: 11px;
     font-weight: 500;
-    color: var(--text-3);
   }
 }
 
@@ -308,6 +416,7 @@ onLoad(async (query) => {
   font-weight: 600;
   color: var(--text-1);
   outline: none;
+  box-sizing: border-box;
   transition: border-color 0.2s;
 
   &:focus {
@@ -336,68 +445,31 @@ onLoad(async (query) => {
   font-weight: 500;
 }
 
-/* ---- 性别切换 (segmented) ---- */
-.segmented {
-  display: flex;
-  background: var(--card-dim);
-  border-radius: 12px;
-  padding: 3px;
-  gap: 2px;
-}
-
-.seg-option {
-  flex: 1;
-  height: 38px;
-  border-radius: 10px;
+.field-input-prefix {
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-2);
-  transition: all 0.2s ease;
 
-  &.active {
-    background: var(--card);
-    color: var(--primary);
-    font-weight: 700;
-    box-shadow: var(--shadow);
+  &__symbol {
+    position: absolute;
+    left: 16px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-3);
+    z-index: 1;
+    pointer-events: none;
   }
+}
 
+.field-input--prefixed {
+  padding-left: 34px;
+}
+
+/* ---- Pill 单选 (locked modifier) ---- */
+.pill-select__item {
   &.locked {
     opacity: 0.5;
   }
 }
 
-/* ---- 提交按钮 ---- */
-.btn-footer {
-  padding: 16px var(--space-page) 0;
-}
-
-.btn-full {
-  width: 100%;
-  height: 50px;
-  border-radius: var(--radius-btn);
-  border: none;
-  font-family: var(--font-display);
-  font-size: 15px;
-  font-weight: 700;
-  color: #fff;
-  background: var(--primary);
-  box-shadow: 0 4px 16px rgba(234, 62, 119, 0.25);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  transition: all 0.12s ease;
-
-  &:active:not(.btn-full--disabled) {
-    transform: scale(0.97);
-    opacity: 0.9;
-  }
-
-  &--disabled {
-    opacity: 0.4;
-  }
-}
 </style>

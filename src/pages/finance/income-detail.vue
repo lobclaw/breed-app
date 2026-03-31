@@ -136,7 +136,7 @@ async function loadRecord() {
 }
 
 function goEdit() {
-  uni.navigateTo({ url: `/pages/finance/income-add?id=${recordId}` })
+  uni.navigateTo({ url: `/pages/finance/income-edit?id=${recordId}` })
 }
 
 function goToSale() {
@@ -172,9 +172,8 @@ onLoad((query) => {
 </script>
 
 <style lang="scss" scoped>
+
 .page {
-  min-height: 100vh;
-  background: var(--bg);
   padding-bottom: 40px;
 }
 
@@ -216,24 +215,10 @@ onLoad((query) => {
   display: flex;
   flex-direction: column;
 }
-.info-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 0;
-  border-bottom: 1px solid rgba(216, 203, 189, 0.3);
-  &:last-child { border-bottom: none; }
-}
 .info-row-label {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-3);
   flex-shrink: 0;
 }
 .info-row-value {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-1);
   text-align: right;
   display: flex;
   align-items: center;
@@ -287,16 +272,4 @@ onLoad((query) => {
   text-align: center;
 }
 
-/* ==================== ACTION AREA ==================== */
-.action-area {
-  padding: 16px 16px 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.btn-row {
-  display: flex;
-  gap: 10px;
-  :deep(.b-btn) { flex: 1; }
-}
 </style>

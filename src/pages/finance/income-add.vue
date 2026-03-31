@@ -17,9 +17,9 @@
         <view class="amount-underline" />
       </view>
 
-      <!-- 收入类型 -->
+      <!-- 收入分类 -->
       <view class="form-row" @click="showTypeSheet = true">
-        <text class="form-label">类型</text>
+        <text class="form-label">分类</text>
         <view class="form-right">
           <view class="category-tag">
             <text class="material-icons-round" style="font-size:16px;color:var(--text-1);">{{ typeIcon }}</text>
@@ -30,32 +30,18 @@
       </view>
 
       <!-- 日期 -->
-      <view class="date-row-wrap">
-        <view class="date-main">
-          <text class="form-label">日期</text>
-          <picker mode="date" :value="dateStr" @change="onDateChange">
-            <view class="form-right">
-              <text>{{ dateStr }}</text>
-              <text class="material-icons-round" style="font-size:18px;color:var(--text-3);">calendar_today</text>
-            </view>
-          </picker>
-        </view>
+      <view class="field-group">
+        <view class="field-label"><text>日期</text></view>
+        <picker mode="date" :value="dateStr" @change="onDateChange">
+          <view class="form-input form-input--picker">
+            <text>{{ dateStr || '请选择日期' }}</text>
+            <text class="material-icons-round form-input__suffix">calendar_today</text>
+          </view>
+        </picker>
         <view class="date-chips">
-          <text
-            class="date-chip"
-            :class="{ active: dateChipActive === 'today' }"
-            @click="setDateChip('today')"
-          >今天</text>
-          <text
-            class="date-chip"
-            :class="{ active: dateChipActive === 'yesterday' }"
-            @click="setDateChip('yesterday')"
-          >昨天</text>
-          <text
-            class="date-chip"
-            :class="{ active: dateChipActive === 'dayBefore' }"
-            @click="setDateChip('dayBefore')"
-          >前天</text>
+          <text class="date-chip" :class="{ active: chipActive === 'today' }" @click="setChip('today')">今天</text>
+          <text class="date-chip" :class="{ active: chipActive === 'yesterday' }" @click="setChip('yesterday')">昨天</text>
+          <text class="date-chip" :class="{ active: chipActive === 'dayBefore' }" @click="setChip('dayBefore')">前天</text>
         </view>
       </view>
 
@@ -74,6 +60,16 @@
         <text>添加图片凭证（选填）</text>
       </view>
 
+      <!-- 照片预览 -->
+      <view v-if="photos.length" class="photo-preview-row">
+        <view v-for="(p, i) in photos" :key="i" class="photo-thumb-wrap">
+          <image :src="p" class="photo-thumb" mode="aspectFill" />
+          <view class="photo-thumb-del" @click.stop="photos.splice(i, 1)">
+            <text class="material-icons-round" style="font-size:14px;color:#fff;">close</text>
+          </view>
+        </view>
+      </view>
+
       <!-- 备注 -->
       <view class="note-section">
         <text class="note-label">备注（选填）</text>
@@ -84,33 +80,77 @@
         />
       </view>
 
-      <!-- 提交按钮 -->
+    </view>
+
+    <!-- 固定底部按钮 -->
+    <view class="fixed-bottom">
       <button
         class="submit-btn"
         :loading="submitting"
-        :disabled="!canSubmit"
+        :disabled="!canSubmit || submitting"
         @click="submit"
       >
         保存收入
       </button>
     </view>
+
+    <!-- 分类选择面板 -->
+    <BSheet v-model:visible="showTypeSheet" title="选择分类">
+      <view class="picker-pills">
+        <text
+          v-for="t in incomeTypes"
+          :key="t"
+          class="picker-pill"
+          :class="{ active: form.type === t }"
+          @click="form.type = t; showTypeSheet = false"
+        >{{ t }}</text>
+      </view>
+    </BSheet>
   </view>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
+import BSheet from '@/components/layout/BSheet.vue'
 
 const amountInput = ref('')
 const submitting = ref(false)
+const photos = ref<string[]>([])
 const showTypeSheet = ref(false)
-const dateChipActive = ref('today')
+
+// 日期
+const today = new Date()
+today.setHours(0, 0, 0, 0)
+const date = ref<number>(today.getTime())
+const chipActive = ref('today')
+
+const dateStr = computed(() => {
+  if (!date.value) return ''
+  const d = new Date(date.value)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+})
+
+function onDateChange(e: any) {
+  date.value = new Date(e.detail.value + 'T00:00:00+08:00').getTime()
+  chipActive.value = ''
+  const now = new Date(); now.setHours(0, 0, 0, 0)
+  const diff = (now.getTime() - date.value) / 86400000
+  if (diff === 0) chipActive.value = 'today'
+  else if (diff === 1) chipActive.value = 'yesterday'
+  else if (diff === 2) chipActive.value = 'dayBefore'
+}
+
+function setChip(chip: string) {
+  const now = new Date(); now.setHours(0, 0, 0, 0)
+  const map: Record<string, number> = { today: 0, yesterday: -1, dayBefore: -2 }
+  date.value = now.getTime() + (map[chip] || 0) * 86400000
+  chipActive.value = chip
+}
 
 const form = reactive({
   type: '其他',
-  date: Date.now(),
   notes: '',
 })
 
@@ -125,36 +165,24 @@ const typeIcons: Record<string, string> = {
 
 const typeIcon = computed(() => typeIcons[form.type] || 'more_horiz')
 
-const dateStr = computed(() => {
-  const d = new Date(form.date)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-})
-
 const canSubmit = computed(() => {
   const amount = parseFloat(amountInput.value)
-  return amount > 0 && form.type
+  return amount > 0 && form.type && !!date.value
 })
 
-function setDateChip(chip: string) {
-  dateChipActive.value = chip
-  const now = new Date()
-  now.setHours(0, 0, 0, 0)
-  if (chip === 'yesterday') now.setDate(now.getDate() - 1)
-  if (chip === 'dayBefore') now.setDate(now.getDate() - 2)
-  form.date = now.getTime()
-}
-
-function onDateChange(e: any) {
-  form.date = new Date(e.detail.value + 'T00:00:00+08:00').getTime()
-  dateChipActive.value = ''
-}
-
 function pickLink() {
-  // 关联选择器 placeholder
+  uni.showToast({ title: '关联记录功能开发中', icon: 'none' })
 }
 
 function addPhoto() {
-  // 拍照/相册 placeholder
+  uni.chooseImage({
+    count: 3,
+    sizeType: ['compressed'],
+    sourceType: ['album', 'camera'],
+    success: (res) => {
+      photos.value = [...photos.value, ...res.tempFilePaths]
+    },
+  })
 }
 
 const { run: addIncome } = useCloudCall('finance-service', 'addIncome', {
@@ -168,28 +196,19 @@ async function submit() {
     const res = await addIncome({
       amount: parseFloat(amountInput.value),
       type: form.type,
-      date: form.date,
+      date: date.value,
       notes: form.notes || null,
+      images: photos.value,
+      source_type: 'manual',
     })
     if (res) uni.navigateBack()
   } finally {
     submitting.value = false
   }
 }
-
-onLoad(() => {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  form.date = today.getTime()
-})
 </script>
 
 <style lang="scss" scoped>
-.page {
-  min-height: 100vh;
-  background: var(--bg);
-  padding-bottom: 40px;
-}
 
 .form-body {
   padding: 8px 24px 24px;
@@ -270,44 +289,6 @@ onLoad(() => {
   color: var(--text-1);
 }
 
-/* ---- Date row ---- */
-.date-row-wrap {
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-  padding: 14px 0;
-}
-
-.date-main {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.date-chips {
-  display: flex;
-  gap: 6px;
-  margin-top: 6px;
-}
-
-.date-chip {
-  padding: 4px 12px;
-  border-radius: var(--radius-btn);
-  font-size: 11px;
-  font-weight: 600;
-  background: var(--card-dim);
-  color: var(--text-2);
-  transition: all 0.12s ease;
-
-  &:active {
-    transform: scale(0.92);
-  }
-
-  &.active {
-    background: var(--primary);
-    color: #fff;
-    box-shadow: 0 2px 8px rgba(234, 62, 119, 0.25);
-  }
-}
-
 /* ---- Photo row ---- */
 .photo-row {
   display: flex;
@@ -322,6 +303,68 @@ onLoad(() => {
   .material-icons-round {
     font-size: 20px;
     color: var(--text-3);
+  }
+}
+
+/* ---- Photo preview ---- */
+.photo-preview-row {
+  display: flex;
+  gap: 8px;
+  padding: 10px 0 4px;
+  flex-wrap: wrap;
+}
+
+.photo-thumb-wrap {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.photo-thumb {
+  width: 100%;
+  height: 100%;
+}
+
+.photo-thumb-del {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---- Picker pills ---- */
+.picker-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 4px 24px;
+}
+
+.picker-pill {
+  padding: 8px 18px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 600;
+  background: var(--card-dim);
+  color: var(--text-2);
+  transition: all 0.12s ease;
+
+  &:active {
+    transform: scale(0.92);
+  }
+
+  &.active {
+    background: var(--primary);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(234, 62, 119, 0.25);
   }
 }
 
@@ -355,30 +398,4 @@ onLoad(() => {
   }
 }
 
-/* ---- Submit button ---- */
-.submit-btn {
-  display: block;
-  width: 100%;
-  margin-top: 24px;
-  padding: 16px;
-  border: none;
-  border-radius: 16px;
-  font-size: 16px;
-  font-weight: 700;
-  color: #fff;
-  background: var(--red);
-  box-shadow: 0 4px 16px rgba(224, 82, 82, 0.25);
-  text-align: center;
-  font-family: var(--font-display);
-  transition: transform 0.12s ease, opacity 0.12s ease;
-
-  &:active {
-    transform: scale(0.94);
-    opacity: 0.85;
-  }
-
-  &[disabled] {
-    opacity: 0.4;
-  }
-}
 </style>

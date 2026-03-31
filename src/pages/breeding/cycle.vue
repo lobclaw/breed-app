@@ -225,16 +225,32 @@ function goToLitter(id: string) {
   uni.navigateTo({ url: `/pages/breeding/litter?id=${id}` })
 }
 
-function onRecordTap(_record: any) {
-  // 可扩展：跳转到记录详情
+function onRecordTap(record: any) {
+  uni.navigateTo({ url: `/pages/record/breeding-detail?id=${record._id}` })
 }
 
 function addRecord() {
-  uni.navigateTo({ url: `/pages/record/breeding?cycleId=${cycleId}&dogId=${cycle.value.dam_id}` })
+  // 显示操作菜单选择记录类型
+  uni.showActionSheet({
+    itemList: ['发情记录', '卵泡检查', '配种记录', '孕检记录', '产检记录', '临产监测', '异常终止'],
+    success: (res) => {
+      const pages = [
+        'breeding-heat',
+        'breeding-follicle',
+        'breeding-mating',
+        'breeding-pregnancy',
+        'breeding-prenatal',
+        'breeding-prelabor',
+        'breeding-termination',
+      ]
+      const page = pages[res.tapIndex]
+      uni.navigateTo({ url: `/pages/record/${page}?cycleId=${cycleId}&dogId=${cycle.value.dam_id}` })
+    },
+  })
 }
 
 function addBirth() {
-  uni.navigateTo({ url: `/pages/breeding/birth-wizard?cycleId=${cycleId}` })
+  uni.navigateTo({ url: `/pages/breeding/birth-wizard?cycleId=${cycleId}&damName=${encodeURIComponent(cycle.value.dam_name)}` })
 }
 
 async function closeCycleAction() {

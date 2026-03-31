@@ -134,6 +134,7 @@
               v-for="record in healthRecords.slice(0, 3)"
               :key="record._id"
               class="dog-detail__rec-item"
+              @click="goToHealthDetail(record._id)"
             >
               <view class="dog-detail__rec-icon" :class="`dog-detail__rec-icon--${healthIconColor(record.type)}`">
                 <text class="material-icons-round">{{ healthIcon(record.type) }}</text>
@@ -175,9 +176,33 @@
               <text class="dog-detail__info-row-label">出生日期</text>
               <text class="dog-detail__info-row-value">{{ dog.birth_date ? formatDate(dog.birth_date) : '—' }}</text>
             </view>
+            <view v-if="dog.purchase_date" class="dog-detail__info-row">
+              <text class="dog-detail__info-row-label">购入日期</text>
+              <text class="dog-detail__info-row-value">{{ formatDate(dog.purchase_date) }}</text>
+            </view>
+            <view v-if="dog.purchase_price" class="dog-detail__info-row">
+              <text class="dog-detail__info-row-label">购入价格</text>
+              <text class="dog-detail__info-row-value">¥{{ dog.purchase_price.toLocaleString() }}</text>
+            </view>
             <view class="dog-detail__info-row">
               <text class="dog-detail__info-row-label">去向</text>
               <text class="dog-detail__info-row-value">{{ dog.disposition || '—' }}</text>
+            </view>
+            <view v-if="dog.disposition_date" class="dog-detail__info-row">
+              <text class="dog-detail__info-row-label">处置日期</text>
+              <text class="dog-detail__info-row-value">{{ formatDate(dog.disposition_date) }}</text>
+            </view>
+            <view v-if="dog.disposition_notes" class="dog-detail__info-row">
+              <text class="dog-detail__info-row-label">处置备注</text>
+              <text class="dog-detail__info-row-value">{{ dog.disposition_notes }}</text>
+            </view>
+            <view v-if="dog.owner_info" class="dog-detail__info-row">
+              <text class="dog-detail__info-row-label">主人信息</text>
+              <text class="dog-detail__info-row-value">{{ dog.owner_info }}</text>
+            </view>
+            <view v-if="dog.origin_litter_id" class="dog-detail__info-row" @click="uni.navigateTo({ url: '/pages/breeding/litter?id=' + dog.origin_litter_id })">
+              <text class="dog-detail__info-row-label">来源窝</text>
+              <text class="dog-detail__info-row-value" style="color: var(--primary); text-decoration: underline;">查看窝信息</text>
             </view>
             <view v-if="dog.latest_weight" class="dog-detail__info-row">
               <text class="dog-detail__info-row-label">最新体重</text>
@@ -254,6 +279,7 @@
               v-for="record in healthRecords"
               :key="record._id"
               class="dog-detail__rec-item"
+              @click="goToHealthDetail(record._id)"
             >
               <view class="dog-detail__rec-icon" :class="`dog-detail__rec-icon--${healthIconColor(record.type)}`">
                 <text class="material-icons-round">{{ healthIcon(record.type) }}</text>
@@ -270,16 +296,25 @@
 
       <!-- ========== 财务 Tab ========== -->
       <view v-if="activeTab === 'finance'" class="dog-detail__pane">
-        <BEmpty
-          icon="account_balance_wallet"
-          title="财务功能将在第二批开发"
-          description="敬请期待"
-        />
+        <view class="dog-detail__finance-links">
+          <view class="dog-detail__finance-link" @click="uni.navigateTo({ url: '/pages/finance/expense-add?dogId=' + dogId })">
+            <text class="material-icons-round" style="font-size: 20px; color: var(--red);">remove_circle</text>
+            <text class="dog-detail__finance-link-text">记录支出</text>
+          </view>
+          <view class="dog-detail__finance-link" @click="uni.navigateTo({ url: '/pages/finance/expense-add?type=income&dogId=' + dogId })">
+            <text class="material-icons-round" style="font-size: 20px; color: var(--green);">add_circle</text>
+            <text class="dog-detail__finance-link-text">记录收入</text>
+          </view>
+          <view v-if="dog?.role === '种狗' && dog?.gender === '母'" class="dog-detail__finance-link" @click="uni.navigateTo({ url: '/pages/finance/dam-roi?damId=' + dogId })">
+            <text class="material-icons-round" style="font-size: 20px; color: var(--primary);">trending_up</text>
+            <text class="dog-detail__finance-link-text">投资回报</text>
+          </view>
+        </view>
       </view>
     </view>
 
     <!-- ==================== 更多操作菜单 ==================== -->
-    <view v-if="showMore" class="dog-detail__overlay" @click="showMore = false" />
+    <view v-if="showMore" class="dog-detail__overlay" @click="showMore = false" @touchmove.prevent />
     <view class="dog-detail__action-sheet" :class="{ 'dog-detail__action-sheet--show': showMore }">
       <view class="dog-detail__action-sheet-handle" />
       <view class="dog-detail__action-sheet-item" @click="editDog">
@@ -298,6 +333,15 @@
         <view class="dog-detail__action-sheet-text">
           <text class="dog-detail__action-sheet-title">标记状态</text>
           <text class="dog-detail__action-sheet-desc">生病、康复等状态变更</text>
+        </view>
+      </view>
+      <view class="dog-detail__action-sheet-item" @click="openDispositionSheet">
+        <view class="dog-detail__action-sheet-icon dog-detail__action-sheet-icon--plum">
+          <text class="material-icons-round">swap_horiz</text>
+        </view>
+        <view class="dog-detail__action-sheet-text">
+          <text class="dog-detail__action-sheet-title">去向管理</text>
+          <text class="dog-detail__action-sheet-desc">已故、领养、赠送、退休等</text>
         </view>
       </view>
       <view class="dog-detail__action-sheet-sep" />
@@ -645,6 +689,7 @@ import BSheet from '@/components/layout/BSheet.vue'
 import BModal from '@/components/layout/BModal.vue'
 import BDeleteConfirm from '@/components/layout/BDeleteConfirm.vue'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { useDogStore } from '@/stores/dogStore'
 import type { Dog, DeriveStatus } from '@/types/dog'
 
 const dog = ref<Dog | null>(null)
@@ -688,7 +733,7 @@ const { run: fetchHealth } = useCloudCall<{ data: any[] }>('health-service', 'ge
 const { run: updateDisposition } = useCloudCall('dog-service', 'updateDisposition', { successMessage: '操作成功' })
 const { run: updateStatus } = useCloudCall('dog-service', 'updateStatus', { successMessage: '状态已更新' })
 const { run: deleteDog } = useCloudCall('dog-service', 'deleteDog', { successMessage: '已删除' })
-const { run: promoteToBreeeder } = useCloudCall('dog-service', 'promoteToBreeder', { successMessage: '已升级为种狗' })
+const { run: promoteToBreeder } = useCloudCall('dog-service', 'promoteToBreeder', { successMessage: '已升级为种狗' })
 
 // ==================== 工具函数 ====================
 
@@ -755,7 +800,27 @@ function editDog() {
 }
 
 function addRecord() {
-  uni.navigateTo({ url: `/pages/record/breeding?dogId=${dogId}` })
+  // 显示操作菜单选择记录类型
+  uni.showActionSheet({
+    itemList: ['发情记录', '卵泡检查', '配种记录', '孕检记录', '产检记录', '临产监测', '异常终止'],
+    success: (res) => {
+      const pages = [
+        'breeding-heat',
+        'breeding-follicle',
+        'breeding-mating',
+        'breeding-pregnancy',
+        'breeding-prenatal',
+        'breeding-prelabor',
+        'breeding-termination',
+      ]
+      const page = pages[res.tapIndex]
+      uni.navigateTo({ url: `/pages/record/${page}?dogId=${dogId}` })
+    },
+  })
+}
+
+function goToHealthDetail(recordId: string) {
+  uni.navigateTo({ url: `/pages/record/health-detail?id=${recordId}` })
 }
 
 // ==================== D-6: 快速标记状态 ====================
@@ -767,15 +832,71 @@ function openStatusSheet() {
   showStatusSheet.value = true
 }
 
+// ==================== 去向管理 ====================
+
+function openDispositionSheet() {
+  showMore.value = false
+
+  // 根据当前状态构建选项
+  let items: string[] = []
+  const d = dog.value
+  if (!d) return
+
+  if (d.role === '幼崽') {
+    items = ['升级为种犬', '标记已故', '送领养', '赠送']
+  } else if (d.disposition === '已退休') {
+    items = ['取消退休', '标记已故']
+  } else {
+    // 在养 / 自留 / 默认
+    items = ['标记已故', '送领养', '赠送', '退休']
+  }
+
+  uni.showActionSheet({
+    itemList: items,
+    success: (res) => {
+      const selected = items[res.tapIndex]
+      switch (selected) {
+        case '标记已故':
+          deceasedDate.value = todayStr()
+          deceasedCause.value = ''
+          showDeceasedModal.value = true
+          break
+        case '送领养':
+          adoptionDate.value = todayStr()
+          adoptionNotes.value = ''
+          adoptionFee.value = ''
+          showAdoptionSheet.value = true
+          break
+        case '赠送':
+          giftDate.value = todayStr()
+          giftRecipient.value = ''
+          showGiftSheet.value = true
+          break
+        case '退休':
+          retireDate.value = todayStr()
+          retireReason.value = ''
+          showRetireModal.value = true
+          break
+        case '取消退休':
+          showCancelRetireModal.value = true
+          break
+        case '升级为种犬':
+          showPromoteModal.value = true
+          break
+      }
+    },
+  })
+}
+
 function selectIllness() {
   showStatusSheet.value = false
   // 跳转到疾病记录表单
-  uni.navigateTo({ url: `/pages/record/health?dogId=${dogId}&type=illness` })
+  uni.navigateTo({ url: `/pages/record/health-illness?dogId=${dogId}` })
 }
 
 function openMedication() {
   showStatusSheet.value = false
-  uni.navigateTo({ url: `/pages/record/health?dogId=${dogId}&type=medication` })
+  uni.navigateTo({ url: `/pages/record/health-deworming?dogId=${dogId}` })
 }
 
 // ==================== D-7: 退休确认 ====================
@@ -862,7 +983,7 @@ async function doCancelRetire() {
 const showPromoteModal = ref(false)
 
 async function doPromote() {
-  await promoteToBreeeder(dogId)
+  await promoteToBreeder(dogId)
   showPromoteModal.value = false
   await loadData()
 }
@@ -996,6 +1117,7 @@ function openDeleteConfirm() {
 
 async function doDelete() {
   await deleteDog(dogId)
+  useDogStore().removeDog(dogId)
   showDeleteModal.value = false
   uni.navigateBack()
 }
@@ -1013,6 +1135,7 @@ async function loadData() {
 
     if (detailRes?.data) {
       dog.value = detailRes.data
+      statuses.value = detailRes.data.statuses || []
     }
     if (cyclesRes?.data) {
       cycles.value = cyclesRes.data
@@ -1636,6 +1759,7 @@ onLoad((query) => {
 .dog-detail__action-sheet-icon--amber { background: var(--icon-amber); .material-icons-round { color: var(--amber); } }
 .dog-detail__action-sheet-icon--teal { background: var(--icon-teal); .material-icons-round { color: var(--teal); } }
 .dog-detail__action-sheet-icon--red { background: var(--icon-red); .material-icons-round { color: var(--red); } }
+.dog-detail__action-sheet-icon--plum { background: var(--icon-plum); .material-icons-round { color: var(--plum); } }
 .dog-detail__action-sheet-text {
   flex: 1;
 }
@@ -2169,5 +2293,30 @@ onLoad((query) => {
   font-size: 12px;
   font-weight: 700;
   flex-shrink: 0;
+}
+
+/* 财务 Tab 链接 */
+.dog-detail__finance-links {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dog-detail__finance-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--card);
+  border-radius: var(--radius-row);
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+  transition: transform 0.12s ease;
+  &:active { transform: scale(0.975); }
+}
+
+.dog-detail__finance-link-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
 }
 </style>

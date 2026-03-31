@@ -24,10 +24,7 @@
         <!-- 选择犬只 -->
         <view class="field-group">
           <view class="field-label"><text>选择犬只</text></view>
-          <view class="add-dog-trigger" @click="pickDog">
-            <text class="material-icons-round">add</text>
-            <text>点击添加犬只</text>
-          </view>
+          <BDogPicker v-model="selectedDog" title="选择犬只" />
         </view>
 
         <!-- 疫苗类型 -->
@@ -105,21 +102,18 @@
       <template v-if="form.type === 'deworming'">
         <view class="field-group">
           <view class="field-label"><text>选择犬只</text></view>
-          <view class="add-dog-trigger" @click="pickDog">
-            <text class="material-icons-round">add</text>
-            <text>点击添加犬只</text>
-          </view>
+          <BDogPicker v-model="selectedDog" title="选择犬只" />
         </view>
 
         <!-- 驱虫类型 -->
         <view class="field-group">
           <view class="field-label"><text>驱虫类型</text></view>
-          <view class="segmented-control">
+          <view class="pill-select">
             <view
               v-for="dt in dewormingTypes"
               :key="dt.value"
-              class="seg-option"
-              :class="{ active: details.deworming_type === dt.value }"
+              class="pill-select__item"
+              :class="{ 'pill-select__item--active': details.deworming_type === dt.value }"
               @click="details.deworming_type = dt.value"
             >
               <text>{{ dt.label }}</text>
@@ -146,6 +140,10 @@
             class="form-input form-input--mt"
             placeholder="或输入自定义药品名称"
           />
+          <view class="protocol-link" @click="openProtocolPicker">
+            <text class="material-icons-round" style="font-size: 14px; color: var(--primary);">medication</text>
+            <text style="font-size: 12px; color: var(--primary); font-weight: 600;">从方案选择</text>
+          </view>
         </view>
 
         <!-- 日期 -->
@@ -162,6 +160,18 @@
             <text class="date-chip" :class="{ active: dateChipActive === 'yesterday' }" @click="setDateChip('yesterday')">昨天</text>
             <text class="date-chip" :class="{ active: dateChipActive === 'dayBefore' }" @click="setDateChip('dayBefore')">前天</text>
           </view>
+        </view>
+
+        <!-- 下次提醒日期 -->
+        <view class="field-group">
+          <view class="field-label"><text>下次提醒日期</text></view>
+          <picker mode="date" :value="nextDewormDateStr" @change="onNextDewormDateChange">
+            <view class="form-input form-input--picker">
+              <text>{{ nextDewormDateStr || '默认90天后' }}</text>
+              <text class="material-icons-round form-input__suffix">calendar_today</text>
+            </view>
+          </picker>
+          <text class="helper-text">自动计算：日期 + 90天，可手动修改</text>
         </view>
 
         <!-- 费用 -->
@@ -190,10 +200,7 @@
       <template v-if="form.type === 'illness'">
         <view class="field-group">
           <view class="field-label"><text>选择犬只</text></view>
-          <view class="add-dog-trigger" @click="pickDog">
-            <text class="material-icons-round">add</text>
-            <text>选择一只犬</text>
-          </view>
+          <BDogPicker v-model="selectedDog" title="选择犬只" />
         </view>
 
         <!-- 病症类型 -->
@@ -215,12 +222,12 @@
         <!-- 严重程度 -->
         <view class="field-group">
           <view class="field-label"><text>严重程度</text></view>
-          <view class="segmented-control">
+          <view class="pill-select">
             <view
               v-for="s in severityLevels"
               :key="s"
-              class="seg-option"
-              :class="{ active: details.severity === s }"
+              class="pill-select__item"
+              :class="{ 'pill-select__item--active': details.severity === s }"
               @click="details.severity = s"
             >
               <text>{{ s }}</text>
@@ -247,12 +254,12 @@
         <!-- 治疗状态 -->
         <view class="field-group">
           <view class="field-label"><text>治疗状态</text></view>
-          <view class="segmented-control">
+          <view class="pill-select">
             <view
               v-for="s in treatmentStatuses"
               :key="s"
-              class="seg-option"
-              :class="{ active: details.treatment_status === s }"
+              class="pill-select__item"
+              :class="{ 'pill-select__item--active': details.treatment_status === s }"
               @click="details.treatment_status = s"
             >
               <text>{{ s }}</text>
@@ -287,7 +294,7 @@
         <button
           class="submit-btn"
           :loading="submitting"
-          :disabled="!canSubmit"
+          :disabled="!canSubmit || submitting"
           @click="submit"
         >
           保存记录
@@ -359,8 +366,9 @@ import { useCloudCall } from '@/composables/useCloudCall'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import BModal from '@/components/layout/BModal.vue'
+import BDogPicker from '@/components/form/BDogPicker.vue'
 
-let dogId = ''
+const selectedDog = ref<any>(null)
 
 const form = reactive({
   type: 'vaccination' as string,
@@ -412,8 +420,9 @@ const dateStr = computed(() => {
 })
 
 const nextVaccineDateStr = computed(() => {
-  if (!details.next_reminder_date) return ''
-  const d = new Date(details.next_reminder_date)
+  const ts = details.next_reminder_date || (form.date ? form.date + 21 * 86400000 : null)
+  if (!ts) return ''
+  const d = new Date(ts)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 })
 
@@ -442,8 +451,16 @@ function onNextVaccineDateChange(e: any) {
   details.next_reminder_date = new Date(e.detail.value + 'T00:00:00+08:00').getTime()
 }
 
-function pickDog() {
-  // 犬只选择器 placeholder
+const nextDewormDateStr = computed(() => {
+  if (!details.next_reminder_date && !form.date) return ''
+  const ts = details.next_reminder_date || (form.date ? form.date + 90 * 86400000 : null)
+  if (!ts) return ''
+  const d = new Date(ts)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+})
+
+function onNextDewormDateChange(e: any) {
+  details.next_reminder_date = new Date(e.detail.value + 'T00:00:00+08:00').getTime()
 }
 
 function buildDetails() {
@@ -457,6 +474,7 @@ function buildDetails() {
   if (form.type === 'deworming') {
     d.deworming_type = details.deworming_type
     if (details.drug_name) d.drug_name = details.drug_name
+    d.next_reminder_date = details.next_reminder_date || (form.date ? form.date + 90 * 86400000 : undefined)
   }
 
   if (form.type === 'illness') {
@@ -481,7 +499,7 @@ async function submit() {
     const cost = costInput.value ? parseFloat(costInput.value) : null
     const res = await addRecord({
       type: form.type,
-      dog_id: dogId,
+      dog_id: selectedDog.value?._id || '',
       date: form.date,
       cost: cost && cost > 0 ? cost : null,
       notes: form.notes || null,
@@ -568,10 +586,15 @@ async function doSaveProtocol() {
     notes: form.notes || null,
   })
   showSaveProtocol.value = false
+  setTimeout(() => uni.navigateBack(), 500)
 }
 
 onLoad((query) => {
-  dogId = query?.dogId || ''
+
+  // 支持 type 预选（从首页快捷入口进入）
+  if (query?.type && ['vaccination', 'deworming', 'illness'].includes(query.type)) {
+    form.type = query.type
+  }
 
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -580,133 +603,15 @@ onLoad((query) => {
 </script>
 
 <style lang="scss" scoped>
+
 .page {
-  min-height: 100vh;
-  background: var(--bg);
   padding-bottom: 40px;
 }
 
-.form-body {
-  padding: 0 var(--space-page);
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-/* ---- Field Group ---- */
-.field-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.field-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-3);
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-
-  &__optional {
-    font-size: 12px;
-    font-weight: 400;
-    color: var(--text-3);
-  }
-}
-
-/* ---- Text inputs ---- */
-.form-input {
-  height: 48px;
-  border-radius: 14px;
-  border: 1px solid var(--text-4);
-  background: var(--card);
-  padding: 0 16px;
-  font-size: 14px;
-  color: var(--text-1);
-  font-family: var(--font-body);
-  outline: none;
-  display: flex;
-  align-items: center;
-  transition: border-color 0.2s;
-
-  &::placeholder {
-    color: var(--text-3);
-  }
-
-  &--picker {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  &__suffix {
-    font-size: 18px;
-    color: var(--text-3);
-  }
-
-  &--prefixed {
-    padding-left: 34px;
-  }
-
-  &--mt {
-    margin-top: 8px;
-  }
-}
-
-/* ---- Textarea ---- */
+/* ---- Textarea (size override) ---- */
 .form-textarea {
-  border-radius: 14px;
-  border: 1px solid var(--text-4);
-  background: var(--card);
   padding: 14px 16px;
-  font-size: 14px;
-  color: var(--text-1);
-  font-family: var(--font-body);
-  outline: none;
-  resize: none;
   min-height: 80px;
-  line-height: 1.5;
-
-  &::placeholder {
-    color: var(--text-3);
-  }
-}
-
-/* ---- Prefix wrapper ---- */
-.input-prefix-wrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.input-prefix {
-  position: absolute;
-  left: 16px;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text-3);
-  pointer-events: none;
-  z-index: 1;
-}
-
-/* ---- Add dog trigger ---- */
-.add-dog-trigger {
-  height: 48px;
-  border-radius: 14px;
-  border: 1px dashed var(--text-4);
-  background: var(--card);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-3);
-
-  .material-icons-round {
-    font-size: 18px;
-  }
 }
 
 /* ---- Segmented control ---- */
@@ -737,28 +642,6 @@ onLoad((query) => {
   }
 }
 
-/* ---- Pill options ---- */
-.pill-options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.pill-option {
-  padding: 8px 16px;
-  border-radius: var(--radius-btn);
-  background: var(--card-dim);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-2);
-  transition: all 0.2s ease;
-
-  &.active {
-    background: var(--primary);
-    color: white;
-  }
-}
-
 /* ---- Date quick chips ---- */
 .date-chips {
   display: flex;
@@ -786,43 +669,14 @@ onLoad((query) => {
   }
 }
 
-/* ---- Helper text ---- */
+/* ---- Helper text (margin override) ---- */
 .helper-text {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-3);
   margin-top: -4px;
 }
 
 /* ---- Submit area ---- */
 .submit-area {
   padding: 8px 0 20px;
-}
-
-.submit-btn {
-  height: 50px;
-  border-radius: var(--radius-btn);
-  border: none;
-  font-size: 15px;
-  font-weight: 700;
-  color: white;
-  background: var(--primary);
-  box-shadow: 0 4px 16px rgba(234, 62, 119, 0.25);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-display);
-  transition: all 0.12s ease;
-  width: 100%;
-
-  &:active {
-    transform: scale(0.94);
-    opacity: 0.85;
-  }
-
-  &[disabled] {
-    opacity: 0.4;
-  }
 }
 
 /* ==================== R-14: 用药方案选择器 ==================== */

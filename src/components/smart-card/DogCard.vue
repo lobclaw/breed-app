@@ -16,13 +16,14 @@
       </view>
     </view>
 
-    <!-- 状态标签 -->
+    <!-- 任务标签（可点击跳转录入） -->
     <view v-if="card.tasks?.length" class="tags">
       <view
         v-for="task in visibleTasks"
         :key="task._id"
-        class="tag"
+        class="tag tag--clickable"
         :class="`tag--${taskColor(task)}`"
+        @click.stop="goRecordTask(task)"
       >
         <text class="tag-text">{{ task.title }}</text>
       </view>
@@ -30,10 +31,10 @@
 
     <!-- 操作按钮 -->
     <view class="card-actions">
-      <view class="btn btn--filled" :class="`btn--${barColor}`" @click.stop="$emit('complete', visibleTasks[0]?._id)">
-        <text class="btn-text btn-text--white">{{ mainBtnText }}</text>
+      <view class="btn btn--ghost-green" @click.stop="$emit('complete', visibleTasks[0]?._id)">
+        <text class="btn-text btn-text--green">完成</text>
       </view>
-      <view v-if="card.priority === 'overdue'" class="btn btn--ghost" @click.stop="$emit('postpone', visibleTasks[0]?._id)">
+      <view class="btn btn--ghost" @click.stop="$emit('postpone', visibleTasks[0]?._id)">
         <text class="btn-text btn-text--ghost">推迟</text>
       </view>
     </view>
@@ -57,12 +58,27 @@ const barColor = computed(() => {
   return 'green'
 })
 
-const mainBtnText = computed(() => {
-  const task = visibleTasks.value[0]
-  if (!task) return '查看'
-  if (props.card.priority === 'overdue') return '去处理'
-  return '记录'
-})
+const typeMap: Record<string, string> = {
+  vaccination: '/pages/record/health-vaccination',
+  deworming: '/pages/record/health-deworming',
+  illness: '/pages/record/health-illness',
+  heat: '/pages/record/breeding-heat',
+  follicle_check: '/pages/record/breeding-follicle',
+  mating: '/pages/record/breeding-mating',
+  pregnancy_check: '/pages/record/breeding-pregnancy',
+  prenatal_check: '/pages/record/breeding-prenatal',
+  pre_labor: '/pages/record/breeding-prelabor',
+  breeding_milestone: '/pages/record/breeding-heat',
+}
+
+function goRecordTask(task: any) {
+  if (!task) return
+  const params: string[] = []
+  if (props.card.dogId) params.push(`dogId=${props.card.dogId}`)
+  if (task._id) params.push(`taskId=${task._id}`)
+  const url = typeMap[task.type] || '/pages/record/health-vaccination'
+  uni.navigateTo({ url: url + '?' + params.join('&') })
+}
 
 function taskColor(task: any) {
   if (task.priority === 'overdue') return 'red'
@@ -115,11 +131,15 @@ function taskColor(task: any) {
 
 .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .tag {
-  font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 999px;
-  &--red { background: var(--red-soft); .tag-text { color: var(--red); } }
-  &--amber { background: var(--amber-soft); .tag-text { color: var(--amber); } }
-  &--green { background: var(--green-soft); .tag-text { color: var(--green); } }
-  &--rose { background: var(--rose-soft); .tag-text { color: var(--rose); } }
+  font-size: 11px; font-weight: 700; padding: 6px 14px; border-radius: 999px;
+  &--red { background: var(--red-soft); box-shadow: 0 1px 4px rgba(224, 82, 82, 0.2); .tag-text { color: var(--red); } }
+  &--amber { background: var(--amber-soft); box-shadow: 0 1px 4px rgba(232, 155, 62, 0.2); .tag-text { color: var(--amber); } }
+  &--green { background: var(--green-soft); box-shadow: 0 1px 4px rgba(61, 174, 111, 0.2); .tag-text { color: var(--green); } }
+  &--rose { background: var(--rose-soft); box-shadow: 0 1px 4px rgba(234, 62, 119, 0.2); .tag-text { color: var(--rose); } }
+  &--clickable {
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+    &:active { transform: scale(0.9); box-shadow: none; }
+  }
 }
 .tag-text { font-size: 11px; font-weight: 600; }
 
@@ -130,10 +150,12 @@ function taskColor(task: any) {
   &:active { transform: scale(0.94); opacity: 0.85; }
   &--filled { &.btn--red { background: var(--red); } &.btn--green { background: var(--green); } &.btn--amber { background: var(--amber); } &.btn--rose { background: var(--rose); } }
   &--ghost { background: transparent; border: 1.5px solid var(--text-4); }
+  &--ghost-green { background: transparent; border: 1.5px solid var(--green); }
 }
 .btn-text {
   font-family: var(--font-display); font-size: 13px; font-weight: 700;
   &--white { color: #FFFFFF; }
   &--ghost { color: var(--text-2); }
+  &--green { color: var(--green); }
 }
 </style>

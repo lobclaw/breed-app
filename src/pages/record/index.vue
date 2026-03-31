@@ -72,27 +72,6 @@
           </view>
         </view>
       </view>
-
-      <!-- 其他 -->
-      <view class="cat-card cat-card--teal">
-        <view class="cat-header">
-          <view class="cat-dot" style="background: var(--teal);" />
-          <text class="cat-title">其他</text>
-        </view>
-        <view class="cat-grid">
-          <view
-            v-for="item in otherTypes"
-            :key="item.label"
-            class="cat-item"
-            @click="goToRecord(item)"
-          >
-            <view class="cat-icon" :style="{ background: item.iconBg }">
-              <text class="material-icons-round" :style="{ color: item.iconColor }">{{ item.icon }}</text>
-            </view>
-            <text class="cat-label">{{ item.label }}</text>
-          </view>
-        </view>
-      </view>
     </scroll-view>
   </view>
 </template>
@@ -110,33 +89,29 @@ interface RecordType {
 
 // 繁育记录（8 种）
 const breedingTypes: RecordType[] = [
-  { icon: 'whatshot', iconBg: 'var(--icon-rose)', iconColor: 'var(--rose)', label: '发情', url: '/pages/record/breeding?type=heat' },
-  { icon: 'biotech', iconBg: 'var(--icon-teal)', iconColor: 'var(--teal)', label: '卵泡', url: '/pages/record/breeding?type=follicle' },
-  { icon: 'favorite', iconBg: 'var(--icon-rose)', iconColor: 'var(--rose)', label: '配种', url: '/pages/record/breeding?type=mating' },
-  { icon: 'stethoscope', iconBg: 'var(--icon-green)', iconColor: 'var(--green)', label: '孕检', url: '/pages/record/breeding?type=pregnancy_check' },
-  { icon: 'assignment', iconBg: 'var(--icon-blue)', iconColor: 'var(--blue)', label: '产检', url: '/pages/record/breeding?type=prenatal' },
-  { icon: 'thermostat', iconBg: 'var(--icon-plum)', iconColor: 'var(--plum)', label: '临产', url: '/pages/record/breeding?type=pre_labor' },
+  { icon: 'whatshot', iconBg: 'var(--icon-rose)', iconColor: 'var(--rose)', label: '发情', url: '/pages/record/breeding-heat' },
+  { icon: 'biotech', iconBg: 'var(--icon-teal)', iconColor: 'var(--teal)', label: '卵泡', url: '/pages/record/breeding-follicle' },
+  { icon: 'favorite', iconBg: 'var(--icon-rose)', iconColor: 'var(--rose)', label: '配种', url: '/pages/record/breeding-mating' },
+  { icon: 'stethoscope', iconBg: 'var(--icon-green)', iconColor: 'var(--green)', label: '孕检', url: '/pages/record/breeding-pregnancy' },
+  { icon: 'assignment', iconBg: 'var(--icon-blue)', iconColor: 'var(--blue)', label: '产检', url: '/pages/record/breeding-prenatal' },
+  { icon: 'thermostat', iconBg: 'var(--icon-plum)', iconColor: 'var(--plum)', label: '临产', url: '/pages/record/breeding-prelabor' },
   { icon: 'child_friendly', iconBg: 'var(--icon-rose)', iconColor: 'var(--rose)', label: '生产', url: '/pages/breeding/birth-wizard' },
-  { icon: 'warning', iconBg: 'var(--icon-red)', iconColor: 'var(--red)', label: '异常终止', url: '/pages/record/breeding?type=abnormal_end' },
+  { icon: 'warning', iconBg: 'var(--icon-red)', iconColor: 'var(--red)', label: '异常终止', url: '/pages/record/breeding-termination' },
 ]
 
-// 健康记录（4 种）
+// 健康记录（5 种）
 const healthTypes: RecordType[] = [
-  { icon: 'vaccines', iconBg: 'var(--icon-blue)', iconColor: 'var(--blue)', label: '疫苗', url: '/pages/record/health?type=vaccination' },
-  { icon: 'shield', iconBg: 'var(--icon-teal)', iconColor: 'var(--teal)', label: '驱虫', url: '/pages/record/health?type=deworming' },
-  { icon: 'sick', iconBg: 'var(--icon-plum)', iconColor: 'var(--plum)', label: '疾病', url: '/pages/record/health?type=illness' },
-  { icon: 'medication', iconBg: 'var(--icon-plum)', iconColor: 'var(--plum)', label: '用药', url: '/pages/record/health?type=medication' },
+  { icon: 'vaccines', iconBg: 'var(--icon-blue)', iconColor: 'var(--blue)', label: '疫苗', url: '/pages/record/health-vaccination' },
+  { icon: 'shield', iconBg: 'var(--icon-teal)', iconColor: 'var(--teal)', label: '驱虫', url: '/pages/record/health-deworming' },
+  { icon: 'sick', iconBg: 'var(--icon-plum)', iconColor: 'var(--plum)', label: '疾病', url: '/pages/record/health-illness' },
+  { icon: 'medication', iconBg: 'var(--icon-plum)', iconColor: 'var(--plum)', label: '用药', url: '/pages/record/health-medication' },
+  { icon: 'monitor_weight', iconBg: 'var(--icon-teal)', iconColor: 'var(--teal)', label: '体重', url: '/pages/health/batch-weight' },
 ]
 
 // 财务记录（2 种）
 const financeTypes: RecordType[] = [
   { icon: 'payments', iconBg: 'var(--icon-green)', iconColor: 'var(--green)', label: '支出', url: '/pages/finance/expense-add' },
-  { icon: 'account_balance', iconBg: 'var(--icon-red)', iconColor: 'var(--red)', label: '收入', url: '/pages/finance/income-add' },
-]
-
-// 其他（1 种）
-const otherTypes: RecordType[] = [
-  { icon: 'monitor_weight', iconBg: 'var(--icon-teal)', iconColor: 'var(--teal)', label: '体重', url: '/pages/health/batch-weight' },
+  { icon: 'account_balance', iconBg: 'var(--icon-red)', iconColor: 'var(--red)', label: '收入', url: '/pages/finance/expense-add?type=income' },
 ]
 
 function goToRecord(item: RecordType) {

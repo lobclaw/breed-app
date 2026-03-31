@@ -103,9 +103,9 @@
               {{ weightDelta(idx) < 0 ? '⚠️' : '' }}
             </text>
           </view>
-          <!-- 迷你趋势线 -->
+          <!-- 迷你趋势线：显示最近 3 次体重 -->
           <view v-if="puppy.weight_history && puppy.weight_history.length > 1" class="mini-trend">
-            <view class="mini-trend-placeholder" />
+            <text class="mini-trend-text">{{ formatWeightHistory(puppy.weight_history) }}</text>
           </view>
         </view>
       </view>
@@ -205,6 +205,12 @@ function weightDelta(idx: number) {
   return Math.round(current - last)
 }
 
+function formatWeightHistory(history: Array<{ weight: number }>) {
+  // 取最近 3 条记录，显示为 "120g → 135g → 150g"
+  const recent = history.slice(-3)
+  return recent.map(h => `${h.weight}g`).join(' → ')
+}
+
 function onTimeChange(e: any) {
   timeStr.value = e.detail.value
 }
@@ -219,14 +225,24 @@ function onWeightInput(e: any, idx: number) {
 }
 
 function onInputFocus(_idx: number) {
-  // 选中全部文字便于替换
+  // UniApp 不支持 programmatic text selection，无法选中全部文字
 }
 
 function focusNext(idx: number) {
   const next = idx + 1
   if (next < puppies.value.length) {
-    // UniApp 的 input 组件不支持直接 focus，需用 ref
-    // 此处只是尝试
+    // UniApp 不支持 programmatic focus，改用 scrollIntoView 滚动到下一个输入框
+    uni.createSelectorQuery()
+      .select(`.puppy-card:nth-child(${next + 1})`)
+      .boundingClientRect((rect: any) => {
+        if (rect) {
+          uni.pageScrollTo({
+            scrollTop: rect.top - 120,
+            duration: 200,
+          })
+        }
+      })
+      .exec()
   }
 }
 
@@ -256,7 +272,15 @@ function selectLitter(litter: any) {
 async function loadLitters() {
   loading.value = true
   const res = await fetchLitters()
-  if (res?.data) litters.value = res.data
+  if (res?.data) {
+    litters.value = res.data
+    // 如果从窝详情进入，自动选中对应的窝
+    if (preselectedLitterId && !selectedLitter.value) {
+      const match = litters.value.find((l: any) => l._id === preselectedLitterId)
+      if (match) selectLitter(match)
+      preselectedLitterId = '' // 只自动选一次
+    }
+  }
   loading.value = false
 }
 
@@ -264,11 +288,20 @@ async function submit() {
   if (!selectedLitter.value) return
   submitting.value = true
 
+  // 将 timeStr (HH:MM) 解析并加到 weightDate（midnight）上
+  let finalDate = weightDate.value
+  if (timeStr.value) {
+    const [hours, minutes] = timeStr.value.split(':').map(Number)
+    if (!isNaN(hours) && !isNaN(minutes)) {
+      finalDate = weightDate.value + hours * 3600000 + minutes * 60000
+    }
+  }
+
   const weightEntries = puppies.value
     .map((p: any, idx: number) => ({
       dog_id: p._id,
       weight: parseFloat(weights.value[idx]),
-      date: weightDate.value,
+      date: finalDate,
     }))
     .filter(e => e.weight > 0)
 
@@ -283,13 +316,22 @@ async function submit() {
   }
 }
 
+let preselectedLitterId = ''
+
 onLoad((query) => {
   if (query?.litterId) {
-    // 如果直接从窝详情进入，可以用 litterId 预选
+    preselectedLitterId = query.litterId
+    // 有预选窝时直接在 onLoad 加载，避免 onShow 先于 preselectedLitterId 赋值
+    loadLitters()
   }
 })
 
-onShow(() => loadLitters())
+onShow(() => {
+  // 无预选窝或已选窝后重新进入页面时刷新
+  if (!preselectedLitterId) {
+    loadLitters()
+  }
+})
 </script>
 
 <style lang="scss" scoped>
@@ -570,16 +612,14 @@ onShow(() => loadLitters())
 
 .mini-trend {
   flex-shrink: 0;
-  width: 60px;
-  height: 30px;
+  max-width: 100px;
 }
 
-.mini-trend-placeholder {
-  width: 100%;
-  height: 100%;
-  background: var(--card-dim);
-  border-radius: 6px;
-  opacity: 0.5;
+.mini-trend-text {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-3);
+  white-space: nowrap;
 }
 
 /* 汇总栏 */

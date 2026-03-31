@@ -1,6 +1,6 @@
-# 五、技术选型
+# 技术选型
 
-## 5.1 技术栈
+## 1. 技术栈
 
 | 层级 | 选择 | 说明 |
 |------|------|------|
@@ -16,7 +16,7 @@
 | 表单校验 | async-validator | 无 DOM 依赖，跨端适用 |
 | 开发工具 | HBuilderX + Claude Code | HBuilderX 管部署，Claude Code 写代码 |
 
-## 5.2 选型决策理由
+## 2. 选型决策理由
 
 ### 为什么选 UniCloud 而不是自建服务器
 
@@ -46,7 +46,7 @@
 - WebView 渲染在现代手机上完全满足需求
 - 保持良好的组件抽象，未来迁移到 uni-app x 成本低
 
-## 5.3 费用估算
+## 3. 费用估算
 
 ### 免费额度（支付宝云开发者版）
 
@@ -74,7 +74,7 @@
 
 自建 VPS + PocketBase/Supabase 的固定成本（~8-33 元/月）在 300+ 用户时比 UniCloud 按量计费更便宜。届时可评估迁移。
 
-## 5.4 数据库集合设计（MongoDB 适配版）
+## 4. 数据库集合设计（MongoDB 适配版）
 
 ### 集合清单（14 个）
 
@@ -244,7 +244,7 @@ if (data.type === 'follicle_check' && data.details?.left_count === undefined) {
 
 > **DB Schema 仅在 JQL 操作时生效。** 云对象中使用 `uniCloud.database()` 的传统 API 操作不受 Schema 权限约束。如需在云对象中也触发 Schema 校验，使用 `uniCloud.databaseForJQL()`。
 
-## 5.5 架构模式
+## 5. 架构模式
 
 ### 云对象注意事项
 
@@ -298,7 +298,7 @@ if (data.type === 'follicle_check' && data.details?.left_count === undefined) {
 
 ### 软删除
 
-支持软删除的集合增加 `deleted_at` 字段（默认 null），删除操作标记时间戳而非真删。查询时默认过滤 `deleted_at == null`。提供 30 天回收站功能。具体哪些集合支持软删除见 01 文档软删除范围矩阵。
+支持软删除的集合增加 `deleted_at` 字段（默认 null），删除操作标记时间戳而非真删。查询时默认过滤 `deleted_at == null`。提供 30 天回收站功能。具体哪些集合支持软删除见 01-data-model.md 软删除范围矩阵。
 
 ### 数据备份
 
@@ -322,7 +322,7 @@ if (data.type === 'follicle_check' && data.details?.left_count === undefined) {
 - **iOS 真机调试**：2022 年 9 月起必须使用自定义基座，标准基座不可用于真机调试
 - **云打包**：推荐使用云打包（无需本地 Android Studio / Xcode 环境），适合快速测试和发布
 
-## 5.6 前端架构
+## 6. 前端架构
 
 ### 项目结构
 
@@ -365,7 +365,7 @@ src/
 - 检测到网络后上传到 UniCloud
 - 冲突策略：Last Write Wins + 时间戳
 
-## 5.7 图片上传规范
+## 7. 图片上传规范
 
 | 参数 | 值 |
 |------|---|

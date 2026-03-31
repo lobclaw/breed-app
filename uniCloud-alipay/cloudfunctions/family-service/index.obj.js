@@ -10,7 +10,8 @@ const dbCmd = db.command
 // 家庭设置默认值
 const DEFAULT_SETTINGS = {
   default_weaning_days: 45,
-  default_vaccine_interval: 21,
+  default_vaccine_interval_puppy: 21,
+  default_vaccine_interval_adult: 365,
   default_deworming_interval_puppy: 14,
   default_deworming_interval_adult: 90,
   morning_summary_time: '07:00',
@@ -363,5 +364,94 @@ module.exports = {
     })
 
     return { message: '成员已移除' }
+  },
+
+  /**
+   * 更新当前用户昵称
+   * @param {string} nickname - 新昵称
+   */
+  async updateNickname(nickname) {
+    if (!nickname || !nickname.trim()) {
+      throw new Error('请输入昵称')
+    }
+
+    const { data } = await db.collection('families')
+      .doc(this.familyId)
+      .field({ members: true })
+      .get()
+
+    const family = data[0] || data
+    const member = family.members.find(m => m.user_id === this.uid && m.status === 'active')
+    if (!member) throw new Error('成员不存在')
+
+    member.nickname = nickname.trim()
+
+    await db.collection('families').doc(this.familyId).update({
+      members: family.members,
+      updated_at: Date.now(),
+    })
+
+    return { message: '昵称已更新' }
+  },
+
+  // ── 操作日志 / 回收站 / 备份 / 护理规则 ──
+
+  /**
+   * 获取操作日志
+   */
+  async getOperationLogs() {
+    // V1: 操作日志功能待后续实现
+    return { data: [] }
+  },
+
+  /**
+   * 获取已删除项目（回收站）
+   */
+  async getDeletedItems() {
+    const { data: dogs } = await db.collection('dogs')
+      .where({
+        family_id: this.familyId,
+        deleted_at: dbCmd.neq(null),
+      })
+      .orderBy('deleted_at', 'desc')
+      .get()
+
+    return { data: dogs.map(d => ({
+      ...d,
+      _type: 'dog',
+      _label: d.name || '未命名犬只',
+      _deletedAt: d.deleted_at,
+    })) }
+  },
+
+  /**
+   * 获取备份信息
+   */
+  async getBackupInfo() {
+    const { data } = await db.collection('families')
+      .doc(this.familyId)
+      .field({ settings: true, created_at: true })
+      .get()
+
+    const family = data[0] || data
+    return {
+      data: {
+        lastBackupDate: family.settings?.last_backup_date || null,
+        autoBackupEnabled: family.settings?.auto_backup_enabled || false,
+      }
+    }
+  },
+
+  /**
+   * 获取护理规则
+   */
+  async getCareRules() {
+    const { data } = await db.collection('families')
+      .doc(this.familyId)
+      .field({ care_rules: true })
+      .get()
+
+    const family = data[0] || data
+    return { data: family.care_rules || [] }
   },
 }

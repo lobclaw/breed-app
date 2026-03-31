@@ -72,12 +72,12 @@
 
         <view class="form-field">
           <text class="field-label">生产方式</text>
-          <view class="segmented">
+          <view class="pill-select">
             <view
               v-for="t in birthTypes"
               :key="t"
-              class="seg-option"
-              :class="{ 'seg-option--active': form.birth_type === t }"
+              class="pill-select__item"
+              :class="{ 'pill-select__item--active': form.birth_type === t }"
               @click="form.birth_type = t"
             >
               <text>{{ t }}</text>
@@ -125,12 +125,12 @@
           <view class="puppy-fields">
             <view class="form-field">
               <text class="field-label">性别</text>
-              <view class="segmented">
-                <view class="seg-option" :class="{ 'seg-option--active': puppy.gender === '公' }" @click="puppy.gender = '公'">
-                  <text>公</text>
-                </view>
-                <view class="seg-option" :class="{ 'seg-option--active': puppy.gender === '母' }" @click="puppy.gender = '母'">
+              <view class="pill-select">
+                <view class="pill-select__item" :class="{ 'pill-select__item--active': puppy.gender === '母' }" @click="puppy.gender = '母'">
                   <text>母</text>
+                </view>
+                <view class="pill-select__item" :class="{ 'pill-select__item--active': puppy.gender === '公' }" @click="puppy.gender = '公'">
+                  <text>公</text>
                 </view>
               </view>
             </view>
@@ -363,8 +363,6 @@ onLoad((query) => {
 
 <style lang="scss" scoped>
 .page {
-  min-height: 100vh;
-  background: var(--bg);
   padding-bottom: 100px;
 }
 
@@ -508,13 +506,10 @@ onLoad((query) => {
 }
 
 .field-label {
-  font-size: 12px;
   font-weight: 700;
   color: var(--text-2);
   margin-bottom: 6px;
-  display: flex;
   align-items: center;
-  gap: 4px;
 }
 
 .optional {
@@ -613,35 +608,6 @@ onLoad((query) => {
     background: var(--primary);
     color: #fff;
     box-shadow: 0 2px 8px rgba(234, 62, 119, 0.25);
-  }
-}
-
-/* Segmented control */
-.segmented {
-  display: flex;
-  background: var(--card-dim);
-  border-radius: 12px;
-  padding: 3px;
-  gap: 2px;
-}
-
-.seg-option {
-  flex: 1;
-  height: 38px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-2);
-  transition: all 0.2s ease;
-
-  &--active {
-    background: var(--card);
-    color: var(--primary);
-    font-weight: 700;
-    box-shadow: var(--shadow);
   }
 }
 

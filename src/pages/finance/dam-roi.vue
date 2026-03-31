@@ -3,9 +3,8 @@
     <BPageHeader title="种母投资回报" />
 
     <!-- 种母选择器 -->
-    <view class="dropdown-selector" @click="showDamPicker">
-      <text class="dd-text">{{ selectedDamName || '选择种母' }}</text>
-      <text class="material-icons-round">expand_more</text>
+    <view class="dam-picker-area">
+      <BDogPicker v-model="selectedDam" roleFilter="种狗" genderFilter="母" title="选择种母" />
     </view>
 
     <!-- ROI 卡片 -->
@@ -73,10 +72,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
+import BDogPicker from '@/components/form/BDogPicker.vue'
+
+const selectedDam = ref<any>(null)
 
 interface RoiData {
   purchaseCost: number
@@ -89,9 +91,12 @@ interface RoiData {
 }
 
 const loading = ref(false)
-const selectedDamId = ref('')
-const selectedDamName = ref('')
 const roiData = ref<RoiData | null>(null)
+
+// 当选择犬只变化时自动加载 ROI
+watch(selectedDam, (dog) => {
+  if (dog?._id) loadRoi(dog._id)
+})
 
 const litterList = computed(() => {
   if (!roiData.value?.litters) return []
@@ -130,10 +135,6 @@ function formatMoney(val: number): string {
   return val.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
 }
 
-function showDamPicker() {
-  // 种母选择器 placeholder
-}
-
 const { run: getDamRoi } = useCloudCall('finance-service', 'getDamRoi', {
   showLoading: true,
   loadingText: '计算中...',
@@ -154,9 +155,12 @@ async function loadRoi(damId: string) {
 onLoad((query) => {
   const damId = query?.damId || ''
   if (damId) {
-    selectedDamId.value = damId
-    selectedDamName.value = query?.damName || ''
-    loadRoi(damId)
+    selectedDam.value = {
+      _id: damId,
+      name: query?.damName || '',
+      gender: '母',
+      role: '种狗',
+    }
   }
 })
 </script>
@@ -168,28 +172,9 @@ onLoad((query) => {
   padding-bottom: 40px;
 }
 
-/* ---- Dropdown Selector ---- */
-.dropdown-selector {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0 var(--space-page) 16px;
-  background: var(--card);
-  border-radius: 12px;
-  padding: 10px 16px;
-  box-shadow: var(--shadow);
-  width: fit-content;
-}
-
-.dd-text {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--text-1);
-}
-
-.dropdown-selector .material-icons-round {
-  font-size: 18px;
-  color: var(--text-3);
+/* ---- Dam Picker Area ---- */
+.dam-picker-area {
+  padding: 0 var(--space-page) 16px;
 }
 
 /* ---- ROI Card ---- */
@@ -384,22 +369,4 @@ onLoad((query) => {
   );
 }
 
-/* ---- Empty State ---- */
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 80px 0;
-  gap: 12px;
-}
-
-.empty-icon {
-  font-size: 48px;
-  color: var(--text-4);
-}
-
-.empty-text {
-  font-size: 14px;
-  color: var(--text-3);
-}
 </style>

@@ -3,8 +3,9 @@
     <!-- 顶栏 -->
     <BPageHeader title="用药方案">
       <template #right>
-        <view v-if="!showAdd" class="add-action" @click="showAdd = true">
-          <text class="material-icons-round" style="font-size: 20px; color: var(--primary);">add</text>
+        <view v-if="!showAdd" class="header-add" @click="showAdd = true">
+          <text class="material-icons-round" style="font-size: 18px;">add</text>
+          <text class="header-add__text">新建</text>
         </view>
       </template>
     </BPageHeader>
@@ -18,7 +19,7 @@
       icon="medication"
       title="暂无用药方案"
       description="添加常用的用药方案，方便快速录入"
-      actionText="添加方案"
+      actionText="新建方案"
       @action="showAdd = true"
     />
 
@@ -106,22 +107,23 @@ import BButton from '@/components/base/BButton.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 
-const protocols = ref<any[]>([])
-const loading = ref(true)
+import { useProtocolStore } from '@/stores/protocolStore'
+
+const protocolStore = useProtocolStore()
+const protocols = computed(() => protocolStore.list)
+const loading = ref(protocolStore.list.length === 0)
 const showAdd = ref(false)
 
 const form = reactive({ name: '', drug_name: '', duration_days: '', notes: '' })
 
 const canSave = computed(() => form.name && form.drug_name && parseInt(form.duration_days) > 0)
 
-const { run: fetchProtocols } = useCloudCall<{ data: any[] }>('health-service', 'getMedicationProtocols')
 const { run: addProtocol } = useCloudCall('health-service', 'addMedicationProtocol', { successMessage: '已添加' })
 const { run: removeProtocol } = useCloudCall('health-service', 'removeMedicationProtocol', { successMessage: '已删除' })
 
 async function load() {
-  loading.value = true
-  const res = await fetchProtocols()
-  if (res?.data) protocols.value = res.data
+  if (protocolStore.list.length === 0) loading.value = true
+  await protocolStore.fetchFromServer()
   loading.value = false
 }
 
@@ -148,6 +150,7 @@ async function remove(idx: number) {
       if (res.confirm) {
         const p = protocols.value[idx]
         await removeProtocol(p._id)
+        try { uni.removeStorageSync(CACHE_KEY) } catch { /* ignore */ }
         load()
       }
     }
@@ -172,17 +175,21 @@ onShow(() => load())
   gap: var(--space-card-gap);
 }
 
-.add-action {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
+.header-add {
   display: flex;
   align-items: center;
-  justify-content: center;
-  background: var(--card);
-  box-shadow: var(--shadow);
-  transition: transform 0.12s ease;
-  &:active { transform: scale(0.9); }
+  gap: 3px;
+  color: var(--primary);
+  padding: 6px 14px 6px 10px;
+  border-radius: 20px;
+  background: var(--primary-soft);
+  transition: all 0.12s ease;
+  &:active { transform: scale(0.92); background: var(--icon-rose); }
+
+  &__text {
+    font-size: 13px;
+    font-weight: 700;
+  }
 }
 
 /* 方案卡片 */

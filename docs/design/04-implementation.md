@@ -1,11 +1,15 @@
-# 八、Phase 1 实现计划
+# 实现计划（后端 + 前端）
 
-> **生成时间：** 2026-03-26（工程审查后）
-> **依据：** 设计文档 01-07 + 工程审查确认的 9 项架构决策
+> **生成时间：** 2026-03-26（后端）/ 2026-03-27（前端）
+> **依据：** 设计文档 01-03 + 工程审查 + design-system.md + page-inventory.md + 20 个 HTML 原型
 
-## 1. 总览
+---
 
-### 1.1 Phase 1 范围（路径 A，四批交付）
+## Part 1: 后端实现计划
+
+### 1. 总览
+
+#### 1.1 Phase 1 范围（路径 A，四批交付）
 
 | 批次 | 内容 | 核心集合 | 预估页面数 |
 |------|------|---------|-----------|
@@ -14,7 +18,7 @@
 | 第三批 | 首页智能卡片 + 自动化逻辑 | tasks（增强） | ~8 |
 | 第四批 | 协作 + 用药方案库 + 代理人 + 批量体重 | families（增强）, medication_protocols, agents, dog_weights | ~14 |
 
-### 1.2 开发原则
+#### 1.2 开发原则
 
 - **每步先后端再前端：** 云对象 + vitest 测试 → 前端页面
 - **测试覆盖：** 云对象目标 80%+ 覆盖率
@@ -23,9 +27,9 @@
 
 ---
 
-## 2. 基础设施（所有批次前置）
+### 2. 基础设施（所有批次前置）
 
-### 2.1 认证 + 家庭初始化
+#### 2.1 认证 + 家庭初始化
 
 **目标：** 用户能注册/登录，创建家庭，进入主界面。
 
@@ -71,9 +75,9 @@
 
 ---
 
-## 3. 第一批：犬只档案 + 繁育流程 + 基础提醒
+### 3. 第一批：犬只档案 + 繁育流程 + 基础提醒
 
-### 3.1 犬只档案
+#### 3.1 犬只档案
 
 **云对象：dog-service**
 
@@ -81,7 +85,7 @@
 |------|------|---------|--------|
 | `getDogListWithStatus()` | 犬只列表 + 实时派生状态 | dogs + breeding_cycles + health_records + medication_tasks | 高 |
 | `getDogDetail(dogId)` | 犬只详情 + 完整状态 | dogs + 关联集合 | 中 |
-| `createDog(data)` | 创建犬只（含外部种公） | dogs | 低 |
+| `createDog(data)` | 创建犬只（含外部种公）。当 `purchase_price` 有值时自动创建对应 expense 记录（category=购入，linked_dog_ids=[newDogId]） | dogs + expenses | 低 |
 | `updateDog(dogId, data)` | 更新犬只基础信息 | dogs | 低 |
 | `updateDogName(dogId, newName)` | 改名 + 批量更新冗余字段 | dogs + tasks + sale_records + incomes + breeding_cycles + litters + expenses | 高 |
 | `changeDisposition(dogId, disposition, data)` | 变更去向（含异常状态转换处理） | dogs + breeding_cycles + tasks | 高 |
@@ -115,7 +119,7 @@
 - 犬只基础编辑（简单字段更新）
 - 体重记录查询
 
-### 3.2 繁育流程
+#### 3.2 繁育流程
 
 **云对象：breeding-service**
 
@@ -163,13 +167,13 @@
 | 生产记录向导 | pages/breeding/birth-wizard | 3 步向导 |
 | 窝详情 | pages/breeding/litter | 幼崽列表 + 体重 + 窝利润 |
 
-### 3.3 健康管理
+#### 3.3 健康管理
 
 **云对象：health-service**
 
 | 方法 | 说明 | 涉及集合 | 复杂度 |
 |------|------|---------|--------|
-| `addHealthRecord(data)` | 录入健康记录（vaccination/deworming/illness） | health_records + tasks + expenses | 中 |
+| `addHealthRecord(data)` | 录入健康记录（vaccination/deworming/illness）。支持 `skip_reminder=true` 跳过下次提醒任务生成（对应表单"下次提醒"开关关闭态） | health_records + tasks + expenses | 中 |
 | `getHealthHistory(dogId, type?)` | 某犬的健康记录 | health_records | 低 |
 | `startMedication(data)` | 开始连续用药 | medication_tasks + tasks | 中 |
 | `completeDailyMedication(taskId)` | 标记今日用药完成 | medication_tasks + tasks | 低 |
@@ -183,7 +187,7 @@
 | 健康记录列表 | 犬只详情 Tab 内 | 嵌入犬只详情页 |
 | 开始用药 | pages/health/medication | 用药表单 |
 
-### 3.4 任务系统（基础版）
+#### 3.4 任务系统（基础版）
 
 **云对象：task-service**
 
@@ -192,6 +196,7 @@
 | `getHomeCards(date?)` | 获取首页卡片数据（含合并算法） | tasks + dogs | 高 |
 | `completeTask(taskId)` | 标记任务完成 | tasks | 低 |
 | `postponeTask(taskId, newDate, reason?)` | 推迟任务 | tasks | 低 |
+| `createManualTask(data)` | 用户手动创建待办任务（表单"标记为待办"开关触发），支持指定犬只、标题、日期 | tasks | 低 |
 | `cancelTasksByCycle(cycleId)` | 周期关闭时批量取消 | tasks | 低 |
 | `_timing_dailyAudit()` | 每日审计（三层保障第三层） | tasks + breeding_records + health_records + medication_tasks | 高 |
 | `_timing_autoCloseCycles()` | 自动关闭过期发情周期 | breeding_cycles + tasks | 中 |
@@ -210,15 +215,9 @@
 5. 截断：每区域最多 8 张卡片
 ```
 
-**前端页面（第一批简化版）：**
-
-| 页面 | 路径 | 说明 |
-|------|------|------|
-| 首页 | pages/home/index | 三区设计（简化版，第三批完善） |
-
 > **第一批首页为简化版：** 只展示任务列表（无智能卡片合并），第三批再实现完整卡片系统。
 
-### 3.5 第一批开发顺序
+#### 3.5 第一批开发顺序
 
 ```
 Step 0: 基础设施（auth + family + 通用组件）
@@ -246,9 +245,9 @@ Step 10: _timing 定时任务 + 每日审计
 
 ---
 
-## 4. 第二批：财务模块 + 销售流程
+### 4. 第二批：财务模块 + 销售流程
 
-### 4.1 财务管理
+#### 4.1 财务管理
 
 **云对象：finance-service**
 
@@ -263,9 +262,9 @@ Step 10: _timing 定时任务 + 每日审计
 | `softDeleteExpense(id)` | 软删除支出 | expenses | 低 |
 | `softDeleteIncome(id)` | 软删除收入 | incomes | 低 |
 
-### 4.2 销售流程
+#### 4.2 销售流程
 
-**cloud对象：finance-service（扩展）**
+**云对象：finance-service（扩展）**
 
 | 方法 | 说明 | 涉及集合 | 复杂度 |
 |------|------|---------|--------|
@@ -281,13 +280,12 @@ Step 10: _timing 定时任务 + 每日审计
 |------|------|------|
 | 财务首页 | pages/finance/index | 统一流水 + 筛选 + 统计入口 |
 | 统计视图 | pages/finance/stats | 月度/年度/窝利润/种母ROI |
-| 录入支出 | pages/finance/expense-add | 表单 |
-| 录入收入 | pages/finance/income-add | 表单 |
+| 记账（支出/收入统一） | pages/finance/expense-add | 顶部 Segmented Control 切换支出/收入模式，?type=income 参数切换默认模式。income-add 页面已弃用 |
 | 销售列表 | pages/sale/list | 三阶段状态筛选 |
 | 销售详情 | pages/sale/detail | 流程进度 + 操作按钮 |
 | 创建销售 | pages/sale/create | 选犬 + 填信息 |
 
-### 4.3 第二批开发顺序
+#### 4.3 第二批开发顺序
 
 ```
 Step 11: finance-service 基础方法（CRUD）+ 测试
@@ -305,9 +303,9 @@ Step 16: 繁育记录 cost → 自动创建 expense 联调
 
 ---
 
-## 5. 第三批：首页智能卡片 + 自动化
+### 5. 第三批：首页智能卡片 + 自动化
 
-### 5.1 完善首页
+#### 5.1 完善首页
 
 | 任务 | 说明 |
 |------|------|
@@ -318,18 +316,7 @@ Step 16: 繁育记录 cost → 自动创建 expense 联调
 | 卡片内操作 | BottomSheet 快速完成 |
 | 逾期处理 | 推迟 + 原因 + 视觉升级 |
 
-**前端组件：**
-
-| 组件 | 路径 |
-|------|------|
-| SmartCard（壳） | components/smart-card/SmartCard.vue |
-| DogCard（个体） | components/smart-card/DogCard.vue |
-| CareGroupCard（群组） | components/smart-card/CareGroupCard.vue |
-| BatchCard（批量） | components/smart-card/BatchCard.vue |
-| MedicationCard（用药） | components/smart-card/MedicationCard.vue |
-| WeekStrip | components/week-strip/WeekStrip.vue |
-
-### 5.2 FAB Action Sheet
+#### 5.2 FAB Action Sheet
 
 | 任务 | 说明 |
 |------|------|
@@ -337,7 +324,7 @@ Step 16: 繁育记录 cost → 自动创建 expense 联调
 | Action Sheet | 智能推荐 3 + 常用 4 + 全部入口 |
 | R-1 全部记录类型 | 15 种记录类型图标网格 |
 
-### 5.3 第三批开发顺序
+#### 5.3 第三批开发顺序
 
 ```
 Step 17: WeekStrip 组件
@@ -355,9 +342,9 @@ Step 22: BottomSheet 快速完成流程
 
 ---
 
-## 6. 第四批：协作 + 辅助功能
+### 6. 第四批：协作 + 辅助功能
 
-### 6.1 协作
+#### 6.1 协作
 
 **云对象：family-service（扩展）**
 
@@ -369,13 +356,13 @@ Step 22: BottomSheet 快速完成流程
 | `removeMember(userId)` | 移除成员 |
 | `getMemberList()` | 成员列表 |
 
-### 6.2 用药方案库 + 代理人
+#### 6.2 用药方案库 + 代理人
 
 **clientDB 直读直写（简单 CRUD）：**
 - medication_protocols：方案名称/药品列表/默认疗程
 - agents：代理人姓名/联系方式/备注
 
-### 6.3 批量体重录入
+#### 6.3 批量体重录入
 
 **云对象：health-service（扩展）**
 
@@ -384,7 +371,7 @@ Step 22: BottomSheet 快速完成流程
 | `batchAddWeights(litterId, weights[])` | 批量录入一窝幼崽体重 |
 | `getWeightHistory(dogId)` | 体重历史 + 增减趋势 |
 
-### 6.4 推送通知
+#### 6.4 推送通知
 
 | 任务 | 说明 |
 |------|------|
@@ -392,7 +379,7 @@ Step 22: BottomSheet 快速完成流程
 | 晨间摘要 | _timing 定时推送（07:00 默认） |
 | 即时推送 | 逾期任务 / 紧急提醒 |
 
-### 6.5 第四批开发顺序
+#### 6.5 第四批开发顺序
 
 ```
 Step 23: 邀请/加入家庭云对象 + 页面
@@ -414,23 +401,23 @@ Step 30: 我的页面（个人信息/设置/数据备份）
 
 ---
 
-## 7. 云对象 API 完整清单
+### 7. 云对象 API 完整清单
 
 | 云对象 | 方法数 | 集中在 |
 |--------|--------|--------|
 | dog-service | 9 | 第一批 |
 | breeding-service | 8 | 第一批 |
 | health-service | 7 | 第一批 + 第四批 |
-| task-service | 6 | 第一批 + 第三批 |
+| task-service | 7 | 第一批 + 第三批 |
 | finance-service | 12 | 第二批 |
 | family-service | 8 | 基础设施 + 第四批 |
-| **总计** | **50** | |
+| **总计** | **51** | |
 
 ---
 
-## 8. 测试策略
+### 8. 测试策略
 
-### 8.1 vitest 测试重点
+#### 8.1 vitest 测试重点
 
 | 优先级 | 测试目标 | 示例 |
 |--------|---------|------|
@@ -443,7 +430,7 @@ Step 30: 我的页面（个人信息/设置/数据备份）
 | P2 | 权限检查 | 协助者不能访问财务、不能创建繁育记录 |
 | P2 | 软删除 + 恢复 | 删除后查询不可见、恢复后数据完整 |
 
-### 8.2 测试文件结构
+#### 8.2 测试文件结构
 
 ```
 tests/
@@ -464,9 +451,9 @@ tests/
 
 ---
 
-## 9. 每日审计 + 定时任务
+### 9. 每日审计 + 定时任务
 
-### 9.1 定时任务清单
+#### 9.1 定时任务清单
 
 | 任务 | 时间 | 云对象 | 方法 |
 |------|------|--------|------|
@@ -475,7 +462,7 @@ tests/
 | 晨间摘要推送 | 07:00 UTC+8（可配置） | task-service | `_timing_morningSummary()` |
 | 过期任务清理 | 03:00 UTC+8 | task-service | `_timing_cleanupOldTasks()` |
 
-### 9.2 每日审计检查项
+#### 9.2 每日审计检查项
 
 1. **有记录无任务：** 扫描最近 N 天的 breeding_records/health_records，检查应生成但缺失的 task
 2. **护理规则无任务：** 扫描活跃护理规则（care_rules），检查对应状态的犬只是否都有 pending task
@@ -484,7 +471,7 @@ tests/
 
 ---
 
-## 10. 关键风险 + 缓解
+### 10. 关键风险 + 缓解
 
 | 风险 | 影响 | 缓解措施 |
 |------|------|---------|
@@ -496,7 +483,7 @@ tests/
 
 ---
 
-## 11. 里程碑检查点
+### 11. 里程碑检查点
 
 | 检查点 | 完成标志 | 可交付 |
 |--------|---------|--------|
@@ -510,3 +497,195 @@ tests/
 | M7：智能首页 | 卡片系统完善 | 完整体验 |
 | M8：协作 | 多用户 + 角色权限 | — |
 | M9：发布 | 打包 + 上架 | Phase 1 完成 |
+
+---
+
+## Part 2: 前端 UI 实现计划
+
+> **设计资产：** design-system.md（设计令牌）+ page-inventory.md（110 屏清单）+ 20 个 HTML 原型（docs/ui/*.html）
+>
+> **原则：** 设计令牌优先（零硬编码）→ 组件化（单一职责）→ 一比一还原 HTML 原型 → 精品代码
+
+### 12. 组件库设计
+
+#### 12.1 组件清单（按优先级）
+
+**Tier 1：基础组件（所有页面依赖）**
+
+| 组件 | 路径 | Props | 设计稿来源 |
+|------|------|-------|-----------|
+| BCard | components/base/BCard.vue | type(颜色), title, subtitle, icon | 所有卡片页面 |
+| BButton | components/base/BButton.vue | variant(filled/ghost), color, size, loading | 全局 |
+| BIconBox | components/base/BIconBox.vue | icon, color, size(36/28) | 卡片头部、列表项 |
+| BTag | components/base/BTag.vue | label, color | 状态标签 |
+| BPill | components/base/BPill.vue | count, color, label | 摘要数字 |
+| BCheckbox | components/base/BCheckbox.vue | v-model, label | 任务完成 |
+| BProgress | components/base/BProgress.vue | value, max, gradient | 用药进度 |
+| BSectionLabel | components/base/BSectionLabel.vue | title, color, badge | 分区标题 |
+
+**Tier 2：布局组件**
+
+| 组件 | 路径 | 说明 |
+|------|------|------|
+| BSheet | components/layout/BSheet.vue | 底部弹出面板（handle + 动画 + 高度自适应） |
+| BModal | components/layout/BModal.vue | 居中确认弹窗 |
+| BTabBar | components/layout/BTabBar.vue | 页面内 Tab 切换（下划线指示器） |
+| BNavBar | components/layout/BNavBar.vue | 底部导航栏（毛玻璃 + FAB） |
+| BPageHeader | components/layout/BPageHeader.vue | 页面标题栏 |
+
+**Tier 3：表单组件**
+
+| 组件 | 路径 | 说明 |
+|------|------|------|
+| BInput | components/form/BInput.vue | 输入框（含标签、错误状态） |
+| BDatePicker | components/form/BDatePicker.vue | 日期选择（今天/昨天快捷 + 日历） |
+| BDogPicker | components/form/BDogPicker.vue | 犬只选择器（自包含模式：自渲染触发卡片 + 搜索 + 彩色头像，v-model 支持单选/多选数组） |
+| BLitterSelector | components/form/BLitterSelector.vue | 窝选择面板 |
+| BCycleSelector | components/form/BCycleSelector.vue | 繁育周期选择面板 |
+| BImageUpload | components/form/BImageUpload.vue | 图片上传（拍照/相册 + 压缩） |
+| BSegmentedControl | components/form/BSegmentedControl.vue | 分段选择器（仅用于视图/标签页切换） |
+| BFormOptions | components/form/BFormOptions.vue | 表单公共选项组（待办开关 + 日期选择含今天/昨天/前天 chips + 下次提醒开关）。支持 `hideTodo` prop 隐藏待办开关。疫苗/驱虫/繁育表单使用完整功能；疾病表单隐藏待办（疾病是记录已发生的事）；用药表单不使用此组件（改用简单日期选择）；财务表单不使用此组件 |
+
+**Tier 4：数据展示组件**
+
+| 组件 | 路径 | 说明 |
+|------|------|------|
+| BWeightChart | components/data/BWeightChart.vue | 迷你体重折线图（SVG） |
+| BTrendLine | components/data/BTrendLine.vue | 4-6 点趋势线 |
+| BTimeline | components/data/BTimeline.vue | 繁育/健康记录时间线 |
+| BSkeleton | components/feedback/BSkeleton.vue | 骨架屏加载占位 |
+| BEmpty | components/feedback/BEmpty.vue | 空状态提示 |
+
+#### 12.2 组件命名规范
+
+- 前缀 `B`（Breed）避免与 uni-ui 冲突
+- 文件名 PascalCase：`BCard.vue`
+- CSS 类名 BEM：`.b-card__header`、`.b-card__body`
+- 所有颜色引用 CSS 变量，禁止硬编码 hex
+
+---
+
+### 13. 页面实现计划
+
+#### 13.1 实现顺序（6 个 Tier）
+
+```
+Tier 0: 设计系统基建
+  tokens.scss + 主题切换 + Plus Jakarta Sans 字体引入
+    ↓
+Tier 1: 基础组件库（8 个）
+  BCard, BButton, BIconBox, BTag, BPill, BCheckbox, BProgress, BSectionLabel
+    ↓
+Tier 2: 布局 + 表单组件（12 个）
+  BSheet, BModal, BTabBar, BNavBar, BPageHeader
+  BInput, BDatePicker, BDogSelector, BImageUpload, BSegmentedControl
+    ↓
+Tier 3: 核心页面重构（高频使用）
+  H-1 首页, D-1 犬只列表, D-2 犬只详情, D-3 新建犬只
+    ↓
+Tier 4: 表单页面（记录录入）
+  R-2~R-9 繁育记录, R-10~R-13 健康记录, R-16/R-17 财务记录
+    ↓
+Tier 5: 剩余页面
+  财务统计, 销售流程, 设置页, 协作页, 监控页
+```
+
+#### 13.2 繁育记录表单
+
+> **实现说明（2026-03-28）：** 繁育记录已从单一 breeding.vue 拆分为 7 个独立页面：breeding-heat、breeding-follicle、breeding-mating、breeding-pregnancy、breeding-prenatal、breeding-prelabor、breeding-termination。每个页面包含 BFormOptions（待办/提醒开关）和固定底部提交按钮。
+
+7 种类型（birth 跳转 birth-wizard），每个独立页面：
+
+| type | 特有字段 | 涉及选择器 |
+|------|---------|-----------|
+| heat | 观察描述 | BDogSelector（种母） |
+| follicle_check | 卵泡大小、建议配种时间 | BDogSelector + BCycleSelector |
+| mating | 种公选择、配种方式、费用 | BDogSelector × 2 |
+| pregnancy_check | 孕检方式、结果 | BCycleSelector |
+| prenatal_check | 检查项目、体重 | BCycleSelector |
+| pre_labor | 体温、预产期 | BCycleSelector |
+| birth | → 跳转 birth-wizard | — |
+| abnormal_termination | 终止原因、处理方式 | BCycleSelector |
+
+#### 13.3 健康记录表单
+
+> **实现说明（2026-03-30 更新）：**
+> - 健康记录已从单一 health.vue 拆分为 3 个独立页面：health-vaccination、health-deworming、health-illness（medication 独立于 R-13）
+> - 疫苗/驱虫表单：BFormOptions 完整功能（待办 + 日期 + 下次提醒），从待办/批量入口进入时隐藏待办开关
+> - 疾病表单：BFormOptions 隐藏待办开关（hideTodo=true），保留下次提醒（复查）。保存后如果 treatment_status≠已康复，弹出"需要用药吗？"跳转用药页面
+> - 用药表单：不使用 BFormOptions，改用简单日期选择。无待办开关、无下次提醒（startMedication 不支持）
+> - 疫苗/驱虫提醒间隔根据犬只 role 动态计算：种狗用 adult 间隔，幼崽用 puppy 间隔
+> - 录入健康记录后自动完成该犬同类型的 pending 待办（autoCompletePendingTasks，子类型匹配）
+
+| type | 特有字段 |
+|------|---------|
+| vaccination | 疫苗名称、接种部位、批号、下次提醒 |
+| deworming | 药品名称、剂量、内/外驱 |
+| illness | 症状描述、严重程度、诊断 |
+| medication | 药品、剂量、频次、疗程天数 |
+
+---
+
+### 14. HTML 原型 → 页面映射表
+
+| HTML 原型文件 | 覆盖页面 | 对应代码文件 |
+|--------------|---------|-------------|
+| home-v1-final.html | H-1 首页 | pages/home/index.vue |
+| pages-list.html | D-1 犬只列表, D-5 筛选面板 | pages/dog/list.vue |
+| pages-dog-detail.html | D-2 犬只详情, D-S1~S6 子视图 | pages/dog/detail.vue |
+| pages-wizard-newdog.html | D-3 新建犬只, D-4 编辑犬只 | pages/dog/add.vue |
+| pages-detail-views.html | D-15 窝详情, D-18 周期详情 | pages/breeding/litter.vue, cycle.vue |
+| pages-litter-cycle-weight.html | 窝/周期/体重详细视图 | pages/breeding/*.vue |
+| pages-breeding-forms.html | R-2~R-9 繁育记录表单 | pages/record/breeding-*.vue |
+| pages-health-finance-forms.html | R-10~R-13 健康, R-16~R-17 财务 | pages/record/health-*.vue, finance/ |
+| pages-expense-redesign.html | R-16 支出重设计 | pages/finance/expense-add.vue |
+| pages-fab-action-sheet.html | R-0 FAB, R-1 全部记录类型 | pages/record/index.vue |
+| pages-financial-stats.html | F-6~F-9 财务统计 | pages/finance/stats.vue |
+| pages-sales-flow.html | S-1~S-10 销售流程 | pages/sale/*.vue |
+| pages-sheets-modals.html | 通用 Sheet/Modal 模板 | components/layout/BSheet.vue, BModal.vue |
+| pages-remaining.html | D-6~D-14 状态变更 | pages/dog/detail.vue 内嵌 |
+| pages-pickers.html | G-1~G-8 选择器组件 | components/form/B*Selector.vue |
+| pages-settings.html | M-1~M-21 设置页 | pages/profile/*.vue |
+| pages-missing-forms.html | 缺失表单补全 | 按需创建 |
+| pages-monitor-logs.html | R-19 观察日志 | 新建 |
+| pages-r7-monitor.html | 快速监控模式 | 新建 |
+| pages-weight-monitor.html | D-19 批量体重 | pages/health/batch-weight.vue |
+
+---
+
+### 15. 验收标准
+
+#### 15.1 页面级验收
+
+- [ ] **像素对比**：与 HTML 原型在 375px 宽度下对比，误差 ≤ 2px
+- [ ] **颜色一致**：所有颜色引用 CSS 变量，无硬编码 hex
+- [ ] **暗色模式**：切换后所有元素正确变色，无白色残留
+- [ ] **交互效果**：按压缩放、过渡动画与设计系统一致
+- [ ] **空状态**：无数据时显示设计稿中的空状态提示
+- [ ] **加载状态**：请求中显示骨架屏
+- [ ] **响应式**：320px ~ 428px 宽度范围内布局正常
+
+#### 15.2 代码级验收
+
+- [ ] **零硬编码**：grep 检查无 `#ea3e77` 等硬编码色值（tokens 文件除外）
+- [ ] **组件复用**：相同 UI 模式使用相同组件，不重复实现
+- [ ] **类型安全**：组件 Props 有 TypeScript 类型定义
+- [ ] **注释规范**：组件头部注释说明用途，复杂逻辑有行内注释
+- [ ] **样式隔离**：使用 scoped style，不污染全局
+- [ ] **无冗余**：不重复定义 tokens 中已有的变量值
+
+---
+
+### 16. 开发排期
+
+| Tier | 内容 | 输出 | 估时 |
+|------|------|------|------|
+| 0 | 设计系统基建 | tokens + mixins + 字体 + 主题切换 | 0.5 天 |
+| 1 | 基础组件库（8 个） | 8 个可复用组件 | 1 天 |
+| 2 | 布局 + 表单组件（12 个） | 12 个可复用组件 | 1.5 天 |
+| 3 | 核心页面重构（4 页） | 首页 + 列表 + 详情 + 新建 | 2 天 |
+| 4 | 表单页面（~15 页） | 繁育/健康/财务记录表单 | 2 天 |
+| 5 | 剩余页面（~30 页） | 统计/销售/设置/协作/监控 | 3 天 |
+| **合计** | | **110 个屏幕** | **~10 天** |
+
+> 以上为 Claude Code 辅助开发估时，非人工估时。

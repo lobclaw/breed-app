@@ -45,7 +45,7 @@
       >
         <text>{{ f.label }}</text>
       </view>
-      <view style="margin-left: auto; padding-right: 4px;">
+      <view style="margin-left: auto; padding-right: 4px;" @click="showCategoryFilter = true">
         <text class="material-icons-round" style="font-size: 22px; color: var(--text-2);">tune</text>
       </view>
     </view>
@@ -62,6 +62,7 @@
         :key="tx._id"
         class="flow-card"
         :class="tx._txType === 'income' ? 'flow-card--income' : 'flow-card--expense'"
+        @click="goToTxDetail(tx)"
       >
         <view class="flow-item">
           <view class="flow-dot" :class="tx._txType === 'income' ? 'flow-dot--income' : 'flow-dot--expense'" />
@@ -96,8 +97,30 @@
       <text class="material-icons-round" style="font-size: 28px; color: #fff;">add</text>
     </view>
 
+    <!-- 分类筛选 Sheet -->
+    <BSheet v-model:visible="showCategoryFilter" title="按分类筛选" height="45%">
+      <view class="category-filter">
+        <view
+          v-for="cat in categoryOptions"
+          :key="cat"
+          class="category-filter__item"
+          :class="{ 'category-filter__item--active': selectedCategory === cat }"
+          @click="applyCategory(cat)"
+        >
+          <text>{{ cat }}</text>
+        </view>
+        <view
+          class="category-filter__item"
+          :class="{ 'category-filter__item--active': !selectedCategory }"
+          @click="applyCategory('')"
+        >
+          <text>全部分类</text>
+        </view>
+      </view>
+    </BSheet>
+
     <!-- 底部导航 -->
-    <BNavBar current="finance" @fab-click="goToAdd" />
+    <BNavBar current="finance" />
   </view>
 </template>
 
@@ -109,10 +132,21 @@ import BNavBar from '@/components/layout/BNavBar.vue'
 import BIconBox from '@/components/base/BIconBox.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
+import BSheet from '@/components/layout/BSheet.vue'
 
 const transactions = ref<any[]>([])
-const loading = ref(true)
+const loading = ref(false)
 const activeFilter = ref('')
+const showCategoryFilter = ref(false)
+const selectedCategory = ref('')
+
+const categoryOptions = ['食品', '营养品', '消耗品', '日常用品', '固定开销', '交通', '医疗', '配种费', '生产', '其他']
+
+function applyCategory(cat: string) {
+  selectedCategory.value = cat
+  showCategoryFilter.value = false
+  loadData()
+}
 const currentMonth = ref(new Date())
 
 const summary = reactive({
@@ -180,21 +214,39 @@ function getFlowIconColor(tx: any): 'red' | 'amber' | 'green' | 'blue' | 'plum' 
   return map[tx.category] || 'green'
 }
 
-function goToAdd() {
-  uni.navigateTo({ url: '/pages/finance/expense-add' })
-}
 
 function goToStats() {
   uni.navigateTo({ url: '/pages/finance/stats' })
 }
 
+function goToTxDetail(tx: any) {
+  if (tx._txType === 'expense') {
+    uni.navigateTo({ url: '/pages/finance/expense-detail?id=' + tx._id })
+  } else {
+    uni.navigateTo({ url: '/pages/finance/income-detail?id=' + tx._id })
+  }
+}
+
 async function loadData() {
-  loading.value = true
+  // 无闪烁切换：有数据时不显示骨架屏，直接替换
+  const hasData = transactions.value.length > 0
+  if (!hasData) loading.value = true
+
+  const monthParams = {
+    month: currentMonth.value.getMonth() + 1,
+    year: currentMonth.value.getFullYear(),
+  }
   const [txResult, sumResult] = await Promise.all([
-    fetchTransactions(),
-    fetchSummary('monthly'),
+    fetchTransactions({
+      type: activeFilter.value || undefined,
+      category: selectedCategory.value || undefined,
+      ...monthParams,
+    }),
+    fetchSummary({ period: 'monthly', ...monthParams }),
   ])
-  if (txResult?.data) transactions.value = txResult.data
+  if (txResult?.data) {
+    transactions.value = txResult.data
+  }
   if (sumResult?.data) {
     summary.totalIncome = sumResult.data.totalIncome || 0
     summary.totalExpense = sumResult.data.totalExpense || 0
@@ -449,6 +501,31 @@ onShow(() => {
   color: var(--text-3);
   margin-top: 2px;
   display: block;
+}
+
+/* ==================== CATEGORY FILTER ==================== */
+.category-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px 0 20px;
+
+  &__item {
+    padding: 8px 16px;
+    border-radius: var(--radius-btn);
+    background: var(--card-dim);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-2);
+    transition: all 0.12s ease;
+
+    &:active { transform: scale(0.94); }
+
+    &--active {
+      background: var(--primary);
+      color: #fff;
+    }
+  }
 }
 
 /* ==================== PAGE FAB ==================== */

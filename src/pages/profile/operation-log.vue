@@ -328,25 +328,6 @@ onLoad(() => {
   color: var(--text-3);
 }
 
-/* ---- Empty State ---- */
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 80px 0;
-  gap: 12px;
-}
-
-.empty-icon {
-  font-size: 48px;
-  color: var(--text-4);
-}
-
-.empty-text {
-  font-size: 14px;
-  color: var(--text-3);
-}
-
 /* ---- Loading State ---- */
 .loading-state {
   display: flex;
