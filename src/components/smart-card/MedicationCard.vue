@@ -130,8 +130,8 @@ function toggleDog(dog: any) {
 // 只计算有药的犬只
 const medDogCount = computed(() => (props.card.dogs || []).filter((d: any) => d.state !== 'sick_only').length)
 const doneCount = computed(() => {
-  const backendDone = (props.card.dogs || []).filter((d: any) => d.state !== 'sick_only' && d.completed).length
-  return backendDone + checkedDogs.value.size
+  const medDogs = (props.card.dogs || []).filter((d: any) => d.state !== 'sick_only')
+  return medDogs.filter((d: any) => d.completed || checkedDogs.value.has(d.dogId)).length
 })
 
 function batchComplete() {

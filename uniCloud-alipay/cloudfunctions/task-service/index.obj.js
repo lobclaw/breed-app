@@ -481,7 +481,8 @@ module.exports = {
       .where({ _id: taskId, family_id: this.familyId })
       .get()
     if (!tasks || tasks.length === 0) throw new Error('任务不存在')
-    if (tasks[0].status !== 'pending') throw new Error('任务已处理')
+    // 幂等：已完成的任务直接返回成功
+    if (tasks[0].status !== 'pending') return { message: '已完成' }
 
     await db.collection('tasks').doc(taskId).update({
       status: 'completed',

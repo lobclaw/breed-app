@@ -201,6 +201,7 @@
 import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { useProtocolStore, type MedicationProtocol } from '@/stores/protocolStore'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import BModal from '@/components/layout/BModal.vue'
@@ -367,9 +368,6 @@ async function submit() {
 
 // ==================== 用药方案选择器 ====================
 
-// MedicationProtocol 类型从 protocolStore 导入
-
-import { useProtocolStore } from '@/stores/protocolStore'
 
 const protocolStore = useProtocolStore()
 const showProtocolPicker = ref(false)
@@ -386,7 +384,7 @@ async function openProtocolPicker() {
 function applyProtocol(protocol: MedicationProtocol) {
   drugName.value = protocol.drug_name || ''
   dosage.value = protocol.dosage || ''
-  if (protocol.duration) durationDays.value = String(protocol.duration)
+  if (protocol.duration_days) durationDays.value = String(protocol.duration_days)
   if (protocol.dosage_unit) dosageUnit.value = protocol.dosage_unit
   if (protocol.method) method.value = protocol.method
   if (protocol.frequency) frequency.value = protocol.frequency
