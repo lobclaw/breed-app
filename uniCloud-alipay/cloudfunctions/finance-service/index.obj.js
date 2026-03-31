@@ -97,28 +97,38 @@ module.exports = {
    */
   async getTransactionList(filters = {}) {
     const familyId = this.familyId
-    const where = { family_id: familyId, deleted_at: null }
 
-    if (filters.startDate) where.date = dbCmd.gte(filters.startDate)
-    if (filters.endDate) {
-      where.date = where.date
-        ? dbCmd.and(where.date, dbCmd.lte(filters.endDate))
-        : dbCmd.lte(filters.endDate)
-    }
+    // 按月份计算日期范围
+    const year = filters.year || new Date().getFullYear()
+    const month = filters.month || (new Date().getMonth() + 1)
+    const startDate = new Date(year, month - 1, 1).getTime()
+    const endDate = new Date(year, month, 1).getTime()
+    const dateFilter = dbCmd.gte(startDate).and(dbCmd.lt(endDate))
 
-    // 并行查询收支
+    const baseWhere = { family_id: familyId, deleted_at: null, date: dateFilter }
+    const type = filters.type  // 'income' | 'expense' | undefined
+
+    // 按类型决定查哪些集合
+    const fetchExpenses = !type || type === 'expense'
+    const fetchIncomes = !type || type === 'income'
+
+    const expenseWhere = { ...baseWhere }
+    if (filters.category) expenseWhere.category = filters.category
+
     const [expenseResult, incomeResult] = await Promise.all([
-      db.collection('expenses').where(where).orderBy('date', 'desc').limit(100).get(),
-      db.collection('incomes').where(where).orderBy('date', 'desc').limit(100).get(),
+      fetchExpenses
+        ? db.collection('expenses').where(expenseWhere).orderBy('date', 'desc').limit(200).get()
+        : { data: [] },
+      fetchIncomes
+        ? db.collection('incomes').where(baseWhere).orderBy('date', 'desc').limit(200).get()
+        : { data: [] },
     ])
 
-    // 合并并标记类型
     const transactions = [
       ...expenseResult.data.map(e => ({ ...e, _txType: 'expense' })),
       ...incomeResult.data.map(i => ({ ...i, _txType: 'income' })),
     ]
 
-    // 按日期降序排序
     transactions.sort((a, b) => (b.date || 0) - (a.date || 0))
 
     return { data: transactions.slice(0, 100) }
@@ -196,18 +206,21 @@ module.exports = {
   /**
    * 月度/年度统计
    */
-  async getFinancialSummary(period) {
+  async getFinancialSummary(params = {}) {
     const familyId = this.familyId
+    // 兼容旧调用（直接传字符串）和新调用（传对象）
+    const period = typeof params === 'string' ? params : (params.period || 'monthly')
     const now = new Date()
+    const year = (typeof params === 'object' && params.year) || now.getFullYear()
+    const month = (typeof params === 'object' && params.month) || (now.getMonth() + 1)
     let startDate, endDate
 
     if (period === 'yearly') {
-      startDate = new Date(now.getFullYear(), 0, 1).getTime()
-      endDate = new Date(now.getFullYear() + 1, 0, 1).getTime()
+      startDate = new Date(year, 0, 1).getTime()
+      endDate = new Date(year + 1, 0, 1).getTime()
     } else {
-      // 默认月度
-      startDate = new Date(now.getFullYear(), now.getMonth(), 1).getTime()
-      endDate = new Date(now.getFullYear(), now.getMonth() + 1, 1).getTime()
+      startDate = new Date(year, month - 1, 1).getTime()
+      endDate = new Date(year, month, 1).getTime()
     }
 
     const dateFilter = { $gte: startDate, $lt: endDate }
@@ -821,5 +834,81 @@ module.exports = {
     ]
 
     return { data: categories }
+  },
+
+  /**
+   * 新增自定义支出分类
+   */
+  async addExpenseCategory({ name } = {}) {
+    if (!name || !name.trim()) throw new Error('请填写分类名称')
+    name = name.trim()
+
+    if (DEFAULT_EXPENSE_CATEGORIES.includes(name)) throw new Error('该分类名称与预设分类重复')
+
+    const { data } = await db.collection('families').doc(this.familyId).field({ settings: true }).get()
+    const family = data[0] || data
+    const custom = family.settings?.custom_expense_categories || []
+
+    if (custom.includes(name)) throw new Error('分类名称已存在')
+
+    await db.collection('families').doc(this.familyId).update({
+      'settings.custom_expense_categories': dbCmd.push(name),
+    })
+
+    return { message: '已添加' }
+  },
+
+  /**
+   * 重命名自定义支出分类（同步迁移历史账单）
+   */
+  async updateExpenseCategory({ oldName, newName } = {}) {
+    if (!oldName || !newName || !newName.trim()) throw new Error('参数不完整')
+    newName = newName.trim()
+
+    if (DEFAULT_EXPENSE_CATEGORIES.includes(oldName)) throw new Error('预设分类不可编辑')
+    if (newName === oldName) return { message: '无变化' }
+    if (DEFAULT_EXPENSE_CATEGORIES.includes(newName)) throw new Error('新名称与预设分类重复')
+
+    const { data } = await db.collection('families').doc(this.familyId).field({ settings: true }).get()
+    const family = data[0] || data
+    const custom = family.settings?.custom_expense_categories || []
+
+    if (!custom.includes(oldName)) throw new Error('分类不存在')
+    if (custom.includes(newName)) throw new Error('新名称已存在')
+
+    const updated = custom.map(c => c === oldName ? newName : c)
+    await db.collection('families').doc(this.familyId).update({
+      'settings.custom_expense_categories': updated,
+    })
+
+    // 迁移历史账单中的分类名称
+    await db.collection('expenses').where({
+      family_id: this.familyId,
+      category: oldName,
+      deleted_at: null,
+    }).update({ category: newName })
+
+    return { message: '已更新' }
+  },
+
+  /**
+   * 删除自定义支出分类
+   */
+  async removeExpenseCategory({ name } = {}) {
+    if (!name) throw new Error('请指定分类名称')
+
+    if (DEFAULT_EXPENSE_CATEGORIES.includes(name)) throw new Error('预设分类不可删除')
+
+    const { data } = await db.collection('families').doc(this.familyId).field({ settings: true }).get()
+    const family = data[0] || data
+    const custom = family.settings?.custom_expense_categories || []
+
+    if (!custom.includes(name)) throw new Error('分类不存在')
+
+    await db.collection('families').doc(this.familyId).update({
+      'settings.custom_expense_categories': dbCmd.pull(name),
+    })
+
+    return { message: '已删除' }
   },
 }
