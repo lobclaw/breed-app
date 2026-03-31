@@ -10,6 +10,7 @@
   <CareGroupCard v-else-if="card.cardType === 'care_group'" :card="card" @complete="onComplete" @batch-complete="onBatchComplete" />
   <BatchCard v-else-if="card.cardType === 'batch'" :card="card" @complete="onComplete" @postpone="onPostpone" @batch-complete="onBatchComplete" />
   <MedicationCard v-else-if="card.cardType === 'health_attention' || card.cardType === 'medication'" :card="card" @complete="onComplete" @postpone="onPostpone" @batch-complete="onBatchComplete" @action="onAction" />
+  <SickObservationCard v-else-if="card.cardType === 'sick_observation'" :card="card" @action="onAction" />
   </view>
 </template>
 
@@ -18,9 +19,10 @@ import DogCard from './DogCard.vue'
 import CareGroupCard from './CareGroupCard.vue'
 import BatchCard from './BatchCard.vue'
 import MedicationCard from './MedicationCard.vue'
+import SickObservationCard from './SickObservationCard.vue'
 
 export interface SmartCardData {
-  cardType: 'dog' | 'care_group' | 'batch' | 'medication' | 'health_attention'
+  cardType: 'dog' | 'care_group' | 'batch' | 'medication' | 'health_attention' | 'sick_observation'
   id: string
   priority: 'overdue' | 'today' | 'upcoming'
   overdueDays?: number

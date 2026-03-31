@@ -29,28 +29,25 @@
     </view>
 
     <!-- 骨架屏 -->
-    <view v-if="loading" style="padding: 0 16px;">
+    <view v-if="loading" class="skeleton-wrap">
       <BSkeleton :rows="3" />
     </view>
 
     <template v-else>
-      <!-- 汇总 2x2 网格 -->
+      <!-- 汇总：净利润横跨全宽 + 收入/支出/利润率三格 -->
       <view class="summary-grid">
-        <view class="summary-card">
+        <view class="summary-card summary-card--profit">
+          <text class="summary-card__label">净利润</text>
+          <text class="summary-card__value summary-card__value--primary">¥{{ formatNum(data.netProfit) }}</text>
+          <text class="summary-card__rate">利润率 {{ profitRate }}</text>
+        </view>
+        <view class="summary-card summary-card--income">
           <text class="summary-card__label">总收入</text>
           <text class="summary-card__value summary-card__value--income">¥{{ formatNum(data.totalIncome) }}</text>
         </view>
-        <view class="summary-card">
+        <view class="summary-card summary-card--expense">
           <text class="summary-card__label">总支出</text>
           <text class="summary-card__value summary-card__value--expense">¥{{ formatNum(data.totalExpense) }}</text>
-        </view>
-        <view class="summary-card">
-          <text class="summary-card__label">净利润</text>
-          <text class="summary-card__value summary-card__value--primary">¥{{ formatNum(data.netProfit) }}</text>
-        </view>
-        <view class="summary-card">
-          <text class="summary-card__label">利润率</text>
-          <text class="summary-card__value summary-card__value--muted">{{ profitRate }}</text>
         </view>
       </view>
 
@@ -69,8 +66,8 @@
             />
           </view>
         </view>
-        <view v-if="expenseItems.length === 0" style="padding: 12px; text-align: center;">
-          <text style="font-size: 13px; color: var(--text-3);">暂无数据</text>
+        <view v-if="expenseItems.length === 0" class="bar-chart__empty">
+          <text>暂无数据</text>
         </view>
       </view>
 
@@ -89,8 +86,8 @@
             />
           </view>
         </view>
-        <view v-if="incomeItems.length === 0" style="padding: 12px; text-align: center;">
-          <text style="font-size: 13px; color: var(--text-3);">暂无数据</text>
+        <view v-if="incomeItems.length === 0" class="bar-chart__empty">
+          <text>暂无数据</text>
         </view>
       </view>
 
@@ -99,15 +96,15 @@
       <view class="nav-cards">
         <view class="nav-card" @click="goTo('/pages/finance/litter-profit')">
           <text class="nav-card__title">单窝利润</text>
-          <text class="material-icons-round" style="font-size: 20px; color: var(--text-3);">chevron_right</text>
+          <text class="material-icons-round nav-card__chevron">chevron_right</text>
         </view>
         <view class="nav-card" @click="goTo('/pages/finance/dam-roi')">
           <text class="nav-card__title">种母投资回报</text>
-          <text class="material-icons-round" style="font-size: 20px; color: var(--text-3);">chevron_right</text>
+          <text class="material-icons-round nav-card__chevron">chevron_right</text>
         </view>
         <view class="nav-card" @click="goTo('/pages/finance/projection')">
           <text class="nav-card__title">未来预估</text>
-          <text class="material-icons-round" style="font-size: 20px; color: var(--text-3);">chevron_right</text>
+          <text class="material-icons-round nav-card__chevron">chevron_right</text>
         </view>
       </view>
     </template>
@@ -115,7 +112,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
@@ -196,7 +194,7 @@ async function load() {
   loading.value = false
 }
 
-onMounted(() => load())
+onShow(() => load())
 </script>
 
 <style lang="scss" scoped>
@@ -256,12 +254,17 @@ onMounted(() => load())
   }
 }
 
+/* ==================== SKELETON ==================== */
+.skeleton-wrap {
+  padding: 0 var(--space-page);
+}
+
 /* ==================== SUMMARY GRID ==================== */
 .summary-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
-  padding: 0 16px 16px;
+  padding: 0 var(--space-page) 16px;
 }
 
 .summary-card {
@@ -269,18 +272,20 @@ onMounted(() => load())
   border-radius: var(--radius-card);
   padding: 16px;
   box-shadow: var(--shadow);
-  position: relative;
-  overflow: hidden;
 
-  &::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 100%;
-    pointer-events: none;
+  &--profit {
+    grid-column: 1 / -1; // 跨两列
+    background: linear-gradient(135deg, var(--primary-soft) 0%, var(--card) 60%);
+    border: 1.5px solid rgba(234, 62, 119, 0.12);
   }
 
-  & > * { position: relative; z-index: 1; }
+  &--income {
+    border-top: 3px solid var(--red);
+  }
+
+  &--expense {
+    border-top: 3px solid var(--green);
+  }
 
   &__label {
     font-size: 12px;
@@ -298,17 +303,31 @@ onMounted(() => load())
 
     &--income { color: var(--red); font-size: 20px; }
     &--expense { color: var(--green); font-size: 20px; }
-    &--primary { color: var(--primary); font-size: 24px; }
-    &--muted { color: var(--text-2); font-size: 20px; }
+    &--primary { color: var(--primary); font-size: 26px; }
+  }
+
+  &__rate {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-3);
+    margin-top: 4px;
+    display: block;
   }
 }
 
 /* ==================== BAR CHART ==================== */
 .bar-chart {
-  padding: 0 16px 12px;
+  padding: 0 var(--space-page) 12px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+
+  &__empty {
+    padding: 12px 0;
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-3);
+  }
 }
 
 .bar-row {
@@ -356,7 +375,7 @@ onMounted(() => load())
 
 /* ==================== NAV CARDS ==================== */
 .nav-cards {
-  padding: 0 16px 16px;
+  padding: 0 var(--space-page) 16px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -380,6 +399,11 @@ onMounted(() => load())
     font-size: 15px;
     font-weight: 700;
     color: var(--text-1);
+  }
+
+  &__chevron {
+    font-size: 20px;
+    color: var(--text-3);
   }
 }
 </style>

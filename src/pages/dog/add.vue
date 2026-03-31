@@ -38,37 +38,47 @@
         />
       </view>
 
-      <!-- 性别 -->
+      <!-- 性别（编辑模式锁定） -->
       <view class="form-field">
-        <view class="field-label"><text>性别</text></view>
-        <view class="pill-select">
+        <view class="field-label">
+          <text>性别</text>
+          <text v-if="isEdit" class="field-label__locked">
+            <text class="material-icons-round" style="font-size: 12px; vertical-align: middle;">lock</text> 创建后不可修改
+          </text>
+        </view>
+        <view class="pill-select" :class="{ 'pill-select--locked': isEdit }">
           <view
             class="pill-select__item"
-            :class="{ 'pill-select__item--active': form.gender === '母', locked: form.role === '外部种公' }"
-            @click="form.role !== '外部种公' && (form.gender = '母')"
+            :class="{ 'pill-select__item--active': form.gender === '母' }"
+            @click="!isEdit && form.role !== '外部种公' && (form.gender = '母')"
           >
             <text>母</text>
           </view>
           <view
             class="pill-select__item"
-            :class="{ 'pill-select__item--active': form.gender === '公', locked: form.role === '外部种公' && form.gender === '母' }"
-            @click="form.gender = '公'"
+            :class="{ 'pill-select__item--active': form.gender === '公' }"
+            @click="!isEdit && (form.gender = '公')"
           >
             <text>公</text>
           </view>
         </view>
       </view>
 
-      <!-- 品种 -->
+      <!-- 品种（编辑模式锁定） -->
       <view class="form-field">
-        <view class="field-label"><text>品种</text></view>
-        <view class="pill-select">
+        <view class="field-label">
+          <text>品种</text>
+          <text v-if="isEdit" class="field-label__locked">
+            <text class="material-icons-round" style="font-size: 12px; vertical-align: middle;">lock</text> 创建后不可修改
+          </text>
+        </view>
+        <view class="pill-select" :class="{ 'pill-select--locked': isEdit }">
           <view
             v-for="b in breedOptions"
             :key="b"
             class="pill-select__item"
             :class="{ 'pill-select__item--active': form.breed === b }"
-            @click="form.breed = b"
+            @click="!isEdit && (form.breed = b)"
           >
             <text>{{ b }}</text>
           </view>
@@ -76,11 +86,11 @@
             v-if="customBreed && !breedOptions.includes(customBreed)"
             class="pill-select__item"
             :class="{ 'pill-select__item--active': form.breed === customBreed }"
-            @click="form.breed = customBreed"
+            @click="!isEdit && (form.breed = customBreed)"
           >
             <text>{{ customBreed }}</text>
           </view>
-          <view class="pill-select__add" @click="addCustomBreed">
+          <view v-if="!isEdit" class="pill-select__add" @click="addCustomBreed">
             <text class="material-icons-round" style="font-size: 14px;">add</text>
             <text>自定义</text>
           </view>
@@ -220,13 +230,10 @@ function onBreedConfirm() {
   showBreedModal.value = false
 }
 
-// 切换角色时自动设置性别
+// 切换角色时自动设置性别（编辑模式不触发，避免覆盖已加载的性别）
 watch(() => form.role, (role) => {
-  if (role === '外部种公') {
-    form.gender = '公'
-  } else {
-    form.gender = '母'
-  }
+  if (isEdit.value) return
+  form.gender = role === '外部种公' ? '公' : '母'
 })
 
 const roleOptions = [
@@ -268,7 +275,9 @@ function onPurchaseDateChange(e: any) {
 
 const { run: createDog } = useCloudCall('dog-service', 'createDog', { successMessage: '已添加' })
 const { run: updateDog } = useCloudCall('dog-service', 'updateDog', { successMessage: '已更新' })
+const { run: updateDogName } = useCloudCall('dog-service', 'updateDogName')
 const { run: fetchDetail } = useCloudCall<{ data: any }>('dog-service', 'getDogDetail')
+let originalName = ''
 
 async function submit() {
   submitting.value = true
@@ -287,6 +296,10 @@ async function submit() {
 
     if (isEdit.value) {
       await updateDog(editDogId, dogData)
+      // 名称变更时单独调用（updateDog 不处理 name；幼崽可清空名称）
+      if (dogData.name !== originalName) {
+        await updateDogName(editDogId, dogData.name)
+      }
       // 更新缓存
       dogStore.updateDog(editDogId, dogData)
     } else {
@@ -313,6 +326,7 @@ onLoad(async (query) => {
     if (res?.data) {
       const dog = res.data
       form.name = dog.name || ''
+      originalName = dog.name || ''
       form.gender = dog.gender
       form.role = dog.role
       form.breed = dog.breed || ''
@@ -402,6 +416,13 @@ onLoad(async (query) => {
     font-size: 11px;
     font-weight: 500;
   }
+  &__locked {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-4);
+    margin-left: 6px;
+  }
+  display: flex;
 }
 
 .field-input {
@@ -470,6 +491,10 @@ onLoad(async (query) => {
   &.locked {
     opacity: 0.5;
   }
+}
+.pill-select--locked {
+  pointer-events: none;
+  opacity: 0.75;
 }
 
 </style>

@@ -24,15 +24,16 @@
     </template>
     <!-- 单选已选中：卡片 -->
     <template v-else-if="!multiple && singleDog">
-      <view class="b-dog-card" @click="openSheet">
+      <view class="b-dog-card" :class="{ 'b-dog-card--readonly': readonly }" @click="readonly ? undefined : openSheet()">
         <view class="b-dog-card__avatar" :class="avatarColorClass(singleDog)">
           <text class="material-icons-round" style="font-size: 20px; color: #fff;">pets</text>
         </view>
         <view class="b-dog-card__info">
           <text class="b-dog-card__name">{{ singleDog.name }}</text>
-          <text class="b-dog-card__meta">{{ singleDog.breed || '马尔济斯' }} · {{ singleDog.gender }} · {{ formatAge(singleDog.birth_date) }}</text>
+          <text class="b-dog-card__meta">{{ singleDog.breed || '马尔济斯' }}<template v-if="singleDog.gender"> · {{ singleDog.gender }}</template></text>
         </view>
-        <text class="material-icons-round" style="font-size: 18px; color: var(--text-4);">chevron_right</text>
+        <text v-if="readonly" class="material-icons-round" style="font-size: 18px; color: var(--text-4);">lock</text>
+        <text v-else class="material-icons-round" style="font-size: 18px; color: var(--text-4);">chevron_right</text>
       </view>
     </template>
     <!-- 未选中：空态 -->
@@ -150,6 +151,8 @@ const props = withDefaults(defineProps<{
   genderFilter?: string
   /** Sheet 标题 */
   title?: string
+  /** 只读模式：显示已选犬只但不允许修改 */
+  readonly?: boolean
   /** 空态占位文字 */
   placeholder?: string
 }>(), {
@@ -160,6 +163,7 @@ const props = withDefaults(defineProps<{
   genderFilter: '',
   title: '选择犬只',
   placeholder: '点击选择犬只',
+  readonly: false,
 })
 
 const emit = defineEmits<{
@@ -370,6 +374,7 @@ function formatAge(birthTs?: number) {
   transition: all 0.15s ease;
 
   &:active { transform: scale(0.98); }
+  &--readonly { pointer-events: none; opacity: 0.8; }
 
   &__avatar {
     width: 42px;

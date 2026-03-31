@@ -28,7 +28,7 @@
 
     <!-- ==================== 紧凑 Hero ==================== -->
     <view class="dog-detail__hero">
-      <view class="dog-detail__hero-avatar">
+      <view class="dog-detail__hero-avatar" :class="heroAvatarClass">
         <text class="material-icons-round dog-detail__hero-avatar-icon">pets</text>
       </view>
       <view class="dog-detail__hero-info">
@@ -43,8 +43,9 @@
             :key="'status-' + idx"
             class="dog-detail__hero-tag"
             :class="`dog-detail__hero-tag--${statusColorMap[s.type] || 'primary'}`"
+            @click="openStatusSheet"
           >
-            <text class="dog-detail__hero-tag-text">{{ s.type }}</text>
+            <text class="dog-detail__hero-tag-text">{{ s.label || s.type }}</text>
             <text class="material-icons-round dog-detail__hero-tag-arrow">chevron_right</text>
           </view>
           <!-- 角色标签（静态，带边框） -->
@@ -214,6 +215,25 @@
 
       <!-- ========== 繁育 Tab ========== -->
       <view v-if="activeTab === 'breeding'" class="dog-detail__pane">
+        <!-- 发情中快捷操作 -->
+        <view v-if="isInEstrus" class="breeding-estrus-banner">
+          <view class="breeding-estrus-banner__info">
+            <text class="material-icons-round breeding-estrus-banner__icon">favorite</text>
+            <view>
+              <text class="breeding-estrus-banner__title">发情中</text>
+              <text class="breeding-estrus-banner__sub">记录本次发情进展</text>
+            </view>
+          </view>
+          <view class="breeding-estrus-banner__actions">
+            <view class="breeding-estrus-banner__btn" @click="navigateToRecord('breeding-follicle')">
+              <text>卵泡检查</text>
+            </view>
+            <view class="breeding-estrus-banner__btn breeding-estrus-banner__btn--primary" @click="navigateToRecord('breeding-mating')">
+              <text>配种记录</text>
+            </view>
+          </view>
+        </view>
+
         <BEmpty
           v-if="cycles.length === 0"
           icon="child_care"
@@ -223,26 +243,43 @@
           @action="addRecord"
         />
         <view v-else>
-          <view class="dog-detail__sec dog-detail__sec--rose">
-            <text class="dog-detail__sec-text">繁育历史</text>
+          <!-- 当前进行中周期（突出显示） -->
+          <view v-if="activeCycle" class="breeding-active-cycle" @click="goToCycle(activeCycle._id)">
+            <view class="breeding-active-cycle__header">
+              <view class="breeding-active-cycle__dot" />
+              <text class="breeding-active-cycle__label">进行中</text>
+              <text class="material-icons-round breeding-active-cycle__chevron">chevron_right</text>
+            </view>
+            <text class="breeding-active-cycle__title">{{ activeCycle.title || '当前繁育周期' }}</text>
+            <text class="breeding-active-cycle__sub">开始于 {{ formatDate(activeCycle.created_at) }}<text v-if="activeCycle.sire_name"> · 种公: {{ activeCycle.sire_name }}</text></text>
+            <view class="breeding-active-cycle__status-badge">
+              <text class="breeding-active-cycle__status-text">{{ activeCycle.status }}</text>
+            </view>
           </view>
-          <view
-            v-for="cycle in cycles"
-            :key="cycle._id"
-            class="dog-detail__cycle-card"
-            @click="goToCycle(cycle._id)"
-          >
-            <view class="dog-detail__rec-icon" :class="cycle.status === '已生产' ? 'dog-detail__rec-icon--green' : 'dog-detail__rec-icon--gray'">
-              <text class="material-icons-round">{{ cycle.status === '已生产' ? 'check_circle' : 'close' }}</text>
+
+          <!-- 历史周期列表 -->
+          <view v-if="pastCycles.length > 0">
+            <view class="dog-detail__sec dog-detail__sec--rose">
+              <text class="dog-detail__sec-text">繁育历史</text>
             </view>
-            <view class="dog-detail__cycle-body">
-              <text class="dog-detail__cycle-title">{{ cycle.title || '繁育周期' }}</text>
-              <text class="dog-detail__cycle-sub">{{ formatDate(cycle.created_at) }}<text v-if="cycle.sire_name"> · 种公: {{ cycle.sire_name }}</text></text>
+            <view
+              v-for="cycle in pastCycles"
+              :key="cycle._id"
+              class="dog-detail__cycle-card"
+              @click="goToCycle(cycle._id)"
+            >
+              <view class="dog-detail__rec-icon" :class="cycle.status === '已生产' ? 'dog-detail__rec-icon--green' : 'dog-detail__rec-icon--gray'">
+                <text class="material-icons-round">{{ cycle.status === '已生产' ? 'check_circle' : 'close' }}</text>
+              </view>
+              <view class="dog-detail__cycle-body">
+                <text class="dog-detail__cycle-title">{{ cycle.title || '繁育周期' }}</text>
+                <text class="dog-detail__cycle-sub">{{ formatDate(cycle.created_at) }}<text v-if="cycle.sire_name"> · 种公: {{ cycle.sire_name }}</text></text>
+              </view>
+              <view v-if="cycle.status" class="dog-detail__rec-tag" :class="cycle.status === '已生产' ? 'dog-detail__rec-tag--green' : 'dog-detail__rec-tag--gray'">
+                <text class="dog-detail__rec-tag-text">{{ cycle.status }}</text>
+              </view>
+              <text class="material-icons-round dog-detail__rec-chevron">chevron_right</text>
             </view>
-            <view v-if="cycle.status" class="dog-detail__rec-tag" :class="cycle.status === '已生产' ? 'dog-detail__rec-tag--green' : 'dog-detail__rec-tag--gray'">
-              <text class="dog-detail__rec-tag-text">{{ cycle.status }}</text>
-            </view>
-            <text class="material-icons-round dog-detail__rec-chevron">chevron_right</text>
           </view>
         </view>
       </view>
@@ -362,28 +399,21 @@
         <text class="status-sheet__dog-emoji">&#x1F436;</text>
         <text class="status-sheet__dog-name">{{ dog.name || '未命名' }}</text>
       </view>
-      <view class="status-grid">
+      <view class="status-grid status-grid--3col">
         <view class="status-card status-card--red" @click="selectIllness">
           <text class="status-card__emoji">&#x1F912;</text>
           <text class="status-card__label">生病</text>
-          <view class="status-card__pills">
-            <text class="status-card__pill">感冒</text>
-            <text class="status-card__pill">腹泻</text>
-            <text class="status-card__pill">皮肤病</text>
-            <text class="status-card__pill">其他</text>
-          </view>
+          <text class="status-card__sub">录入疾病记录</text>
         </view>
         <view class="status-card status-card--plum" @click="openMedication">
           <text class="status-card__emoji">&#x1F48A;</text>
           <text class="status-card__label">开始用药</text>
+          <text class="status-card__sub">添加用药计划</text>
         </view>
         <view class="status-card status-card--green" @click="openRecoveryConfirm">
           <text class="status-card__emoji">&#x2705;</text>
           <text class="status-card__label">标记康复</text>
-        </view>
-        <view class="status-card status-card--amber" @click="openRetireConfirm">
-          <text class="status-card__emoji">&#x1F3E5;</text>
-          <text class="status-card__label">退休</text>
+          <text class="status-card__sub">退出生病状态</text>
         </view>
       </view>
       <view class="status-sheet__cancel" @click="showStatusSheet = false">
@@ -677,12 +707,30 @@
         </view>
       </view>
     </BSheet>
+
+    <!-- ==================== 添加记录 Sheet ==================== -->
+    <BSheet v-model:visible="showAddRecordSheet" title="添加繁育记录">
+      <view class="add-record-list">
+        <view
+          v-for="item in addRecordItems"
+          :key="item.page"
+          class="add-record-item"
+          @click="navigateToRecord(item.page)"
+        >
+          <view class="add-record-item__icon" :style="{ background: 'color-mix(in srgb, ' + item.color + ' 15%, transparent)' }">
+            <text class="material-icons-round" :style="{ color: item.color, fontSize: '20px' }">{{ item.icon }}</text>
+          </view>
+          <text class="add-record-item__label">{{ item.label }}</text>
+          <text class="material-icons-round add-record-item__arrow">chevron_right</text>
+        </view>
+      </view>
+    </BSheet>
   </view>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 import BSheet from '@/components/layout/BSheet.vue'
@@ -699,6 +747,7 @@ const healthRecords = ref<any[]>([])
 const activeTab = ref('overview')
 const loading = ref(true)
 const showMore = ref(false)
+const showAddRecordSheet = ref(false)
 const infoExpanded = ref(false)
 let dogId = ''
 
@@ -726,6 +775,22 @@ const statusIconMap: Record<string, string> = {
   '生病中': 'sick',
   '用药中': 'medication',
 }
+
+// Hero avatar 颜色 — 与 BDogPicker 保持一致
+const heroAvatarClass = computed(() => {
+  const d = dog.value
+  if (!d) return 'dog-detail__hero-avatar--primary'
+  if (d.role === '幼崽') return 'dog-detail__hero-avatar--amber'
+  if (d.role === '外部种公') return 'dog-detail__hero-avatar--blue'
+  if (d.gender === '母') return 'dog-detail__hero-avatar--rose'
+  if (d.gender === '公') return 'dog-detail__hero-avatar--teal'
+  return 'dog-detail__hero-avatar--primary'
+})
+
+// 繁育周期计算属性
+const isInEstrus = computed(() => statuses.value.some((s: any) => s.type === '发情中'))
+const activeCycle = computed(() => cycles.value.find((c: any) => c.status !== '已生产' && c.status !== '已终止'))
+const pastCycles = computed(() => cycles.value.filter((c: any) => c.status === '已生产' || c.status === '已终止'))
 
 const { run: fetchDetail } = useCloudCall<{ data: Dog }>('dog-service', 'getDogDetail')
 const { run: fetchCycles } = useCloudCall<{ data: any[] }>('breeding-service', 'getCycleHistory')
@@ -807,24 +872,24 @@ function editDog() {
   uni.navigateTo({ url: `/pages/dog/add?id=${dogId}` })
 }
 
+const addRecordItems = [
+  { icon: 'favorite', color: 'var(--red)', label: '发情记录', page: 'breeding-heat' },
+  { icon: 'biotech', color: 'var(--blue)', label: '卵泡检查', page: 'breeding-follicle' },
+  { icon: 'pets', color: 'var(--plum)', label: '配种记录', page: 'breeding-mating' },
+  { icon: 'pregnant_woman', color: 'var(--green)', label: '孕检记录', page: 'breeding-pregnancy' },
+  { icon: 'medical_services', color: 'var(--blue)', label: '产检记录', page: 'breeding-prenatal' },
+  { icon: 'schedule', color: 'var(--amber)', label: '临产监测', page: 'breeding-prelabor' },
+  { icon: 'cancel', color: 'var(--red)', label: '异常终止', page: 'breeding-termination' },
+]
+
 function addRecord() {
-  // 显示操作菜单选择记录类型
-  uni.showActionSheet({
-    itemList: ['发情记录', '卵泡检查', '配种记录', '孕检记录', '产检记录', '临产监测', '异常终止'],
-    success: (res) => {
-      const pages = [
-        'breeding-heat',
-        'breeding-follicle',
-        'breeding-mating',
-        'breeding-pregnancy',
-        'breeding-prenatal',
-        'breeding-prelabor',
-        'breeding-termination',
-      ]
-      const page = pages[res.tapIndex]
-      uni.navigateTo({ url: `/pages/record/${page}?dogId=${dogId}` })
-    },
-  })
+  showAddRecordSheet.value = true
+}
+
+function navigateToRecord(page: string) {
+  showAddRecordSheet.value = false
+  const dogName = encodeURIComponent(dog.value?.name || '')
+  uni.navigateTo({ url: `/pages/record/${page}?dogId=${dogId}&dogName=${dogName}&locked=true` })
 }
 
 function goToHealthDetail(recordId: string) {
@@ -904,7 +969,7 @@ function selectIllness() {
 
 function openMedication() {
   showStatusSheet.value = false
-  uni.navigateTo({ url: `/pages/record/health-deworming?dogId=${dogId}` })
+  uni.navigateTo({ url: `/pages/record/health-medication?dogId=${dogId}&dogName=${encodeURIComponent(dog.value?.name || '')}` })
 }
 
 // ==================== D-7: 退休确认 ====================
@@ -1158,6 +1223,9 @@ async function loadData() {
 
 onLoad((query) => {
   dogId = query?.id || ''
+})
+
+onShow(() => {
   if (dogId) loadData()
 })
 </script>
@@ -1247,11 +1315,15 @@ onLoad((query) => {
   height: 56px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--primary), var(--amber));
+  &--primary { background: linear-gradient(135deg, var(--primary), var(--amber)); box-shadow: 0 4px 14px rgba(234, 62, 119, 0.2); }
+  &--rose { background: linear-gradient(135deg, #ea3e77, #f0789a); box-shadow: 0 4px 14px rgba(234, 62, 119, 0.2); }
+  &--amber { background: linear-gradient(135deg, #e89b3e, #f0b868); box-shadow: 0 4px 14px rgba(232, 155, 62, 0.2); }
+  &--blue { background: linear-gradient(135deg, #4a8dd4, #72a8e0); box-shadow: 0 4px 14px rgba(74, 141, 212, 0.2); }
+  &--teal { background: linear-gradient(135deg, #3da88e, #5cc0a8); box-shadow: 0 4px 14px rgba(61, 168, 142, 0.2); }
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 4px 14px rgba(234, 62, 119, 0.2);
 }
 .dog-detail__hero-avatar-icon {
   font-family: 'Material Icons Round';
@@ -1658,6 +1730,61 @@ onLoad((query) => {
   margin-top: 2px;
 }
 
+/* ==================== 发情中 Banner ==================== */
+.breeding-estrus-banner {
+  background: var(--amber-soft);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  border: 1px solid rgba(232, 155, 62, 0.2);
+}
+.breeding-estrus-banner__info {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+}
+.breeding-estrus-banner__icon { font-size: 22px; color: var(--amber); }
+.breeding-estrus-banner__title { display: block; font-size: 14px; font-weight: 700; color: var(--amber); }
+.breeding-estrus-banner__sub { display: block; font-size: 12px; color: var(--text-2); }
+.breeding-estrus-banner__actions { display: flex; gap: 8px; }
+.breeding-estrus-banner__btn {
+  flex: 1; height: 34px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 999px; border: 1.5px solid var(--amber);
+  font-size: 13px; font-weight: 600; color: var(--amber);
+  &:active { opacity: 0.7; }
+  &--primary { background: var(--amber); color: #fff; border-color: transparent; }
+}
+
+/* ==================== 进行中周期卡片 ==================== */
+.breeding-active-cycle {
+  background: var(--card);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  border-left: 3.5px solid var(--rose);
+  box-shadow: var(--shadow);
+  &:active { opacity: 0.8; }
+}
+.breeding-active-cycle__header {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 6px;
+}
+.breeding-active-cycle__dot {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--rose);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.breeding-active-cycle__label { font-size: 11px; font-weight: 700; color: var(--rose); flex: 1; }
+.breeding-active-cycle__chevron { font-size: 16px; color: var(--text-4); }
+.breeding-active-cycle__title { display: block; font-size: 15px; font-weight: 700; color: var(--text-1); margin-bottom: 2px; }
+.breeding-active-cycle__sub { display: block; font-size: 12px; color: var(--text-2); }
+.breeding-active-cycle__status-badge {
+  display: inline-block; margin-top: 8px;
+  padding: 2px 10px; border-radius: 999px;
+  background: var(--rose-soft); font-size: 11px; font-weight: 700; color: var(--rose);
+}
+
 /* ==================== 可折叠详细信息 ==================== */
 .dog-detail__collapse-head {
   display: flex;
@@ -1816,6 +1943,7 @@ onLoad((query) => {
 .status-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
+  &--3col { grid-template-columns: 1fr 1fr 1fr; }
   gap: 10px;
   margin-bottom: 12px;
 }
@@ -1842,18 +1970,12 @@ onLoad((query) => {
   color: var(--text-1);
   margin-bottom: 6px;
 }
-.status-card__pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.status-card__pill {
-  padding: 3px 8px;
-  border-radius: var(--radius-tag);
+.status-card__sub {
+  display: block;
   font-size: 10px;
-  font-weight: 600;
-  background: rgba(255, 255, 255, 0.7);
-  color: var(--text-2);
+  font-weight: 500;
+  color: var(--text-3);
+  margin-top: 2px;
 }
 .status-sheet__cancel {
   text-align: center;
@@ -2334,4 +2456,20 @@ onLoad((query) => {
   font-weight: 600;
   color: var(--text-1);
 }
+
+/* ==================== 添加记录 Sheet ==================== */
+.add-record-list { padding-bottom: 16px; }
+.add-record-item {
+  display: flex; align-items: center; gap: 14px;
+  padding: 13px 4px;
+  border-bottom: 0.5px solid var(--card-dim);
+  &:last-child { border-bottom: none; }
+  &:active { opacity: 0.6; }
+}
+.add-record-item__icon {
+  width: 38px; height: 38px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.add-record-item__label { flex: 1; font-size: 15px; font-weight: 600; color: var(--text-1); }
+.add-record-item__arrow { font-size: 18px; color: var(--text-4); }
 </style>

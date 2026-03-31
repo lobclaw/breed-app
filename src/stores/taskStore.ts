@@ -116,8 +116,8 @@ export const useTaskStore = defineStore('tasks', {
       const slots: any[] = []
       const usedUrls = new Set<string>()
 
-      // 槽位 1：待办（排除健康关注卡）
-      const actionableCards = this.cards.filter((c: any) => c.cardType !== 'health_attention')
+      // 槽位 1：待办（排除健康卡）
+      const actionableCards = this.cards.filter((c: any) => !['health_attention', 'medication', 'sick_observation'].includes(c.cardType))
       if (actionableCards.length > 0) {
         const task = actionableCards[0]
         slots.push({

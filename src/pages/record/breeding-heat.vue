@@ -10,7 +10,7 @@
       <!-- 选择种母 -->
       <view class="field-group">
         <view class="field-label"><text>选择种母</text></view>
-        <BDogPicker v-model="selectedDog" roleFilter="种狗" genderFilter="母" title="选择种母" />
+        <BDogPicker v-model="selectedDog" roleFilter="种狗" genderFilter="母" title="选择种母" :readonly="dogLocked" />
       </view>
 
       <!-- 日期 + 待办 + 下次提醒（公共组件） -->
@@ -65,6 +65,7 @@ import BFormOptions from '@/components/form/BFormOptions.vue'
 
 let cycleId = ''
 const selectedDog = ref<any>(null)
+const dogLocked = ref(false)
 
 const form = reactive({
   notes: '',
@@ -144,6 +145,10 @@ async function submit() {
 
 onLoad(async (query) => {
   cycleId = query?.cycleId || ''
+  if (query?.dogId) {
+    selectedDog.value = { _id: query.dogId, name: decodeURIComponent(query.dogName || ''), gender: '母', role: '种狗' }
+    if (query.locked === 'true') dogLocked.value = true
+  }
   if (query?.taskId) {
     prefillTaskId = query.taskId
     const res = await fetchTask(query.taskId)

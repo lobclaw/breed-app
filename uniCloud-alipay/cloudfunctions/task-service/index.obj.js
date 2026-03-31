@@ -126,26 +126,45 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = []) {
     }
   }
 
-  // 输出健康关注卡（始终在"今日任务"区，不进"需处理"区）
+  // 输出两张健康卡（始终在"今日任务"区，不进"需处理"区）
+  // - medication 卡：sick_with_med + med_only，有 checkbox 和完成/推迟按钮
+  // - sick_observation 卡：sick_only，有康复按钮
   if (dogMap.size > 0) {
-    // 排序：有 checkbox 的在前（sick_with_med → med_only），sick_only 在后
-    // 同组内按创建时间升序（越早的越前）
-    const stateOrder = { sick_with_med: 0, med_only: 1, sick_only: 2 }
-    const dogs = Array.from(dogMap.values()).sort((a, b) => {
-      const oa = stateOrder[a.state] ?? 2
-      const ob = stateOrder[b.state] ?? 2
-      if (oa !== ob) return oa - ob
-      return (a._createdAt || 0) - (b._createdAt || 0)
-    })
-    cards.push({
-      cardType: 'health_attention',
-      id: 'health-attention',
-      priority: 'today',
-      groupTitle: '健康关注',
-      dogs,
-      tasks: medTasks,
-      progress: null,
-    })
+    const allDogs = Array.from(dogMap.values())
+    const medDogs = allDogs
+      .filter(d => d.state !== 'sick_only')
+      .sort((a, b) => {
+        const order = { sick_with_med: 0, med_only: 1 }
+        const oa = order[a.state] ?? 1
+        const ob = order[b.state] ?? 1
+        if (oa !== ob) return oa - ob
+        return (a._createdAt || 0) - (b._createdAt || 0)
+      })
+    const sickOnlyDogs = allDogs
+      .filter(d => d.state === 'sick_only')
+      .sort((a, b) => (a._createdAt || 0) - (b._createdAt || 0))
+
+    if (medDogs.length > 0) {
+      cards.push({
+        cardType: 'medication',
+        id: 'medication',
+        priority: 'today',
+        groupTitle: '今日用药',
+        dogs: medDogs,
+        tasks: medTasks,
+        progress: null,
+      })
+    }
+    if (sickOnlyDogs.length > 0) {
+      cards.push({
+        cardType: 'sick_observation',
+        id: 'sick-observation',
+        priority: 'today',
+        groupTitle: '疾病观察',
+        dogs: sickOnlyDogs,
+        tasks: [],
+      })
+    }
   }
 
   // 第 2 轮：护理群组卡片
