@@ -21,7 +21,7 @@
           <text class="rule-card__title">{{ rule.task_description }}</text>
           <text
             class="material-icons-round rule-card__delete"
-            @click="removeRule(idx)"
+            @click="askDelete(idx)"
           >delete_outline</text>
         </view>
         <text class="rule-card__meta">触发：{{ rule.status_trigger }} · {{ rule.frequency || '每日' }}</text>
@@ -51,10 +51,19 @@
       <text v-if="availableTemplates.length === 0" class="template-section__empty">所有模板已启用</text>
     </view>
 
+    <!-- 删除确认 -->
+    <BDeleteConfirm
+      v-model:visible="showDeleteConfirm"
+      title="删除护理规则"
+      :content="`删除后不可恢复`"
+      @confirm="confirmDelete"
+    />
+
     <!-- 新建规则弹窗 -->
     <BModal
       v-model:visible="showModal"
       title="新建护理规则"
+      :manualClose="true"
       @confirm="onConfirm"
     >
       <view class="modal-form">
@@ -113,6 +122,7 @@ import { useCloudCall } from '@/composables/useCloudCall'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 import BModal from '@/components/layout/BModal.vue'
+import BDeleteConfirm from '@/components/layout/BDeleteConfirm.vue'
 
 const { currentFamily, loadFamily } = useAuth()
 
@@ -137,6 +147,8 @@ const availableTemplates = computed(() =>
 )
 
 const showModal = ref(false)
+const showDeleteConfirm = ref(false)
+const deletingIndex = ref(-1)
 const form = reactive({
   status_trigger: '',
   customTrigger: '',
@@ -179,35 +191,62 @@ async function onConfirm() {
   const trigger = isCustomTrigger.value ? form.customTrigger.trim() : form.status_trigger
   if (!trigger || !form.task_description.trim()) {
     uni.showToast({ title: '请填写触发条件和任务描述', icon: 'none' })
-    return
+    return  // manualClose=true，验证失败弹窗保持打开
   }
-  await addCareRule({
+  const newRule = {
     status_trigger: trigger,
     task_description: form.task_description.trim(),
     frequency: form.frequency,
+  }
+  // 乐观更新：立即加入列表
+  if (currentFamily.value) {
+    currentFamily.value.care_rules = [...(currentFamily.value.care_rules || []), newRule]
+  }
+  showModal.value = false
+  addCareRule(newRule).catch(() => {
+    // 失败回滚
+    if (currentFamily.value) {
+      const idx = currentFamily.value.care_rules.findIndex(
+        (r: any) => r.status_trigger === newRule.status_trigger && r.task_description === newRule.task_description
+      )
+      if (idx !== -1) currentFamily.value.care_rules.splice(idx, 1)
+    }
+    uni.showToast({ title: '添加失败，请重试', icon: 'none' })
   })
-  await loadFamily()
 }
 
 async function enableTemplate(tpl: typeof templates[0]) {
-  await addCareRule({
-    status_trigger: tpl.status_trigger,
-    task_description: tpl.task_description,
-    frequency: tpl.frequency,
+  const newRule = { status_trigger: tpl.status_trigger, task_description: tpl.task_description, frequency: tpl.frequency }
+  // 乐观更新
+  if (currentFamily.value) {
+    currentFamily.value.care_rules = [...(currentFamily.value.care_rules || []), newRule]
+  }
+  addCareRule(newRule).catch(() => {
+    if (currentFamily.value) {
+      const idx = currentFamily.value.care_rules.findIndex(
+        (r: any) => r.status_trigger === newRule.status_trigger && r.task_description === newRule.task_description
+      )
+      if (idx !== -1) currentFamily.value.care_rules.splice(idx, 1)
+    }
+    uni.showToast({ title: '启用失败，请重试', icon: 'none' })
   })
-  await loadFamily()
 }
 
-async function removeRule(index: number) {
-  uni.showModal({
-    title: '确认删除',
-    content: '删除后不可恢复',
-    success: async (res) => {
-      if (res.confirm) {
-        await removeCareRule(index)
-        await loadFamily()
-      }
-    },
+function askDelete(index: number) {
+  deletingIndex.value = index
+  showDeleteConfirm.value = true
+}
+
+async function confirmDelete() {
+  const index = deletingIndex.value
+  if (index < 0 || !currentFamily.value) return
+  // 乐观删除：立即从列表移除
+  const removed = currentFamily.value.care_rules.splice(index, 1)[0]
+  showDeleteConfirm.value = false
+  removeCareRule(index).catch(() => {
+    // 失败恢复
+    if (currentFamily.value) currentFamily.value.care_rules.splice(index, 0, removed)
+    uni.showToast({ title: '删除失败，请重试', icon: 'none' })
   })
 }
 </script>

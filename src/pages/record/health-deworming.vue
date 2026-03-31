@@ -27,7 +27,10 @@
 
       <!-- 驱虫药品 -->
       <view class="field-group">
-        <view class="field-label"><text>驱虫药品</text></view>
+        <view class="field-label">
+          <text>驱虫药品</text>
+          <text class="field-label__optional">（选填）</text>
+        </view>
         <view class="pill-options">
           <view
             v-for="drug in dewormDrugs"

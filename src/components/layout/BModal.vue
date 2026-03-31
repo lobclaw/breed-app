@@ -9,6 +9,7 @@
     cancelText — 取消按钮文字（默认"取消"）
     confirmColor — 确认按钮颜色（默认 primary）
     danger — 是否为危险操作（确认按钮变红）
+    manualClose — 设为 true 时点确认不自动关闭，由父组件控制 visible
 -->
 <template>
   <view v-if="visible" class="b-modal">
@@ -39,11 +40,13 @@ const props = withDefaults(defineProps<{
   confirmText?: string
   cancelText?: string
   danger?: boolean
+  manualClose?: boolean
 }>(), {
   content: '',
   confirmText: '确定',
   cancelText: '取消',
   danger: false,
+  manualClose: false,
 })
 
 const emit = defineEmits<{
@@ -83,7 +86,9 @@ function cancel() {
 
 function confirm() {
   emit('confirm')
-  emit('update:visible', false)
+  if (!props.manualClose) {
+    emit('update:visible', false)
+  }
 }
 </script>
 
