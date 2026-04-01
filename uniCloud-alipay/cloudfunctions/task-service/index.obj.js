@@ -196,7 +196,7 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = []) {
 
   // 输出两张健康卡（始终在"今日任务"区，不进"需处理"区）
   // - medication 卡：sick_with_med + med_only，有 checkbox 和完成/推迟按钮
-  // - sick_observation 卡：有任一 treatment_status='观察中' 疾病的犬（与用药卡不互斥）
+  // - sick_observation 卡：仅 sick_only（无用药），排除已在用药卡的犬只
   const medDogs = Array.from(dogMap.values())
     .filter(d => d.state !== 'sick_only')
     .sort((a, b) => {
@@ -206,7 +206,10 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = []) {
       if (oa !== ob) return oa - ob
       return (a._createdAt || 0) - (b._createdAt || 0)
     })
+  // 排除已进入用药卡的犬（sick_with_med / med_only）
+  const medDogIds = new Set(medDogs.map(d => d.dogId))
   const sickObserveDogs = Array.from(sickObserveMap.values())
+    .filter(d => !medDogIds.has(d.dogId))
     .sort((a, b) => (a._createdAt || 0) - (b._createdAt || 0))
 
   if (medDogs.length > 0) {
