@@ -55,6 +55,7 @@
               :completing="completingCards.has(card.id)"
               @complete="onComplete" @postpone="onPostpone"
               @batch-complete="onBatchComplete" @action="onAction"
+              @record-dose="onRecordDose"
             />
           </view>
         </view>
@@ -81,6 +82,7 @@
               v-for="card in dayCards" :key="card.id" :card="card"
               @complete="onComplete" @postpone="onPostpone"
               @batch-complete="onBatchComplete" @action="onAction"
+              @record-dose="onRecordDose"
             />
           </view>
         </view>
@@ -391,6 +393,7 @@ const { run: fetchWeekCards } = useCloudCall<{ data: any }>('task-service', 'get
 const { run: doCompleteTask } = useCloudCall('task-service', 'completeTask')
 const { run: doPostponeTask } = useCloudCall('task-service', 'postponeTask')
 const { run: doBatchComplete } = useCloudCall('task-service', 'batchCompleteTask')
+const { run: doRecordDose } = useCloudCall('task-service', 'recordDose')
 
 // 7天卡片缓存：{ [dayTimestamp]: Card[] }
 const weekCache = ref<Record<number, any[]>>({})
@@ -642,6 +645,11 @@ async function onBatchComplete(payload: any) {
     taskStore.removeCardByTaskId(taskIds[0])
   }
   doBatchComplete(taskIds)
+}
+
+async function onRecordDose({ taskId }: { taskId: string }) {
+  await doRecordDose(taskId)
+  await loadTodayCards()
 }
 
 const { run: updateIllnessStatus } = useCloudCall('health-service', 'updateIllnessStatus')

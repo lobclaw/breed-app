@@ -373,6 +373,48 @@ module.exports = {
   },
 
   /**
+   * 获取某母犬的所有窝记录
+   */
+  async getLittersByDam(damId) {
+    if (!damId) throw new Error('缺少犬只 ID')
+
+    const { data: litters } = await db.collection('litters')
+      .where({ dam_id: damId, family_id: this.familyId })
+      .orderBy('birth_date', 'desc')
+      .get()
+
+    if (!litters || litters.length === 0) return { data: [] }
+
+    // 为每窝附加幼崽统计
+    const litterIds = litters.map(l => l._id)
+    const { data: puppies } = await db.collection('dogs')
+      .where({ origin_litter_id: dbCmd.in(litterIds), deleted_at: null })
+      .get()
+
+    const puppyMap = {}
+    for (const p of puppies) {
+      if (!puppyMap[p.origin_litter_id]) puppyMap[p.origin_litter_id] = []
+      puppyMap[p.origin_litter_id].push(p)
+    }
+
+    const result = litters.map(l => {
+      const pups = puppyMap[l._id] || []
+      return {
+        ...l,
+        pupStats: {
+          total: pups.length,
+          alive: pups.filter(p => p.disposition !== '已故').length,
+          sold: pups.filter(p => ['已售', '已预定'].includes(p.disposition)).length,
+          kept: pups.filter(p => p.disposition === '自留' || p.disposition === '在养').length,
+          available: pups.filter(p => p.disposition === '待售').length,
+        },
+      }
+    })
+
+    return { data: result }
+  },
+
+  /**
    * 获取某母犬的繁育历史
    */
   async getCycleHistory(damId) {

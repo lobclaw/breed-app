@@ -1,7 +1,7 @@
 <!--
   MedicationCard — 今日用药卡
   展示需要今日用药的犬只：sick_with_med / med_only
-  两种行状态：sick_with_med（生病+用药）/ med_only（仅用药）
+  支持多药展开（点行主体展开/折叠）和计次给药（每次给药点一下，达到 frequency 自动完成）
 -->
 <template>
   <view class="card card--plum">
@@ -18,47 +18,98 @@
       </view>
     </view>
 
-    <!-- 用药犬只（sick_with_med + med_only，有 checkbox） -->
     <view class="health-list">
-      <view
-        v-for="dog in actionableDogs"
-        :key="dog.dogId"
-        class="health-row"
-        :class="{ 'health-row--done': dog.completed || checkedDogs.has(dog.dogId) }"
-        @click="toggleDog(dog)"
-      >
-        <template v-if="dog.state === 'sick_with_med'">
-          <view class="cb-box" :class="(dog.completed || checkedDogs.has(dog.dogId)) ? 'cb-box--done' : 'cb-box--empty'">
-            <text v-if="dog.completed || checkedDogs.has(dog.dogId)" class="cb-check">✓</text>
-          </view>
+      <template v-for="dog in actionableDogs" :key="dog.dogId">
+        <!-- 主行：点击行主体展开/折叠（多药时）-->
+        <view
+          class="health-row"
+          :class="{ 'health-row--done': dogState(dog) === 'done' }"
+          @click="onRowClick(dog)"
+        >
+          <!-- 左侧：给药按钮（高频单药）/ 三态 checkbox（其余）-->
+          <template v-if="dogState(dog) === 'done'">
+            <view class="cb-box cb-box--done">
+              <text class="cb-check">✓</text>
+            </view>
+          </template>
+          <template v-else-if="isHighFreq(dog)">
+            <!-- 单药但每日多次：显示计次给药按钮 -->
+            <view class="give-btn" @click.stop="onGiveDose(dog.allMedTasks[0])">
+              <text class="give-btn__label">给药</text>
+              <text class="give-btn__count">{{ getLocalDoses(dog.allMedTasks[0]._id, dog.allMedTasks[0].doses_given) }}/{{ dog.allMedTasks[0].details?.frequency }}次</text>
+            </view>
+          </template>
+          <template v-else>
+            <!-- 单药 freq=1 或多药：三态 checkbox（□ / − / ✓）-->
+            <view
+              class="cb-box"
+              :class="dogState(dog) === 'partial' ? 'cb-box--partial' : 'cb-box--empty'"
+              @click.stop="onMainCb(dog)"
+            >
+              <text v-if="dogState(dog) === 'partial'" class="cb-check">—</text>
+            </view>
+          </template>
+
+          <!-- 犬只名 -->
           <text class="health-row__name">{{ dog.dogName }}</text>
+
+          <!-- 信息区 -->
           <view class="health-row__info">
-            <text class="health-row__illness">{{ dog.illness }}</text>
-            <text v-if="dog.treatmentStatus" class="health-row__badge health-row__badge--amber">{{ dog.treatmentStatus }}</text>
+            <template v-if="dog.state === 'sick_with_med'">
+              <text class="health-row__illness">{{ dog.illnessNames || dog.illness }}</text>
+              <text v-if="dog.treatmentStatus" class="health-row__badge health-row__badge--amber">{{ dog.treatmentStatus }}</text>
+            </template>
             <text class="health-row__drug">{{ dog.drugName }}</text>
-            <text v-if="dog.dosageStr" class="health-row__dosage">{{ dog.dosageStr }}</text>
-            <text v-if="dog.progress" class="health-row__tag">{{ dog.progress }}</text>
-            <text v-if="dog.methodFreq" class="health-row__meta">{{ dog.methodFreq }}</text>
+            <!-- 单药：内联显示详情 -->
+            <template v-if="!hasMultiDrug(dog)">
+              <text v-if="dog.dosageStr" class="health-row__dosage">{{ dog.dosageStr }}</text>
+              <text v-if="dog.progress" class="health-row__tag">{{ dog.progress }}</text>
+              <text v-if="dog.methodFreq" class="health-row__meta">{{ dog.methodFreq }}</text>
+            </template>
           </view>
-          <text v-if="!(dog.completed || checkedDogs.has(dog.dogId))" class="health-row__action" @click.stop="onSickAction(dog)">康复</text>
+
+          <!-- 多药展开箭头 -->
+          <text v-if="hasMultiDrug(dog)" class="health-row__chevron material-icons-round">
+            {{ expandedDogs.has(dog.dogId) ? 'expand_less' : 'expand_more' }}
+          </text>
+
+          <!-- 动作按钮（未完成时显示）-->
+          <template v-if="dogState(dog) !== 'done'">
+            <text v-if="dog.state === 'sick_with_med'" class="health-row__action" @click.stop="onSickAction(dog)">康复</text>
+            <text v-else-if="dog.state === 'med_only'" class="health-row__action health-row__action--stop" @click.stop="onStopMedication(dog)">停药</text>
+          </template>
+        </view>
+
+        <!-- 展开子行（多药时）-->
+        <template v-if="hasMultiDrug(dog) && expandedDogs.has(dog.dogId)">
+          <view
+            v-for="task in dog.allMedTasks"
+            :key="task._id"
+            class="health-sub-row"
+            :class="{ 'health-sub-row--done': isTaskDone(task) }"
+          >
+            <!-- 已完成标记 or 给药按钮 -->
+            <view v-if="isTaskDone(task)" class="sub-done">
+              <text class="sub-done__check">✓</text>
+            </view>
+            <view v-else class="give-btn give-btn--sm" @click="onGiveDose(task)">
+              <text class="give-btn__label">给药</text>
+              <text v-if="(task.details?.frequency || 1) > 1" class="give-btn__count">
+                {{ getLocalDoses(task._id, task.doses_given) }}/{{ task.details.frequency }}次
+              </text>
+            </view>
+
+            <!-- 药品信息 -->
+            <text class="sub-row__drug">{{ task.details?.drug_name }}</text>
+            <text v-if="task.dosageStr" class="sub-row__dosage">{{ task.dosageStr }}</text>
+            <text v-if="task.progress" class="sub-row__tag">{{ task.progress }}</text>
+            <text v-if="task.methodFreq" class="sub-row__meta">{{ task.methodFreq }}</text>
+          </view>
         </template>
-        <template v-else>
-          <view class="cb-box" :class="(dog.completed || checkedDogs.has(dog.dogId)) ? 'cb-box--done' : 'cb-box--empty'">
-            <text v-if="dog.completed || checkedDogs.has(dog.dogId)" class="cb-check">✓</text>
-          </view>
-          <text class="health-row__name">{{ dog.dogName }}</text>
-          <view class="health-row__info">
-            <text class="health-row__drug">{{ dog.drugName || '用药' }}</text>
-            <text v-if="dog.dosageStr" class="health-row__dosage">{{ dog.dosageStr }}</text>
-            <text v-if="dog.progress" class="health-row__tag">{{ dog.progress }}</text>
-            <text v-if="dog.methodFreq" class="health-row__meta">{{ dog.methodFreq }}</text>
-          </view>
-          <text v-if="!(dog.completed || checkedDogs.has(dog.dogId))" class="health-row__action health-row__action--stop" @click.stop="onStopMedication(dog)">停药</text>
-        </template>
-      </view>
+      </template>
     </view>
 
-    <!-- 按钮组 -->
+    <!-- 底部按钮（有未完成任务时显示）-->
     <view v-if="hasPendingMed" class="card-actions__btns">
       <view class="btn btn--filled btn--plum" @click="batchComplete">
         <text class="btn-text btn-text--white">完成</text>
@@ -67,7 +118,6 @@
         <text class="btn-text btn-text--ghost">推迟</text>
       </view>
     </view>
-
   </view>
 </template>
 
@@ -80,9 +130,89 @@ const emit = defineEmits<{
   (e: 'batch-complete', taskIds: string[]): void
   (e: 'postpone', taskIds: string | string[], title?: string): void
   (e: 'action', payload: { type: string; data: any }): void
+  (e: 'record-dose', payload: { taskId: string }): void
 }>()
 
-// 把犬只数据和可选操作传给父组件，由父组件渲染 BSheet
+// 展开/折叠状态
+const expandedDogs = ref(new Set<string>())
+
+// 乐观 doses 计数（在后端刷新前提供即时反馈）
+const localDoses = ref(new Map<string, number>())
+
+function getLocalDoses(taskId: string, baseDoses: number): number {
+  return localDoses.value.has(taskId) ? localDoses.value.get(taskId)! : (baseDoses || 0)
+}
+
+// 用药犬只列表（sick_with_med + med_only）
+const actionableDogs = computed(() => props.card.dogs || [])
+
+// --- 状态判断 ---
+
+function isTaskDone(task: any): boolean {
+  if (task.status === 'completed') return true
+  const doses = getLocalDoses(task._id, task.doses_given || 0)
+  return doses >= (task.details?.frequency || 1)
+}
+
+function dogState(dog: any): 'empty' | 'partial' | 'done' {
+  const allTasks: any[] = dog.allMedTasks || []
+  if (allTasks.length === 0) {
+    // 旧数据兼容：没有 allMedTasks 时退回 completed 字段
+    return dog.completed ? 'done' : 'empty'
+  }
+  const doneCount = allTasks.filter(t => isTaskDone(t)).length
+  if (doneCount === 0) return 'empty'
+  if (doneCount === allTasks.length) return 'done'
+  return 'partial'
+}
+
+function hasMultiDrug(dog: any): boolean {
+  return Array.isArray(dog.allMedTasks) && dog.allMedTasks.length > 1
+}
+
+function isHighFreq(dog: any): boolean {
+  if (hasMultiDrug(dog)) return false
+  const task = dog.allMedTasks?.[0]
+  return !!task && (task.details?.frequency || 1) > 1
+}
+
+// --- 交互 ---
+
+function onRowClick(dog: any) {
+  if (hasMultiDrug(dog)) toggleExpand(dog.dogId)
+}
+
+function toggleExpand(dogId: string) {
+  if (expandedDogs.value.has(dogId)) {
+    expandedDogs.value.delete(dogId)
+  } else {
+    expandedDogs.value.add(dogId)
+  }
+}
+
+function onMainCb(dog: any) {
+  if (dogState(dog) === 'done') return
+  const allTasks: any[] = dog.allMedTasks || []
+  if (allTasks.length > 0) {
+    const pendingIds = allTasks.filter(t => !isTaskDone(t)).map(t => t._id)
+    if (pendingIds.length > 0) emit('batch-complete', pendingIds)
+  } else {
+    // 旧数据兼容
+    const task = props.card.tasks?.find((t: any) => t.dog_id === dog.dogId || t.dogId === dog.dogId)
+    if (!task) return
+    const allDone = (props.card.dogs || []).every((d: any) => d.dogId === dog.dogId || dogState(d) === 'done')
+    emit('complete', task._id, allDone)
+  }
+}
+
+function onGiveDose(task: any) {
+  if (isTaskDone(task)) return
+  // 乐观更新
+  const current = getLocalDoses(task._id, task.doses_given || 0)
+  localDoses.value.set(task._id, current + 1)
+  emit('record-dose', { taskId: task._id })
+}
+
 function onSickAction(dog: any) {
   const items: { icon: string; label: string; action: string }[] = [
     { icon: 'check_circle', label: '标记康复', action: 'recover' },
@@ -97,23 +227,11 @@ function onStopMedication(dog: any) {
   emit('action', { type: 'show_stop_confirm', data: { dogId: dog.dogId, dogName: dog.dogName, drugName: dog.drugName, dosageStr: dog.dosageStr, progress: dog.progress } })
 }
 
-// 用药犬只（sick_with_med + med_only）
-const actionableDogs = computed(() => props.card.dogs || [])
-
-const checkedDogs = ref(new Set<string>())
-
-function toggleDog(dog: any) {
-  if (dog.completed || checkedDogs.value.has(dog.dogId)) return
-  const task = props.card.tasks?.find((t: any) => t.dog_id === dog.dogId || t.dogId === dog.dogId)
-  if (!task) return
-  checkedDogs.value.add(dog.dogId)
-  const allDone = (props.card.dogs || []).every((d: any) => d.completed || checkedDogs.value.has(d.dogId))
-  emit('complete', task._id, allDone)
-}
+// --- 底部按钮 ---
 
 const medDogCount = computed(() => (props.card.dogs || []).length)
 const doneCount = computed(() =>
-  (props.card.dogs || []).filter((d: any) => d.completed || checkedDogs.value.has(d.dogId)).length
+  (props.card.dogs || []).filter((d: any) => dogState(d) === 'done').length
 )
 const hasPendingMed = computed(() => doneCount.value < medDogCount.value)
 
@@ -124,9 +242,7 @@ function batchComplete() {
 
 function batchPostpone() {
   const taskIds = (props.card.tasks || []).map((t: any) => t._id)
-  if (taskIds.length > 0) {
-    emit('postpone', taskIds, props.card.groupTitle || '今日用药')
-  }
+  if (taskIds.length > 0) emit('postpone', taskIds, props.card.groupTitle || '今日用药')
 }
 </script>
 
@@ -155,6 +271,8 @@ function batchPostpone() {
 
 /* 健康列表 */
 .health-list { display: flex; flex-direction: column; gap: 0; margin-top: 10px; }
+
+/* 主行 */
 .health-row {
   display: flex; align-items: center; gap: 8px;
   padding: 8px 0;
@@ -171,18 +289,9 @@ function batchPostpone() {
   flex: 1; display: flex; align-items: center; gap: 6px;
   flex-wrap: wrap; min-width: 0;
 }
-.health-row__illness {
-  font-size: 12px; font-weight: 700; color: var(--red);
-}
-.health-row__sep {
-  font-size: 10px; color: var(--text-4); margin: 0 -1px;
-}
-.health-row__drug {
-  font-size: 12px; font-weight: 700; color: var(--plum);
-}
-.health-row__dosage {
-  font-size: 11px; font-weight: 600; color: var(--text-2);
-}
+.health-row__illness { font-size: 12px; font-weight: 700; color: var(--red); }
+.health-row__drug { font-size: 12px; font-weight: 700; color: var(--plum); }
+.health-row__dosage { font-size: 11px; font-weight: 600; color: var(--text-2); }
 .health-row__tag {
   font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 4px;
   background: var(--plum-soft); color: var(--plum);
@@ -191,8 +300,9 @@ function batchPostpone() {
   font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 4px;
   &--amber { background: var(--amber-soft); color: var(--amber); }
 }
-.health-row__days {
-  font-size: 11px; color: var(--text-3);
+.health-row__meta { font-size: 10px; color: var(--text-3); }
+.health-row__chevron {
+  font-size: 18px; color: var(--text-3); flex-shrink: 0;
 }
 .health-row__action {
   font-size: 11px; font-weight: 700; color: var(--green);
@@ -202,14 +312,44 @@ function batchPostpone() {
   flex-shrink: 0;
   &:active { transform: scale(0.9); box-shadow: none; }
   &--stop {
-    color: var(--text-2);
-    background: var(--card-dim);
+    color: var(--text-2); background: var(--card-dim);
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
   }
 }
-.health-row__meta {
-  font-size: 10px; color: var(--text-3);
+
+/* 展开子行 */
+.health-sub-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 0 6px 26px;
+  border-bottom: 0.5px solid var(--card-dim);
+  &:last-child { border-bottom: none; }
+  &--done { opacity: 0.45; }
+  &--done .sub-row__drug { text-decoration: line-through; }
 }
+.sub-done {
+  width: 32px; height: 20px; border-radius: 6px;
+  background: var(--green); flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.sub-done__check { font-size: 10px; color: #FFFFFF; font-weight: 700; }
+.sub-row__drug { font-size: 12px; font-weight: 600; color: var(--text-1); }
+.sub-row__dosage { font-size: 11px; color: var(--text-2); }
+.sub-row__tag {
+  font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 4px;
+  background: var(--plum-soft); color: var(--plum);
+}
+.sub-row__meta { font-size: 10px; color: var(--text-3); }
+
+/* 给药按钮 */
+.give-btn {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: var(--plum); border-radius: 6px; padding: 2px 6px;
+  flex-shrink: 0; min-width: 32px;
+  &:active { transform: scale(0.9); }
+  &--sm { min-width: 32px; }
+}
+.give-btn__label { font-size: 10px; font-weight: 700; color: #FFFFFF; line-height: 1.3; }
+.give-btn__count { font-size: 9px; color: rgba(255,255,255,0.8); line-height: 1.2; }
 
 /* Checkbox */
 .cb-box {
@@ -218,8 +358,10 @@ function batchPostpone() {
   transition: transform 0.15s ease; &:active { transform: scale(0.85); }
   &--done { background: var(--green); }
   &--empty { border: 2px solid var(--text-4); background: transparent; }
+  &--partial { background: var(--plum-soft); border: 2px solid var(--plum); }
 }
 .cb-check { font-size: 10px; color: #FFFFFF; font-weight: 700; }
+.cb-box--partial .cb-check { color: var(--plum); }
 
 .card-actions__btns { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
 .btn {
@@ -232,6 +374,4 @@ function batchPostpone() {
   &--ghost { background: transparent; border-color: var(--text-4); }
 }
 .btn-text { font-family: var(--font-display); font-size: 13px; font-weight: 700; &--white { color: #FFFFFF; } &--ghost { color: var(--text-2); } }
-
-
 </style>

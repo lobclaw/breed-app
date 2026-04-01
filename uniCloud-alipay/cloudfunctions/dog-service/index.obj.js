@@ -127,15 +127,84 @@ module.exports = {
   async getDogDetail(dogId) {
     if (!dogId) throw new Error('缺少犬只 ID')
 
-    const { data } = await db.collection('dogs')
-      .where({ _id: dogId, family_id: this.familyId, deleted_at: null })
-      .get()
+    const familyId = this.familyId
+    const now = Date.now()
 
-    if (!data || data.length === 0) {
-      throw new Error('犬只不存在')
+    const [dogRes, cyclesRes, illnessRes, medTasksRes, littersRes] = await Promise.all([
+      db.collection('dogs').where({ _id: dogId, family_id: familyId, deleted_at: null }).get(),
+      db.collection('breeding_cycles').where({ dam_id: dogId, family_id: familyId }).get(),
+      db.collection('health_records').where({ dog_id: dogId, family_id: familyId, type: 'illness' }).get(),
+      db.collection('tasks').where({ dog_id: dogId, family_id: familyId, type: 'medication', status: 'pending' }).get(),
+      db.collection('litters').where({ dam_id: dogId, family_id: familyId, weaned_at: null }).get(),
+    ])
+
+    if (!dogRes.data || dogRes.data.length === 0) throw new Error('犬只不存在')
+    const dog = dogRes.data[0]
+    const statuses = []
+
+    const methodMap = { oral: '口服', injection: '注射', topical: '外用', other: '其他' }
+
+    // 繁育状态（取最近一条活跃周期）
+    const activeCycle = (cyclesRes.data || []).find(c => c.status === '发情中' || c.status === '怀孕中')
+    if (activeCycle) {
+      if (activeCycle.status === '发情中') {
+        statuses.push({ type: '发情中', cycleId: activeCycle._id })
+      } else if (activeCycle.status === '怀孕中') {
+        const startTs = activeCycle.updated_at || activeCycle.created_at
+        const daysPassed = Math.max(1, Math.floor((now - startTs) / 86400000))
+        const totalDays = 63
+        const dueTs = startTs + totalDays * 86400000
+        const dueDate = new Date(dueTs)
+        const dueMd = `${dueDate.getMonth() + 1}月${dueDate.getDate()}日`
+        statuses.push({
+          type: '怀孕中',
+          cycleId: activeCycle._id,
+          detail: activeCycle.sire_name ? `种公: ${activeCycle.sire_name}` : '',
+          progress: { current: Math.min(daysPassed, totalDays), total: totalDays },
+          meta: [
+            { icon: 'event', text: `预产期 ${dueMd}` },
+            { icon: 'schedule', text: `还有${Math.max(0, totalDays - daysPassed)}天` },
+          ],
+        })
+      }
     }
 
-    return { data: data[0] }
+    // 哺乳中（有未断奶的窝且无活跃繁育周期）
+    if ((littersRes.data || []).length > 0 && !activeCycle) {
+      statuses.push({ type: '哺乳中' })
+    }
+
+    // 疾病状态（未康复的）
+    const activeIllnesses = (illnessRes.data || []).filter(r => !r.details?.is_recovered)
+    for (const illness of activeIllnesses) {
+      statuses.push({
+        type: '生病中',
+        label: illness.details?.condition || '生病中',
+        recordId: illness._id,
+      })
+    }
+
+    // 用药状态（按药名去重，取进度最新的）
+    const medTasks = medTasksRes.data || []
+    const medDrugMap = {}
+    for (const task of medTasks) {
+      const drug = task.details?.drug_name || '用药'
+      if (!medDrugMap[drug] || (task.details?.day || 0) > (medDrugMap[drug].details?.day || 0)) {
+        medDrugMap[drug] = task
+      }
+    }
+    for (const task of Object.values(medDrugMap)) {
+      const dd = task.details || {}
+      const parts = [dd.drug_name, dd.dosage ? `${dd.dosage}${dd.dosage_unit || ''}` : null, methodMap[dd.method] || dd.method].filter(Boolean)
+      statuses.push({
+        type: '用药中',
+        taskId: task._id,
+        detail: parts.join(' · '),
+        progress: dd.day && dd.total_days ? { current: dd.day, total: dd.total_days } : null,
+      })
+    }
+
+    return { data: { ...dog, statuses } }
   },
 
   /**

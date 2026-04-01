@@ -113,11 +113,29 @@
                     <text class="material-icons-round">{{ statusIconMap[s.type] || 'info' }}</text>
                   </view>
                   <view>
-                    <text class="dog-detail__st-title">{{ s.type }}</text>
+                    <text class="dog-detail__st-title">{{ statusTitle(s) }}</text>
                     <text v-if="s.detail" class="dog-detail__st-sub">{{ s.detail }}</text>
                   </view>
                 </view>
                 <text class="material-icons-round dog-detail__st-chevron">chevron_right</text>
+              </view>
+              <!-- 进度条 -->
+              <view v-if="s.progress" class="dog-detail__st-progress">
+                <view class="dog-detail__st-progress-track">
+                  <view
+                    class="dog-detail__st-progress-fill"
+                    :class="`dog-detail__st-progress-fill--${statusColorMap[s.type] || 'rose'}`"
+                    :style="{ width: Math.min(100, Math.round(s.progress.current / s.progress.total * 100)) + '%' }"
+                  />
+                </view>
+                <text class="dog-detail__st-progress-text">第{{ s.progress.current }}天 / 共{{ s.progress.total }}天</text>
+              </view>
+              <!-- 元信息 -->
+              <view v-if="s.meta && s.meta.length > 0" class="dog-detail__st-meta">
+                <view v-for="(m, mi) in s.meta" :key="mi" class="dog-detail__st-meta-item">
+                  <text class="material-icons-round dog-detail__st-meta-icon">{{ m.icon }}</text>
+                  <text class="dog-detail__st-meta-text">{{ m.text }}</text>
+                </view>
               </view>
             </view>
           </view>
@@ -252,8 +270,29 @@
             </view>
             <text class="breeding-active-cycle__title">{{ activeCycle.title || '当前繁育周期' }}</text>
             <text class="breeding-active-cycle__sub">开始于 {{ formatDate(activeCycle.created_at) }}<text v-if="activeCycle.sire_name"> · 种公: {{ activeCycle.sire_name }}</text></text>
-            <view class="breeding-active-cycle__status-badge">
-              <text class="breeding-active-cycle__status-text">{{ activeCycle.status }}</text>
+            <!-- 里程碑节点 -->
+            <view class="breeding-milestones">
+              <template v-for="(node, ni) in cycleNodes(activeCycle)" :key="ni">
+                <view
+                  class="breeding-milestone"
+                  :class="node.active ? 'breeding-milestone--active' : node.done ? 'breeding-milestone--done' : 'breeding-milestone--pending'"
+                >
+                  <view class="breeding-milestone__dot" />
+                  <text class="breeding-milestone__label">{{ node.key }}</text>
+                </view>
+                <view
+                  v-if="ni < 3"
+                  class="breeding-milestone-line"
+                  :class="node.done && cycleNodes(activeCycle)[ni + 1]?.done ? 'breeding-milestone-line--done' : ''"
+                />
+              </template>
+            </view>
+            <!-- 孕期进度 -->
+            <view v-if="activeCycleProgress" class="breeding-active-cycle__progress-wrap">
+              <view class="breeding-active-cycle__progress-track">
+                <view class="breeding-active-cycle__progress-fill" :style="{ width: activeCycleProgress.pct + '%' }" />
+              </view>
+              <text class="breeding-active-cycle__progress-label">{{ activeCycleProgress.label }}</text>
             </view>
           </view>
 
@@ -281,6 +320,38 @@
               <text class="material-icons-round dog-detail__rec-chevron">chevron_right</text>
             </view>
           </view>
+
+          <!-- 产仔记录 -->
+          <view v-if="litters.length > 0">
+            <view class="dog-detail__sec dog-detail__sec--green">
+              <text class="dog-detail__sec-text">产仔记录</text>
+              <view class="dog-detail__sec-badge">
+                <text class="dog-detail__sec-badge-text">{{ litters.length }}窝</text>
+              </view>
+            </view>
+            <view class="dog-detail__rec-list">
+              <view v-for="litter in litters" :key="litter._id" class="dog-detail__litter-item">
+                <view class="dog-detail__litter-meta">
+                  <text class="dog-detail__litter-date">{{ formatDate(litter.birth_date) }}</text>
+                  <text v-if="litter.sire_name" class="dog-detail__litter-sire">种公: {{ litter.sire_name }}</text>
+                </view>
+                <view v-if="litter.pupStats" class="dog-detail__pup-chips">
+                  <view class="dog-detail__pup-chip dog-detail__pup-chip--total">
+                    <text class="dog-detail__pup-chip-text">共{{ litter.pupStats.total }}只</text>
+                  </view>
+                  <view v-if="litter.pupStats.alive > 0" class="dog-detail__pup-chip dog-detail__pup-chip--alive">
+                    <text class="dog-detail__pup-chip-text">在养{{ litter.pupStats.alive }}</text>
+                  </view>
+                  <view v-if="litter.pupStats.sold > 0" class="dog-detail__pup-chip dog-detail__pup-chip--sold">
+                    <text class="dog-detail__pup-chip-text">已售{{ litter.pupStats.sold }}</text>
+                  </view>
+                  <view v-if="litter.pupStats.available > 0" class="dog-detail__pup-chip dog-detail__pup-chip--avail">
+                    <text class="dog-detail__pup-chip-text">可售{{ litter.pupStats.available }}</text>
+                  </view>
+                </view>
+              </view>
+            </view>
+          </view>
         </view>
       </view>
 
@@ -299,33 +370,108 @@
         </view>
 
         <BEmpty
-          v-if="healthRecords.length === 0"
+          v-if="healthRecords.length === 0 && medStatuses.length === 0"
           icon="healing"
           title="暂无健康记录"
           description="记录疫苗、驱虫、疾病等信息"
         />
         <view v-else>
-          <view class="dog-detail__sec dog-detail__sec--blue">
-            <text class="dog-detail__sec-text">健康记录</text>
-            <view class="dog-detail__sec-badge">
-              <text class="dog-detail__sec-badge-text">{{ healthRecords.length }}</text>
+          <!-- 用药中 -->
+          <view v-if="medStatuses.length > 0">
+            <view class="dog-detail__sec dog-detail__sec--plum">
+              <text class="dog-detail__sec-text">用药中</text>
+              <view class="dog-detail__sec-badge">
+                <text class="dog-detail__sec-badge-text">{{ medStatuses.length }}</text>
+              </view>
+            </view>
+            <view class="dog-detail__rec-list">
+              <view v-for="s in medStatuses" :key="s.taskId || s.detail" class="dog-detail__rec-item">
+                <view class="dog-detail__rec-icon dog-detail__rec-icon--plum">
+                  <text class="material-icons-round">medication</text>
+                </view>
+                <view class="dog-detail__rec-body">
+                  <text class="dog-detail__rec-title">{{ s.detail || '用药' }}</text>
+                  <text v-if="s.progress" class="dog-detail__rec-sub">第{{ s.progress.current }}天 / 共{{ s.progress.total }}天</text>
+                </view>
+              </view>
             </view>
           </view>
-          <view class="dog-detail__rec-list">
-            <view
-              v-for="record in healthRecords"
-              :key="record._id"
-              class="dog-detail__rec-item"
-              @click="goToHealthDetail(record._id)"
-            >
-              <view class="dog-detail__rec-icon" :class="`dog-detail__rec-icon--${healthIconColor(record.type)}`">
-                <text class="material-icons-round">{{ healthIcon(record.type) }}</text>
+          <!-- 疫苗 -->
+          <view v-if="vaccineRecords.length > 0">
+            <view class="dog-detail__sec dog-detail__sec--blue">
+              <text class="dog-detail__sec-text">疫苗</text>
+              <view class="dog-detail__sec-badge">
+                <text class="dog-detail__sec-badge-text">{{ vaccineRecords.length }}</text>
               </view>
-              <view class="dog-detail__rec-body">
-                <text class="dog-detail__rec-title">{{ typeLabel(record.type) }}<text v-if="recordSubtitle(record)"> · {{ recordSubtitle(record) }}</text></text>
-                <text class="dog-detail__rec-sub">{{ formatDate(record.date) }}</text>
+            </view>
+            <view class="dog-detail__rec-list">
+              <view
+                v-for="record in vaccineRecords"
+                :key="record._id"
+                class="dog-detail__rec-item"
+                @click="goToHealthDetail(record._id)"
+              >
+                <view class="dog-detail__rec-icon dog-detail__rec-icon--blue">
+                  <text class="material-icons-round">vaccines</text>
+                </view>
+                <view class="dog-detail__rec-body">
+                  <text class="dog-detail__rec-title">{{ recordSubtitle(record) || '疫苗接种' }}</text>
+                  <text class="dog-detail__rec-sub">{{ formatDate(record.date) }}</text>
+                </view>
+                <text class="material-icons-round dog-detail__rec-chevron">chevron_right</text>
               </view>
-              <text class="material-icons-round dog-detail__rec-chevron">chevron_right</text>
+            </view>
+          </view>
+          <!-- 驱虫 -->
+          <view v-if="dewormingRecords.length > 0">
+            <view class="dog-detail__sec dog-detail__sec--teal">
+              <text class="dog-detail__sec-text">驱虫</text>
+              <view class="dog-detail__sec-badge">
+                <text class="dog-detail__sec-badge-text">{{ dewormingRecords.length }}</text>
+              </view>
+            </view>
+            <view class="dog-detail__rec-list">
+              <view
+                v-for="record in dewormingRecords"
+                :key="record._id"
+                class="dog-detail__rec-item"
+                @click="goToHealthDetail(record._id)"
+              >
+                <view class="dog-detail__rec-icon dog-detail__rec-icon--teal">
+                  <text class="material-icons-round">bug_report</text>
+                </view>
+                <view class="dog-detail__rec-body">
+                  <text class="dog-detail__rec-title">{{ recordSubtitle(record) || '驱虫处理' }}</text>
+                  <text class="dog-detail__rec-sub">{{ formatDate(record.date) }}</text>
+                </view>
+                <text class="material-icons-round dog-detail__rec-chevron">chevron_right</text>
+              </view>
+            </view>
+          </view>
+          <!-- 疾病 -->
+          <view v-if="illnessRecords.length > 0">
+            <view class="dog-detail__sec dog-detail__sec--rose">
+              <text class="dog-detail__sec-text">疾病</text>
+              <view class="dog-detail__sec-badge">
+                <text class="dog-detail__sec-badge-text">{{ illnessRecords.length }}</text>
+              </view>
+            </view>
+            <view class="dog-detail__rec-list">
+              <view
+                v-for="record in illnessRecords"
+                :key="record._id"
+                class="dog-detail__rec-item"
+                @click="goToHealthDetail(record._id)"
+              >
+                <view class="dog-detail__rec-icon dog-detail__rec-icon--rose">
+                  <text class="material-icons-round">healing</text>
+                </view>
+                <view class="dog-detail__rec-body">
+                  <text class="dog-detail__rec-title">{{ recordSubtitle(record) || '疾病记录' }}</text>
+                  <text class="dog-detail__rec-sub">{{ formatDate(record.date) }}</text>
+                </view>
+                <text class="material-icons-round dog-detail__rec-chevron">chevron_right</text>
+              </view>
             </view>
           </view>
         </view>
@@ -333,6 +479,7 @@
 
       <!-- ========== 财务 Tab ========== -->
       <view v-if="activeTab === 'finance'" class="dog-detail__pane">
+        <!-- 快捷操作 -->
         <view class="dog-detail__finance-links">
           <view class="dog-detail__finance-link" @click="uni.navigateTo({ url: '/pages/finance/expense-add?dogId=' + dogId })">
             <text class="material-icons-round" style="font-size: 20px; color: var(--red);">remove_circle</text>
@@ -345,6 +492,51 @@
           <view v-if="dog?.role === '种狗' && dog?.gender === '母'" class="dog-detail__finance-link" @click="uni.navigateTo({ url: '/pages/finance/dam-roi?damId=' + dogId })">
             <text class="material-icons-round" style="font-size: 20px; color: var(--primary);">trending_up</text>
             <text class="dog-detail__finance-link-text">投资回报</text>
+          </view>
+        </view>
+        <!-- 财务汇总 -->
+        <view v-if="dogFinance" class="dog-detail__fin-summary">
+          <view class="dog-detail__fin-grid">
+            <view class="dog-detail__fin-cell">
+              <text class="dog-detail__fin-cell-label">购入成本</text>
+              <text class="dog-detail__fin-cell-value dog-detail__fin-cell-value--red">{{ formatAmount(dogFinance.purchaseCost || 0) }}</text>
+            </view>
+            <view class="dog-detail__fin-cell">
+              <text class="dog-detail__fin-cell-label">直接费用</text>
+              <text class="dog-detail__fin-cell-value dog-detail__fin-cell-value--red">{{ formatAmount(dogFinance.directExpenses || 0) }}</text>
+            </view>
+            <view class="dog-detail__fin-cell">
+              <text class="dog-detail__fin-cell-label">销售收入</text>
+              <text class="dog-detail__fin-cell-value dog-detail__fin-cell-value--green">{{ formatAmount(dogFinance.salesIncome || 0) }}</text>
+            </view>
+            <view class="dog-detail__fin-cell">
+              <text class="dog-detail__fin-cell-label">净利润</text>
+              <text
+                class="dog-detail__fin-cell-value"
+                :class="(dogFinance.netProfit || 0) >= 0 ? 'dog-detail__fin-cell-value--green' : 'dog-detail__fin-cell-value--red'"
+              >{{ formatAmount(dogFinance.netProfit || 0) }}</text>
+            </view>
+          </view>
+        </view>
+        <!-- 最近交易 -->
+        <view v-if="dogFinance?.recent?.length > 0">
+          <view class="dog-detail__sec dog-detail__sec--teal">
+            <text class="dog-detail__sec-text">最近交易</text>
+          </view>
+          <view class="dog-detail__rec-list">
+            <view v-for="tx in dogFinance.recent" :key="tx._id" class="dog-detail__rec-item">
+              <view class="dog-detail__rec-icon" :class="tx.type === 'income' ? 'dog-detail__rec-icon--green' : 'dog-detail__rec-icon--red'">
+                <text class="material-icons-round">{{ tx.type === 'income' ? 'add_circle' : 'remove_circle' }}</text>
+              </view>
+              <view class="dog-detail__rec-body">
+                <text class="dog-detail__rec-title">{{ tx.category || (tx.type === 'income' ? '收入' : '支出') }}</text>
+                <text class="dog-detail__rec-sub">{{ formatDate(tx.date) }}</text>
+              </view>
+              <text
+                class="dog-detail__rec-amount"
+                :class="tx.type === 'income' ? 'dog-detail__rec-amount--green' : 'dog-detail__rec-amount--red'"
+              >{{ tx.type === 'income' ? '+' : '-' }}¥{{ (tx.amount || 0).toLocaleString() }}</text>
+            </view>
           </view>
         </view>
       </view>
@@ -792,9 +984,25 @@ const isInEstrus = computed(() => statuses.value.some((s: any) => s.type === '�
 const activeCycle = computed(() => cycles.value.find((c: any) => c.status !== '已生产' && c.status !== '已终止'))
 const pastCycles = computed(() => cycles.value.filter((c: any) => c.status === '已生产' || c.status === '已终止'))
 
+const medStatuses = computed(() => statuses.value.filter((s: DeriveStatus) => s.type === '用药中'))
+const vaccineRecords = computed(() => healthRecords.value.filter((r: any) => r.type === 'vaccination'))
+const dewormingRecords = computed(() => healthRecords.value.filter((r: any) => r.type === 'deworming'))
+const illnessRecords = computed(() => healthRecords.value.filter((r: any) => r.type === 'illness'))
+const activeCycleProgress = computed(() => {
+  const pregStatus = statuses.value.find((s: DeriveStatus) => s.type === '怀孕中')
+  if (!pregStatus?.progress) return null
+  const pct = Math.min(100, Math.round(pregStatus.progress.current / pregStatus.progress.total * 100))
+  return { pct, label: pregStatus.detail || `孕期第${pregStatus.progress.current}天` }
+})
+
+const litters = ref<any[]>([])
+const dogFinance = ref<any>(null)
+
 const { run: fetchDetail } = useCloudCall<{ data: Dog }>('dog-service', 'getDogDetail')
 const { run: fetchCycles } = useCloudCall<{ data: any[] }>('breeding-service', 'getCycleHistory')
 const { run: fetchHealth } = useCloudCall<{ data: any[] }>('health-service', 'getHealthHistory')
+const { run: fetchLitters } = useCloudCall<{ data: any[] }>('breeding-service', 'getLittersByDam')
+const { run: fetchDogFinance } = useCloudCall<{ data: any }>('finance-service', 'getDogFinanceSummary')
 const { run: updateDisposition } = useCloudCall('dog-service', 'updateDisposition', { successMessage: '操作成功' })
 const { run: updateStatus } = useCloudCall('dog-service', 'updateStatus', { successMessage: '状态已更新' })
 const { run: deleteDog } = useCloudCall('dog-service', 'deleteDog', { successMessage: '已删除' })
@@ -857,6 +1065,28 @@ function healthIconColor(type: string) {
     illness: 'plum',
   }
   return map[type] || 'blue'
+}
+
+function statusTitle(s: DeriveStatus): string {
+  if (s.type === '怀孕中' && s.progress) return `孕期第${s.progress.current}天`
+  if (s.type === '用药中' && s.detail) return s.detail.split(' ')[0]
+  if (s.type === '生病中' && s.label) return s.label
+  return s.type
+}
+
+function cycleNodes(cycle: any) {
+  const st = cycle.status || ''
+  return [
+    { key: '发情', done: true, active: st === '发情中' },
+    { key: '配种', done: st !== '发情中', active: false },
+    { key: '确孕', done: ['怀孕中', '临产中', '已生产'].includes(st), active: st === '怀孕中' },
+    { key: '分娩', done: st === '已生产', active: st === '临产中' },
+  ]
+}
+
+function formatAmount(amount: number) {
+  if (!amount) return '¥0'
+  return amount >= 10000 ? `¥${(amount / 10000).toFixed(1)}万` : `¥${amount.toLocaleString()}`
 }
 
 function goBack() {
@@ -1200,10 +1430,12 @@ async function doDelete() {
 async function loadData() {
   loading.value = true
   try {
-    const [detailRes, cyclesRes, healthRes] = await Promise.all([
+    const [detailRes, cyclesRes, healthRes, littersRes, financeRes] = await Promise.all([
       fetchDetail(dogId),
       fetchCycles(dogId),
       fetchHealth(dogId),
+      fetchLitters(dogId),
+      fetchDogFinance(dogId),
     ])
 
     if (detailRes?.data) {
@@ -1215,6 +1447,12 @@ async function loadData() {
     }
     if (healthRes?.data) {
       healthRecords.value = healthRes.data
+    }
+    if (littersRes?.data) {
+      litters.value = littersRes.data
+    }
+    if (financeRes?.data) {
+      dogFinance.value = financeRes.data
     }
   } finally {
     loading.value = false
@@ -2456,6 +2694,228 @@ onShow(() => {
   font-weight: 600;
   color: var(--text-1);
 }
+
+/* ==================== A: 状态卡进度条 + 元信息 ==================== */
+.dog-detail__st-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.dog-detail__st-progress-track {
+  flex: 1;
+  height: 5px;
+  background: rgba(216, 203, 189, 0.25);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.dog-detail__st-progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+  &--rose { background: var(--rose); }
+  &--plum { background: var(--plum); }
+  &--red { background: var(--red); }
+  &--amber { background: var(--amber); }
+  &--green { background: var(--green); }
+}
+.dog-detail__st-progress-text {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+.dog-detail__st-meta {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.dog-detail__st-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.dog-detail__st-meta-icon {
+  font-family: 'Material Icons Round';
+  font-size: 13px;
+  color: var(--text-3);
+}
+.dog-detail__st-meta-text {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+
+/* ==================== C: 繁育里程碑 ==================== */
+.breeding-milestones {
+  display: flex;
+  align-items: flex-start;
+  margin-top: 12px;
+  margin-bottom: 2px;
+}
+.breeding-milestone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.breeding-milestone__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-4);
+  border: 2px solid var(--text-4);
+}
+.breeding-milestone__label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.breeding-milestone--done .breeding-milestone__dot {
+  background: var(--rose);
+  border-color: var(--rose);
+}
+.breeding-milestone--done .breeding-milestone__label {
+  color: var(--rose);
+}
+.breeding-milestone--active .breeding-milestone__dot {
+  background: var(--rose);
+  border-color: var(--rose);
+  box-shadow: 0 0 0 3px var(--rose-soft);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+.breeding-milestone--active .breeding-milestone__label {
+  color: var(--rose);
+  font-weight: 700;
+}
+.breeding-milestone-line {
+  flex: 1;
+  height: 2px;
+  background: var(--text-4);
+  margin-top: 4px;
+  margin-bottom: 18px;
+}
+.breeding-milestone-line--done {
+  background: var(--rose);
+}
+.breeding-active-cycle__progress-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+.breeding-active-cycle__progress-track {
+  flex: 1;
+  height: 5px;
+  background: rgba(216, 203, 189, 0.25);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.breeding-active-cycle__progress-fill {
+  height: 100%;
+  background: var(--rose);
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+.breeding-active-cycle__progress-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+
+/* ==================== D: 产仔记录 ==================== */
+.dog-detail__litter-item {
+  padding: 12px 16px;
+  & + & { border-top: 1px solid rgba(216, 203, 189, 0.12); }
+}
+.dog-detail__litter-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.dog-detail__litter-date {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.dog-detail__litter-sire {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.dog-detail__pup-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.dog-detail__pup-chip {
+  padding: 3px 9px;
+  border-radius: var(--radius-tag);
+}
+.dog-detail__pup-chip-text {
+  font-size: 11px;
+  font-weight: 700;
+}
+.dog-detail__pup-chip--total {
+  background: var(--card-dim);
+  .dog-detail__pup-chip-text { color: var(--text-2); }
+}
+.dog-detail__pup-chip--alive {
+  background: var(--green-soft);
+  .dog-detail__pup-chip-text { color: var(--green); }
+}
+.dog-detail__pup-chip--sold {
+  background: var(--icon-blue);
+  .dog-detail__pup-chip-text { color: var(--blue); }
+}
+.dog-detail__pup-chip--avail {
+  background: var(--amber-soft);
+  .dog-detail__pup-chip-text { color: var(--amber); }
+}
+
+/* ==================== F: 财务汇总 ==================== */
+.dog-detail__fin-summary {
+  background: var(--card);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.dog-detail__fin-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+.dog-detail__fin-cell {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  &:nth-child(2) { border-left: 1px solid rgba(216, 203, 189, 0.15); }
+  &:nth-child(3), &:nth-child(4) { border-top: 1px solid rgba(216, 203, 189, 0.15); }
+  &:nth-child(4) { border-left: 1px solid rgba(216, 203, 189, 0.15); }
+}
+.dog-detail__fin-cell-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.dog-detail__fin-cell-value {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-1);
+}
+.dog-detail__fin-cell-value--red { color: var(--red); }
+.dog-detail__fin-cell-value--green { color: var(--green); }
+
+/* 交易金额 */
+.dog-detail__rec-amount {
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.dog-detail__rec-amount--green { color: var(--green); }
+.dog-detail__rec-amount--red { color: var(--red); }
 
 /* ==================== 添加记录 Sheet ==================== */
 .add-record-list { padding-bottom: 16px; }

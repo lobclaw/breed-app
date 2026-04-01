@@ -39,14 +39,23 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = []) {
   // 第 1 轮：健康关注卡（生病犬只 + 用药犬只合并）
   const medTasks = tasks.filter(t => t.type === 'medication')
 
-  // 1a: 建立两个独立数据结构
+  // 1a: 建立三个独立数据结构
   // dogMap：用于用药卡的疾病信息丰富（每犬只取第一条疾病）
   // sickObserveMap：疾病观察卡独立来源，收集所有 treatment_status='观察中' 的犬（每犬只取第一条）
+  // dogIllnessNames：收集每只犬所有活跃病症名（用于多疾病行头显示 "感冒/腹泻"）
   const dogMap = new Map()
   const sickObserveMap = new Map()
+  const dogIllnessNames = new Map() // dogId → string[]（去重病症名）
 
   for (const ill of activeIllnesses) {
     const status = ill.details?.treatment_status || '观察中'
+
+    // 收集该犬的所有病症名（去重）
+    if (!dogIllnessNames.has(ill.dog_id)) dogIllnessNames.set(ill.dog_id, [])
+    const cond = ill.details?.condition || '生病'
+    const existingNames = dogIllnessNames.get(ill.dog_id)
+    if (!existingNames.includes(cond)) existingNames.push(cond)
+
     const illStart = new Date(ill.date || ill.created_at); illStart.setHours(0, 0, 0, 0)
     const todayMid = new Date(); todayMid.setHours(0, 0, 0, 0)
     const daysSick = Math.max(1, Math.round((todayMid.getTime() - illStart.getTime()) / DAY_MS) + 1)
@@ -134,6 +143,27 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = []) {
 
       const isCompleted = !!t._completed
 
+      // 构建 allMedTasks：每条 task 带上前端展开所需的预计算字段
+      const allMedTasksForDog = allDogTasks.map(dt => {
+        const dd = dt.details || {}
+        const ml = methodMap[dd.method] || dd.method || '口服'
+        const fr = typeof dd.frequency === 'number' ? dd.frequency : 1
+        return {
+          _id: dt._id,
+          dog_id: dt.dog_id,
+          status: dt._completed ? 'completed' : (dt.status || 'pending'),
+          doses_given: dt.doses_given || 0,
+          details: { drug_name: dd.drug_name || '用药', frequency: fr },
+          dosageStr: dd.dosage ? `${dd.dosage}${unitMap[dd.dosage_unit] || dd.dosage_unit || 'mg'}` : '',
+          progress: dd.day && dd.total_days ? `第${dd.day}/${dd.total_days}天` : '',
+          methodFreq: fr > 1 ? `${ml} 日${fr}次` : ml,
+        }
+      })
+
+      // 该犬的多疾病名（斜杠拼接）
+      const illNames = dogIllnessNames.get(t.dog_id) || []
+      const illnessNames = illNames.join('/')
+
       if (dogMap.has(t.dog_id)) {
         const existing = dogMap.get(t.dog_id)
         if (existing.state === 'sick_only') {
@@ -143,6 +173,8 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = []) {
           existing.progress = progress
           existing.methodFreq = methodFreq
           existing.completed = isCompleted
+          existing.allMedTasks = allMedTasksForDog
+          existing.illnessNames = illnessNames
         }
       } else {
         dogMap.set(t.dog_id, {
@@ -154,6 +186,8 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = []) {
           progress,
           methodFreq,
           completed: isCompleted,
+          allMedTasks: allMedTasksForDog,
+          illnessNames,
           _createdAt: t.created_at || 0,
         })
       }
@@ -368,18 +402,11 @@ module.exports = {
 
     const pendingTasks = pendingRes.data
     const todayCompletedTasks = completedRes.data
-    let activeIllnesses = illnessRes.data || []
-
-
-    // 生病记录按犬只去重（取最新一条）
-    const illnessMap = new Map()
-    for (const ill of activeIllnesses) {
-      if (!illnessMap.has(ill.dog_id)) illnessMap.set(ill.dog_id, ill)
-    }
-    activeIllnesses = Array.from(illnessMap.values())
+    const activeIllnesses = illnessRes.data || []
 
     // 补充犬只名称（illness 记录不一定有 dog_name）
-    const illDogIds = activeIllnesses.filter(i => !i.dog_name).map(i => i.dog_id)
+    // 去重 dog_id 后批量查询
+    const illDogIds = [...new Set(activeIllnesses.filter(i => !i.dog_name).map(i => i.dog_id))]
     if (illDogIds.length > 0) {
       const { data: dogs } = await db.collection('dogs')
         .where({ _id: dbCmd.in(illDogIds) })
@@ -497,17 +524,10 @@ module.exports = {
     ])
 
     const tasks = taskRes.data
-    let activeIllnesses = illnessRes.data || []
+    const activeIllnesses = illnessRes.data || []
 
-    // 生病记录按犬只去重
-    const illMap = new Map()
-    for (const ill of activeIllnesses) {
-      if (!illMap.has(ill.dog_id)) illMap.set(ill.dog_id, ill)
-    }
-    activeIllnesses = Array.from(illMap.values())
-
-    // 补充犬只名称
-    const illDogIds = activeIllnesses.filter(i => !i.dog_name).map(i => i.dog_id)
+    // 补充犬只名称（去重 dog_id 后批量查询）
+    const illDogIds = [...new Set(activeIllnesses.filter(i => !i.dog_name).map(i => i.dog_id))]
     if (illDogIds.length > 0) {
       const { data: dogs } = await db.collection('dogs')
         .where({ _id: dbCmd.in(illDogIds) }).field({ _id: true, name: true }).get()
@@ -585,8 +605,45 @@ module.exports = {
   },
 
   /**
-   * 标记任务完成
+   * 记录一次给药（用于每日多次用药追踪）
+   * 每次调用将 doses_given +1，达到 details.frequency 时自动完成任务
    */
+  async recordDose(taskId) {
+    if (!taskId) throw new Error('缺少任务 ID')
+    const familyId = this.familyId
+    const now = Date.now()
+
+    const { data: tasks } = await db.collection('tasks')
+      .where({ _id: taskId, family_id: familyId, status: 'pending' })
+      .get()
+    if (!tasks || tasks.length === 0) return { data: { completed: false, already_done: true } }
+
+    const task = tasks[0]
+    const frequency = task.details?.frequency || 1
+
+    // 原子 inc 避免并发双击导致计数丢失
+    await db.collection('tasks').doc(taskId).update({
+      doses_given: dbCmd.inc(1),
+      updated_at: now,
+    })
+
+    // 重新读取判断是否达到完成阈值
+    const { data: updated } = await db.collection('tasks').doc(taskId).get()
+    const dosesSoFar = updated[0]?.doses_given || 1
+
+    if (dosesSoFar >= frequency) {
+      await db.collection('tasks').doc(taskId).update({
+        status: 'completed',
+        completed_at: now,
+        completed_by: this.uid,
+        updated_at: now,
+      })
+      return { data: { doses_given: dosesSoFar, completed: true } }
+    }
+
+    return { data: { doses_given: dosesSoFar, completed: false } }
+  },
+
   /**
    * 完成任务
    * autoRecord=true 时（健康类），自动创建 health_record + 生成下次提醒

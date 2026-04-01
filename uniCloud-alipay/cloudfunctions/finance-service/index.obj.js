@@ -93,6 +93,41 @@ module.exports = {
   },
 
   /**
+   * 单犬财务汇总（购入成本 + 个体支出 + 销售收入 + 净收益 + 近期流水）
+   */
+  async getDogFinanceSummary(dogId) {
+    if (!dogId) throw new Error('缺少犬只 ID')
+    const familyId = this.familyId
+
+    const [dogRes, expenseRes, incomeRes] = await Promise.all([
+      db.collection('dogs').where({ _id: dogId, family_id: familyId, deleted_at: null }).get(),
+      db.collection('expenses').where({ linked_dog_ids: dogId, family_id: familyId, deleted_at: null }).orderBy('date', 'desc').limit(50).get(),
+      db.collection('incomes').where({ dog_id: dogId, family_id: familyId, deleted_at: null }).orderBy('date', 'desc').limit(50).get(),
+    ])
+
+    const dog = dogRes.data?.[0] || {}
+    const expenses = expenseRes.data || []
+    const incomes = incomeRes.data || []
+
+    const purchaseCost = dog.purchase_price || 0
+    const directExpenses = expenses.reduce((sum, e) => {
+      // 分摊：如果该费用关联多只犬，按比例算
+      const share = e.linked_dog_ids?.length > 1 ? 1 / e.linked_dog_ids.length : 1
+      return sum + (e.total_amount || 0) * share
+    }, 0)
+    const salesIncome = incomes.reduce((sum, i) => sum + (i.amount || 0), 0)
+    const netProfit = salesIncome - purchaseCost - directExpenses
+
+    // 最近流水（合并，按日期排序，取10条）
+    const recent = [
+      ...expenses.map(e => ({ ...e, _txType: 'expense' })),
+      ...incomes.map(i => ({ ...i, _txType: 'income' })),
+    ].sort((a, b) => (b.date || 0) - (a.date || 0)).slice(0, 10)
+
+    return { data: { purchaseCost, directExpenses, salesIncome, netProfit, recent } }
+  },
+
+  /**
    * 收支流水列表（合并展示）
    */
   async getTransactionList(filters = {}) {

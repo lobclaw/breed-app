@@ -40,6 +40,10 @@ export interface DeriveStatus {
   cycleId?: string
   recordId?: string
   taskId?: string
+  label?: string
+  detail?: string
+  progress?: { current: number; total: number }
+  meta?: Array<{ icon: string; text: string }>
 }
 
 // 列表项（Dog + 派生状态）
