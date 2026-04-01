@@ -259,6 +259,7 @@ function setChip(chip: string) {
   chipActive.value = chip
 }
 const saveAsProtocol = ref(false)
+const illnessRecordId = ref('')
 
 const dosageUnits = [
   { label: '毫升', value: 'ml' },
@@ -363,6 +364,8 @@ async function submit() {
         actual_start_date: date.value,
         notes: notes.value || null,
         cost: perDogCost,
+        // 单犬从疾病表单跳转时传入，云函数会自动将该疾病升级为"治疗中"
+        illnessRecordId: selectedDogs.value.length === 1 ? (illnessRecordId.value || null) : null,
       })
     }
     uni.showToast({
@@ -445,13 +448,16 @@ async function doSaveProtocol() {
   setTimeout(() => uni.navigateBack(), 500)
 }
 
-// 从疾病页面跳转过来时预选犬只
+// 从疾病页面跳转过来时预选犬只，并读取关联的疾病记录 ID
 onLoad((query) => {
   if (query?.batchDogs) {
     try {
       const dogs = JSON.parse(decodeURIComponent(query.batchDogs))
       selectedDogs.value = dogs
     } catch { /* ignore */ }
+  }
+  if (query?.illnessRecordId) {
+    illnessRecordId.value = query.illnessRecordId
   }
 })
 </script>

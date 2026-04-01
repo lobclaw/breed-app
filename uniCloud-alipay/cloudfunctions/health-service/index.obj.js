@@ -469,6 +469,20 @@ module.exports = {
       })
     }
 
+    // 如果指定了来源疾病，校验归属后自动升级为"治疗中"
+    if (data.illnessRecordId) {
+      const { data: ill } = await db.collection('health_records')
+        .where({ _id: data.illnessRecordId, family_id: familyId })
+        .get()
+      if (ill && ill.length > 0) {
+        await db.collection('health_records').doc(data.illnessRecordId).update({
+          'details.treatment_status': '治疗中',
+          updated_at: now,
+        })
+      }
+      // 若 illnessRecordId 不属于当前家庭，静默忽略
+    }
+
     return { data: { medicationId } }
   },
 

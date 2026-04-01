@@ -167,6 +167,7 @@ const isTodo = ref(false)
 const enableReminder = ref(true)
 const reminderDate = ref<number | null>(null)
 const showMedPrompt = ref(false)
+const savedRecordId = ref('')
 
 const conditionTypes = ['感冒', '腹泻', '寄生虫', '皮肤病', '眼部', '骨骼', '犬瘟', '细小', '其他']
 const customCondition = ref('')
@@ -234,6 +235,10 @@ async function submit() {
       if (res?.data?.completedTasks?.length) {
         allCompletedTasks.push(...res.data.completedTasks)
       }
+      // 单犬时保存 recordId，供跳转用药页时关联疾病状态升级
+      if (selectedDogs.value.length === 1 && res?.data?.recordId) {
+        savedRecordId.value = res.data.recordId
+      }
     }
 
     if (allCompletedTasks.length > 0) {
@@ -293,7 +298,11 @@ function goToMedication() {
   showMedPrompt.value = false
   const dogList = selectedDogs.value.map((d: any) => ({ _id: d._id, name: d.name }))
   const dogsParam = encodeURIComponent(JSON.stringify(dogList))
-  uni.redirectTo({ url: `/pages/record/health-medication?batchDogs=${dogsParam}` })
+  // 单犬时传疾病记录 ID，用药页保存后自动将该疾病升级为"治疗中"
+  const illnessParam = savedRecordId.value && selectedDogs.value.length === 1
+    ? `&illnessRecordId=${savedRecordId.value}`
+    : ''
+  uni.redirectTo({ url: `/pages/record/health-medication?batchDogs=${dogsParam}${illnessParam}` })
 }
 
 function finishAndBack() {

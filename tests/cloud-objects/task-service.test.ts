@@ -12,6 +12,11 @@ import {
 const mockUniCloud = createMockUniCloud()
 ;(globalThis as any).uniCloud = mockUniCloud
 
+// 加载 task-service 模块以访问 _mergeTasks 测试导出
+process.env.NODE_ENV = 'test'
+const taskService = require('../../uniCloud-alipay/cloudfunctions/task-service/index.obj.js')
+const mergeTasks: (...args: any[]) => any = taskService._mergeTasks
+
 describe('task-service', () => {
   const db = mockUniCloud.database()
   const familyId = 'fam_1'
@@ -226,6 +231,80 @@ describe('task-service', () => {
       // c_new 不受影响
       const { data: newCycle } = await db.collection('breeding_cycles').doc('c_new').get()
       expect(newCycle[0].status).toBe('发情中')
+    })
+  })
+
+  describe('mergeTasks 健康卡片路由', () => {
+    const now = Date.now()
+    const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0)
+
+    const makeMedTask = (dogId: string, drugName: string, day = 1, totalDays = 5) => ({
+      _id: `med_${dogId}_${drugName}`,
+      dog_id: dogId,
+      dog_name: dogId,
+      type: 'medication',
+      due_date: todayStart.getTime() + 1000,
+      status: 'pending',
+      family_id: familyId,
+      created_at: now,
+      details: { drug_name: drugName, dosage: '2', dosage_unit: 'mg', method: '口服', frequency: 1, day, total_days: totalDays },
+    })
+
+    const makeIllness = (dogId: string, condition: string, treatmentStatus = '观察中') => ({
+      _id: `ill_${dogId}_${condition}`,
+      dog_id: dogId,
+      dog_name: dogId,
+      type: 'illness',
+      date: now - 2 * DAY_MS,
+      family_id: familyId,
+      created_at: now - 2 * DAY_MS,
+      details: { condition, treatment_status: treatmentStatus, severity: '轻微' },
+    })
+
+    it('单犬：观察中疾病 → 仅出现在疾病观察卡', () => {
+      const illnesses = [makeIllness('肉肉', '感冒', '观察中')]
+      const cards = mergeTasks([], [], illnesses)
+      expect(cards).toHaveLength(1)
+      expect(cards[0].cardType).toBe('sick_observation')
+      expect(cards[0].dogs[0].dogId).toBe('肉肉')
+    })
+
+    it('单犬：治疗中疾病 + 用药 → 仅出现在用药卡，不出现在疾病观察卡', () => {
+      const illnesses = [makeIllness('肉肉', '感冒', '治疗中')]
+      const tasks = [makeMedTask('肉肉', '药A')]
+      const cards = mergeTasks(tasks, [], illnesses)
+      const cardTypes = cards.map((c: any) => c.cardType)
+      expect(cardTypes).toContain('medication')
+      expect(cardTypes).not.toContain('sick_observation')
+    })
+
+    it('单犬：两个疾病（一个治疗中+用药，一个观察中）→ 两张卡都出现', () => {
+      const illnesses = [
+        makeIllness('肉肉', '感冒', '治疗中'),
+        makeIllness('肉肉', '寄生虫', '观察中'),
+      ]
+      const tasks = [makeMedTask('肉肉', '药A')]
+      const cards = mergeTasks(tasks, [], illnesses)
+      const cardTypes = cards.map((c: any) => c.cardType)
+      expect(cardTypes).toContain('medication')
+      expect(cardTypes).toContain('sick_observation')
+    })
+
+    it('单犬：两个活跃用药 → 用药卡显示"2种用药"', () => {
+      const illnesses = [makeIllness('肉肉', '感冒', '治疗中')]
+      const tasks = [makeMedTask('肉肉', '药A'), makeMedTask('肉肉', '药B')]
+      const cards = mergeTasks(tasks, [], illnesses)
+      const medCard = cards.find((c: any) => c.cardType === 'medication')
+      expect(medCard).toBeDefined()
+      expect(medCard.dogs[0].drugName).toBe('2种用药')
+    })
+
+    it('单犬：仅用药无疾病 → 用药卡 med_only，无疾病观察卡', () => {
+      const tasks = [makeMedTask('肉肉', '药A')]
+      const cards = mergeTasks(tasks, [], [])
+      expect(cards).toHaveLength(1)
+      expect(cards[0].cardType).toBe('medication')
+      expect(cards[0].dogs[0].state).toBe('med_only')
     })
   })
 

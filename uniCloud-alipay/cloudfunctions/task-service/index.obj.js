@@ -38,26 +38,48 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = []) {
 
   // 第 1 轮：健康关注卡（生病犬只 + 用药犬只合并）
   const medTasks = tasks.filter(t => t.type === 'medication')
-  const dogMap = new Map()
 
-  // 1a: 生病犬只 → sick_only
+  // 1a: 建立两个独立数据结构
+  // dogMap：用于用药卡的疾病信息丰富（每犬只取第一条疾病）
+  // sickObserveMap：疾病观察卡独立来源，收集所有 treatment_status='观察中' 的犬（每犬只取第一条）
+  const dogMap = new Map()
+  const sickObserveMap = new Map()
+
   for (const ill of activeIllnesses) {
-    if (dogMap.has(ill.dog_id)) continue
-    // 按日历天数计算（不按小时数），第1天=记录当天
+    const status = ill.details?.treatment_status || '观察中'
     const illStart = new Date(ill.date || ill.created_at); illStart.setHours(0, 0, 0, 0)
     const todayMid = new Date(); todayMid.setHours(0, 0, 0, 0)
     const daysSick = Math.max(1, Math.round((todayMid.getTime() - illStart.getTime()) / DAY_MS) + 1)
-    dogMap.set(ill.dog_id, {
-      dogId: ill.dog_id,
-      dogName: ill.dog_name || ill._dog_name || '',
-      state: 'sick_only',
-      illness: ill.details?.condition || '生病',
-      severity: ill.details?.severity || '轻微',
-      illnessId: ill._id,
-      daysSick,
-      treatmentStatus: ill.details?.treatment_status || '观察中',
-      _createdAt: ill.date || ill.created_at || 0,
-    })
+
+    // 疾病观察卡：收集 treatment_status='观察中' 的犬（每犬只取最早一条）
+    if (status === '观察中' && !sickObserveMap.has(ill.dog_id)) {
+      sickObserveMap.set(ill.dog_id, {
+        dogId: ill.dog_id,
+        dogName: ill.dog_name || ill._dog_name || '',
+        state: 'sick_only',
+        illness: ill.details?.condition || '生病',
+        severity: ill.details?.severity || '轻微',
+        illnessId: ill._id,
+        daysSick,
+        treatmentStatus: '观察中',
+        _createdAt: ill.date || ill.created_at || 0,
+      })
+    }
+
+    // dogMap：每犬只取第一条疾病，供用药卡展示病症名称
+    if (!dogMap.has(ill.dog_id)) {
+      dogMap.set(ill.dog_id, {
+        dogId: ill.dog_id,
+        dogName: ill.dog_name || ill._dog_name || '',
+        state: 'sick_only',
+        illness: ill.details?.condition || '生病',
+        severity: ill.details?.severity || '轻微',
+        illnessId: ill._id,
+        daysSick,
+        treatmentStatus: status,
+        _createdAt: ill.date || ill.created_at || 0,
+      })
+    }
   }
 
   // 1b: 用药犬只 → med_only 或升级 sick_only → sick_with_med
@@ -69,6 +91,13 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = []) {
     medTasks.forEach(t => consumed.add(t._id))
     completedMedTasks.forEach(t => completedConsumed.add(t._id))
 
+    // 按犬只分组全部用药 tasks（用于多药摘要检测）
+    const dogAllMedTasks = new Map()
+    for (const t of allMedTasks) {
+      if (!dogAllMedTasks.has(t.dog_id)) dogAllMedTasks.set(t.dog_id, [])
+      dogAllMedTasks.get(t.dog_id).push(t)
+    }
+
     // 按犬只分组，每只犬取最适合展示的 task（当天 > 未来 > 逾期）
     const dogBestTask = new Map()
     const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
@@ -78,7 +107,6 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = []) {
       if (!prev) {
         dogBestTask.set(t.dog_id, t)
       } else {
-        // 当天的 task 优先级最高
         const prevIsToday = prev.due_date >= todayStart.getTime() && prev.due_date <= todayEnd.getTime()
         const currIsToday = t.due_date >= todayStart.getTime() && t.due_date <= todayEnd.getTime()
         if (currIsToday && !prevIsToday) {
@@ -89,14 +117,20 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = []) {
 
     for (const t of dogBestTask.values()) {
       const d = t.details || {}
-      const drugName = d.drug_name || '用药'
       const unitMap = { ml: 'ml', mg: 'mg', tablet: '片' }
-      const dosageStr = d.dosage ? `${d.dosage}${unitMap[d.dosage_unit] || d.dosage_unit || 'mg'}` : ''
-      const progress = d.day && d.total_days ? `${d.day}/${d.total_days}天` : ''
       const methodMap = { oral: '口服', injection: '注射' }
+
+      // 多药摘要：同犬有多个不同药名时显示"N种用药"
+      const allDogTasks = dogAllMedTasks.get(t.dog_id) || [t]
+      const uniqueDrugs = [...new Set(allDogTasks.map(x => x.details?.drug_name).filter(Boolean))]
+      const isMultiDrug = uniqueDrugs.length > 1
+
+      const drugName = isMultiDrug ? `${uniqueDrugs.length}种用药` : (d.drug_name || '用药')
+      const dosageStr = isMultiDrug ? '' : (d.dosage ? `${d.dosage}${unitMap[d.dosage_unit] || d.dosage_unit || 'mg'}` : '')
+      const progress = isMultiDrug ? '' : (d.day && d.total_days ? `${d.day}/${d.total_days}天` : '')
       const methodLabel = methodMap[d.method] || d.method || '口服'
       const freq = typeof d.frequency === 'number' ? d.frequency : 1
-      const methodFreq = freq > 1 ? `${methodLabel} 日${freq}次` : methodLabel
+      const methodFreq = isMultiDrug ? '' : (freq > 1 ? `${methodLabel} 日${freq}次` : methodLabel)
 
       const isCompleted = !!t._completed
 
@@ -128,43 +162,39 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = []) {
 
   // 输出两张健康卡（始终在"今日任务"区，不进"需处理"区）
   // - medication 卡：sick_with_med + med_only，有 checkbox 和完成/推迟按钮
-  // - sick_observation 卡：sick_only，有康复按钮
-  if (dogMap.size > 0) {
-    const allDogs = Array.from(dogMap.values())
-    const medDogs = allDogs
-      .filter(d => d.state !== 'sick_only')
-      .sort((a, b) => {
-        const order = { sick_with_med: 0, med_only: 1 }
-        const oa = order[a.state] ?? 1
-        const ob = order[b.state] ?? 1
-        if (oa !== ob) return oa - ob
-        return (a._createdAt || 0) - (b._createdAt || 0)
-      })
-    const sickOnlyDogs = allDogs
-      .filter(d => d.state === 'sick_only')
-      .sort((a, b) => (a._createdAt || 0) - (b._createdAt || 0))
+  // - sick_observation 卡：有任一 treatment_status='观察中' 疾病的犬（与用药卡不互斥）
+  const medDogs = Array.from(dogMap.values())
+    .filter(d => d.state !== 'sick_only')
+    .sort((a, b) => {
+      const order = { sick_with_med: 0, med_only: 1 }
+      const oa = order[a.state] ?? 1
+      const ob = order[b.state] ?? 1
+      if (oa !== ob) return oa - ob
+      return (a._createdAt || 0) - (b._createdAt || 0)
+    })
+  const sickObserveDogs = Array.from(sickObserveMap.values())
+    .sort((a, b) => (a._createdAt || 0) - (b._createdAt || 0))
 
-    if (medDogs.length > 0) {
-      cards.push({
-        cardType: 'medication',
-        id: 'medication',
-        priority: 'today',
-        groupTitle: '今日用药',
-        dogs: medDogs,
-        tasks: medTasks,
-        progress: null,
-      })
-    }
-    if (sickOnlyDogs.length > 0) {
-      cards.push({
-        cardType: 'sick_observation',
-        id: 'sick-observation',
-        priority: 'today',
-        groupTitle: '疾病观察',
-        dogs: sickOnlyDogs,
-        tasks: [],
-      })
-    }
+  if (medDogs.length > 0) {
+    cards.push({
+      cardType: 'medication',
+      id: 'medication',
+      priority: 'today',
+      groupTitle: '今日用药',
+      dogs: medDogs,
+      tasks: medTasks,
+      progress: null,
+    })
+  }
+  if (sickObserveDogs.length > 0) {
+    cards.push({
+      cardType: 'sick_observation',
+      id: 'sick-observation',
+      priority: 'today',
+      groupTitle: '疾病观察',
+      dogs: sickObserveDogs,
+      tasks: [],
+    })
   }
 
   // 第 2 轮：护理群组卡片
@@ -994,4 +1024,9 @@ module.exports = {
     return { data: { pushCount } }
   },
 
+}
+
+// 测试用导出（仅在测试环境使用）
+if (typeof process !== 'undefined' && process.env.NODE_ENV === 'test') {
+  module.exports._mergeTasks = mergeTasks
 }
