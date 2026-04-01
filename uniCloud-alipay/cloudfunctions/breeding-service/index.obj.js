@@ -310,10 +310,13 @@ module.exports = {
     if (newStatus) {
       const updateData = { status: newStatus, updated_at: now }
 
-      // 配种时更新种公信息
-      if (data.type === 'mating' && data.details?.sire_id) {
-        updateData.sire_id = data.details.sire_id
-        updateData.sire_name = data.details.sire_name || null
+      // 配种时更新种公信息 + 记录配种日期（用于孕期进度计算）
+      if (data.type === 'mating') {
+        updateData.mated_at = data.date
+        if (data.details?.sire_id) {
+          updateData.sire_id = data.details.sire_id
+          updateData.sire_name = data.details.sire_name || null
+        }
       }
 
       await db.collection('breeding_cycles').doc(cycleId).update(updateData)

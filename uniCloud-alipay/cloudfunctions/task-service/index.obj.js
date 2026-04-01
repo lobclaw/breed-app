@@ -470,7 +470,12 @@ module.exports = {
       data: {
         cards: allCards.slice(0, 12),
         counts: {
-          today: pendingTasks.length + (activeIllnesses.length > 0 ? 1 : 0), // 健康关注卡算1项
+          // 用药任务并入健康关注卡（1张卡），不重复计数
+          today: (() => {
+            const medCount = pendingTasks.filter(t => t.type === 'medication').length
+            const hasHealthCard = activeIllnesses.length > 0 || medCount > 0
+            return pendingTasks.length - medCount + (hasHealthCard ? 1 : 0)
+          })(),
           week: weekRes.total + (activeIllnesses.length > 0 ? 1 : 0),
           month30: month30Res.total + (activeIllnesses.length > 0 ? 1 : 0),
           hasOverdue: overdue.length > 0,

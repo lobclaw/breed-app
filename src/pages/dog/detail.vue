@@ -525,17 +525,17 @@
           </view>
           <view class="dog-detail__rec-list">
             <view v-for="tx in dogFinance.recent" :key="tx._id" class="dog-detail__rec-item">
-              <view class="dog-detail__rec-icon" :class="tx.type === 'income' ? 'dog-detail__rec-icon--green' : 'dog-detail__rec-icon--red'">
-                <text class="material-icons-round">{{ tx.type === 'income' ? 'add_circle' : 'remove_circle' }}</text>
+              <view class="dog-detail__rec-icon" :class="tx._txType === 'income' ? 'dog-detail__rec-icon--green' : 'dog-detail__rec-icon--red'">
+                <text class="material-icons-round">{{ tx._txType === 'income' ? 'add_circle' : 'remove_circle' }}</text>
               </view>
               <view class="dog-detail__rec-body">
-                <text class="dog-detail__rec-title">{{ tx.category || (tx.type === 'income' ? '收入' : '支出') }}</text>
+                <text class="dog-detail__rec-title">{{ tx.category || (tx._txType === 'income' ? '收入' : '支出') }}</text>
                 <text class="dog-detail__rec-sub">{{ formatDate(tx.date) }}</text>
               </view>
               <text
                 class="dog-detail__rec-amount"
-                :class="tx.type === 'income' ? 'dog-detail__rec-amount--green' : 'dog-detail__rec-amount--red'"
-              >{{ tx.type === 'income' ? '+' : '-' }}¥{{ (tx.amount || 0).toLocaleString() }}</text>
+                :class="tx._txType === 'income' ? 'dog-detail__rec-amount--green' : 'dog-detail__rec-amount--red'"
+              >{{ tx._txType === 'income' ? '+' : '-' }}¥{{ (tx.amount || 0).toLocaleString() }}</text>
             </view>
           </view>
         </view>
@@ -981,8 +981,9 @@ const heroAvatarClass = computed(() => {
 
 // 繁育周期计算属性
 const isInEstrus = computed(() => statuses.value.some((s: any) => s.type === '发情中'))
-const activeCycle = computed(() => cycles.value.find((c: any) => c.status !== '已生产' && c.status !== '已终止'))
-const pastCycles = computed(() => cycles.value.filter((c: any) => c.status === '已生产' || c.status === '已终止'))
+const TERMINAL_CYCLE_STATUSES = ['已生产', '失败', '放弃']
+const activeCycle = computed(() => cycles.value.find((c: any) => !TERMINAL_CYCLE_STATUSES.includes(c.status)))
+const pastCycles = computed(() => cycles.value.filter((c: any) => TERMINAL_CYCLE_STATUSES.includes(c.status)))
 
 const medStatuses = computed(() => statuses.value.filter((s: DeriveStatus) => s.type === '用药中'))
 const vaccineRecords = computed(() => healthRecords.value.filter((r: any) => r.type === 'vaccination'))

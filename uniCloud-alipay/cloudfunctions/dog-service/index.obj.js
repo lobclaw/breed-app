@@ -150,7 +150,7 @@ module.exports = {
       if (activeCycle.status === '发情中') {
         statuses.push({ type: '发情中', cycleId: activeCycle._id })
       } else if (activeCycle.status === '怀孕中') {
-        const startTs = activeCycle.updated_at || activeCycle.created_at
+        const startTs = activeCycle.mated_at || activeCycle.updated_at || activeCycle.created_at
         const daysPassed = Math.max(1, Math.floor((now - startTs) / 86400000))
         const totalDays = 63
         const dueTs = startTs + totalDays * 86400000
