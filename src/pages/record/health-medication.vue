@@ -77,7 +77,7 @@
       <view class="field-group">
         <view class="field-label"><text>持续天数</text></view>
         <view class="input-suffix-wrapper">
-          <input v-model="durationDays" class="form-input form-input--suffixed" type="number" placeholder="请输入天数" />
+          <input v-model="durationDays" class="form-input form-input--suffixed" type="number" placeholder="默认1天" />
           <text class="input-suffix">天</text>
         </view>
       </view>
@@ -280,14 +280,13 @@ const frequencies = [
 
 const parsedDuration = computed(() => {
   const n = parseInt(durationDays.value)
-  return n > 0 ? n : 7
+  return n > 0 ? n : 1
 })
 
 const canSubmit = computed(() => {
   return selectedDogs.value.length > 0
     && !!drugName.value.trim()
     && !!dosage.value
-    && !!durationDays.value
     && !!date.value
 })
 
@@ -360,7 +359,7 @@ async function submit() {
         dosage_unit: dosageUnit.value,
         method: methodLabels[method.value] || method.value,
         frequency: freqMap[frequency.value] || 1,
-        duration_days: parseInt(durationDays.value),
+        duration_days: parsedDuration.value,
         actual_start_date: date.value,
         notes: notes.value || null,
         cost: perDogCost,

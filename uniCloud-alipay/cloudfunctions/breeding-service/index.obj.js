@@ -351,7 +351,7 @@ module.exports = {
 
     // 获取子记录（按日期排序）
     const { data: records } = await db.collection('breeding_records')
-      .where({ cycle_id: cycleId })
+      .where({ cycle_id: cycleId, family_id: this.familyId })
       .orderBy('date', 'asc')
       .get()
 

@@ -69,7 +69,11 @@ function startOfDay(ts: number): number {
   return d.getTime()
 }
 
-const today = computed(() => startOfDay(Date.now()))
+// 依赖 selectedDate，确保 onShow 重置日期时重新计算（Date.now() 无响应式依赖）
+const today = computed(() => {
+  void props.selectedDate
+  return startOfDay(Date.now())
+})
 
 // 计算本周一的时间戳
 function getMonday(ts: number): number {

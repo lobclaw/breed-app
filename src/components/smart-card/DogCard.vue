@@ -29,15 +29,15 @@
     </view>
 
     <!-- 操作按钮 -->
-    <view class="card-actions">
+    <view v-if="!acting" class="card-actions">
       <!-- 健康类才显示"完成"按钮 -->
-      <view v-if="isHealthType" class="btn btn--ghost-green" @click.stop="$emit('complete', visibleTasks[0]?._id, 'auto')">
+      <view v-if="isHealthType" class="btn btn--ghost-green" @click.stop="onComplete(visibleTasks[0]?._id, 'auto')">
         <text class="btn-text btn-text--green">完成</text>
       </view>
       <view class="btn btn--ghost" @click.stop="$emit('postpone', visibleTasks[0]?._id)">
         <text class="btn-text btn-text--ghost">推迟</text>
       </view>
-      <view class="btn-skip" @click.stop="$emit('complete', visibleTasks[0]?._id, 'skip')">
+      <view class="btn-skip" @click.stop="onComplete(visibleTasks[0]?._id, 'skip')">
         <text class="btn-skip-text">跳过</text>
       </view>
     </view>
@@ -45,16 +45,24 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
 const HEALTH_TYPES = ['vaccination', 'deworming', 'medication']
 
 const props = defineProps<{ card: any }>()
-defineEmits<{
+const emit = defineEmits<{
   (e: 'complete', taskId: string, mode?: string): void
   (e: 'postpone', taskId: string): void
   (e: 'action', payload: { type: string; data: any }): void
 }>()
+
+const acting = ref(false)
+
+function onComplete(taskId: string, mode: string) {
+  if (acting.value) return
+  acting.value = true
+  emit('complete', taskId, mode)
+}
 
 const visibleTasks = computed(() => (props.card.tasks || []).slice(0, 3))
 const firstTaskType = computed(() => visibleTasks.value[0]?.type || '')

@@ -59,7 +59,10 @@
 
 ## gstack
 
-使用 gstack 的 `/browse` 技能进行所有网页浏览，**永远不要使用 `mcp__claude-in-chrome__*` 工具**。
+## 浏览器工具路由
+
+- 用户说"用Chrome" / "Chrome测试" / "open in Chrome" → 使用 `mcp__claude-in-chrome__*` 工具
+- 其他所有浏览器/QA 任务 → 使用 gstack 的 `/browse` 技能（不使用 `mcp__claude-in-chrome__*`）
 
 可用技能：
 - `/office-hours` `/plan-ceo-review` `/plan-eng-review` `/plan-design-review`

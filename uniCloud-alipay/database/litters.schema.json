@@ -2,10 +2,10 @@
   "bsonType": "object",
   "required": ["cycle_id", "dam_id", "family_id", "birth_date", "total_born", "born_alive", "born_dead"],
   "permission": {
-    "read": true,
-    "create": true,
-    "update": true,
-    "delete": true
+    "read": "auth.uid != null",
+    "create": "auth.uid != null",
+    "update": "auth.uid != null",
+    "delete": "auth.uid != null"
   },
   "properties": {
     "_id": {

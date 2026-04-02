@@ -389,7 +389,7 @@ module.exports = {
   async startMedication(data) {
     if (!data.dog_id) throw new Error('请选择犬只')
     if (!data.drug_name) throw new Error('请填写药品名称')
-    if (!data.duration_days || data.duration_days < 1) throw new Error('请填写用药天数')
+    const durationDays = (data.duration_days && data.duration_days >= 1) ? data.duration_days : 1
 
     const now = Date.now()
     const familyId = this.familyId
@@ -413,7 +413,7 @@ module.exports = {
       dosage_unit: data.dosage_unit || null,
       method: data.method || '口服',
       frequency: data.frequency || 1,
-      duration_days: data.duration_days,
+      duration_days: durationDays,
       actual_start_date: startDate,
       status: '进行中',
       notes: data.notes || null,
@@ -423,7 +423,7 @@ module.exports = {
     const { id: medicationId } = await db.collection('medication_tasks').add(medicationData)
 
     // 生成每日用药提醒任务
-    for (let day = 0; day < data.duration_days; day++) {
+    for (let day = 0; day < durationDays; day++) {
       await db.collection('tasks').add({
         card_type: 'individual',
         dog_id: data.dog_id,
@@ -443,7 +443,7 @@ module.exports = {
           method: data.method || '口服',
           frequency: data.frequency || 1,
           day: day + 1,
-          total_days: data.duration_days,
+          total_days: durationDays,
         },
         created_at: now,
         updated_at: now,
@@ -460,7 +460,7 @@ module.exports = {
         sub_category: '用药',
         amount: data.cost,
         date: startDate,
-        notes: `${data.drug_name} ${data.duration_days}天`,
+        notes: `${data.drug_name} ${durationDays}天`,
         source_type: 'medication_task',
         source_id: medicationId,
         created_by: this.uid,
@@ -469,8 +469,9 @@ module.exports = {
       })
     }
 
-    // 如果指定了来源疾病，校验归属后自动升级为"治疗中"
+    // 自动将该犬"观察中"的活跃疾病记录升级为"治疗中"
     if (data.illnessRecordId) {
+      // 从疾病表单跳转过来：只升级指定记录，校验归属
       const { data: ill } = await db.collection('health_records')
         .where({ _id: data.illnessRecordId, family_id: familyId })
         .get()
@@ -480,7 +481,25 @@ module.exports = {
           updated_at: now,
         })
       }
-      // 若 illnessRecordId 不属于当前家庭，静默忽略
+    } else {
+      // 独立创建用药：查找该犬所有"观察中"的活跃疾病记录，一并升级
+      const { data: activeIllnesses } = await db.collection('health_records')
+        .where({
+          family_id: familyId,
+          dog_id: data.dog_id,
+          type: 'illness',
+          'details.treatment_status': '观察中',
+          deleted_at: null,
+        })
+        .get()
+      if (activeIllnesses && activeIllnesses.length > 0) {
+        for (const r of activeIllnesses) {
+          await db.collection('health_records').doc(r._id).update({
+            'details.treatment_status': '治疗中',
+            updated_at: now,
+          })
+        }
+      }
     }
 
     return { data: { medicationId } }

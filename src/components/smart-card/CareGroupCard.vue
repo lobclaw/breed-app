@@ -24,7 +24,7 @@
     </view>
 
     <!-- 批量完成按钮 -->
-    <view class="card-actions">
+    <view v-if="!acting" class="card-actions">
       <view class="btn btn--filled btn--primary" @click="batchComplete">
         <text class="btn-text btn-text--white">批量标记今日已完成</text>
       </view>
@@ -33,13 +33,19 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
+
 const props = defineProps<{ card: any }>()
 const emit = defineEmits<{
   (e: 'complete', taskId: string): void
   (e: 'batch-complete', taskIds: string[]): void
 }>()
 
+const acting = ref(false)
+
 function batchComplete() {
+  if (acting.value) return
+  acting.value = true
   const taskIds = props.card.tasks.map((t: any) => t._id)
   emit('batch-complete', taskIds)
 }

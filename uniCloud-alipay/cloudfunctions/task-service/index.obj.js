@@ -94,9 +94,10 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = []) {
   // 1b: 用药犬只 → med_only 或升级 sick_only → sick_with_med
   // 同犬多条 task 时，优先取当天的展示（逾期 task 仍影响卡片优先级但不覆盖展示）
   // 包含今日已完成的 medication task（刷新后保持显示，标记为 completed）
+  // 注意：只有 medTasks（pending）非空才构建卡片；全部完成时不应再显示卡片
   const completedMedTasks = todayCompleted.filter(t => t.type === 'medication')
   const allMedTasks = [...medTasks, ...completedMedTasks]
-  if (allMedTasks.length > 0) {
+  if (medTasks.length > 0) {
     medTasks.forEach(t => consumed.add(t._id))
     completedMedTasks.forEach(t => completedConsumed.add(t._id))
 
@@ -312,17 +313,13 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = []) {
         if (t._completed) completedConsumed.add(t._id)
         else consumed.add(t._id)
       })
-      // 按犬只去重，同一只犬有 pending 则标记未完成，否则标记已完成
+      // 只保留 pending 犬只，已完成的不再显示（角标从 0/N 开始，完成即消失）
       const dogMap = new Map()
-      for (const t of group) {
+      for (const t of pendingInGroup) {
         if (!dogMap.has(t.dog_id)) {
-          dogMap.set(t.dog_id, { dogId: t.dog_id, dogName: t.dog_name, completed: !!t._completed })
-        } else if (!t._completed) {
-          // 如果该犬还有 pending 任务，标记为未完成
-          dogMap.get(t.dog_id).completed = false
+          dogMap.set(t.dog_id, { dogId: t.dog_id, dogName: t.dog_name, completed: false })
         }
       }
-      const doneCount = Array.from(dogMap.values()).filter(d => d.completed).length
       const dogs = Array.from(dogMap.values())
       cards.push({
         cardType: 'batch',
@@ -331,7 +328,7 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = []) {
         groupTitle: `${group[0].title} · ${dogs.length}只`,
         dogs,
         tasks: pendingInGroup,
-        progress: { done: doneCount, total: dogs.length },
+        progress: { done: 0, total: dogs.length },
       })
     }
   }

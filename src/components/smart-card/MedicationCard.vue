@@ -110,7 +110,7 @@
     </view>
 
     <!-- 底部按钮（有未完成任务时显示）-->
-    <view v-if="hasPendingMed" class="card-actions__btns">
+    <view v-if="hasPendingMed && !acting" class="card-actions__btns">
       <view class="btn btn--filled btn--plum" @click="batchComplete">
         <text class="btn-text btn-text--white">完成</text>
       </view>
@@ -132,6 +132,9 @@ const emit = defineEmits<{
   (e: 'action', payload: { type: string; data: any }): void
   (e: 'record-dose', payload: { taskId: string }): void
 }>()
+
+// 防止重复点击
+const acting = ref(false)
 
 // 展开/折叠状态
 const expandedDogs = ref(new Set<string>())
@@ -194,8 +197,18 @@ function onMainCb(dog: any) {
   if (dogState(dog) === 'done') return
   const allTasks: any[] = dog.allMedTasks || []
   if (allTasks.length > 0) {
-    const pendingIds = allTasks.filter(t => !isTaskDone(t)).map(t => t._id)
-    if (pendingIds.length > 0) emit('batch-complete', pendingIds)
+    const pendingTasks = allTasks.filter(t => !isTaskDone(t))
+    // 乐观更新：本地立即标记该犬所有用药为已完成
+    for (const t of pendingTasks) {
+      localDoses.value.set(t._id, t.details?.frequency || 1)
+    }
+    // 逐个调用完成接口（mode=false 不触发卡片移除）
+    for (const t of pendingTasks) {
+      emit('complete', t._id, false)
+    }
+    // 全部犬只都完成时自动消失整张卡片
+    const allDone = (props.card.dogs || []).every((d: any) => dogState(d) === 'done')
+    if (allDone) batchComplete()
   } else {
     // 旧数据兼容
     const task = props.card.tasks?.find((t: any) => t.dog_id === dog.dogId || t.dogId === dog.dogId)
@@ -236,8 +249,25 @@ const doneCount = computed(() =>
 const hasPendingMed = computed(() => doneCount.value < medDogCount.value)
 
 function batchComplete() {
+  if (acting.value) return
+  acting.value = true
+
+  // 同时勾选所有未完成犬只，再触发卡片消失
+  const undone = (props.card.dogs || []).filter((d: any) => dogState(d) !== 'done')
+  for (const dog of undone) {
+    const allTasks: any[] = dog.allMedTasks || []
+    for (const t of allTasks) {
+      if (!isTaskDone(t)) {
+        localDoses.value.set(t._id, t.details?.frequency || 1)
+      }
+    }
+  }
+
   const taskIds = (props.card.tasks || []).map((t: any) => t._id)
-  emit('batch-complete', taskIds)
+  // 短暂延迟让勾选动画可见后再消失卡片
+  setTimeout(() => {
+    emit('batch-complete', taskIds.length > 0 ? taskIds : [props.card.id])
+  }, 120)
 }
 
 function batchPostpone() {

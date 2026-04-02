@@ -14,8 +14,8 @@
         <text class="card-sub">{{ card.dogs?.length || 0 }}只犬</text>
       </view>
       <!-- 分数角标 -->
-      <view v-if="card.progress" class="fraction-badge">
-        <text class="fraction-badge-text">{{ doneCount }}/{{ card.progress.total }}</text>
+      <view class="fraction-badge">
+        <text class="fraction-badge-text">{{ doneCount }}/{{ totalDogs }}</text>
       </view>
     </view>
 
@@ -36,14 +36,14 @@
     </view>
 
     <!-- 进度条 -->
-    <view v-if="card.progress" class="progress-area">
+    <view class="progress-area">
       <view class="progress-track">
         <view class="progress-fill" :style="{ width: progressPct + '%' }" />
       </view>
     </view>
 
     <!-- 操作按钮 -->
-    <view class="card-actions">
+    <view v-if="!acting" class="card-actions">
       <view class="btn btn--ghost-green" @click="batchComplete">
         <text class="btn-text btn-text--green">完成</text>
       </view>
@@ -67,11 +67,13 @@ const props = defineProps<{ card: any }>()
 const emit = defineEmits<{
   (e: 'complete', taskId: string, allDone?: boolean): void
   (e: 'batch-complete', taskIds: string[]): void
+  (e: 'batch-skip', taskIds: string[]): void
   (e: 'postpone', taskIds: string | string[], title?: string): void
   (e: 'action', payload: any): void
 }>()
 
 const checkedDogs = ref(new Set<string>())
+const acting = ref(false)
 
 function toggleDog(dog: any) {
   if (dog.completed || checkedDogs.value.has(dog.dogId)) return
@@ -121,25 +123,33 @@ function batchPostpone() {
 }
 
 const visibleDogs = computed(() => (props.card.dogs || []).slice(0, 12))
-const doneCount = computed(() => {
-  const backendDone = props.card.progress?.done || 0
-  return backendDone + checkedDogs.value.size
-})
-const pendingCount = computed(() => (props.card.progress?.total || 0) - doneCount.value)
+const totalDogs = computed(() => (props.card.dogs || []).length)
+const doneCount = computed(() => checkedDogs.value.size)
 const progressPct = computed(() => {
-  if (!props.card.progress) return 0
-  return Math.round((doneCount.value / props.card.progress.total) * 100)
+  if (!totalDogs.value) return 0
+  return Math.round((doneCount.value / totalDogs.value) * 100)
 })
 
 function batchComplete() {
+  if (acting.value) return
+  acting.value = true
+
   const taskIds = props.card.tasks.filter((t: any) => t.status === 'pending').map((t: any) => t._id)
-  emit('batch-complete', taskIds)
+
+  // 逐一勾选所有未打钩的犬只，再触发完成动画
+  const unchecked = (props.card.dogs || []).filter((d: any) => !d.completed && !checkedDogs.value.has(d.dogId))
+  unchecked.forEach((dog: any, i: number) => {
+    setTimeout(() => checkedDogs.value.add(dog.dogId), i * 40)
+  })
+  setTimeout(() => emit('batch-complete', taskIds), unchecked.length * 40)
 }
 
 function batchSkip() {
-  // 跳过所有：仅标记 done，不创建记录
+  if (acting.value) return
+  acting.value = true
+  // 跳过所有：仅标记 done，不创建记录（无完成特效，仅滑出）
   const taskIds = props.card.tasks.filter((t: any) => t.status === 'pending').map((t: any) => t._id)
-  emit('batch-complete', taskIds)
+  emit('batch-skip', taskIds)
 }
 </script>
 

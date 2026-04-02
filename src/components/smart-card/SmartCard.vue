@@ -1,6 +1,6 @@
 <template>
   <!-- 智能卡片壳：根据 card.cardType 分发到具体卡片 -->
-  <view class="smart-card-wrap" :class="{ 'smart-card--completing': completing, 'smart-card--overdue': card.priority === 'overdue' }">
+  <view class="smart-card-wrap" :class="{ 'smart-card--completing': completing, 'smart-card--completed': completed, 'smart-card--overdue': card.priority === 'overdue' }">
   <!-- 逾期标记 -->
   <view v-if="card.priority === 'overdue' && card.overdueDays" class="overdue-badge">
     <text class="material-icons-round overdue-badge-icon">schedule</text>
@@ -8,7 +8,7 @@
   </view>
   <DogCard v-if="card.cardType === 'dog'" :card="card" @complete="onComplete" @postpone="onPostpone" @action="onAction" />
   <CareGroupCard v-else-if="card.cardType === 'care_group'" :card="card" @complete="onComplete" @batch-complete="onBatchComplete" />
-  <BatchCard v-else-if="card.cardType === 'batch'" :card="card" @complete="onComplete" @postpone="onPostpone" @batch-complete="onBatchComplete" />
+  <BatchCard v-else-if="card.cardType === 'batch'" :card="card" @complete="onComplete" @postpone="onPostpone" @batch-complete="onBatchComplete" @batch-skip="onBatchSkip" />
   <MedicationCard v-else-if="card.cardType === 'health_attention' || card.cardType === 'medication'" :card="card" @complete="onComplete" @postpone="onPostpone" @batch-complete="onBatchComplete" @action="onAction" @record-dose="onRecordDose" />
   <SickObservationCard v-else-if="card.cardType === 'sick_observation'" :card="card" @action="onAction" />
   </view>
@@ -39,12 +39,14 @@ export interface SmartCardData {
 defineProps<{
   card: SmartCardData
   completing?: boolean
+  completed?: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'complete', taskId: string, mode?: boolean | string): void
   (e: 'postpone', taskIds: string | string[], title?: string): void
   (e: 'batch-complete', taskIds: string[]): void
+  (e: 'batch-skip', taskIds: string[]): void
   (e: 'action', payload: { type: string; data: any }): void
   (e: 'record-dose', payload: { taskId: string }): void
 }>()
@@ -52,12 +54,14 @@ const emit = defineEmits<{
 function onComplete(taskId: string, mode?: boolean | string) { emit('complete', taskId, mode) }
 function onPostpone(taskIds: string | string[], title?: string) { emit('postpone', taskIds, title) }
 function onBatchComplete(taskIds: string[]) { emit('batch-complete', taskIds) }
+function onBatchSkip(taskIds: string[]) { emit('batch-skip', taskIds) }
 function onAction(payload: { type: string; data: any }) { emit('action', payload) }
 function onRecordDose(payload: { taskId: string }) { emit('record-dose', payload) }
 </script>
 
 <style lang="scss" scoped>
 .smart-card-wrap {
+  position: relative;
   transform: translateX(0) scale(1);
   opacity: 1;
   transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1),
@@ -68,6 +72,36 @@ function onRecordDose(payload: { taskId: string }) { emit('record-dose', payload
   transform: translateX(-30%) scale(0.9);
   opacity: 0;
   pointer-events: none;
+}
+
+.smart-card--completed {
+  pointer-events: none;
+  animation: card-done-bounce 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 16px;
+    box-shadow: inset 0 0 0 2px var(--green), 0 4px 20px rgba(61, 174, 111, 0.25);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 10;
+    animation: card-done-glow 1.5s ease forwards;
+  }
+}
+
+@keyframes card-done-bounce {
+  0%   { transform: scale(1); }
+  55%  { transform: scale(1.018); }
+  100% { transform: scale(1); }
+}
+
+@keyframes card-done-glow {
+  0%   { opacity: 0; }
+  12%  { opacity: 1; }
+  80%  { opacity: 1; }
+  100% { opacity: 0; }
 }
 
 .smart-card--overdue {

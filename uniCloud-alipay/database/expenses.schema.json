@@ -2,10 +2,10 @@
   "bsonType": "object",
   "required": ["total_amount", "category", "date", "family_id"],
   "permission": {
-    "read": true,
-    "create": true,
-    "update": true,
-    "delete": true
+    "read": "auth.uid != null",
+    "create": "auth.uid != null",
+    "update": "auth.uid != null",
+    "delete": "auth.uid != null"
   },
   "properties": {
     "_id": {

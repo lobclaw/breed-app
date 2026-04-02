@@ -53,8 +53,9 @@
             <SmartCard
               v-for="card in cards" :key="card.id" :card="card"
               :completing="completingCards.has(card.id)"
+              :completed="completedCards.has(card.id)"
               @complete="onComplete" @postpone="onPostpone"
-              @batch-complete="onBatchComplete" @action="onAction"
+              @batch-complete="onBatchComplete" @batch-skip="onBatchSkip" @action="onAction"
               @record-dose="onRecordDose"
             />
           </view>
@@ -80,8 +81,10 @@
           <view class="card-feed">
             <SmartCard
               v-for="card in dayCards" :key="card.id" :card="card"
+              :completing="completingCards.has(card.id)"
+              :completed="completedCards.has(card.id)"
               @complete="onComplete" @postpone="onPostpone"
-              @batch-complete="onBatchComplete" @action="onAction"
+              @batch-complete="onBatchComplete" @batch-skip="onBatchSkip" @action="onAction"
               @record-dose="onRecordDose"
             />
           </view>
@@ -480,22 +483,39 @@ function toggleCalendar() {
 
 // 乐观更新：标记正在消失的卡片
 const completingCards = ref(new Set<string>())
+const completedCards = ref(new Set<string>())
 
-function removeCardLocally(taskId: string) {
+function removeCardLocally(taskId: string, forceRemoveCard = false, showSuccess = true) {
   const lists = [cards, dayCards]
   for (const list of lists) {
     const idx = list.value.findIndex(c => c.tasks?.some((t: any) => t._id === taskId) || c.id === taskId)
     if (idx < 0) continue
     const card = list.value[idx]
     const remainingTasks = card.tasks?.filter((t: any) => t._id !== taskId) || []
-    if (remainingTasks.length === 0) {
-      completingCards.value.add(card.id)
-      setTimeout(() => {
-        const currentIdx = list.value.findIndex(c => c.id === card.id)
-        if (currentIdx >= 0) list.value.splice(currentIdx, 1)
-        completingCards.value.delete(card.id)
-        counts.today = Math.max(0, counts.today - 1)
-      }, 450)
+    if (remainingTasks.length === 0 || forceRemoveCard) {
+      if (showSuccess) {
+        // 完成：弹跳 + 绿色光环 1500ms，再退场
+        completedCards.value.add(card.id)
+        setTimeout(() => {
+          completedCards.value.delete(card.id)
+          completingCards.value.add(card.id)
+          setTimeout(() => {
+            const currentIdx = list.value.findIndex(c => c.id === card.id)
+            if (currentIdx >= 0) list.value.splice(currentIdx, 1)
+            completingCards.value.delete(card.id)
+            counts.today = Math.max(0, counts.today - 1)
+          }, 450)
+        }, 1500)
+      } else {
+        // 推迟/跳过：直接滑出
+        completingCards.value.add(card.id)
+        setTimeout(() => {
+          const currentIdx = list.value.findIndex(c => c.id === card.id)
+          if (currentIdx >= 0) list.value.splice(currentIdx, 1)
+          completingCards.value.delete(card.id)
+          counts.today = Math.max(0, counts.today - 1)
+        }, 450)
+      }
     } else {
       card.tasks = remainingTasks
     }
@@ -546,7 +566,7 @@ async function onComplete(taskId: string, mode?: boolean | string) {
   }
   // DogCard "跳过" (mode='skip'): 仅标记 done，不创建记录
   if (mode === 'skip') {
-    removeCardLocally(taskId)
+    removeCardLocally(taskId, false, false)
     doCompleteTask(taskId)
     uni.showToast({ title: '已跳过', icon: 'none', duration: 1500 })
     return
@@ -606,7 +626,6 @@ async function doPostpone() {
           completingCards.value.delete(card.id)
           counts.today = Math.max(0, counts.today - 1)
         }, 450)
-        taskStore.removeCardByTaskId(ids[0])
         break
       }
     }
@@ -614,7 +633,7 @@ async function doPostpone() {
     syncWeekCache(ids[0])
   } else {
     // 单条推迟
-    removeCardLocally(ids[0])
+    removeCardLocally(ids[0], false, false)
     syncWeekCache(ids[0])
   }
 
@@ -637,13 +656,16 @@ async function onBatchComplete(payload: any) {
     showBatchComplete.value = true
     return
   }
-  // 数组方式（BatchCard/MedicationCard 的"完成"按钮）— 用第一条 ID 移除整张卡片
+  // 数组方式（BatchCard/MedicationCard 的"完成"按钮）— 整张卡片移除
   const taskIds = Array.isArray(payload) ? payload : []
   if (taskIds.length > 0) {
-    removeCardLocally(taskIds[0])
-    syncWeekCache(taskIds[0])
-    taskStore.removeCardByTaskId(taskIds[0])
+    removeCardLocally(taskIds[0], true)
   }
+  doBatchComplete(taskIds)
+}
+
+function onBatchSkip(taskIds: string[]) {
+  if (taskIds.length > 0) removeCardLocally(taskIds[0], true, false)
   doBatchComplete(taskIds)
 }
 
