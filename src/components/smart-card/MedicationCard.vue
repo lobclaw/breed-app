@@ -114,9 +114,6 @@
       <view class="btn btn--filled btn--plum" @click="batchComplete">
         <text class="btn-text btn-text--white">完成</text>
       </view>
-      <view class="btn btn--ghost" @click="batchPostpone">
-        <text class="btn-text btn-text--ghost">推迟</text>
-      </view>
     </view>
   </view>
 </template>
@@ -127,10 +124,9 @@ import { computed, ref } from 'vue'
 const props = defineProps<{ card: any }>()
 const emit = defineEmits<{
   (e: 'complete', taskId: string, allDone?: boolean): void
-  (e: 'batch-complete', taskIds: string[]): void
-  (e: 'postpone', taskIds: string | string[], title?: string): void
+  (e: 'batch-complete-med', medicationTaskIds: string[]): void
   (e: 'action', payload: { type: string; data: any }): void
-  (e: 'record-dose', payload: { taskId: string }): void
+  (e: 'record-dose', payload: { medicationTaskId: string }): void
 }>()
 
 // 防止重复点击
@@ -196,25 +192,16 @@ function toggleExpand(dogId: string) {
 function onMainCb(dog: any) {
   if (dogState(dog) === 'done') return
   const allTasks: any[] = dog.allMedTasks || []
-  if (allTasks.length > 0) {
-    const pendingTasks = allTasks.filter(t => !isTaskDone(t))
-    // 乐观更新：本地立即标记该犬所有用药为已完成
-    for (const t of pendingTasks) {
-      localDoses.value.set(t._id, t.details?.frequency || 1)
-    }
-    // 逐个调用完成接口（mode=false 不触发卡片移除）
-    for (const t of pendingTasks) {
-      emit('complete', t._id, false)
-    }
-    // 全部犬只都完成时自动消失整张卡片
-    const allDone = (props.card.dogs || []).every((d: any) => dogState(d) === 'done')
-    if (allDone) batchComplete()
-  } else {
-    // 旧数据兼容
-    const task = props.card.tasks?.find((t: any) => t.dog_id === dog.dogId || t.dogId === dog.dogId)
-    if (!task) return
-    const allDone = (props.card.dogs || []).every((d: any) => d.dogId === dog.dogId || dogState(d) === 'done')
-    emit('complete', task._id, allDone)
+  if (allTasks.length === 0) return
+  const pendingTasks = allTasks.filter(t => !isTaskDone(t))
+  // 乐观更新：本地立即标记该犬所有用药为已完成
+  for (const t of pendingTasks) {
+    localDoses.value.set(t._id, t.details?.frequency || 1)
+  }
+  // 批量完成该犬的所有用药
+  const medIds = pendingTasks.map(t => t._id)
+  if (medIds.length > 0) {
+    emit('batch-complete-med', medIds)
   }
 }
 
@@ -223,7 +210,7 @@ function onGiveDose(task: any) {
   // 乐观更新
   const current = getLocalDoses(task._id, task.doses_given || 0)
   localDoses.value.set(task._id, current + 1)
-  emit('record-dose', { taskId: task._id })
+  emit('record-dose', { medicationTaskId: task._id })
 }
 
 function onSickAction(dog: any) {
@@ -252,7 +239,7 @@ function batchComplete() {
   if (acting.value) return
   acting.value = true
 
-  // 同时勾选所有未完成犬只，再触发卡片消失
+  // 乐观更新：同时勾选所有未完成犬只
   const undone = (props.card.dogs || []).filter((d: any) => dogState(d) !== 'done')
   for (const dog of undone) {
     const allTasks: any[] = dog.allMedTasks || []
@@ -263,16 +250,11 @@ function batchComplete() {
     }
   }
 
-  const taskIds = (props.card.tasks || []).map((t: any) => t._id)
-  // 短暂延迟让勾选动画可见后再消失卡片
+  // 收集所有活跃的 medication_task IDs
+  const medIds = props.card.medicationTaskIds || []
   setTimeout(() => {
-    emit('batch-complete', taskIds.length > 0 ? taskIds : [props.card.id])
+    emit('batch-complete-med', medIds)
   }, 120)
-}
-
-function batchPostpone() {
-  const taskIds = (props.card.tasks || []).map((t: any) => t._id)
-  if (taskIds.length > 0) emit('postpone', taskIds, props.card.groupTitle || '今日用药')
 }
 </script>
 

@@ -31,26 +31,44 @@ function highestPriority(tasks) {
  * @param {Array} todayCompleted - 今日已完成任务（用于保持批量卡片完整）
  * @param {Array} activeIllnesses - 当前生病中的 health_records（可选）
  */
-function mergeTasks(tasks, todayCompleted = [], activeIllnesses = []) {
+/**
+ * 从 medication_tasks 计算指定日期的用药状态
+ */
+function computeMedItemsForDay(activeMedications, targetDate) {
+  const target = new Date(targetDate); target.setHours(0, 0, 0, 0)
+  return activeMedications.map(med => {
+    const start = new Date(med.actual_start_date); start.setHours(0, 0, 0, 0)
+    const currentDay = Math.floor((target.getTime() - start.getTime()) / DAY_MS) + 1
+    if (currentDay < 1 || currentDay > med.duration_days) return null
+    const frequency = med.frequency || 1
+    const todayDoses = med.daily_doses?.[String(currentDay)] || 0
+    return {
+      ...med,
+      currentDay,
+      todayDoses,
+      isDoneToday: todayDoses >= frequency,
+    }
+  }).filter(Boolean)
+}
+
+function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems = []) {
   const cards = []
   const consumed = new Set()
   const completedConsumed = new Set()
 
   // 第 1 轮：健康关注卡（生病犬只 + 用药犬只合并）
-  const medTasks = tasks.filter(t => t.type === 'medication')
+  // 兼容旧数据：仍过滤 tasks 中的 medication 类型（旧记录），与 medItems（新记录）合并
+  const oldMedTasks = tasks.filter(t => t.type === 'medication')
+  oldMedTasks.forEach(t => consumed.add(t._id))
 
   // 1a: 建立三个独立数据结构
-  // dogMap：用于用药卡的疾病信息丰富（每犬只取第一条疾病）
-  // sickObserveMap：疾病观察卡独立来源，收集所有 treatment_status='观察中' 的犬（每犬只取第一条）
-  // dogIllnessNames：收集每只犬所有活跃病症名（用于多疾病行头显示 "感冒/腹泻"）
   const dogMap = new Map()
   const sickObserveMap = new Map()
-  const dogIllnessNames = new Map() // dogId → string[]（去重病症名）
+  const dogIllnessNames = new Map()
 
   for (const ill of activeIllnesses) {
     const status = ill.details?.treatment_status || '观察中'
 
-    // 收集该犬的所有病症名（去重）
     if (!dogIllnessNames.has(ill.dog_id)) dogIllnessNames.set(ill.dog_id, [])
     const cond = ill.details?.condition || '生病'
     const existingNames = dogIllnessNames.get(ill.dog_id)
@@ -60,7 +78,6 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = []) {
     const todayMid = new Date(); todayMid.setHours(0, 0, 0, 0)
     const daysSick = Math.max(1, Math.round((todayMid.getTime() - illStart.getTime()) / DAY_MS) + 1)
 
-    // 疾病观察卡：收集 treatment_status='观察中' 的犬（每犬只取最早一条）
     if (status === '观察中' && !sickObserveMap.has(ill.dog_id)) {
       sickObserveMap.set(ill.dog_id, {
         dogId: ill.dog_id,
@@ -75,7 +92,6 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = []) {
       })
     }
 
-    // dogMap：每犬只取第一条疾病，供用药卡展示病症名称
     if (!dogMap.has(ill.dog_id)) {
       dogMap.set(ill.dog_id, {
         dogId: ill.dog_id,
@@ -91,82 +107,47 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = []) {
     }
   }
 
-  // 1b: 用药犬只 → med_only 或升级 sick_only → sick_with_med
-  // 同犬多条 task 时，优先取当天的展示（逾期 task 仍影响卡片优先级但不覆盖展示）
-  // 包含今日已完成的 medication task（刷新后保持显示，标记为 completed）
-  // 注意：只有 medTasks（pending）非空才构建卡片；全部完成时不应再显示卡片
-  const completedMedTasks = todayCompleted.filter(t => t.type === 'medication')
-  const allMedTasks = [...medTasks, ...completedMedTasks]
-  if (medTasks.length > 0) {
-    medTasks.forEach(t => consumed.add(t._id))
-    completedMedTasks.forEach(t => completedConsumed.add(t._id))
+  // 1b: 从 medication_tasks 计算用药卡片数据（新模型）
+  const unitMap = { ml: 'ml', mg: 'mg', tablet: '片' }
+  const hasPendingMed = medItems.some(m => !m.isDoneToday)
 
-    // 按犬只分组全部用药 tasks（用于多药摘要检测）
-    const dogAllMedTasks = new Map()
-    for (const t of allMedTasks) {
-      if (!dogAllMedTasks.has(t.dog_id)) dogAllMedTasks.set(t.dog_id, [])
-      dogAllMedTasks.get(t.dog_id).push(t)
+  if (medItems.length > 0) {
+    // 按犬只分组
+    const medByDog = new Map()
+    for (const m of medItems) {
+      if (!medByDog.has(m.dog_id)) medByDog.set(m.dog_id, [])
+      medByDog.get(m.dog_id).push(m)
     }
 
-    // 按犬只分组，每只犬取最适合展示的 task（当天 > 未来 > 逾期）
-    const dogBestTask = new Map()
-    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
-    const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999)
-    for (const t of allMedTasks) {
-      const prev = dogBestTask.get(t.dog_id)
-      if (!prev) {
-        dogBestTask.set(t.dog_id, t)
-      } else {
-        const prevIsToday = prev.due_date >= todayStart.getTime() && prev.due_date <= todayEnd.getTime()
-        const currIsToday = t.due_date >= todayStart.getTime() && t.due_date <= todayEnd.getTime()
-        if (currIsToday && !prevIsToday) {
-          dogBestTask.set(t.dog_id, t)
-        }
-      }
-    }
-
-    for (const t of dogBestTask.values()) {
-      const d = t.details || {}
-      const unitMap = { ml: 'ml', mg: 'mg', tablet: '片' }
-      const methodMap = { oral: '口服', injection: '注射' }
-
-      // 多药摘要：同犬有多个不同药名时显示"N种用药"
-      const allDogTasks = dogAllMedTasks.get(t.dog_id) || [t]
-      const uniqueDrugs = [...new Set(allDogTasks.map(x => x.details?.drug_name).filter(Boolean))]
+    for (const [dogId, meds] of medByDog) {
+      const uniqueDrugs = [...new Set(meds.map(m => m.drug_name).filter(Boolean))]
       const isMultiDrug = uniqueDrugs.length > 1
+      const primary = meds[0]
 
-      const drugName = isMultiDrug ? `${uniqueDrugs.length}种用药` : (d.drug_name || '用药')
-      const dosageStr = isMultiDrug ? '' : (d.dosage ? `${d.dosage}${unitMap[d.dosage_unit] || d.dosage_unit || 'mg'}` : '')
-      const progress = isMultiDrug ? '' : (d.day && d.total_days ? `${d.day}/${d.total_days}天` : '')
-      const methodLabel = methodMap[d.method] || d.method || '口服'
-      const freq = typeof d.frequency === 'number' ? d.frequency : 1
-      const methodFreq = isMultiDrug ? '' : (freq > 1 ? `${methodLabel} 日${freq}次` : methodLabel)
+      const drugName = isMultiDrug ? `${uniqueDrugs.length}种用药` : (primary.drug_name || '用药')
+      const dosageStr = isMultiDrug ? '' : (primary.dosage ? `${primary.dosage}${unitMap[primary.dosage_unit] || primary.dosage_unit || 'mg'}` : '')
+      const progress = isMultiDrug ? '' : `${primary.currentDay}/${primary.duration_days}天`
+      const freq = primary.frequency || 1
+      const methodFreq = isMultiDrug ? '' : (freq > 1 ? `${primary.method || '口服'} 日${freq}次` : (primary.method || '口服'))
 
-      const isCompleted = !!t._completed
+      const allMedTasksForDog = meds.map(m => ({
+        _id: m._id,
+        dog_id: m.dog_id,
+        currentDay: m.currentDay,
+        status: m.isDoneToday ? 'completed' : 'pending',
+        doses_given: m.todayDoses,
+        details: { drug_name: m.drug_name || '用药', frequency: m.frequency || 1 },
+        dosageStr: m.dosage ? `${m.dosage}${unitMap[m.dosage_unit] || m.dosage_unit || 'mg'}` : '',
+        progress: `第${m.currentDay}/${m.duration_days}天`,
+        methodFreq: (m.frequency || 1) > 1 ? `${m.method || '口服'} 日${m.frequency}次` : (m.method || '口服'),
+      }))
 
-      // 构建 allMedTasks：每条 task 带上前端展开所需的预计算字段
-      const allMedTasksForDog = allDogTasks.map(dt => {
-        const dd = dt.details || {}
-        const ml = methodMap[dd.method] || dd.method || '口服'
-        const fr = typeof dd.frequency === 'number' ? dd.frequency : 1
-        return {
-          _id: dt._id,
-          dog_id: dt.dog_id,
-          status: dt._completed ? 'completed' : (dt.status || 'pending'),
-          doses_given: dt.doses_given || 0,
-          details: { drug_name: dd.drug_name || '用药', frequency: fr },
-          dosageStr: dd.dosage ? `${dd.dosage}${unitMap[dd.dosage_unit] || dd.dosage_unit || 'mg'}` : '',
-          progress: dd.day && dd.total_days ? `第${dd.day}/${dd.total_days}天` : '',
-          methodFreq: fr > 1 ? `${ml} 日${fr}次` : ml,
-        }
-      })
-
-      // 该犬的多疾病名（斜杠拼接）
-      const illNames = dogIllnessNames.get(t.dog_id) || []
+      const isCompleted = meds.every(m => m.isDoneToday)
+      const illNames = dogIllnessNames.get(dogId) || []
       const illnessNames = illNames.join('/')
 
-      if (dogMap.has(t.dog_id)) {
-        const existing = dogMap.get(t.dog_id)
+      if (dogMap.has(dogId)) {
+        const existing = dogMap.get(dogId)
         if (existing.state === 'sick_only') {
           existing.state = 'sick_with_med'
           existing.drugName = drugName
@@ -178,9 +159,9 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = []) {
           existing.illnessNames = illnessNames
         }
       } else {
-        dogMap.set(t.dog_id, {
-          dogId: t.dog_id,
-          dogName: t.dog_name,
+        dogMap.set(dogId, {
+          dogId,
+          dogName: primary.dog_name || '',
           state: 'med_only',
           drugName,
           dosageStr,
@@ -189,15 +170,13 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = []) {
           completed: isCompleted,
           allMedTasks: allMedTasksForDog,
           illnessNames,
-          _createdAt: t.created_at || 0,
+          _createdAt: primary.created_at || 0,
         })
       }
     }
   }
 
-  // 输出两张健康卡（始终在"今日任务"区，不进"需处理"区）
-  // - medication 卡：sick_with_med + med_only，有 checkbox 和完成/推迟按钮
-  // - sick_observation 卡：仅 sick_only（无用药），排除已在用药卡的犬只
+  // 输出两张健康卡
   const medDogs = Array.from(dogMap.values())
     .filter(d => d.state !== 'sick_only')
     .sort((a, b) => {
@@ -207,20 +186,23 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = []) {
       if (oa !== ob) return oa - ob
       return (a._createdAt || 0) - (b._createdAt || 0)
     })
-  // 排除已进入用药卡的犬（sick_with_med / med_only）
   const medDogIds = new Set(medDogs.map(d => d.dogId))
   const sickObserveDogs = Array.from(sickObserveMap.values())
     .filter(d => !medDogIds.has(d.dogId))
     .sort((a, b) => (a._createdAt || 0) - (b._createdAt || 0))
 
-  if (medDogs.length > 0) {
+  // 收集所有活跃用药的 medication_task IDs（供前端 batchComplete 使用）
+  const activeMedTaskIds = medItems.filter(m => !m.isDoneToday).map(m => m._id)
+
+  if (medDogs.length > 0 && hasPendingMed) {
     cards.push({
       cardType: 'medication',
       id: 'medication',
       priority: 'today',
       groupTitle: '今日用药',
       dogs: medDogs,
-      tasks: medTasks,
+      tasks: [],
+      medicationTaskIds: activeMedTaskIds,
       progress: null,
     })
   }
@@ -387,8 +369,8 @@ module.exports = {
     const todayEnd = new Date()
     todayEnd.setHours(23, 59, 59, 999)
 
-    // 并行查询：pending 任务 + 今日已完成 + 当前生病犬只
-    const [pendingRes, completedRes, illnessRes] = await Promise.all([
+    // 并行查询：pending 任务 + 今日已完成 + 当前生病犬只 + 进行中的用药
+    const [pendingRes, completedRes, illnessRes, medRes] = await Promise.all([
       db.collection('tasks')
         .where({ family_id: familyId, status: 'pending', due_date: dbCmd.lte(todayEnd.getTime()) })
         .orderBy('due_date', 'asc').limit(200).get(),
@@ -398,11 +380,15 @@ module.exports = {
       db.collection('health_records')
         .where({ family_id: familyId, type: 'illness', 'details.treatment_status': dbCmd.neq('已康复') })
         .orderBy('date', 'desc').limit(50).get(),
+      db.collection('medication_tasks')
+        .where({ family_id: familyId, status: '进行中' })
+        .get(),
     ])
 
     const pendingTasks = pendingRes.data
     const todayCompletedTasks = completedRes.data
     const activeIllnesses = illnessRes.data || []
+    const activeMedications = medRes.data || []
 
     // 补充犬只名称（illness 记录不一定有 dog_name）
     // 去重 dog_id 后批量查询
@@ -431,7 +417,8 @@ module.exports = {
       task._completed = true
     }
 
-    const cards = mergeTasks(pendingTasks, todayCompletedTasks, activeIllnesses)
+    const medItems = computeMedItemsForDay(activeMedications, Date.now())
+    const cards = mergeTasks(pendingTasks, todayCompletedTasks, activeIllnesses, medItems)
 
 
     // 逾期卡片按逾期天数降序排列（最久的最上面），然后接今日卡片
@@ -472,9 +459,11 @@ module.exports = {
         counts: {
           // 用药任务并入健康关注卡（1张卡），不重复计数
           today: (() => {
-            const medCount = pendingTasks.filter(t => t.type === 'medication').length
-            const hasHealthCard = activeIllnesses.length > 0 || medCount > 0
-            return pendingTasks.length - medCount + (hasHealthCard ? 1 : 0)
+            // 兼容旧数据：排除 tasks 中的 medication 类型
+            const oldMedCount = pendingTasks.filter(t => t.type === 'medication').length
+            const hasMed = activeMedications.length > 0 || oldMedCount > 0
+            const hasHealthCard = activeIllnesses.length > 0 || hasMed
+            return pendingTasks.length - oldMedCount + (hasHealthCard ? 1 : 0)
           })(),
           week: weekRes.total + (activeIllnesses.length > 0 ? 1 : 0),
           month30: month30Res.total + (activeIllnesses.length > 0 ? 1 : 0),
@@ -518,18 +507,22 @@ module.exports = {
   async getWeekCards(startDate, endDate) {
     const familyId = this.familyId
 
-    // 并行查询：周任务 + 当前生病犬只
-    const [taskRes, illnessRes] = await Promise.all([
+    // 并行查询：周任务 + 当前生病犬只 + 进行中的用药
+    const [taskRes, illnessRes, medRes] = await Promise.all([
       db.collection('tasks')
         .where({ family_id: familyId, status: 'pending', due_date: dbCmd.gte(startDate).and(dbCmd.lte(endDate)) })
         .orderBy('due_date', 'asc').limit(200).get(),
       db.collection('health_records')
         .where({ family_id: familyId, type: 'illness', 'details.treatment_status': dbCmd.neq('已康复') })
         .orderBy('date', 'desc').limit(50).get(),
+      db.collection('medication_tasks')
+        .where({ family_id: familyId, status: '进行中' })
+        .get(),
     ])
 
     const tasks = taskRes.data
     const activeIllnesses = illnessRes.data || []
+    const activeMedications = medRes.data || []
 
     // 补充犬只名称（去重 dog_id 后批量查询）
     const illDogIds = [...new Set(activeIllnesses.filter(i => !i.dog_name).map(i => i.dog_id))]
@@ -557,21 +550,35 @@ module.exports = {
     }
 
     // 每天独立合并为卡片
-    // 今天：传完整 illness 列表（sick_only + sick_with_med 都显示）
-    // 未来日期：只传有 medication task 的犬的 illness（sick_with_med 能显示病症，sick_only 不出现）
     const todayMs = realTodayStart.getTime()
     const result = {}
     for (const [dayTs, dayTasks] of dayGroups) {
+      const dayMedItems = computeMedItemsForDay(activeMedications, dayTs)
       if (dayTs < todayMs) {
-        // 过去日期不传 illness
-        result[dayTs] = mergeTasks(dayTasks, [], [])
+        result[dayTs] = mergeTasks(dayTasks, [], [], dayMedItems)
       } else {
-        // 未来日期：只保留当天有 medication task 的犬的 illness
-        const medDogIds = new Set(dayTasks.filter(t => t.type === 'medication').map(t => t.dog_id))
+        // 未来日期：只保留有用药的犬的 illness
+        const medDogIds = new Set(dayMedItems.map(m => m.dog_id))
         const filteredIllnesses = medDogIds.size > 0
           ? activeIllnesses.filter(ill => medDogIds.has(ill.dog_id))
           : []
-        result[dayTs] = mergeTasks(dayTasks, [], filteredIllnesses)
+        result[dayTs] = mergeTasks(dayTasks, [], filteredIllnesses, dayMedItems)
+      }
+    }
+
+    // 补充没有其他任务但有用药的日期
+    for (let d = new Date(startDate); d.getTime() <= endDate; d.setDate(d.getDate() + 1)) {
+      const dayTs = new Date(d); dayTs.setHours(0, 0, 0, 0)
+      const key = dayTs.getTime()
+      if (!result[key]) {
+        const dayMedItems = computeMedItemsForDay(activeMedications, key)
+        if (dayMedItems.length > 0) {
+          const medDogIds = new Set(dayMedItems.map(m => m.dog_id))
+          const filteredIllnesses = medDogIds.size > 0
+            ? activeIllnesses.filter(ill => medDogIds.has(ill.dog_id))
+            : []
+          result[key] = mergeTasks([], [], filteredIllnesses, dayMedItems)
+        }
       }
     }
 

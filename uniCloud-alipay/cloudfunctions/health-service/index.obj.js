@@ -473,6 +473,129 @@ module.exports = {
     return { data: null }
   },
 
+  /**
+   * 批量检查重复用药（一次查询）
+   */
+  async batchCheckDuplicateMedication(dogIds, drugName) {
+    if (!dogIds || !Array.isArray(dogIds) || !drugName) return { data: [] }
+
+    const { data: existing } = await db.collection('medication_tasks')
+      .where({
+        family_id: this.familyId,
+        dog_id: dbCmd.in(dogIds),
+        drug_name: drugName,
+        status: '进行中',
+      })
+      .get()
+
+    const results = (existing || []).map(task => {
+      const daysPassed = Math.max(1, Math.ceil((Date.now() - task.actual_start_date) / 86400000))
+      return {
+        dog_id: task.dog_id,
+        dogName: task.dog_name || '',
+        drugName: task.drug_name,
+        day: daysPassed,
+        totalDays: task.duration_days,
+      }
+    })
+
+    return { data: results }
+  },
+
+  /**
+   * 批量创建用药任务（多犬同药）
+   * 一次校验 + 并行创建 medication_tasks + 费用 + 疾病升级
+   */
+  async batchStartMedication(data) {
+    if (!data.dog_ids || !Array.isArray(data.dog_ids) || data.dog_ids.length === 0) throw new Error('请选择犬只')
+    if (!data.drug_name) throw new Error('请填写药品名称')
+    const durationDays = (data.duration_days && data.duration_days >= 1) ? data.duration_days : 1
+
+    const now = Date.now()
+    const familyId = this.familyId
+    const uid = this.uid
+    const startDate = data.actual_start_date || now
+
+    // ① 一次校验所有犬只
+    const { data: dogs } = await db.collection('dogs')
+      .where({ _id: dbCmd.in(data.dog_ids), family_id: familyId, deleted_at: null })
+      .get()
+    if (dogs.length !== data.dog_ids.length) throw new Error('部分犬只不存在或不属于当前家庭')
+
+    // ② 费用分摊
+    const totalCost = data.cost || null
+    const perDogCost = totalCost && dogs.length > 1
+      ? Math.round(totalCost / dogs.length * 100) / 100
+      : totalCost
+
+    // ③ 并行创建
+    const results = await Promise.all(dogs.map(async (dog) => {
+      const medicationData = {
+        dog_id: dog._id,
+        dog_name: dog.name,
+        family_id: familyId,
+        protocol_id: data.protocol_id || null,
+        drug_name: data.drug_name,
+        dosage: data.dosage || null,
+        dosage_unit: data.dosage_unit || null,
+        method: data.method || '口服',
+        frequency: data.frequency || 1,
+        duration_days: durationDays,
+        actual_start_date: startDate,
+        status: '进行中',
+        daily_doses: {},
+        notes: data.notes || null,
+        created_at: now,
+        updated_at: now,
+      }
+      const { id: medicationId } = await db.collection('medication_tasks').add(medicationData)
+
+      // 创建费用
+      if (perDogCost && perDogCost > 0) {
+        await db.collection('expenses').add({
+          family_id: familyId, dog_id: dog._id, dog_name: dog.name,
+          category: '医疗', sub_category: '用药',
+          amount: perDogCost, date: startDate,
+          notes: `${data.drug_name} ${durationDays}天`,
+          source_type: 'medication_task', source_id: medicationId,
+          created_by: uid, created_at: now, updated_at: now,
+        })
+      }
+
+      // 疾病升级：观察中 → 治疗中
+      if (data.illnessRecordId && dogs.length === 1) {
+        // 单犬从疾病表单跳转：只升级指定疾病记录
+        const { data: ill } = await db.collection('health_records')
+          .where({ _id: data.illnessRecordId, family_id: familyId })
+          .get()
+        if (ill && ill.length > 0) {
+          await db.collection('health_records').doc(data.illnessRecordId).update({
+            'details.treatment_status': '治疗中', updated_at: now,
+          })
+        }
+      } else {
+        // 批量或无指定：升级该犬所有观察中的疾病
+        const { data: activeIllnesses } = await db.collection('health_records')
+          .where({
+            family_id: familyId, dog_id: dog._id, type: 'illness',
+            'details.treatment_status': '观察中', deleted_at: null,
+          })
+          .get()
+        if (activeIllnesses && activeIllnesses.length > 0) {
+          for (const r of activeIllnesses) {
+            await db.collection('health_records').doc(r._id).update({
+              'details.treatment_status': '治疗中', updated_at: now,
+            })
+          }
+        }
+      }
+
+      return { medicationId, dog_id: dog._id }
+    }))
+
+    return { data: { count: results.length, medications: results } }
+  },
+
   async startMedication(data) {
     if (!data.dog_id) throw new Error('请选择犬只')
     if (!data.drug_name) throw new Error('请填写药品名称')
@@ -490,9 +613,10 @@ module.exports = {
 
     const startDate = data.actual_start_date || now
 
-    // 创建用药任务
+    // 创建用药任务（单条记录，不预生成每日 task）
     const medicationData = {
       dog_id: data.dog_id,
+      dog_name: dog.name,
       family_id: familyId,
       protocol_id: data.protocol_id || null,
       drug_name: data.drug_name,
@@ -503,39 +627,12 @@ module.exports = {
       duration_days: durationDays,
       actual_start_date: startDate,
       status: '进行中',
+      daily_doses: {},
       notes: data.notes || null,
       created_at: now,
       updated_at: now,
     }
     const { id: medicationId } = await db.collection('medication_tasks').add(medicationData)
-
-    // 生成每日用药提醒任务
-    for (let day = 0; day < durationDays; day++) {
-      await db.collection('tasks').add({
-        card_type: 'individual',
-        dog_id: data.dog_id,
-        dog_name: dog.name,
-        medication_task_id: medicationId,
-        type: 'medication',
-        title: `${dog.name} · ${data.drug_name}`,
-        due_date: startDate + day * 86400000,
-        status: 'pending',
-        priority: day === 0 ? 'today' : 'upcoming',
-        family_id: familyId,
-        postpone_count: 0,
-        details: {
-          drug_name: data.drug_name,
-          dosage: data.dosage || null,
-          dosage_unit: data.dosage_unit || null,
-          method: data.method || '口服',
-          frequency: data.frequency || 1,
-          day: day + 1,
-          total_days: durationDays,
-        },
-        created_at: now,
-        updated_at: now,
-      })
-    }
 
     // 如有费用 → 创建 expense
     if (data.cost && data.cost > 0) {
@@ -593,7 +690,121 @@ module.exports = {
   },
 
   /**
-   * 标记今日用药完成
+   * 记录一次给药（打卡模式）
+   * 原子递增 daily_doses.{day}，达到 frequency 时当天完成，全部天数完成时结束用药
+   */
+  async recordMedicationDose(medicationTaskId) {
+    if (!medicationTaskId) throw new Error('缺少用药任务 ID')
+
+    const familyId = this.familyId
+    const now = Date.now()
+
+    const { data: meds } = await db.collection('medication_tasks')
+      .where({ _id: medicationTaskId, family_id: familyId, status: '进行中' })
+      .get()
+    if (!meds || meds.length === 0) return { data: { completed: false, already_done: true } }
+
+    const med = meds[0]
+    const frequency = med.frequency || 1
+
+    // 计算今天是第几天
+    const startDate = new Date(med.actual_start_date); startDate.setHours(0, 0, 0, 0)
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const currentDay = Math.floor((today.getTime() - startDate.getTime()) / DAY_MS) + 1
+    if (currentDay < 1 || currentDay > med.duration_days) {
+      return { data: { completed: false, out_of_range: true } }
+    }
+
+    const dayKey = String(currentDay)
+
+    // 原子递增当天给药次数
+    await db.collection('medication_tasks').doc(medicationTaskId).update({
+      [`daily_doses.${dayKey}`]: dbCmd.inc(1),
+      updated_at: now,
+    })
+
+    // 重新读取判断完成状态
+    const { data: updated } = await db.collection('medication_tasks').doc(medicationTaskId).get()
+    const updatedMed = updated[0] || updated
+    const todayDoses = updatedMed.daily_doses?.[dayKey] || 0
+    const todayComplete = todayDoses >= frequency
+
+    // 检查是否所有天数都已完成
+    let allComplete = false
+    if (todayComplete) {
+      allComplete = true
+      for (let d = 1; d <= med.duration_days; d++) {
+        if ((updatedMed.daily_doses?.[String(d)] || 0) < frequency) {
+          allComplete = false
+          break
+        }
+      }
+      if (allComplete) {
+        await db.collection('medication_tasks').doc(medicationTaskId).update({
+          status: '已完成',
+          updated_at: now,
+        })
+      }
+    }
+
+    return { data: { doses_given: todayDoses, completed: todayComplete, allComplete } }
+  },
+
+  /**
+   * 批量完成今日用药（卡片底部"完成"按钮）
+   * 将指定的 medication_tasks 今天的 doses 全部补满
+   */
+  async batchCompleteMedicationDay(medicationTaskIds) {
+    if (!medicationTaskIds || !Array.isArray(medicationTaskIds) || medicationTaskIds.length === 0) {
+      throw new Error('缺少用药任务 ID')
+    }
+
+    const familyId = this.familyId
+    const now = Date.now()
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+
+    const { data: meds } = await db.collection('medication_tasks')
+      .where({ _id: dbCmd.in(medicationTaskIds), family_id: familyId, status: '进行中' })
+      .get()
+
+    for (const med of meds) {
+      const startDate = new Date(med.actual_start_date); startDate.setHours(0, 0, 0, 0)
+      const currentDay = Math.floor((today.getTime() - startDate.getTime()) / DAY_MS) + 1
+      if (currentDay < 1 || currentDay > med.duration_days) continue
+
+      const dayKey = String(currentDay)
+      const frequency = med.frequency || 1
+      const currentDoses = med.daily_doses?.[dayKey] || 0
+      if (currentDoses >= frequency) continue
+
+      // 直接设置为 frequency（补满）
+      await db.collection('medication_tasks').doc(med._id).update({
+        [`daily_doses.${dayKey}`]: frequency,
+        updated_at: now,
+      })
+
+      // 检查全部完成
+      const updatedDoses = { ...med.daily_doses, [dayKey]: frequency }
+      let allComplete = true
+      for (let d = 1; d <= med.duration_days; d++) {
+        if ((updatedDoses[String(d)] || 0) < frequency) {
+          allComplete = false
+          break
+        }
+      }
+      if (allComplete) {
+        await db.collection('medication_tasks').doc(med._id).update({
+          status: '已完成',
+          updated_at: now,
+        })
+      }
+    }
+
+    return { data: { completed: meds.length } }
+  },
+
+  /**
+   * 标记今日用药完成（旧接口，兼容已有 daily tasks）
    */
   async completeDailyMedication(taskId) {
     if (!taskId) throw new Error('缺少任务 ID')
@@ -655,7 +866,7 @@ module.exports = {
       updated_at: now,
     })
 
-    // 取消剩余用药提醒
+    // 兼容旧数据：取消关联的 daily tasks（新记录没有，旧记录可能有）
     await db.collection('tasks').where({
       medication_task_id: medicationTaskId,
       status: 'pending',
@@ -687,7 +898,7 @@ module.exports = {
         status: '已取消',
         updated_at: now,
       })
-      // 取消剩余 pending 任务
+      // 兼容旧数据：取消关联的 daily tasks
       await db.collection('tasks').where({
         medication_task_id: med._id,
         status: 'pending',

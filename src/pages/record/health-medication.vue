@@ -187,6 +187,24 @@
       </view>
     </BSheet>
 
+    <!-- 同名用药确认 Modal -->
+    <BModal
+      v-model:visible="showDupModal"
+      :title="`${dupList.length}只犬已有同名任务`"
+      confirmText="继续创建"
+      cancelText="取消"
+      @confirm="dupResolve?.(true)"
+      @cancel="dupResolve?.(false)"
+    >
+      <view class="dup-list">
+        <view v-for="(dup, i) in dupList" :key="i" class="dup-list__item">
+          <text class="dup-list__name">{{ dup.dogName }}</text>
+          <text class="dup-list__drug">{{ dup.drugName }}</text>
+          <text class="dup-list__progress">第{{ dup.day }}/{{ dup.totalDays }}天</text>
+        </view>
+      </view>
+    </BModal>
+
     <!-- 保存方案命名 Modal -->
     <BModal
       v-model:visible="showNameModal"
@@ -292,12 +310,12 @@ const canSubmit = computed(() => {
 
 // ==================== 提交 ====================
 
-const { run: startMedication } = useCloudCall('health-service', 'startMedication', {
+const { run: batchStartMedication } = useCloudCall('health-service', 'batchStartMedication', {
   showLoading: true,
   loadingText: '创建中...',
 })
 
-const { run: checkDuplicate } = useCloudCall<{ data: any }>('health-service', 'checkDuplicateMedication')
+const { run: batchCheckDuplicate } = useCloudCall<{ data: any[] }>('health-service', 'batchCheckDuplicateMedication')
 
 const frequencyLabels: Record<string, string> = {
   once_daily: '每日1次',
@@ -320,53 +338,40 @@ async function submit() {
   submitting.value = true
   try {
     const drug = drugName.value.trim()
+    const dogIds = selectedDogs.value.map((d: any) => d._id)
 
-    // 检查同药名重复
-    const duplicates: string[] = []
-    for (const dog of selectedDogs.value) {
-      const res = await checkDuplicate(dog._id, drug)
-      if (res?.data) {
-        duplicates.push(`${dog.name}已有${drug}任务（第${res.data.day}天/${res.data.totalDays}天）`)
-      }
-    }
-
-    if (duplicates.length > 0) {
+    // 批量检查同药名重复（一次调用）
+    const dupRes = await batchCheckDuplicate(dogIds, drug)
+    dupList.value = dupRes?.data || []
+    if (dupList.value.length > 0) {
+      showDupModal.value = true
       const confirmed = await new Promise<boolean>((resolve) => {
-        uni.showModal({
-          title: '已有同名用药任务',
-          content: duplicates.join('；') + '。是否仍要创建？',
-          confirmText: '继续创建',
-          cancelText: '取消',
-          success: (res) => resolve(res.confirm),
-        })
+        dupResolve.value = resolve
       })
+      showDupModal.value = false
+      dupResolve.value = null
       if (!confirmed) {
         submitting.value = false
         return
       }
     }
 
+    // 批量创建用药任务（一次调用）
     const freqMap: Record<string, number> = { once_daily: 1, twice_daily: 2, three_daily: 3 }
-    const cost = costInput.value ? parseFloat(costInput.value) : null
-    const perDogCost = cost && selectedDogs.value.length > 1
-      ? Math.round(cost / selectedDogs.value.length * 100) / 100
-      : cost
-    for (const dog of selectedDogs.value) {
-      await startMedication({
-        dog_id: dog._id,
-        drug_name: drug,
-        dosage: dosage.value,
-        dosage_unit: dosageUnit.value,
-        method: methodLabels[method.value] || method.value,
-        frequency: freqMap[frequency.value] || 1,
-        duration_days: parsedDuration.value,
-        actual_start_date: date.value,
-        notes: notes.value || null,
-        cost: perDogCost,
-        // 单犬从疾病表单跳转时传入，云函数会自动将该疾病升级为"治疗中"
-        illnessRecordId: selectedDogs.value.length === 1 ? (illnessRecordId.value || null) : null,
-      })
-    }
+    await batchStartMedication({
+      dog_ids: dogIds,
+      drug_name: drug,
+      dosage: dosage.value,
+      dosage_unit: dosageUnit.value,
+      method: methodLabels[method.value] || method.value,
+      frequency: freqMap[frequency.value] || 1,
+      duration_days: parsedDuration.value,
+      actual_start_date: date.value,
+      notes: notes.value || null,
+      cost: costInput.value ? parseFloat(costInput.value) : null,
+      protocol_id: null,
+      illnessRecordId: selectedDogs.value.length === 1 ? (illnessRecordId.value || null) : null,
+    })
     uni.showToast({
       title: selectedDogs.value.length > 1
         ? `已创建 ${selectedDogs.value.length} 个用药任务`
@@ -421,6 +426,11 @@ function goToNewProtocol() {
 
 const showNameModal = ref(false)
 const protocolName = ref('')
+
+// 同名用药确认弹窗
+const showDupModal = ref(false)
+const dupList = ref<any[]>([])
+const dupResolve = ref<((v: boolean) => void) | null>(null)
 
 const { run: saveProtocol } = useCloudCall('health-service', 'addMedicationProtocol', {
   successMessage: '方案已保存',
@@ -688,5 +698,29 @@ onLoad((query) => {
   animation: shimmer 1.2s ease infinite;
   &--title { width: 60%; height: 14px; }
   &--sub { width: 80%; height: 10px; }
+}
+
+/* ---- 同名用药确认列表 ---- */
+.dup-list {
+  display: flex; flex-direction: column; gap: 8px;
+  margin-top: 4px;
+}
+.dup-list__item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; border-radius: 10px;
+  background: var(--card-dim);
+}
+.dup-list__name {
+  font-size: 14px; font-weight: 700; color: var(--text-1);
+  min-width: 40px;
+}
+.dup-list__drug {
+  font-size: 13px; font-weight: 600; color: var(--plum);
+  flex: 1;
+}
+.dup-list__progress {
+  font-size: 11px; font-weight: 700; color: var(--plum);
+  padding: 2px 8px; border-radius: 4px;
+  background: var(--plum-soft);
 }
 </style>

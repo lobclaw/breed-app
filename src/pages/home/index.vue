@@ -55,8 +55,8 @@
               :completing="completingCards.has(card.id)"
               :completed="completedCards.has(card.id)"
               @complete="onComplete" @postpone="onPostpone"
-              @batch-complete="onBatchComplete" @batch-skip="onBatchSkip" @action="onAction"
-              @record-dose="onRecordDose"
+              @batch-complete="onBatchComplete" @batch-skip="onBatchSkip" @batch-complete-med="onBatchCompleteMed"
+              @action="onAction" @record-dose="onRecordDose"
             />
           </view>
         </view>
@@ -84,8 +84,8 @@
               :completing="completingCards.has(card.id)"
               :completed="completedCards.has(card.id)"
               @complete="onComplete" @postpone="onPostpone"
-              @batch-complete="onBatchComplete" @batch-skip="onBatchSkip" @action="onAction"
-              @record-dose="onRecordDose"
+              @batch-complete="onBatchComplete" @batch-skip="onBatchSkip" @batch-complete-med="onBatchCompleteMed"
+              @action="onAction" @record-dose="onRecordDose"
             />
           </view>
         </view>
@@ -396,7 +396,8 @@ const { run: fetchWeekCards } = useCloudCall<{ data: any }>('task-service', 'get
 const { run: doCompleteTask } = useCloudCall('task-service', 'completeTask')
 const { run: doPostponeTask } = useCloudCall('task-service', 'postponeTask')
 const { run: doBatchComplete } = useCloudCall('task-service', 'batchCompleteTask')
-const { run: doRecordDose } = useCloudCall('task-service', 'recordDose')
+const { run: doRecordMedDose } = useCloudCall('health-service', 'recordMedicationDose')
+const { run: doBatchCompleteMedDay } = useCloudCall('health-service', 'batchCompleteMedicationDay')
 
 // 7天卡片缓存：{ [dayTimestamp]: Card[] }
 const weekCache = ref<Record<number, any[]>>({})
@@ -669,8 +670,16 @@ function onBatchSkip(taskIds: string[]) {
   doBatchComplete(taskIds)
 }
 
-async function onRecordDose({ taskId }: { taskId: string }) {
-  await doRecordDose(taskId)
+async function onRecordDose({ medicationTaskId }: { medicationTaskId: string }) {
+  await doRecordMedDose(medicationTaskId)
+  await loadTodayCards()
+}
+
+async function onBatchCompleteMed(medicationTaskIds: string[]) {
+  if (medicationTaskIds.length > 0) {
+    removeCardLocally('medication', true)
+  }
+  await doBatchCompleteMedDay(medicationTaskIds)
   await loadTodayCards()
 }
 

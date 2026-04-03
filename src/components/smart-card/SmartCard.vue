@@ -9,7 +9,7 @@
   <DogCard v-if="card.cardType === 'dog'" :card="card" @complete="onComplete" @postpone="onPostpone" @action="onAction" />
   <CareGroupCard v-else-if="card.cardType === 'care_group'" :card="card" @complete="onComplete" @batch-complete="onBatchComplete" />
   <BatchCard v-else-if="card.cardType === 'batch'" :card="card" @complete="onComplete" @postpone="onPostpone" @batch-complete="onBatchComplete" @batch-skip="onBatchSkip" />
-  <MedicationCard v-else-if="card.cardType === 'health_attention' || card.cardType === 'medication'" :card="card" @complete="onComplete" @postpone="onPostpone" @batch-complete="onBatchComplete" @action="onAction" @record-dose="onRecordDose" />
+  <MedicationCard v-else-if="card.cardType === 'health_attention' || card.cardType === 'medication'" :card="card" @complete="onComplete" @batch-complete-med="onBatchCompleteMed" @action="onAction" @record-dose="onRecordDose" />
   <SickObservationCard v-else-if="card.cardType === 'sick_observation'" :card="card" @action="onAction" />
   </view>
 </template>
@@ -47,16 +47,18 @@ const emit = defineEmits<{
   (e: 'postpone', taskIds: string | string[], title?: string): void
   (e: 'batch-complete', taskIds: string[]): void
   (e: 'batch-skip', taskIds: string[]): void
+  (e: 'batch-complete-med', medicationTaskIds: string[]): void
   (e: 'action', payload: { type: string; data: any }): void
-  (e: 'record-dose', payload: { taskId: string }): void
+  (e: 'record-dose', payload: { medicationTaskId: string }): void
 }>()
 
 function onComplete(taskId: string, mode?: boolean | string) { emit('complete', taskId, mode) }
 function onPostpone(taskIds: string | string[], title?: string) { emit('postpone', taskIds, title) }
 function onBatchComplete(taskIds: string[]) { emit('batch-complete', taskIds) }
 function onBatchSkip(taskIds: string[]) { emit('batch-skip', taskIds) }
+function onBatchCompleteMed(medIds: string[]) { emit('batch-complete-med', medIds) }
 function onAction(payload: { type: string; data: any }) { emit('action', payload) }
-function onRecordDose(payload: { taskId: string }) { emit('record-dose', payload) }
+function onRecordDose(payload: { medicationTaskId: string }) { emit('record-dose', payload) }
 </script>
 
 <style lang="scss" scoped>
