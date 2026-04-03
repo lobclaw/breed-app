@@ -164,7 +164,7 @@ const details = reactive<Record<string, any>>({ treatment_status: '观察中', s
 const fromTask = ref(false)
 const submitting = ref(false)
 const isTodo = ref(false)
-const enableReminder = ref(true)
+const enableReminder = ref(false)
 const reminderDate = ref<number | null>(null)
 const showMedPrompt = ref(false)
 const savedRecordId = ref('')
@@ -206,7 +206,7 @@ function buildDetails() {
   return d
 }
 
-const { run: addRecord } = useCloudCall('health-service', 'addHealthRecord', {
+const { run: batchAddRecord } = useCloudCall('health-service', 'batchAddHealthRecords', {
   showLoading: true,
   loadingText: '保存中...',
 })
@@ -216,29 +216,22 @@ const { run: fetchTask } = useCloudCall('task-service', 'getTask')
 async function submit() {
   submitting.value = true
   try {
-    const cost = costInput.value ? parseFloat(costInput.value) : null
-    const perDogCost = cost && selectedDogs.value.length > 1
-      ? Math.round(cost / selectedDogs.value.length * 100) / 100
-      : cost
+    // 批量录入健康记录（一次云调用）
+    const res = await batchAddRecord({
+      dog_ids: selectedDogs.value.map((d: any) => d._id),
+      type: 'illness',
+      date: date.value,
+      cost: costInput.value ? parseFloat(costInput.value) : null,
+      notes: notes.value || null,
+      details: buildDetails(),
+      skip_reminder: !enableReminder.value,
+    })
 
-    let allCompletedTasks: any[] = []
-    for (const dog of selectedDogs.value) {
-      const res = await addRecord({
-        type: 'illness',
-        dog_id: dog._id,
-        date: date.value,
-        cost: perDogCost && perDogCost > 0 ? perDogCost : null,
-        notes: notes.value || null,
-        details: buildDetails(),
-        skip_reminder: !enableReminder.value,
-      })
-      if (res?.data?.completedTasks?.length) {
-        allCompletedTasks.push(...res.data.completedTasks)
-      }
-      // 单犬时保存 recordId，供跳转用药页时关联疾病状态升级
-      if (selectedDogs.value.length === 1 && res?.data?.recordId) {
-        savedRecordId.value = res.data.recordId
-      }
+    const allCompletedTasks = res?.data?.completedTasks || []
+
+    // 单犬时保存 recordId，供跳转用药页时关联疾病状态升级
+    if (selectedDogs.value.length === 1 && res?.data?.records?.[0]?.recordId) {
+      savedRecordId.value = res.data.records[0].recordId
     }
 
     if (allCompletedTasks.length > 0) {

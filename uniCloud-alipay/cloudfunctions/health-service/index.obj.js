@@ -142,9 +142,9 @@ async function autoCompletePendingTasks(familyId, dogId, type, details) {
   return []
 }
 
-async function generateReminders(familyId, type, data, dog, recordId) {
+async function generateReminders(familyId, type, data, dog, recordId, preloadedSettings) {
   const now = Date.now()
-  const settings = await getFamilySettings(familyId)
+  const settings = preloadedSettings || await getFamilySettings(familyId)
 
   if (type === 'vaccination') {
     const vaccineInterval = (dog.role === '种狗' || dog.role === '外部种公')
@@ -263,6 +263,13 @@ module.exports = {
   },
 
   /**
+   * 预热接口（App 启动时静默调用，消除冷启动）
+   */
+  async ping() {
+    return { data: { ok: true } }
+  },
+
+  /**
    * 录入健康记录（vaccination/deworming/illness）
    * 自动生成下次提醒任务 + 创建费用
    */
@@ -334,6 +341,86 @@ module.exports = {
     }
 
     return { data: { recordId, completedTasks } }
+  },
+
+  /**
+   * 批量录入健康记录（多犬同类型）
+   * 一次鉴权 + 一次犬只校验 + 一次读 settings + 并行写入
+   */
+  async batchAddHealthRecords(data) {
+    if (!data.type) throw new Error('请选择记录类型')
+    if (!data.dog_ids || !Array.isArray(data.dog_ids) || data.dog_ids.length === 0) throw new Error('请选择犬只')
+    if (!data.date) throw new Error('请选择日期')
+
+    const validTypes = ['vaccination', 'deworming', 'illness']
+    if (!validTypes.includes(data.type)) throw new Error('无效的记录类型')
+
+    validateDetails(data.type, data.details || {})
+
+    const now = Date.now()
+    const familyId = this.familyId
+    const uid = this.uid
+
+    // ① 一次查询校验所有犬只
+    const { data: dogs } = await db.collection('dogs')
+      .where({ _id: dbCmd.in(data.dog_ids), family_id: familyId, deleted_at: null })
+      .get()
+    if (dogs.length !== data.dog_ids.length) throw new Error('部分犬只不存在或不属于当前家庭')
+
+    // ② 一次读取 family settings
+    const settings = await getFamilySettings(familyId)
+
+    // ③ 一次保存自定义类型
+    await saveCustomType(familyId, data.type, data.details)
+
+    // ④ 费用分摊
+    const totalCost = data.cost || null
+    const perDogCost = totalCost && dogs.length > 1
+      ? Math.round(totalCost / dogs.length * 100) / 100
+      : totalCost
+
+    // ⑤ 并行处理每只犬
+    const results = await Promise.all(dogs.map(async (dog) => {
+      const recordData = {
+        type: data.type,
+        dog_id: dog._id,
+        family_id: familyId,
+        date: data.date,
+        cost: perDogCost && perDogCost > 0 ? perDogCost : null,
+        notes: data.notes || null,
+        details: data.details || {},
+        created_by: uid,
+        created_at: now,
+        updated_at: now,
+      }
+      const { id: recordId } = await db.collection('health_records').add(recordData)
+
+      // 自动完成该犬同类型的 pending 待办
+      const completedTasks = await autoCompletePendingTasks(familyId, dog._id, data.type, data.details)
+
+      // 生成下次提醒任务（传入预加载的 settings）
+      if (!data.skip_reminder) {
+        await generateReminders(familyId, data.type, data, dog, recordId, settings)
+      }
+
+      // 创建费用
+      if (perDogCost && perDogCost > 0) {
+        await createExpense(familyId, uid, {
+          type: data.type, date: data.date, cost: perDogCost,
+          dog_id: dog._id, notes: data.notes || null,
+        }, dog, recordId)
+      }
+
+      return { recordId, dog_id: dog._id, completedTasks }
+    }))
+
+    return {
+      data: {
+        count: results.length,
+        records: results.map(r => ({ recordId: r.recordId, dog_id: r.dog_id })),
+        completedTasks: results.flatMap(r => r.completedTasks),
+      }
+    }
   },
 
   /**

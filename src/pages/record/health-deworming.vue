@@ -139,7 +139,7 @@ const costInput = ref('')
 const details = reactive<Record<string, any>>({ deworming_type: 'internal' })
 const submitting = ref(false)
 const isTodo = ref(false)
-const enableReminder = ref(true)
+const enableReminder = ref(false)
 const reminderDate = ref<number | null>(null)
 const fromTask = ref(false)
 
@@ -224,12 +224,12 @@ function buildDetails() {
   return d
 }
 
-const { run: addRecord } = useCloudCall('health-service', 'addHealthRecord', {
+const { run: batchAddRecord } = useCloudCall('health-service', 'batchAddHealthRecords', {
   showLoading: true,
   loadingText: '保存中...',
 })
 
-const { run: addTask } = useCloudCall('task-service', 'createManualTask', {
+const { run: batchAddTask } = useCloudCall('task-service', 'batchCreateManualTasks', {
   showLoading: true,
   loadingText: '创建待办中...',
 })
@@ -247,61 +247,43 @@ async function submit() {
   submitting.value = true
   try {
     if (isTodo.value) {
-      // 创建待办任务
-      const typeLabel = dewormingTypeLabels[details.deworming_type] || '驱虫'
+      // 批量创建待办任务（一次云调用）
       const rd = enableReminder.value
         ? (reminderDate.value || (date.value ? date.value + computedReminderDays.value * 86400000 : null))
         : null
-      let created = 0
-      for (const dog of selectedDogs.value) {
-        const res = await addTask({
-          card_type: 'individual',
-          dog_id: dog._id,
-          dog_name: dog.name,
-          type: 'deworming',
-          title: '驱虫',
-          due_date: date.value,
-          status: 'pending',
-          priority: 'upcoming',
-          next_reminder_date: rd,
-          details: {
-            deworming_type: details.deworming_type || null,
-            drug_name: details.drug_name || null,
-            cost: costInput.value ? parseFloat(costInput.value) : null,
-            notes: notes.value || null,
-          },
-        })
-        if (res?.data && !res.data.skipped) created++
-      }
+      const res = await batchAddTask({
+        dogs: selectedDogs.value.map((d: any) => ({ dog_id: d._id, dog_name: d.name })),
+        card_type: 'individual',
+        type: 'deworming',
+        title: '驱虫',
+        due_date: date.value,
+        next_reminder_date: rd,
+        details: {
+          deworming_type: details.deworming_type || null,
+          drug_name: details.drug_name || null,
+          cost: costInput.value ? parseFloat(costInput.value) : null,
+          notes: notes.value || null,
+        },
+      })
+      const created = res?.data?.created || 0
       if (created > 0) {
         uni.showToast({ title: `已创建 ${created} 条待办`, icon: 'success' })
       } else {
         uni.showToast({ title: '已有相同待办，未重复创建', icon: 'none' })
       }
-      setTimeout(() => uni.navigateBack(), 1000)
     } else {
-      // 正常录入健康记录
-      const cost = costInput.value ? parseFloat(costInput.value) : null
-      const perDogCost = cost && selectedDogs.value.length > 1
-        ? Math.round(cost / selectedDogs.value.length * 100) / 100
-        : cost
+      // 批量录入健康记录（一次云调用）
+      const res = await batchAddRecord({
+        dog_ids: selectedDogs.value.map((d: any) => d._id),
+        type: 'deworming',
+        date: date.value,
+        cost: costInput.value ? parseFloat(costInput.value) : null,
+        notes: notes.value || null,
+        details: buildDetails(),
+        skip_reminder: !enableReminder.value,
+      })
 
-      let allCompletedTasks: any[] = []
-      for (const dog of selectedDogs.value) {
-        const res = await addRecord({
-          type: 'deworming',
-          dog_id: dog._id,
-          date: date.value,
-          cost: perDogCost && perDogCost > 0 ? perDogCost : null,
-          notes: notes.value || null,
-          details: buildDetails(),
-          skip_reminder: !enableReminder.value,
-        })
-        if (res?.data?.completedTasks?.length) {
-          allCompletedTasks.push(...res.data.completedTasks)
-        }
-      }
-
+      const allCompletedTasks = res?.data?.completedTasks || []
       if (allCompletedTasks.length > 0) {
         const names = allCompletedTasks.map((t: any) => t.dog_name).join('、')
         uni.showToast({
@@ -320,8 +302,8 @@ async function submit() {
 
       // 如果有自定义药品，刷新家庭设置以便下次显示
       if (customDrug.value) loadFamily()
-      setTimeout(() => uni.navigateBack(), 1000)
     }
+    setTimeout(() => uni.navigateBack(), 1000)
   } finally {
     submitting.value = false
   }

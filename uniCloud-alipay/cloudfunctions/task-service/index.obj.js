@@ -826,6 +826,68 @@ module.exports = {
   },
 
   /**
+   * 批量创建待办任务（多犬同类型）
+   * 一次鉴权 + 一次去重查询 + 并行写入
+   */
+  async batchCreateManualTasks(data) {
+    if (!data.dogs || !Array.isArray(data.dogs) || data.dogs.length === 0) throw new Error('请选择犬只')
+    if (!data.due_date) throw new Error('请选择日期')
+    if (!data.type) throw new Error('请选择类型')
+
+    const familyId = this.familyId
+    const uid = this.uid
+    const now = Date.now()
+
+    // ① 一次查询批量去重
+    const WEEK = 7 * DAY_MS
+    const dogIds = data.dogs.map(d => d.dog_id)
+    const { data: existingTasks } = await db.collection('tasks')
+      .where({
+        family_id: familyId,
+        dog_id: dbCmd.in(dogIds),
+        type: data.type,
+        status: 'pending',
+        due_date: dbCmd.gte(data.due_date - WEEK).and(dbCmd.lte(data.due_date + WEEK)),
+      })
+      .get()
+    const existingDogIds = new Set((existingTasks || []).map(t => t.dog_id))
+
+    // ② 并行创建不重复的任务
+    const dogsToCreate = data.dogs.filter(d => !existingDogIds.has(d.dog_id))
+
+    const results = await Promise.all(dogsToCreate.map(async (dog) => {
+      const taskData = {
+        card_type: data.card_type || 'individual',
+        dog_id: dog.dog_id,
+        dog_name: dog.dog_name || '',
+        type: data.type,
+        title: data.title || data.type,
+        due_date: data.due_date,
+        status: 'pending',
+        priority: data.due_date <= now ? 'overdue' : 'upcoming',
+        next_reminder_date: data.next_reminder_date || null,
+        details: data.details || null,
+        source_record_id: null,
+        source_collection: null,
+        family_id: familyId,
+        postpone_count: 0,
+        created_by: uid,
+        created_at: now,
+        updated_at: now,
+      }
+      const { id } = await db.collection('tasks').add(taskData)
+      return { taskId: id, dog_id: dog.dog_id }
+    }))
+
+    return {
+      data: {
+        created: results.length,
+        skipped: data.dogs.length - results.length,
+      }
+    }
+  },
+
+  /**
    * 获取单个任务详情（供表单预填使用）
    */
   async getTasksByIds(taskIds) {
