@@ -159,7 +159,7 @@ async function generateReminders(familyId, type, data, dog, recordId, preloadedS
       dog_id: dog._id,
       dog_name: dog.name,
       type: 'vaccination',
-      title: data.details?.vaccine_type || '疫苗',
+      title: data.details?.vaccine_type ? `疫苗 · ${data.details.vaccine_type}` : '疫苗',
       due_date: dueDate,
       status: 'pending',
       priority: 'upcoming',

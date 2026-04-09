@@ -338,7 +338,7 @@ describe('task-service', () => {
 
       expect(cards).toHaveLength(2)
       expect(cards.every((c: any) => c.cardType === 'dog')).toBe(true)
-      expect(cards.map((c: any) => c.tasks[0].display_title)).toEqual(['卫佳5', '狂犬'])
+      expect(cards.map((c: any) => c.tasks[0].display_title)).toEqual(['疫苗 · 卫佳5', '疫苗 · 狂犬'])
     })
 
     it('相同疫苗类型的同日任务应合并并显示具体疫苗名', () => {
@@ -372,7 +372,7 @@ describe('task-service', () => {
 
       expect(cards).toHaveLength(1)
       expect(cards[0].cardType).toBe('batch')
-      expect(cards[0].groupTitle).toContain('卫佳5')
+      expect(cards[0].groupTitle).toContain('疫苗 · 卫佳5')
     })
   })
 

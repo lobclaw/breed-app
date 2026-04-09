@@ -1045,7 +1045,10 @@ function typeLabel(type: string) {
 /** 记录副标题：病名/疫苗型号/驱虫药，优先 details 字段，fallback notes */
 function recordSubtitle(record: any) {
   if (record.type === 'illness') return record.details?.condition || record.notes || null
-  if (record.type === 'vaccination') return record.details?.vaccine_type || record.details?.vaccine_name || record.notes || null
+  if (record.type === 'vaccination') {
+    const vaccineType = record.details?.vaccine_type || record.details?.vaccine_name
+    return vaccineType ? `疫苗 · ${vaccineType}` : (record.notes || null)
+  }
   if (record.type === 'deworming') return record.details?.drug_name || record.notes || null
   return record.notes || null
 }

@@ -256,7 +256,7 @@ async function submit() {
         dogs: selectedDogs.value.map((d: any) => ({ dog_id: d._id, dog_name: d.name })),
         card_type: 'individual',
         type: 'vaccination',
-        title: details.vaccine_type || '疫苗',
+        title: details.vaccine_type ? `疫苗 · ${details.vaccine_type}` : '疫苗',
         due_date: date.value,
         next_reminder_date: rd,
         details: {

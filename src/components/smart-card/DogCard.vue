@@ -97,7 +97,10 @@ function goRecordTask(task: any) {
 
 function taskDisplayTitle(task: any) {
   if (!task) return ''
-  if (task.type === 'vaccination') return task.details?.vaccine_type || task.title || '疫苗'
+  if (task.type === 'vaccination') {
+    if (task.details?.vaccine_type) return `疫苗 · ${task.details.vaccine_type}`
+    return task.title || '疫苗'
+  }
   if (task.type === 'deworming') return task.details?.drug_name || task.title || '驱虫'
   if (task.type === 'illness') return task.details?.condition || task.title || '疾病'
   return task.title || ''

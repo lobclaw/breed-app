@@ -41,7 +41,8 @@ function getTaskVariantKey(task) {
 function getTaskDisplayTitle(task) {
   if (!task) return ''
   if (task.type === 'vaccination') {
-    return task.details?.vaccine_type || task.title || '疫苗'
+    if (task.details?.vaccine_type) return `疫苗 · ${task.details.vaccine_type}`
+    return task.title || '疫苗'
   }
   if (task.type === 'deworming') {
     return task.details?.drug_name || task.title || '驱虫'
@@ -765,7 +766,7 @@ module.exports = {
 
         if (dupCount === 0) {
           const followupTitle = task.type === 'vaccination'
-            ? `${details.vaccine_type || '疫苗'}`
+            ? (details.vaccine_type ? `疫苗 · ${details.vaccine_type}` : '疫苗')
             : `${details.drug_name || '驱虫'}`
           await db.collection('tasks').add({
             card_type: 'individual',
@@ -899,7 +900,7 @@ module.exports = {
 
     const results = await Promise.all(dogsToCreate.map(async (dog) => {
       const taskTitle = data.title
-        || (data.type === 'vaccination' ? (data.details?.vaccine_type || '疫苗') : '')
+        || (data.type === 'vaccination' ? (data.details?.vaccine_type ? `疫苗 · ${data.details.vaccine_type}` : '疫苗') : '')
         || (data.type === 'deworming' ? (data.details?.drug_name || '驱虫') : '')
         || data.type
       const taskData = {
