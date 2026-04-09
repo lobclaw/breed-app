@@ -28,6 +28,7 @@
         v-for="dog in dogs"
         :key="dog.dogId"
         class="sick-row"
+        :class="{ 'sick-row--removing': dog._removing }"
       >
         <view class="sick-dot" :class="`sick-dot--${dotClass(dog)}`" />
         <text class="sick-row__name">{{ dog.dogName }}</text>
@@ -132,7 +133,13 @@ function onAction(dog: any) {
   display: flex; align-items: center; gap: 8px;
   padding: 8px 0;
   border-bottom: 0.5px solid var(--card-dim);
+  transition: opacity 0.3s ease, transform 0.3s ease;
   &:last-child { border-bottom: none; }
+  &--removing {
+    opacity: 0;
+    transform: translateX(-30%);
+    pointer-events: none;
+  }
 }
 .sick-row__name {
   font-size: 13px; font-weight: 700; color: var(--text-1);

@@ -38,11 +38,12 @@
             class="pill-option"
             :class="{ active: details.drug_name === drug }"
             @click="details.drug_name = drug"
+            @longpress="isPresetDrug(drug) ? undefined : deleteCustomDrug(drug)"
           >
             <text>{{ drug }}</text>
           </view>
           <view
-            v-if="customDrug"
+            v-if="customDrug && !dewormDrugs.includes(customDrug)"
             class="pill-option"
             :class="{ active: details.drug_name === customDrug }"
             @click="details.drug_name = customDrug"
@@ -101,6 +102,14 @@
         {{ isTodo ? '创建待办' : '保存记录' }}
       </button>
     </view>
+
+    <BModal
+      v-model:visible="showDeleteConfirm"
+      :title="`删除「${pendingDeleteVal}」？`"
+      confirmText="删除"
+      :danger="true"
+      @confirm="handleDeleteConfirm"
+    />
 
     <!-- 自定义药品输入弹窗 -->
     <BModal
@@ -167,18 +176,22 @@ const PRESET_DEWORMING_DRUGS: Record<string, string[]> = {
   external: ['福来恩', '大宠爱'],
   combo: ['超可信', '博来恩'],
 }
-// 根据当前选中的驱虫类型，合并预设 + 用户自定义药品
+const deletedCustomDrugs = ref<string[]>([])
+// 根据当前选中的驱虫类型，合并预设 + 用户自定义药品（过滤乐观删除）
 const dewormDrugs = computed(() => {
   const subtype = details.deworming_type || 'internal'
   const preset = PRESET_DEWORMING_DRUGS[subtype] || []
   const customSettings = currentFamily.value?.settings?.custom_deworming_drugs || {}
-  const custom = customSettings[subtype] || []
+  const custom = (customSettings[subtype] || []).filter((v: string) => !deletedCustomDrugs.value.includes(v))
   const all = [...preset, ...custom]
   return [...new Set(all)]
 })
 const customDrug = ref('')
 const showCustomModal = ref(false)
 const customInput = ref('')
+const showDeleteConfirm = ref(false)
+const pendingDeleteVal = ref('')
+let confirmDeleteFn: (() => Promise<void>) | null = null
 
 function addCustomDrug() {
   customInput.value = ''
@@ -186,6 +199,37 @@ function addCustomDrug() {
 }
 
 const { run: updateFamilySettings } = useCloudCall('family-service', 'updateSettings')
+
+function isPresetDrug(drug: string): boolean {
+  const subtype = details.deworming_type || 'internal'
+  return (PRESET_DEWORMING_DRUGS[subtype] || []).includes(drug)
+}
+
+function deleteCustomDrug(val: string) {
+  pendingDeleteVal.value = val
+  confirmDeleteFn = async () => {
+    uni.vibrateShort()
+    deletedCustomDrugs.value.push(val)
+    if (details.drug_name === val) details.drug_name = ''
+    if (customDrug.value === val) customDrug.value = ''
+    const subtype = details.deworming_type || 'internal'
+    const customSettings = currentFamily.value?.settings?.custom_deworming_drugs || {}
+    const updated = { ...customSettings, [subtype]: (customSettings[subtype] || []).filter((v: string) => v !== val) }
+    try {
+      await updateFamilySettings({ custom_deworming_drugs: updated })
+      await loadFamily()
+      deletedCustomDrugs.value = deletedCustomDrugs.value.filter(v => v !== val)
+    } catch {
+      deletedCustomDrugs.value = deletedCustomDrugs.value.filter(v => v !== val)
+      uni.showToast({ title: '删除失败', icon: 'none' })
+    }
+  }
+  showDeleteConfirm.value = true
+}
+
+async function handleDeleteConfirm() {
+  if (confirmDeleteFn) { await confirmDeleteFn(); confirmDeleteFn = null }
+}
 
 async function onCustomConfirm() {
   const val = customInput.value.trim()
@@ -266,9 +310,7 @@ async function submit() {
         },
       })
       const created = res?.data?.created || 0
-      if (created > 0) {
-        uni.showToast({ title: `已创建 ${created} 条待办`, icon: 'success' })
-      } else {
+      if (created === 0) {
         uni.showToast({ title: '已有相同待办，未重复创建', icon: 'none' })
       }
     } else {
@@ -287,16 +329,9 @@ async function submit() {
       if (allCompletedTasks.length > 0) {
         const names = allCompletedTasks.map((t: any) => t.dog_name).join('、')
         uni.showToast({
-          title: `已保存，自动完成 ${allCompletedTasks.length} 条待办（${names}）`,
+          title: `自动完成 ${allCompletedTasks.length} 条待办（${names}）`,
           icon: 'none',
           duration: 2500,
-        })
-      } else {
-        uni.showToast({
-          title: selectedDogs.value.length > 1
-            ? `已保存 ${selectedDogs.value.length} 条记录`
-            : '已保存',
-          icon: 'success',
         })
       }
 

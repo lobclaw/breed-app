@@ -306,6 +306,74 @@ describe('task-service', () => {
       expect(cards[0].cardType).toBe('medication')
       expect(cards[0].dogs[0].state).toBe('med_only')
     })
+
+    it('不同疫苗类型的同日任务不应合并到同一批量卡', () => {
+      const dueDate = todayStart.getTime() + 1000
+      const tasks = [
+        {
+          _id: 'vac_1',
+          dog_id: 'dog_1',
+          dog_name: '奶盖',
+          type: 'vaccination',
+          title: '疫苗',
+          due_date: dueDate,
+          priority: 'today',
+          status: 'pending',
+          details: { vaccine_type: '卫佳5' },
+        },
+        {
+          _id: 'vac_2',
+          dog_id: 'dog_2',
+          dog_name: '布丁',
+          type: 'vaccination',
+          title: '疫苗',
+          due_date: dueDate,
+          priority: 'today',
+          status: 'pending',
+          details: { vaccine_type: '狂犬' },
+        },
+      ]
+
+      const cards = mergeTasks(tasks, [], [])
+
+      expect(cards).toHaveLength(2)
+      expect(cards.every((c: any) => c.cardType === 'dog')).toBe(true)
+      expect(cards.map((c: any) => c.tasks[0].display_title)).toEqual(['卫佳5', '狂犬'])
+    })
+
+    it('相同疫苗类型的同日任务应合并并显示具体疫苗名', () => {
+      const dueDate = todayStart.getTime() + 1000
+      const tasks = [
+        {
+          _id: 'vac_same_1',
+          dog_id: 'dog_1',
+          dog_name: '奶盖',
+          type: 'vaccination',
+          title: '疫苗',
+          due_date: dueDate,
+          priority: 'today',
+          status: 'pending',
+          details: { vaccine_type: '卫佳5' },
+        },
+        {
+          _id: 'vac_same_2',
+          dog_id: 'dog_2',
+          dog_name: '布丁',
+          type: 'vaccination',
+          title: '疫苗',
+          due_date: dueDate,
+          priority: 'today',
+          status: 'pending',
+          details: { vaccine_type: '卫佳5' },
+        },
+      ]
+
+      const cards = mergeTasks(tasks, [], [])
+
+      expect(cards).toHaveLength(1)
+      expect(cards[0].cardType).toBe('batch')
+      expect(cards[0].groupTitle).toContain('卫佳5')
+    })
   })
 
   describe('_timing_dailyAudit 每日审计', () => {

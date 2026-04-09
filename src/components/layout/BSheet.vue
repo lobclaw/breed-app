@@ -150,6 +150,9 @@ function close() {
     flex: 1;
     padding: 0 var(--space-page) env(safe-area-inset-bottom, 20px);
     overflow-y: auto;
+    scrollbar-width: none;
+    &::-webkit-scrollbar { display: none; }
+    :deep(::-webkit-scrollbar) { display: none; }
   }
 }
 </style>

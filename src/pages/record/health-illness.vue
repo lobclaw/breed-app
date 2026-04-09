@@ -19,11 +19,12 @@
             class="pill-option"
             :class="{ active: details.condition === c }"
             @click="details.condition = c"
+            @longpress="PRESET_CONDITION_TYPES.includes(c) ? undefined : deleteCustomCondition(c)"
           >
             <text>{{ c }}</text>
           </view>
           <view
-            v-if="customCondition"
+            v-if="customCondition && !conditionTypes.includes(customCondition)"
             class="pill-option"
             :class="{ active: details.condition === customCondition }"
             @click="details.condition = customCondition"
@@ -115,6 +116,14 @@
       </button>
     </view>
 
+    <BModal
+      v-model:visible="showDeleteConfirm"
+      :title="`删除「${pendingDeleteVal}」？`"
+      confirmText="删除"
+      :danger="true"
+      @confirm="handleDeleteConfirm"
+    />
+
     <!-- 自定义病症输入弹窗 -->
     <BModal
       v-model:visible="showCustomModal"
@@ -151,10 +160,13 @@
 import { ref, reactive, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BModal from '@/components/layout/BModal.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 import BFormOptions from '@/components/form/BFormOptions.vue'
+
+const { currentFamily, loadFamily } = useAuth()
 
 const selectedDogs = ref<any[]>([])
 const date = ref<number | null>(null)
@@ -169,22 +181,68 @@ const reminderDate = ref<number | null>(null)
 const showMedPrompt = ref(false)
 const savedRecordId = ref('')
 
-const conditionTypes = ['感冒', '腹泻', '寄生虫', '皮肤病', '眼部', '骨骼', '犬瘟', '细小', '其他']
+const PRESET_CONDITION_TYPES = ['感冒', '腹泻', '寄生虫', '皮肤病', '眼部', '骨骼', '犬瘟', '细小', '其他']
+const deletedCustomConditions = ref<string[]>([])
+const conditionTypes = computed(() => {
+  const custom = (currentFamily.value?.settings?.custom_condition_types || [])
+    .filter((v: string) => !deletedCustomConditions.value.includes(v))
+  const all = [...PRESET_CONDITION_TYPES, ...custom]
+  return [...new Set(all)]
+})
 const customCondition = ref('')
 const showCustomModal = ref(false)
 const customInput = ref('')
+const showDeleteConfirm = ref(false)
+const pendingDeleteVal = ref('')
+let confirmDeleteFn: (() => Promise<void>) | null = null
 
 function addCustomCondition() {
   customInput.value = ''
   showCustomModal.value = true
 }
 
-function onCustomConfirm() {
-  if (customInput.value.trim()) {
-    customCondition.value = customInput.value.trim()
-    details.condition = customCondition.value
+const { run: updateFamilySettings } = useCloudCall('family-service', 'updateSettings')
+
+function deleteCustomCondition(val: string) {
+  pendingDeleteVal.value = val
+  confirmDeleteFn = async () => {
+    uni.vibrateShort()
+    deletedCustomConditions.value.push(val)
+    if (details.condition === val) details.condition = ''
+    if (customCondition.value === val) customCondition.value = ''
+    const existing = currentFamily.value?.settings?.custom_condition_types || []
+    const updated = existing.filter((v: string) => v !== val)
+    try {
+      await updateFamilySettings({ custom_condition_types: updated })
+      await loadFamily()
+      deletedCustomConditions.value = deletedCustomConditions.value.filter(v => v !== val)
+    } catch {
+      deletedCustomConditions.value = deletedCustomConditions.value.filter(v => v !== val)
+      uni.showToast({ title: '删除失败', icon: 'none' })
+    }
   }
+  showDeleteConfirm.value = true
+}
+
+async function handleDeleteConfirm() {
+  if (confirmDeleteFn) { await confirmDeleteFn(); confirmDeleteFn = null }
+}
+
+async function onCustomConfirm() {
+  const val = customInput.value.trim()
+  if (!val) { showCustomModal.value = false; return }
+
+  customCondition.value = val
+  details.condition = val
   showCustomModal.value = false
+
+  if (!PRESET_CONDITION_TYPES.includes(val)) {
+    const existing = currentFamily.value?.settings?.custom_condition_types || []
+    if (!existing.includes(val)) {
+      await updateFamilySettings({ custom_condition_types: [...existing, val] })
+      await loadFamily()
+    }
+  }
 }
 const severityLevels = ['轻微', '中等', '严重']
 const treatmentStatuses = ['观察中', '治疗中', '已康复', '慢性管理']
@@ -236,9 +294,7 @@ async function submit() {
 
     if (allCompletedTasks.length > 0) {
       const names = allCompletedTasks.map((t: any) => t.dog_name).join('、')
-      uni.showToast({ title: `已保存，自动完成 ${allCompletedTasks.length} 条待办（${names}）`, icon: 'none', duration: 2500 })
-    } else {
-      uni.showToast({ title: selectedDogs.value.length > 1 ? `已保存 ${selectedDogs.value.length} 条记录` : '已保存', icon: 'success' })
+      uni.showToast({ title: `自动完成 ${allCompletedTasks.length} 条待办（${names}）`, icon: 'none', duration: 2500 })
     }
 
     // 如果犬只还在治疗中，提示是否需要用药
@@ -258,13 +314,21 @@ onLoad(async (query) => {
   }
   if (query?.taskId) {
     const res = await fetchTask(query.taskId)
-    if (res?.data?.details) {
-      const d = res.data.details
-      if (d.condition) details.condition = d.condition
-      if (d.severity) details.severity = d.severity
-      if (d.treatment_status) details.treatment_status = d.treatment_status
-      if (d.cost) costInput.value = String(d.cost)
-      if (d.notes) notes.value = d.notes
+    if (res?.data) {
+      const task = res.data
+      // 预选犬只
+      if (task.dog_id && task.dog_name) {
+        selectedDogs.value = [{ _id: task.dog_id, name: task.dog_name }]
+      }
+      // 预填表单详情
+      const d = task.details
+      if (d) {
+        if (d.condition) details.condition = d.condition
+        if (d.severity) details.severity = d.severity
+        if (d.treatment_status) details.treatment_status = d.treatment_status
+        if (d.cost) costInput.value = String(d.cost)
+        if (d.notes) notes.value = d.notes
+      }
     }
   }
   // 从批量卡片预选犬只（同步，零延迟）

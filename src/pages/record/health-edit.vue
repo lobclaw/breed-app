@@ -26,11 +26,12 @@
               class="pill-option"
               :class="{ active: details.vaccine_type === vt }"
               @click="details.vaccine_type = vt"
+              @longpress="PRESET_VACCINE_TYPES.includes(vt) ? undefined : deleteCustomVaccine(vt)"
             >
               <text>{{ vt }}</text>
             </view>
             <view
-              v-if="customVaccine"
+              v-if="customVaccine && !vaccineTypes.includes(customVaccine)"
               class="pill-option"
               :class="{ active: details.vaccine_type === customVaccine }"
               @click="details.vaccine_type = customVaccine"
@@ -111,11 +112,12 @@
               class="pill-option"
               :class="{ active: details.drug_name === drug }"
               @click="details.drug_name = drug"
+              @longpress="isPresetDrug(drug) ? undefined : deleteCustomDrug(drug)"
             >
               <text>{{ drug }}</text>
             </view>
             <view
-              v-if="customDrug"
+              v-if="customDrug && !dewormDrugs.includes(customDrug)"
               class="pill-option"
               :class="{ active: details.drug_name === customDrug }"
               @click="details.drug_name = customDrug"
@@ -170,8 +172,21 @@
               class="pill-option"
               :class="{ active: details.condition === c }"
               @click="details.condition = c"
+              @longpress="PRESET_CONDITION_TYPES.includes(c) ? undefined : deleteCustomCondition(c)"
             >
               <text>{{ c }}</text>
+            </view>
+            <view
+              v-if="customCondition && !conditionTypes.includes(customCondition)"
+              class="pill-option"
+              :class="{ active: details.condition === customCondition }"
+              @click="details.condition = customCondition"
+            >
+              <text>{{ customCondition }}</text>
+            </view>
+            <view class="pill-add" @click="addCustomCondition">
+              <text class="material-icons-round" style="font-size: 14px;">add</text>
+              <text>自定义</text>
             </view>
           </view>
         </view>
@@ -250,6 +265,14 @@
       </button>
     </view>
 
+    <BModal
+      v-model:visible="showDeleteConfirm"
+      :title="`删除「${pendingDeleteVal}」？`"
+      confirmText="删除"
+      :danger="true"
+      @confirm="handleDeleteConfirm"
+    />
+
     <!-- 自定义疫苗输入弹窗 -->
     <BModal
       v-model:visible="showVaccineModal"
@@ -280,6 +303,21 @@
         />
       </view>
     </BModal>
+    <!-- 自定义病症输入弹窗 -->
+    <BModal
+      v-model:visible="showConditionModal"
+      title="自定义病症"
+      @confirm="onConditionConfirm"
+    >
+      <view class="custom-input-wrap">
+        <input
+          v-model="conditionInput"
+          class="custom-input"
+          placeholder="输入病症名称"
+          :focus="showConditionModal"
+        />
+      </view>
+    </BModal>
   </view>
 </template>
 
@@ -287,8 +325,11 @@
 import { ref, reactive, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BModal from '@/components/layout/BModal.vue'
+
+const { currentFamily, loadFamily } = useAuth()
 
 let recordId = ''
 
@@ -312,7 +353,24 @@ const typeLabels: Record<string, string> = {
 
 const typeLabel = computed(() => typeLabels[form.type] || form.type)
 
-const vaccineTypes = ['卫佳5', '卫佳8', '卫佳10', '狂犬']
+const { run: updateFamilySettings } = useCloudCall('family-service', 'updateSettings')
+
+const PRESET_VACCINE_TYPES = ['卫佳5', '卫佳8', '卫佳10', '狂犬']
+const deletedCustomVaccines = ref<string[]>([])
+const vaccineTypes = computed(() => {
+  const custom = (currentFamily.value?.settings?.custom_vaccine_types || [])
+    .filter((v: string) => !deletedCustomVaccines.value.includes(v))
+  const all = [...PRESET_VACCINE_TYPES, ...custom]
+  return [...new Set(all)]
+})
+const showDeleteConfirm = ref(false)
+const pendingDeleteVal = ref('')
+let confirmDeleteFn: (() => Promise<void>) | null = null
+
+async function handleDeleteConfirm() {
+  if (confirmDeleteFn) { await confirmDeleteFn(); confirmDeleteFn = null }
+}
+
 const customVaccine = ref('')
 const showVaccineModal = ref(false)
 const vaccineInput = ref('')
@@ -322,12 +380,40 @@ function addCustomVaccine() {
   showVaccineModal.value = true
 }
 
-function onVaccineConfirm() {
-  if (vaccineInput.value.trim()) {
-    customVaccine.value = vaccineInput.value.trim()
-    details.vaccine_type = customVaccine.value
+function deleteCustomVaccine(val: string) {
+  pendingDeleteVal.value = val
+  confirmDeleteFn = async () => {
+    uni.vibrateShort()
+    deletedCustomVaccines.value.push(val)
+    if (details.vaccine_type === val) details.vaccine_type = ''
+    if (customVaccine.value === val) customVaccine.value = ''
+    const existing = currentFamily.value?.settings?.custom_vaccine_types || []
+    const updated = existing.filter((v: string) => v !== val)
+    try {
+      await updateFamilySettings({ custom_vaccine_types: updated })
+      await loadFamily()
+      deletedCustomVaccines.value = deletedCustomVaccines.value.filter(v => v !== val)
+    } catch {
+      deletedCustomVaccines.value = deletedCustomVaccines.value.filter(v => v !== val)
+      uni.showToast({ title: '删除失败', icon: 'none' })
+    }
   }
+  showDeleteConfirm.value = true
+}
+
+async function onVaccineConfirm() {
+  const val = vaccineInput.value.trim()
+  if (!val) { showVaccineModal.value = false; return }
+  customVaccine.value = val
+  details.vaccine_type = val
   showVaccineModal.value = false
+  if (!PRESET_VACCINE_TYPES.includes(val)) {
+    const existing = currentFamily.value?.settings?.custom_vaccine_types || []
+    if (!existing.includes(val)) {
+      await updateFamilySettings({ custom_vaccine_types: [...existing, val] })
+      await loadFamily()
+    }
+  }
 }
 
 const dewormingTypes = [
@@ -336,25 +422,126 @@ const dewormingTypes = [
   { label: '内外同驱', value: 'combo' },
 ]
 
-const dewormDrugs = ['拜宠清', '海乐妙', '犬心保']
+const PRESET_DEWORMING_DRUGS: Record<string, string[]> = {
+  internal: ['拜宠清', '海乐妙', '犬心保'],
+  external: ['福来恩', '大宠爱'],
+  combo: ['超可信', '博来恩'],
+}
+const deletedCustomDrugs = ref<string[]>([])
+const dewormDrugs = computed(() => {
+  const subtype = details.deworming_type || 'internal'
+  const preset = PRESET_DEWORMING_DRUGS[subtype] || []
+  const customSettings = currentFamily.value?.settings?.custom_deworming_drugs || {}
+  const custom = (customSettings[subtype] || []).filter((v: string) => !deletedCustomDrugs.value.includes(v))
+  const all = [...preset, ...custom]
+  return [...new Set(all)]
+})
 const customDrug = ref('')
 const showDrugModal = ref(false)
 const drugInput = ref('')
+
+function isPresetDrug(drug: string): boolean {
+  const subtype = details.deworming_type || 'internal'
+  return (PRESET_DEWORMING_DRUGS[subtype] || []).includes(drug)
+}
+
+function deleteCustomDrug(val: string) {
+  pendingDeleteVal.value = val
+  confirmDeleteFn = async () => {
+    uni.vibrateShort()
+    deletedCustomDrugs.value.push(val)
+    if (details.drug_name === val) details.drug_name = ''
+    if (customDrug.value === val) customDrug.value = ''
+    const subtype = details.deworming_type || 'internal'
+    const customSettings = currentFamily.value?.settings?.custom_deworming_drugs || {}
+    const updated = { ...customSettings, [subtype]: (customSettings[subtype] || []).filter((v: string) => v !== val) }
+    try {
+      await updateFamilySettings({ custom_deworming_drugs: updated })
+      await loadFamily()
+      deletedCustomDrugs.value = deletedCustomDrugs.value.filter(v => v !== val)
+    } catch {
+      deletedCustomDrugs.value = deletedCustomDrugs.value.filter(v => v !== val)
+      uni.showToast({ title: '删除失败', icon: 'none' })
+    }
+  }
+  showDeleteConfirm.value = true
+}
 
 function addCustomDrug() {
   drugInput.value = ''
   showDrugModal.value = true
 }
 
-function onDrugConfirm() {
-  if (drugInput.value.trim()) {
-    customDrug.value = drugInput.value.trim()
-    details.drug_name = customDrug.value
-  }
+async function onDrugConfirm() {
+  const val = drugInput.value.trim()
+  if (!val) { showDrugModal.value = false; return }
+  customDrug.value = val
+  details.drug_name = val
   showDrugModal.value = false
+  const subtype = details.deworming_type || 'internal'
+  if (!(PRESET_DEWORMING_DRUGS[subtype] || []).includes(val)) {
+    const customSettings = currentFamily.value?.settings?.custom_deworming_drugs || {}
+    const existing = customSettings[subtype] || []
+    if (!existing.includes(val)) {
+      await updateFamilySettings({ custom_deworming_drugs: { ...customSettings, [subtype]: [...existing, val] } })
+      await loadFamily()
+    }
+  }
 }
 
-const conditionTypes = ['感冒', '腹泻', '寄生虫', '皮肤病', '眼部', '骨骼', '犬瘟', '细小', '其他']
+const PRESET_CONDITION_TYPES = ['感冒', '腹泻', '寄生虫', '皮肤病', '眼部', '骨骼', '犬瘟', '细小', '其他']
+const deletedCustomConditions = ref<string[]>([])
+const conditionTypes = computed(() => {
+  const custom = (currentFamily.value?.settings?.custom_condition_types || [])
+    .filter((v: string) => !deletedCustomConditions.value.includes(v))
+  const all = [...PRESET_CONDITION_TYPES, ...custom]
+  return [...new Set(all)]
+})
+const customCondition = ref('')
+const showConditionModal = ref(false)
+const conditionInput = ref('')
+
+function addCustomCondition() {
+  conditionInput.value = ''
+  showConditionModal.value = true
+}
+
+function deleteCustomCondition(val: string) {
+  pendingDeleteVal.value = val
+  confirmDeleteFn = async () => {
+    uni.vibrateShort()
+    deletedCustomConditions.value.push(val)
+    if (details.condition === val) details.condition = ''
+    if (customCondition.value === val) customCondition.value = ''
+    const existing = currentFamily.value?.settings?.custom_condition_types || []
+    const updated = existing.filter((v: string) => v !== val)
+    try {
+      await updateFamilySettings({ custom_condition_types: updated })
+      await loadFamily()
+      deletedCustomConditions.value = deletedCustomConditions.value.filter(v => v !== val)
+    } catch {
+      deletedCustomConditions.value = deletedCustomConditions.value.filter(v => v !== val)
+      uni.showToast({ title: '删除失败', icon: 'none' })
+    }
+  }
+  showDeleteConfirm.value = true
+}
+
+async function onConditionConfirm() {
+  const val = conditionInput.value.trim()
+  if (!val) { showConditionModal.value = false; return }
+  customCondition.value = val
+  details.condition = val
+  showConditionModal.value = false
+  if (!PRESET_CONDITION_TYPES.includes(val)) {
+    const existing = currentFamily.value?.settings?.custom_condition_types || []
+    if (!existing.includes(val)) {
+      await updateFamilySettings({ custom_condition_types: [...existing, val] })
+      await loadFamily()
+    }
+  }
+}
+
 const severityLevels = ['轻微', '中等', '严重']
 const treatmentStatuses = ['治疗中', '已康复', '慢性管理']
 

@@ -21,12 +21,13 @@
             class="pill-select__item"
             :class="{ 'pill-select__item--active': details.vaccine_type === vt }"
             @click="details.vaccine_type = vt"
+            @longpress="PRESET_VACCINE_TYPES.includes(vt) ? undefined : deleteCustomVaccine(vt)"
           >
             <text>{{ vt }}</text>
           </view>
-          <!-- 自定义值（已输入时显示为选中 pill） -->
+          <!-- 自定义值（已输入时显示为选中 pill，尚未存入 settings） -->
           <view
-            v-if="customVaccine"
+            v-if="customVaccine && !vaccineTypes.includes(customVaccine)"
             class="pill-select__item"
             :class="{ 'pill-select__item--active': details.vaccine_type === customVaccine }"
             @click="details.vaccine_type = customVaccine"
@@ -103,6 +104,14 @@
       </view>
     </BModal>
   </view>
+
+  <BModal
+    v-model:visible="showDeleteConfirm"
+    :title="`删除「${pendingDeleteVal}」？`"
+    confirmText="删除"
+    :danger="true"
+    @confirm="handleDeleteConfirm"
+  />
 </template>
 
 <script setup lang="ts">
@@ -143,15 +152,20 @@ const computedReminderDays = computed(() => {
 })
 
 const PRESET_VACCINE_TYPES = ['卫佳5', '卫佳8', '卫佳10', '狂犬']
-// 合并预设 + 用户自定义类型（去重）
+const deletedCustomVaccines = ref<string[]>([])
+// 合并预设 + 用户自定义类型（去重，过滤已乐观删除的）
 const vaccineTypes = computed(() => {
-  const custom = currentFamily.value?.settings?.custom_vaccine_types || []
+  const custom = (currentFamily.value?.settings?.custom_vaccine_types || [])
+    .filter((v: string) => !deletedCustomVaccines.value.includes(v))
   const all = [...PRESET_VACCINE_TYPES, ...custom]
   return [...new Set(all)]
 })
 const customVaccine = ref('')
 const showCustomModal = ref(false)
 const customInput = ref('')
+const showDeleteConfirm = ref(false)
+const pendingDeleteVal = ref('')
+let confirmDeleteFn: (() => Promise<void>) | null = null
 
 function addCustomVaccine() {
   customInput.value = ''
@@ -159,6 +173,31 @@ function addCustomVaccine() {
 }
 
 const { run: updateFamilySettings } = useCloudCall('family-service', 'updateSettings')
+
+function deleteCustomVaccine(val: string) {
+  pendingDeleteVal.value = val
+  confirmDeleteFn = async () => {
+    uni.vibrateShort()
+    deletedCustomVaccines.value.push(val)
+    if (details.vaccine_type === val) details.vaccine_type = ''
+    if (customVaccine.value === val) customVaccine.value = ''
+    const existing = currentFamily.value?.settings?.custom_vaccine_types || []
+    const updated = existing.filter((v: string) => v !== val)
+    try {
+      await updateFamilySettings({ custom_vaccine_types: updated })
+      await loadFamily()
+      deletedCustomVaccines.value = deletedCustomVaccines.value.filter(v => v !== val)
+    } catch {
+      deletedCustomVaccines.value = deletedCustomVaccines.value.filter(v => v !== val)
+      uni.showToast({ title: '删除失败', icon: 'none' })
+    }
+  }
+  showDeleteConfirm.value = true
+}
+
+async function handleDeleteConfirm() {
+  if (confirmDeleteFn) { await confirmDeleteFn(); confirmDeleteFn = null }
+}
 
 async function onCustomConfirm() {
   const val = customInput.value.trim()
@@ -217,7 +256,7 @@ async function submit() {
         dogs: selectedDogs.value.map((d: any) => ({ dog_id: d._id, dog_name: d.name })),
         card_type: 'individual',
         type: 'vaccination',
-        title: '疫苗',
+        title: details.vaccine_type || '疫苗',
         due_date: date.value,
         next_reminder_date: rd,
         details: {
@@ -227,9 +266,7 @@ async function submit() {
         },
       })
       const created = res?.data?.created || 0
-      if (created > 0) {
-        uni.showToast({ title: `已创建 ${created} 条待办`, icon: 'success' })
-      } else {
+      if (created === 0) {
         uni.showToast({ title: '已有相同待办，未重复创建', icon: 'none' })
       }
     } else {
@@ -248,16 +285,9 @@ async function submit() {
       if (allCompletedTasks.length > 0) {
         const names = allCompletedTasks.map((t: any) => t.dog_name).join('、')
         uni.showToast({
-          title: `已保存，自动完成 ${allCompletedTasks.length} 条待办（${names}）`,
+          title: `自动完成 ${allCompletedTasks.length} 条待办（${names}）`,
           icon: 'none',
           duration: 2500,
-        })
-      } else {
-        uni.showToast({
-          title: selectedDogs.value.length > 1
-            ? `已保存 ${selectedDogs.value.length} 条记录`
-            : '已保存',
-          icon: 'success',
         })
       }
     }

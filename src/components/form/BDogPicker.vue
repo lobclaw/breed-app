@@ -62,15 +62,20 @@
     </view>
 
     <!-- 筛选栏 -->
-    <view v-if="filterTabs.length" class="b-dog-picker__filters">
-      <view
-        v-for="f in filterTabs"
-        :key="f.value"
-        class="b-dog-picker__filter"
-        :class="{ 'b-dog-picker__filter--active': activeFilter === f.value }"
-        @click="activeFilter = f.value"
-      >
-        <text>{{ f.label }}</text>
+    <view v-if="filterTabs.length || multiple" class="b-dog-picker__filter-row">
+      <view v-if="filterTabs.length" class="b-dog-picker__filters">
+        <view
+          v-for="f in filterTabs"
+          :key="f.value"
+          class="b-dog-picker__filter"
+          :class="{ 'b-dog-picker__filter--active': activeFilter === f.value }"
+          @click="activeFilter = f.value"
+        >
+          <text>{{ f.label }}</text>
+        </view>
+      </view>
+      <view v-if="multiple && filteredDogs.length > 0" class="b-dog-picker__select-all" @click="toggleSelectAll">
+        <text>{{ isAllSelected ? '取消全选' : '全选' }}</text>
       </view>
     </view>
 
@@ -275,6 +280,41 @@ async function loadDogs() {
     await dogStore.ensure()
     dogs.value = dogStore.getFiltered(props.roleFilter, props.genderFilter)
     loading.value = false
+  }
+}
+
+const isAllSelected = computed(() => {
+  if (filteredDogs.value.length === 0) return false
+  return filteredDogs.value.every(d => isSelected(d._id))
+})
+
+function toggleSelectAll() {
+  if (isAllSelected.value) {
+    // 取消全选：从当前 modelValue 中移除 filteredDogs 里的所有犬
+    if (hasModelValue.value && props.multiple) {
+      const filteredIds = new Set(filteredDogs.value.map(d => d._id))
+      const current = Array.isArray(props.modelValue) ? props.modelValue : []
+      emit('update:modelValue', current.filter(d => !filteredIds.has(d._id)))
+    } else {
+      selectedIds.value = selectedIds.value.filter(
+        id => !filteredDogs.value.some(d => d._id === id)
+      )
+    }
+  } else {
+    // 全选：将 filteredDogs 中未选中的都加入
+    if (hasModelValue.value && props.multiple) {
+      const current = Array.isArray(props.modelValue) ? [...props.modelValue] : []
+      const currentIds = new Set(current.map(d => d._id))
+      for (const dog of filteredDogs.value) {
+        if (!currentIds.has(dog._id)) current.push(dog)
+      }
+      emit('update:modelValue', current)
+    } else {
+      const currentSet = new Set(selectedIds.value)
+      for (const dog of filteredDogs.value) {
+        if (!currentSet.has(dog._id)) selectedIds.value.push(dog._id)
+      }
+    }
   }
 }
 
@@ -507,11 +547,32 @@ function formatAge(birthTs?: number) {
 }
 
 /* ==================== Sheet 内列表 ==================== */
+.b-dog-picker__filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
 .b-dog-picker__filters {
   display: flex;
   gap: 6px;
-  margin-bottom: 12px;
+  flex: 1;
   overflow-x: auto;
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
+}
+
+.b-dog-picker__select-all {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: var(--primary-soft);
+  white-space: nowrap;
+  &:active { opacity: 0.7; }
 }
 
 .b-dog-picker__filter {

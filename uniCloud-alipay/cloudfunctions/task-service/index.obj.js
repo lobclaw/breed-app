@@ -24,6 +24,34 @@ function highestPriority(tasks) {
   return best
 }
 
+function getTaskVariantKey(task) {
+  if (!task) return ''
+  if (task.type === 'vaccination') {
+    return `vaccination:${task.details?.vaccine_type || ''}`
+  }
+  if (task.type === 'deworming') {
+    return `deworming:${task.details?.deworming_type || ''}:${task.details?.drug_name || ''}`
+  }
+  if (task.type === 'illness') {
+    return `illness:${task.details?.condition || ''}`
+  }
+  return task.type || ''
+}
+
+function getTaskDisplayTitle(task) {
+  if (!task) return ''
+  if (task.type === 'vaccination') {
+    return task.details?.vaccine_type || task.title || '疫苗'
+  }
+  if (task.type === 'deworming') {
+    return task.details?.drug_name || task.title || '驱虫'
+  }
+  if (task.type === 'illness') {
+    return task.details?.condition || task.title || '疾病'
+  }
+  return task.title || task.type || ''
+}
+
 /**
  * 智能合并任务为卡片
  * 合并优先级：健康关注 > 窝级别 > 护理群组 > 批量(2+同类同天) > 个体犬只
@@ -56,6 +84,10 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
   const consumed = new Set()
   const completedConsumed = new Set()
 
+  for (const task of [...tasks, ...todayCompleted]) {
+    task.display_title = getTaskDisplayTitle(task)
+  }
+
   // 第 1 轮：健康关注卡（生病犬只 + 用药犬只合并）
   // 兼容旧数据：仍过滤 tasks 中的 medication 类型（旧记录），与 medItems（新记录）合并
   const oldMedTasks = tasks.filter(t => t.type === 'medication')
@@ -78,7 +110,7 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
     const todayMid = new Date(); todayMid.setHours(0, 0, 0, 0)
     const daysSick = Math.max(1, Math.round((todayMid.getTime() - illStart.getTime()) / DAY_MS) + 1)
 
-    if (status === '观察中' && !sickObserveMap.has(ill.dog_id)) {
+    if (!sickObserveMap.has(ill.dog_id)) {
       sickObserveMap.set(ill.dog_id, {
         dogId: ill.dog_id,
         dogName: ill.dog_name || ill._dog_name || '',
@@ -87,7 +119,7 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
         severity: ill.details?.severity || '轻微',
         illnessId: ill._id,
         daysSick,
-        treatmentStatus: '观察中',
+        treatmentStatus: status,
         _createdAt: ill.date || ill.created_at || 0,
       })
     }
@@ -249,7 +281,7 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
   const litterTasks = tasks.filter(t => t.litter_id && !consumed.has(t._id))
   const litterGroups = new Map()
   for (const t of litterTasks) {
-    const key = `${t.litter_id}__${t.type}`
+    const key = `${t.litter_id}__${getTaskVariantKey(t)}`
     if (!litterGroups.has(key)) litterGroups.set(key, [])
     litterGroups.get(key).push(t)
   }
@@ -267,7 +299,7 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
         cardType: 'batch',
         id: `litter-${group[0].litter_id}-${group[0].type}`,
         priority: highestPriority(group),
-        groupTitle: `${group[0].dog_name || ''}窝 · ${group[0].title}`,
+        groupTitle: `${group[0].dog_name || ''}窝 · ${group[0].display_title || group[0].title}`,
         dogs,
         tasks: group,
         progress: { done: 0, total: dogs.length },
@@ -282,7 +314,7 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
   const batchGroups = new Map()
   for (const t of allForBatch) {
     const dayKey = new Date(t.due_date).toDateString()
-    const key = `${t.type}__${dayKey}`
+    const key = `${getTaskVariantKey(t)}__${dayKey}`
     if (!batchGroups.has(key)) batchGroups.set(key, [])
     batchGroups.get(key).push(t)
   }
@@ -307,7 +339,7 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
         cardType: 'batch',
         id: `batch-${group[0].type}-${group[0].due_date}`,
         priority: highestPriority(pendingInGroup),
-        groupTitle: `${group[0].title} · ${dogs.length}只`,
+        groupTitle: `${group[0].display_title || group[0].title} · ${dogs.length}只`,
         dogs,
         tasks: pendingInGroup,
         progress: { done: 0, total: dogs.length },
@@ -732,12 +764,15 @@ module.exports = {
           .count()
 
         if (dupCount === 0) {
+          const followupTitle = task.type === 'vaccination'
+            ? `${details.vaccine_type || '疫苗'}`
+            : `${details.drug_name || '驱虫'}`
           await db.collection('tasks').add({
             card_type: 'individual',
             dog_id: task.dog_id,
             dog_name: task.dog_name,
             type: task.type,
-            title: `${task.dog_name} · 下次${task.type === 'vaccination' ? '疫苗' : '驱虫'}`,
+            title: followupTitle,
             due_date: nextDue,
             status: 'pending',
             priority: 'upcoming',
@@ -863,12 +898,16 @@ module.exports = {
     const dogsToCreate = data.dogs.filter(d => !existingDogIds.has(d.dog_id))
 
     const results = await Promise.all(dogsToCreate.map(async (dog) => {
+      const taskTitle = data.title
+        || (data.type === 'vaccination' ? (data.details?.vaccine_type || '疫苗') : '')
+        || (data.type === 'deworming' ? (data.details?.drug_name || '驱虫') : '')
+        || data.type
       const taskData = {
         card_type: data.card_type || 'individual',
         dog_id: dog.dog_id,
         dog_name: dog.dog_name || '',
         type: data.type,
-        title: data.title || data.type,
+        title: taskTitle,
         due_date: data.due_date,
         status: 'pending',
         priority: data.due_date <= now ? 'overdue' : 'upcoming',

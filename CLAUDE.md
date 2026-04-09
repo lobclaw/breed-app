@@ -25,7 +25,7 @@
 
 ## 当前阶段
 
-设计阶段已完成（brainstorming + 技术选型）。下一步：实现计划。开发路径为 Path A（分四批交付）。
+Phase 1 功能 + 性能优化完成，进入验收测试阶段。
 
 ## 开发约定
 
@@ -57,40 +57,55 @@
 - **状态语言优于日期语言**：显示「孕期第58天」而非「3月26日」
 - **YAGNI**：只做当前确认的需求，不提前设计未讨论的功能
 
+## 用药任务模块
+
+### 重复用药检测（`src/pages/record/health-medication.vue`）
+
+- **同药名视为唯一**：同一犬只同一药名只允许一个进行中任务，不支持并存（剂量相同无重复创建必要）
+- **弹窗分两段**：「将创建（N只）」无重复犬 + 「已有同名任务（M只）」可勾选覆盖，默认不勾选
+- **覆盖 = 取消旧任务 + 创建新任务**：云函数 `batchStartMedication` 接受可选 `override_dog_ids`，先将该犬同名进行中任务设为 `已取消`，再创建新任务
+- **提交只创建最终犬只**：`finalDogIds = cleanDogIds + overrideDogIds`，未勾选的重复犬直接跳过
+- **全选按钮**：弹窗「已有同名任务」区块右侧有「全选/取消全选」，同样在 `BDogPicker` 多选模式下提供全选
+
+### 云函数常量规范
+
+- 云函数内**禁止使用未定义常量**（如曾出现的 `DAY_MS is not defined` bug）
+- 毫秒常量统一写字面量 `86400000`，不定义全局 `DAY_MS`
+
+## 首页日历红点（WeekStrip）
+
+### 数据流
+
+- `dayCounts` 由 `getDateCounts` 从 `tasks` 集合（`status: pending`）聚合返回，**不含**用药卡/健康关注卡
+- `loadAll()` 并行执行 `loadTodayCards()` + `loadDateCounts()` + `loadWeekCache()`，存在时序竞争
+
+### 红点同步规则
+
+- **必须在 `Promise.all` 之后**写 `dayCounts[todayTs]`，不能在子函数内写（会被后完成的 `loadDateCounts` 覆盖）
+- **以实际可见卡片数为准**：`cards.value.length === 0` → 强制 0；cards 非空且服务端返回 0 → 补 1
+- **不依赖 `counts.today`**：该字段含「用药卡计 1」逻辑，即使今日剂量全给完也可能为 1，不能作为红点依据
+- **乐观更新**：卡片被 `removeCardLocally` 移除时，同步 `dayCounts[startOfDay(Date.now())] = counts.today`
+
+### `counts.today` 计算说明（后端）
+
+```
+counts.today = pendingTasks.length - oldMedCount + (hasHealthCard ? 1 : 0)
+```
+只要有进行中用药任务（`activeMedications.length > 0`），即使今日剂量全给完，`counts.today` 仍为 1。
+**这是已知行为，不是 bug**；红点不应依赖此值。
+
+## BDogPicker 组件（`src/components/form/BDogPicker.vue`）
+
+- **多选模式全选**：筛选栏右侧显示「全选/取消全选」，作用于当前 `filteredDogs`（按筛选 tab 过滤后的结果），不影响其他 tab 下已选犬只
+- `isAllSelected` 基于 `filteredDogs` 判断，支持局部全选（如只全选「种母」tab）
+
+## BSheet 组件（`src/components/layout/BSheet.vue`）
+
+- 滚动条隐藏：`scrollbar-width: none` + `&::-webkit-scrollbar { display: none }` + `:deep(::-webkit-scrollbar) { display: none }`
+- 内部列表横向滚动条同样隐藏
+
 ## gstack
 
-## 浏览器工具路由
+gstack 技能和路由规则见 `~/CLAUDE.md`（全局配置，避免重复）。
 
-- 用户说"用Chrome" / "Chrome测试" / "open in Chrome" → 使用 `mcp__claude-in-chrome__*` 工具
-- 其他所有浏览器/QA 任务 → 使用 gstack 的 `/browse` 技能（不使用 `mcp__claude-in-chrome__*`）
-
-可用技能：
-- `/office-hours` `/plan-ceo-review` `/plan-eng-review` `/plan-design-review`
-- `/design-consultation` `/review` `/ship` `/land-and-deploy`
-- `/canary` `/benchmark` `/browse` `/qa` `/qa-only`
-- `/design-review` `/setup-browser-cookies` `/setup-deploy`
-- `/retro` `/investigate` `/document-release` `/codex`
-- `/cso` `/careful` `/freeze` `/guard` `/unfreeze` `/gstack-upgrade`
-
-如果 gstack 技能不起作用，运行以下命令重新构建：
-```bash
-cd .claude/skills/gstack && ./setup
-```
-
-## Skill routing
-
-When the user's request matches an available skill, ALWAYS invoke it using the Skill
-tool as your FIRST action. Do NOT answer directly, do NOT use other tools first.
-The skill has specialized workflows that produce better results than ad-hoc answers.
-
-Key routing rules:
-- Product ideas, "is this worth building", brainstorming → invoke office-hours
-- Bugs, errors, "why is this broken", 500 errors → invoke investigate
-- Ship, deploy, push, create PR → invoke ship
-- QA, test the site, find bugs → invoke qa
-- Code review, check my diff → invoke review
-- Update docs after shipping → invoke document-release
-- Weekly retro → invoke retro
-- Design system, brand → invoke design-consultation
-- Visual audit, design polish → invoke design-review
-- Architecture review → invoke plan-eng-review
+如果 gstack 技能不起作用：`cd .claude/skills/gstack && ./setup`

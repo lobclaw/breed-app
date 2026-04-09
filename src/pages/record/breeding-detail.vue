@@ -182,11 +182,11 @@
     <!-- 更多操作 Sheet -->
     <BSheet v-model:visible="showMore" title="更多操作">
       <view class="more-actions">
-        <view class="more-action-item" @click="goEdit; showMore = false">
+        <view class="more-action-item" @click="handleEditFromMore">
           <text class="material-icons-round" style="font-size: 20px; color: var(--text-2);">edit</text>
           <text class="more-action-label">编辑记录</text>
         </view>
-        <view class="more-action-item" @click="confirmDelete; showMore = false">
+        <view class="more-action-item" @click="handleDeleteFromMore">
           <text class="material-icons-round" style="font-size: 20px; color: var(--red);">delete</text>
           <text class="more-action-label" style="color: var(--red);">删除记录</text>
         </view>
@@ -261,6 +261,10 @@ function goEdit() {
   uni.navigateTo({ url: `/pages/record/breeding-edit?id=${recordId}` })
 }
 
+function handleEditFromMore() {
+  goEdit()
+}
+
 function goToCycle() {
   if (record.value?.cycle_id) {
     uni.navigateTo({ url: `/pages/breeding/cycle?id=${record.value.cycle_id}` })
@@ -282,6 +286,10 @@ function confirmDelete() {
       }
     },
   })
+}
+
+function handleDeleteFromMore() {
+  confirmDelete()
 }
 
 onLoad((query) => {

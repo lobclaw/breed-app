@@ -79,6 +79,7 @@
             class="pill-select__item"
             :class="{ 'pill-select__item--active': form.breed === b }"
             @click="!isEdit && (form.breed = b)"
+            @longpress="(!isEdit && !PRESET_BREEDS.includes(b)) ? deleteCustomBreed(b) : undefined"
           >
             <text>{{ b }}</text>
           </view>
@@ -167,6 +168,14 @@
       </button>
     </view>
 
+    <BModal
+      v-model:visible="showDeleteConfirm"
+      :title="`删除「${pendingDeleteVal}」？`"
+      confirmText="删除"
+      :danger="true"
+      @confirm="handleDeleteConfirm"
+    />
+
     <!-- 自定义品种弹窗 -->
     <BModal
       v-model:visible="showBreedModal"
@@ -189,11 +198,13 @@
 import { ref, computed, reactive, watch } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BModal from '@/components/layout/BModal.vue'
 import { useDogStore } from '@/stores/dogStore'
 
 const dogStore = useDogStore()
+const { currentFamily, loadFamily } = useAuth()
 
 const isEdit = ref(false)
 let editDogId = ''
@@ -212,22 +223,68 @@ const purchasePriceInput = ref('')
 
 const submitting = ref(false)
 
-const breedOptions = ['马尔济斯', '西施', '约克夏']
+const PRESET_BREEDS = ['马尔济斯', '西施', '约克夏']
+const deletedCustomBreeds = ref<string[]>([])
+const breedOptions = computed(() => {
+  const custom = (currentFamily.value?.settings?.custom_breed_types || [])
+    .filter((v: string) => !deletedCustomBreeds.value.includes(v))
+  const all = [...PRESET_BREEDS, ...custom]
+  return [...new Set(all)]
+})
 const customBreed = ref('')
 const showBreedModal = ref(false)
 const breedInput = ref('')
+const showDeleteConfirm = ref(false)
+const pendingDeleteVal = ref('')
+let confirmDeleteFn: (() => Promise<void>) | null = null
 
 function addCustomBreed() {
   breedInput.value = ''
   showBreedModal.value = true
 }
 
-function onBreedConfirm() {
-  if (breedInput.value.trim()) {
-    customBreed.value = breedInput.value.trim()
-    form.breed = customBreed.value
+const { run: updateFamilySettings } = useCloudCall('family-service', 'updateSettings')
+
+function deleteCustomBreed(val: string) {
+  pendingDeleteVal.value = val
+  confirmDeleteFn = async () => {
+    uni.vibrateShort()
+    deletedCustomBreeds.value.push(val)
+    if (form.breed === val) form.breed = PRESET_BREEDS[0]
+    if (customBreed.value === val) customBreed.value = ''
+    const existing = currentFamily.value?.settings?.custom_breed_types || []
+    const updated = existing.filter((v: string) => v !== val)
+    try {
+      await updateFamilySettings({ custom_breed_types: updated })
+      await loadFamily()
+      deletedCustomBreeds.value = deletedCustomBreeds.value.filter(v => v !== val)
+    } catch {
+      deletedCustomBreeds.value = deletedCustomBreeds.value.filter(v => v !== val)
+      uni.showToast({ title: '删除失败', icon: 'none' })
+    }
   }
+  showDeleteConfirm.value = true
+}
+
+async function handleDeleteConfirm() {
+  if (confirmDeleteFn) { await confirmDeleteFn(); confirmDeleteFn = null }
+}
+
+async function onBreedConfirm() {
+  if (!breedInput.value.trim()) { showBreedModal.value = false; return }
+
+  const val = breedInput.value.trim()
+  customBreed.value = val
+  form.breed = val
   showBreedModal.value = false
+
+  if (!PRESET_BREEDS.includes(val)) {
+    const existing = currentFamily.value?.settings?.custom_breed_types || []
+    if (!existing.includes(val)) {
+      await updateFamilySettings({ custom_breed_types: [...existing, val] })
+      await loadFamily()
+    }
+  }
 }
 
 // 切换角色时自动设置性别（编辑模式不触发，避免覆盖已加载的性别）

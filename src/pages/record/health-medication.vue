@@ -190,17 +190,45 @@
     <!-- 同名用药确认 Modal -->
     <BModal
       v-model:visible="showDupModal"
-      :title="`${dupList.length}只犬已有同名任务`"
-      confirmText="继续创建"
+      :title="cleanDogs.length > 0 ? '部分犬只已有同名任务' : '所有犬只已有同名任务'"
+      :confirmText="dupConfirmText"
       cancelText="取消"
       @confirm="dupResolve?.(true)"
       @cancel="dupResolve?.(false)"
     >
-      <view class="dup-list">
-        <view v-for="(dup, i) in dupList" :key="i" class="dup-list__item">
-          <text class="dup-list__name">{{ dup.dogName }}</text>
-          <text class="dup-list__drug">{{ dup.drugName }}</text>
-          <text class="dup-list__progress">第{{ dup.day }}/{{ dup.totalDays }}天</text>
+      <view class="dup-dialog">
+        <!-- 无重复犬 → 直接创建 -->
+        <view v-if="cleanDogs.length > 0" class="dup-section">
+          <text class="dup-section__title dup-section__title--ok">将创建（{{ cleanDogs.length }}只）</text>
+          <view v-for="dog in cleanDogs" :key="dog._id" class="dup-row">
+            <text class="dup-row__name">{{ dog.name }}</text>
+            <text class="dup-row__tag">新建</text>
+          </view>
+        </view>
+
+        <view v-if="cleanDogs.length > 0" class="dup-divider" />
+
+        <!-- 有重复犬 → 可勾选覆盖 -->
+        <view class="dup-section">
+          <view class="dup-section__header">
+            <text class="dup-section__title dup-section__title--warn">已有同名任务（{{ dupList.length }}只）</text>
+            <text class="dup-section__select-all" @click="toggleAllOverride">
+              {{ dupOverrideDogIds.length === dupList.length ? '取消全选' : '全选' }}
+            </text>
+          </view>
+          <text class="dup-section__hint">勾选后将覆盖旧任务</text>
+          <view
+            v-for="(dup, i) in dupList"
+            :key="i"
+            class="dup-row dup-row--selectable"
+            @click="toggleOverride(dup.dog_id)"
+          >
+            <view class="dup-check-box" :class="{ 'dup-check-box--checked': dupOverrideDogIds.includes(dup.dog_id) }">
+              <text v-if="dupOverrideDogIds.includes(dup.dog_id)" class="material-icons-round" style="font-size: 13px; color: #fff;">check</text>
+            </view>
+            <text class="dup-row__name">{{ dup.dogName }}</text>
+            <text class="dup-row__progress">第{{ dup.day }}/{{ dup.totalDays }}天</text>
+          </view>
         </view>
       </view>
     </BModal>
@@ -344,22 +372,30 @@ async function submit() {
     const dupRes = await batchCheckDuplicate(dogIds, drug)
     dupList.value = dupRes?.data || []
     if (dupList.value.length > 0) {
+      dupOverrideDogIds.value = []
       showDupModal.value = true
       const confirmed = await new Promise<boolean>((resolve) => {
         dupResolve.value = resolve
       })
       showDupModal.value = false
       dupResolve.value = null
-      if (!confirmed) {
+      if (!confirmed || dupFinalCount.value === 0) {
         submitting.value = false
         return
       }
     }
 
+    // 计算最终创建犬只：无重复的 + 用户选择覆盖的
+    const dupDogIdSet = new Set(dupList.value.map((d: any) => d.dog_id))
+    const cleanDogIds = dogIds.filter(id => !dupDogIdSet.has(id))
+    const overrideDogIds = [...dupOverrideDogIds.value]
+    const finalDogIds = [...cleanDogIds, ...overrideDogIds]
+
     // 批量创建用药任务（一次调用）
     const freqMap: Record<string, number> = { once_daily: 1, twice_daily: 2, three_daily: 3 }
     await batchStartMedication({
-      dog_ids: dogIds,
+      dog_ids: finalDogIds,
+      override_dog_ids: overrideDogIds.length > 0 ? overrideDogIds : undefined,
       drug_name: drug,
       dosage: dosage.value,
       dosage_unit: dosageUnit.value,
@@ -373,8 +409,8 @@ async function submit() {
       illnessRecordId: selectedDogs.value.length === 1 ? (illnessRecordId.value || null) : null,
     })
     uni.showToast({
-      title: selectedDogs.value.length > 1
-        ? `已创建 ${selectedDogs.value.length} 个用药任务`
+      title: finalDogIds.length > 1
+        ? `已创建 ${finalDogIds.length} 个用药任务`
         : '已创建用药任务',
       icon: 'success',
     })
@@ -430,7 +466,31 @@ const protocolName = ref('')
 // 同名用药确认弹窗
 const showDupModal = ref(false)
 const dupList = ref<any[]>([])
+const dupOverrideDogIds = ref<string[]>([])
 const dupResolve = ref<((v: boolean) => void) | null>(null)
+
+const cleanDogs = computed(() => {
+  const dupDogIdSet = new Set(dupList.value.map((d: any) => d.dog_id))
+  return selectedDogs.value.filter((d: any) => !dupDogIdSet.has(d._id))
+})
+const dupFinalCount = computed(() => cleanDogs.value.length + dupOverrideDogIds.value.length)
+const dupConfirmText = computed(() =>
+  dupFinalCount.value === 0 ? '跳过（不创建）' : `确认创建（${dupFinalCount.value}只）`
+)
+
+function toggleOverride(dogId: string) {
+  const idx = dupOverrideDogIds.value.indexOf(dogId)
+  if (idx === -1) dupOverrideDogIds.value.push(dogId)
+  else dupOverrideDogIds.value.splice(idx, 1)
+}
+
+function toggleAllOverride() {
+  if (dupOverrideDogIds.value.length === dupList.value.length) {
+    dupOverrideDogIds.value = []
+  } else {
+    dupOverrideDogIds.value = dupList.value.map((d: any) => d.dog_id)
+  }
+}
 
 const { run: saveProtocol } = useCloudCall('health-service', 'addMedicationProtocol', {
   successMessage: '方案已保存',
@@ -700,27 +760,68 @@ onLoad((query) => {
   &--sub { width: 80%; height: 10px; }
 }
 
-/* ---- 同名用药确认列表 ---- */
-.dup-list {
-  display: flex; flex-direction: column; gap: 8px;
+/* ---- 同名用药确认弹窗 ---- */
+.dup-dialog {
+  display: flex; flex-direction: column; gap: 12px;
   margin-top: 4px;
 }
-.dup-list__item {
+.dup-section {
+  display: flex; flex-direction: column; gap: 6px;
+}
+.dup-section__header {
+  display: flex; align-items: center; justify-content: space-between;
+}
+.dup-section__title {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.3px;
+}
+.dup-section__title--ok { color: var(--text-3); }
+.dup-section__title--warn { color: var(--plum); }
+.dup-section__select-all {
+  font-size: 12px; font-weight: 600; color: var(--plum);
+  padding: 2px 8px; border-radius: 6px;
+  background: var(--plum-soft);
+  &:active { opacity: 0.7; }
+}
+.dup-section__hint {
+  font-size: 11px; color: var(--text-4);
+  margin-top: -2px; margin-bottom: 2px;
+}
+.dup-divider {
+  height: 1px; background: var(--card-dim);
+}
+.dup-row {
   display: flex; align-items: center; gap: 8px;
-  padding: 8px 12px; border-radius: 10px;
+  padding: 8px 10px; border-radius: 10px;
   background: var(--card-dim);
 }
-.dup-list__name {
+.dup-row--selectable {
+  cursor: pointer;
+  &:active { opacity: 0.7; }
+}
+.dup-row__name {
   font-size: 14px; font-weight: 700; color: var(--text-1);
   min-width: 40px;
 }
-.dup-list__drug {
-  font-size: 13px; font-weight: 600; color: var(--plum);
-  flex: 1;
-}
-.dup-list__progress {
+.dup-row__progress {
   font-size: 11px; font-weight: 700; color: var(--plum);
   padding: 2px 8px; border-radius: 4px;
   background: var(--plum-soft);
+  margin-left: auto;
+}
+.dup-row__tag {
+  font-size: 11px; font-weight: 700; color: var(--primary);
+  padding: 2px 8px; border-radius: 4px;
+  background: var(--primary-soft);
+  margin-left: auto;
+}
+.dup-check-box {
+  width: 20px; height: 20px; border-radius: 6px;
+  border: 2px solid var(--text-4);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+.dup-check-box--checked {
+  background: var(--plum); border-color: var(--plum);
 }
 </style>

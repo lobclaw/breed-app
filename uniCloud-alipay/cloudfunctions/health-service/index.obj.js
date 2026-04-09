@@ -159,7 +159,7 @@ async function generateReminders(familyId, type, data, dog, recordId, preloadedS
       dog_id: dog._id,
       dog_name: dog.name,
       type: 'vaccination',
-      title: `${dog.name} · 下次疫苗`,
+      title: data.details?.vaccine_type || '疫苗',
       due_date: dueDate,
       status: 'pending',
       priority: 'upcoming',
@@ -207,7 +207,7 @@ async function generateReminders(familyId, type, data, dog, recordId, preloadedS
       dog_id: dog._id,
       dog_name: dog.name,
       type: 'illness',
-      title: `${dog.name} · 复查提醒`,
+      title: `${dog.name} · ${data.details?.condition || '疾病'}复查`,
       due_date: data.details.next_reminder_date,
       status: 'pending',
       priority: 'upcoming',
@@ -215,6 +215,11 @@ async function generateReminders(familyId, type, data, dog, recordId, preloadedS
       source_collection: 'health_records',
       family_id: familyId,
       postpone_count: 0,
+      details: {
+        condition: data.details?.condition || null,
+        severity: data.details?.severity || null,
+        treatment_status: data.details?.treatment_status || null,
+      },
       created_at: now,
       updated_at: now,
     })
@@ -530,6 +535,16 @@ module.exports = {
 
     // ③ 并行创建
     const results = await Promise.all(dogs.map(async (dog) => {
+      // 覆盖模式：先取消该犬的同名进行中任务
+      if (data.override_dog_ids && data.override_dog_ids.includes(dog._id)) {
+        const { data: existingMeds } = await db.collection('medication_tasks')
+          .where({ dog_id: dog._id, family_id: familyId, drug_name: data.drug_name, status: '进行中' })
+          .get()
+        await Promise.all((existingMeds || []).map(med =>
+          db.collection('medication_tasks').doc(med._id).update({ status: '已取消', updated_at: now })
+        ))
+      }
+
       const medicationData = {
         dog_id: dog._id,
         dog_name: dog.name,
@@ -710,7 +725,7 @@ module.exports = {
     // 计算今天是第几天
     const startDate = new Date(med.actual_start_date); startDate.setHours(0, 0, 0, 0)
     const today = new Date(); today.setHours(0, 0, 0, 0)
-    const currentDay = Math.floor((today.getTime() - startDate.getTime()) / DAY_MS) + 1
+    const currentDay = Math.floor((today.getTime() - startDate.getTime()) / 86400000) + 1
     if (currentDay < 1 || currentDay > med.duration_days) {
       return { data: { completed: false, out_of_range: true } }
     }
@@ -769,7 +784,7 @@ module.exports = {
 
     for (const med of meds) {
       const startDate = new Date(med.actual_start_date); startDate.setHours(0, 0, 0, 0)
-      const currentDay = Math.floor((today.getTime() - startDate.getTime()) / DAY_MS) + 1
+      const currentDay = Math.floor((today.getTime() - startDate.getTime()) / 86400000) + 1
       if (currentDay < 1 || currentDay > med.duration_days) continue
 
       const dayKey = String(currentDay)

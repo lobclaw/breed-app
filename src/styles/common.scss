@@ -167,7 +167,7 @@
   font-weight: 600;
   color: var(--text-2);
   background: var(--card-dim);
-  border: none;
+  border: 1px solid transparent;
   transition: all 0.15s ease;
 
   &:active {
@@ -234,6 +234,7 @@
 
   &:active { transform: scale(0.94); }
 }
+
 
 /* ==================== 行内字段（如卵泡左右侧） ==================== */
 .inline-fields {

@@ -422,11 +422,6 @@ async function loadTodayCards() {
     taskStore.cards = cards.value
     taskStore.counts = { today: counts.today, week: counts.week, month30: counts.month30, hasOverdue: counts.hasOverdue }
     taskStore.loaded = true
-    // 确保今天的 dayCounts 红点反映健康关注卡
-    if (cards.value.length > 0) {
-      const todayTs = startOfDay(Date.now())
-      dayCounts.value[todayTs] = Math.max(dayCounts.value[todayTs] || 0, 1)
-    }
   }
   loading.value = false
 }
@@ -460,8 +455,16 @@ async function loadDateCounts() {
 }
 
 /** 并行加载所有首页数据 */
-function loadAll() {
-  return Promise.all([loadTodayCards(), loadWeekCache(), loadDateCounts()])
+async function loadAll() {
+  await Promise.all([loadTodayCards(), loadWeekCache(), loadDateCounts()])
+  // 两个请求都完成后：以实际可见卡片数修正今天的红点
+  // 不依赖 counts.today（它含用药卡，即使今日剂量全给完仍为 1）
+  const todayTs = startOfDay(Date.now())
+  if (cards.value.length === 0) {
+    dayCounts.value[todayTs] = 0
+  } else if (!dayCounts.value[todayTs]) {
+    dayCounts.value[todayTs] = 1
+  }
 }
 
 function onDateSelect(ts: number) {
@@ -505,6 +508,7 @@ function removeCardLocally(taskId: string, forceRemoveCard = false, showSuccess 
             if (currentIdx >= 0) list.value.splice(currentIdx, 1)
             completingCards.value.delete(card.id)
             counts.today = Math.max(0, counts.today - 1)
+            dayCounts.value[startOfDay(Date.now())] = counts.today
           }, 450)
         }, 1500)
       } else {
@@ -515,6 +519,7 @@ function removeCardLocally(taskId: string, forceRemoveCard = false, showSuccess 
           if (currentIdx >= 0) list.value.splice(currentIdx, 1)
           completingCards.value.delete(card.id)
           counts.today = Math.max(0, counts.today - 1)
+          dayCounts.value[startOfDay(Date.now())] = counts.today
         }, 450)
       }
     } else {
@@ -562,14 +567,12 @@ async function onComplete(taskId: string, mode?: boolean | string) {
   if (mode === 'auto') {
     removeCardLocally(taskId)
     doCompleteTask(taskId, true) // autoRecord=true
-    uni.showToast({ title: '已完成并记录', icon: 'success', duration: 1500 })
     return
   }
   // DogCard "跳过" (mode='skip'): 仅标记 done，不创建记录
   if (mode === 'skip') {
     removeCardLocally(taskId, false, false)
     doCompleteTask(taskId)
-    uni.showToast({ title: '已跳过', icon: 'none', duration: 1500 })
     return
   }
   // 兜底
@@ -686,6 +689,36 @@ async function onBatchCompleteMed(medicationTaskIds: string[]) {
 const { run: updateIllnessStatus } = useCloudCall('health-service', 'updateIllnessStatus')
 const { run: endMedication } = useCloudCall('health-service', 'endMedicationByDog')
 
+/** 乐观移除疾病观察卡中的犬只行（带淡出动画） */
+function removeSickDogLocally(dogId: string) {
+  const list = cards
+  const idx = list.value.findIndex(c => c.cardType === 'sick_observation')
+  if (idx < 0) return
+  const card = list.value[idx]
+  const dog = (card.dogs || []).find((d: any) => d.dogId === dogId)
+  if (!dog) return
+
+  // 标记淡出动画
+  dog._removing = true
+
+  setTimeout(() => {
+    const remaining = (card.dogs || []).filter((d: any) => d.dogId !== dogId)
+    if (remaining.length === 0) {
+      // 最后一只：整张卡片滑出
+      completingCards.value.add(card.id)
+      setTimeout(() => {
+        const ci = list.value.findIndex(c => c.id === card.id)
+        if (ci >= 0) list.value.splice(ci, 1)
+        completingCards.value.delete(card.id)
+        counts.today = Math.max(0, counts.today - 1)
+        dayCounts.value[startOfDay(Date.now())] = counts.today
+      }, 450)
+    } else {
+      card.dogs = remaining
+    }
+  }, 350)
+}
+
 // 健康关注卡：操作菜单状态
 const showSickMenu = ref(false)
 const sickMenuDog = ref<any>(null)
@@ -708,20 +741,18 @@ function onAction(payload: { type: string; data: any }) {
     stopConfirmData.value = payload.data
     showStopConfirm.value = true
   } else if (payload.type === 'recover' && payload.data?.illnessId) {
-    updateIllnessStatus(payload.data.illnessId, '已康复').then(() => {
-      uni.showToast({ title: '已标记康复', icon: 'success' })
-      loadAll()
-    })
+    removeSickDogLocally(payload.data.dogId)
+    updateIllnessStatus(payload.data.illnessId, '已康复')
   } else if (payload.type === 'update_status' && payload.data?.illnessId) {
-    updateIllnessStatus(payload.data.illnessId, payload.data.status).then(() => {
-      uni.showToast({ title: '已更新', icon: 'success' })
-      loadAll()
-    })
+    // 就地更新状态标签（不移除行）
+    const sickCard = cards.value.find(c => c.cardType === 'sick_observation')
+    if (sickCard) {
+      const dog = (sickCard.dogs || []).find((d: any) => d.dogId === payload.data.dogId)
+      if (dog) dog.treatmentStatus = payload.data.status
+    }
+    updateIllnessStatus(payload.data.illnessId, payload.data.status)
   } else if (payload.type === 'stop_medication' && payload.data?.dogId) {
-    endMedication(payload.data.dogId).then(() => {
-      uni.showToast({ title: '已停止用药', icon: 'success' })
-      loadAll()
-    })
+    endMedication(payload.data.dogId).then(() => loadAll())
   }
 }
 

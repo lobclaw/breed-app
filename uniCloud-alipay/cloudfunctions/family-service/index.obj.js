@@ -17,6 +17,8 @@ const DEFAULT_SETTINGS = {
   morning_summary_time: '07:00',
   custom_vaccine_types: [],
   custom_deworming_drugs: { internal: [], external: [], combo: [] },
+  custom_condition_types: [],
+  custom_breed_types: [],
 }
 
 module.exports = {
