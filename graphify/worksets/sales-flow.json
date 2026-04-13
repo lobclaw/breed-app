@@ -1,0 +1,36 @@
+{
+  "name": "sales-flow",
+  "title": "销售流程业务域",
+  "description": "覆盖销售列表、创建、详情、代理人，以及 sale 与 finance/dog 状态联动。",
+  "keywords": [
+    "销售",
+    "sale",
+    "代理",
+    "agents",
+    "成交",
+    "退款",
+    "定金",
+    "预定",
+    "售出"
+  ],
+  "files": [
+    "docs/design/01-data-model.md",
+    "docs/design/02-features.md",
+    "docs/design/03-tech-stack.md",
+    "docs/design/04-implementation.md",
+    "docs/design/05-field-page-mapping.md",
+    "src/types/dog.ts",
+    "src/types/finance.ts",
+    "src/composables/useCloudCall.ts",
+    "src/pages/sale/list.vue",
+    "src/pages/sale/create.vue",
+    "src/pages/sale/detail.vue",
+    "src/pages/sale/agents.vue",
+    "src/pages/dog/detail.vue",
+    "src/pages/finance/income-detail.vue",
+    "src/pages/finance/index.vue",
+    "src/components/layout/BFabSheet.vue",
+    "uniCloud-alipay/cloudfunctions/finance-service/index.obj.js",
+    "uniCloud-alipay/cloudfunctions/dog-service/index.obj.js"
+  ]
+}

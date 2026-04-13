@@ -1,0 +1,36 @@
+{
+  "name": "family-auth",
+  "title": "家庭与认证业务域",
+  "description": "覆盖单家庭模式、家庭初始化/邀请/加入、成员权限、useAuth 状态恢复，以及 family-service 与 uni-id 链路。",
+  "keywords": [
+    "家庭",
+    "邀请",
+    "加入",
+    "成员",
+    "权限",
+    "认证",
+    "登录",
+    "useauth",
+    "family",
+    "uni-id"
+  ],
+  "files": [
+    "docs/design/01-data-model.md",
+    "docs/design/02-features.md",
+    "docs/design/03-tech-stack.md",
+    "docs/design/04-implementation.md",
+    "src/types/family.ts",
+    "src/composables/useAuth.ts",
+    "src/composables/useCloudCall.ts",
+    "src/pages/family/setup.vue",
+    "src/pages/family/invite.vue",
+    "src/pages/family/join.vue",
+    "src/pages/family/members.vue",
+    "src/pages/profile/index.vue",
+    "src/pages/profile/notifications.vue",
+    "src/pages/profile/operation-log.vue",
+    "uniCloud-alipay/cloudfunctions/family-service/index.obj.js",
+    "uniCloud-alipay/cloudfunctions/uni-id-co/index.obj.js",
+    "uniCloud-alipay/cloudfunctions/common/breed-auth/auth.js"
+  ]
+}

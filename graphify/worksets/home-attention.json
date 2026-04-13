@@ -1,0 +1,36 @@
+{
+  "name": "home-attention",
+  "title": "首页注意力单元业务域",
+  "description": "覆盖首页卡片聚合、WeekStrip 红点、周缓存、首页动作以及相关云函数返回逻辑。",
+  "keywords": [
+    "首页",
+    "红点",
+    "weekstrip",
+    "daycounts",
+    "卡片",
+    "今日",
+    "提醒",
+    "批量处理"
+  ],
+  "files": [
+    "docs/design/01-data-model.md",
+    "docs/design/02-features.md",
+    "docs/design/04-implementation.md",
+    "docs/design/05-field-page-mapping.md",
+    "src/pages/home/index.vue",
+    "src/pages/home/batch-process.vue",
+    "src/components/week-strip/WeekStrip.vue",
+    "src/components/smart-card/SmartCard.vue",
+    "src/components/smart-card/DogCard.vue",
+    "src/components/smart-card/BatchCard.vue",
+    "src/components/smart-card/MedicationCard.vue",
+    "src/components/smart-card/CareGroupCard.vue",
+    "src/components/smart-card/SickObservationCard.vue",
+    "src/stores/taskStore.ts",
+    "src/composables/useCloudCall.ts",
+    "src/types/task.ts",
+    "src/types/health.ts",
+    "uniCloud-alipay/cloudfunctions/task-service/index.obj.js",
+    "uniCloud-alipay/cloudfunctions/health-service/index.obj.js"
+  ]
+}

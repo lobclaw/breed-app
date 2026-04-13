@@ -1,0 +1,32 @@
+# Version control and generated output
+.git/
+graphify-out/
+.graphify-worksets/
+node_modules/
+dist/
+unpackage/
+coverage/
+
+# Local tooling / IDE state
+.hbuilderx/
+.claude/
+.gstack/
+.lingma/
+.DS_Store
+
+# Third-party bundled modules
+uni_modules/
+src/uni_modules/
+uniCloud-alipay/cloudfunctions/*/node_modules/
+
+# Low-signal binary/static assets
+static/fonts/
+static/tab/
+src/static/fonts/
+src/static/tab/
+*.woff2
+*.docx
+
+# Archived documents that are not current design sources
+archive/
+docs/design/archive/

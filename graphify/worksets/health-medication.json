@@ -1,0 +1,35 @@
+{
+  "name": "health-medication",
+  "title": "用药任务业务域",
+  "description": "覆盖用药表单、重复检测、批量覆盖、今日用药卡、详情页以及云对象写入链路。",
+  "keywords": [
+    "用药",
+    "药物",
+    "重复用药",
+    "覆盖",
+    "medication",
+    "剂量",
+    "方案库",
+    "药卡"
+  ],
+  "files": [
+    "docs/design/01-data-model.md",
+    "docs/design/02-features.md",
+    "docs/design/04-implementation.md",
+    "docs/design/05-field-page-mapping.md",
+    "src/pages/record/health-medication.vue",
+    "src/pages/record/medication-detail.vue",
+    "src/pages/record/health-illness.vue",
+    "src/pages/dog/detail.vue",
+    "src/components/form/BDogPicker.vue",
+    "src/components/form/BFormOptions.vue",
+    "src/components/layout/BSheet.vue",
+    "src/components/smart-card/MedicationCard.vue",
+    "src/components/smart-card/SmartCard.vue",
+    "src/composables/useCloudCall.ts",
+    "src/types/health.ts",
+    "src/types/task.ts",
+    "uniCloud-alipay/cloudfunctions/health-service/index.obj.js",
+    "uniCloud-alipay/cloudfunctions/task-service/index.obj.js"
+  ]
+}

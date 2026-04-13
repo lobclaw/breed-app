@@ -1,0 +1,43 @@
+{
+  "name": "finance",
+  "title": "财务业务域",
+  "description": "覆盖财务首页、收入支出录入与详情、窝利润、母犬 ROI、预测统计，以及 finance-service 聚合逻辑。",
+  "keywords": [
+    "财务",
+    "收入",
+    "支出",
+    "利润",
+    "roi",
+    "projection",
+    "stats",
+    "finance",
+    "expense",
+    "income"
+  ],
+  "files": [
+    "docs/design/01-data-model.md",
+    "docs/design/02-features.md",
+    "docs/design/03-tech-stack.md",
+    "docs/design/04-implementation.md",
+    "docs/design/05-field-page-mapping.md",
+    "src/types/finance.ts",
+    "src/composables/useCloudCall.ts",
+    "src/components/form/BLitterSelector.vue",
+    "src/components/layout/BFabSheet.vue",
+    "src/pages/finance/index.vue",
+    "src/pages/finance/expense-add.vue",
+    "src/pages/finance/expense-edit.vue",
+    "src/pages/finance/expense-detail.vue",
+    "src/pages/finance/income-add.vue",
+    "src/pages/finance/income-edit.vue",
+    "src/pages/finance/income-detail.vue",
+    "src/pages/finance/litter-profit.vue",
+    "src/pages/finance/dam-roi.vue",
+    "src/pages/finance/projection.vue",
+    "src/pages/finance/stats.vue",
+    "src/pages/profile/expense-categories.vue",
+    "uniCloud-alipay/cloudfunctions/finance-service/index.obj.js",
+    "uniCloud-alipay/cloudfunctions/dog-service/index.obj.js",
+    "uniCloud-alipay/cloudfunctions/breeding-service/index.obj.js"
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "name": "shared-form-system",
+  "title": "共享表单系统业务域",
+  "description": "覆盖 BFormOptions、犬只/周期/窝选择器、底部弹层和记录表单约定，适合排查表单一致性与复用规则。",
+  "keywords": [
+    "表单",
+    "bformoptions",
+    "选择器",
+    "dogpicker",
+    "cycleselector",
+    "litterselector",
+    "bsheet",
+    "bmodal",
+    "一致性"
+  ],
+  "files": [
+    "docs/design/02-features.md",
+    "docs/design/04-implementation.md",
+    "docs/design/05-field-page-mapping.md",
+    "src/composables/useCloudCall.ts",
+    "src/components/form/BFormOptions.vue",
+    "src/components/form/BDogPicker.vue",
+    "src/components/form/BCycleSelector.vue",
+    "src/components/form/BLitterSelector.vue",
+    "src/components/form/BDatePicker.vue",
+    "src/components/form/BInput.vue",
+    "src/components/layout/BSheet.vue",
+    "src/components/layout/BModal.vue",
+    "src/components/layout/BDeleteConfirm.vue",
+    "src/pages/record/health-vaccination.vue",
+    "src/pages/record/health-deworming.vue",
+    "src/pages/record/health-illness.vue",
+    "src/pages/record/breeding-heat.vue",
+    "src/pages/record/breeding-follicle.vue",
+    "src/pages/record/breeding-mating.vue",
+    "src/pages/record/breeding-pregnancy.vue",
+    "src/pages/record/breeding-prenatal.vue",
+    "src/pages/record/breeding-prelabor.vue",
+    "src/pages/record/breeding-termination.vue",
+    "src/pages/record/health-medication.vue"
+  ]
+}

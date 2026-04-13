@@ -109,3 +109,25 @@ counts.today = pendingTasks.length - oldMedCount + (hasHealthCard ? 1 : 0)
 gstack 技能和路由规则见 `~/AGENTS.md`（全局配置，避免重复）。
 
 如果 gstack 技能不起作用：`cd .Codex/skills/gstack && ./setup`
+
+## graphify
+
+This project has a graphify knowledge graph at graphify-out/.
+
+Rules:
+- Before answering architecture or codebase questions, read graphify-out/GRAPH_REPORT.md for god nodes and community structure
+- If the question is inside a clear business domain, prefer the matching workset in `graphify/worksets/` before reading raw files
+- Current priority worksets:
+  - `health-medication`: medication form, duplicate detection, medication card, `batchStartMedication`
+  - `home-attention`: home cards, WeekStrip, `dayCounts`, `getDateCounts`
+  - `breeding-record`: breeding forms, birth wizard, cycle/litter flow, `breeding-service`
+  - `shared-form-system`: `BFormOptions`, selectors, sheet/modal interactions, form consistency
+  - `finance`: finance pages, ROI/profit/projection/stats, `finance-service`
+  - `dog-profile`: dog list/detail/add, disposition/status, `dog-service`
+  - `family-auth`: family setup/invite/join/members, `useAuth`, `family-service`, `uni-id-co`
+  - `sales-flow`: sale list/create/detail/agents, sale-income-dog linking
+  - `health-ops`: vaccination/deworming/illness, batch weight, medication protocols, `health-service`
+- Use `./scripts/graphify-workset.sh show <workset>` to inspect scope and `./scripts/graphify-workset.sh build <workset>` to create a smaller staged corpus + code graph
+- If graphify-out/wiki/index.md exists, navigate it instead of reading raw files
+- If `graphify-out/graph.json` is missing, run `$graphify .` once from the repo root to create the initial graph
+- After modifying code files in this session, run `./scripts/graphify-rebuild.sh` to keep the graph current

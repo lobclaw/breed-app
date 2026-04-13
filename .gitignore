@@ -34,3 +34,13 @@ coverage/
 # UniCloud local dev
 uniCloud-alipay/cloudfunctions/*/node_modules/
 .gstack/
+
+# Graphify
+graphify-out/
+.graphify-worksets/
+.graphify_detect.json
+.graphify_ast.json
+.graphify_cached.json
+.graphify_semantic_new.json
+.graphify_uncached.txt
+.graphify_transcripts.json
