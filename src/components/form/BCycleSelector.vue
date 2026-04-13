@@ -135,7 +135,7 @@ async function fetchCycles() {
   loading.value = true
   try {
     const db = uniCloud.database()
-    let query = db.collection('breeding_cycles')
+    let query: any = db.collection('breeding_cycles')
     if (props.damId) {
       query = query.where(`dam_id == "${props.damId}"`)
     }

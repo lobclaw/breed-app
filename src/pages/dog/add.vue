@@ -358,7 +358,7 @@ async function submit() {
         await updateDogName(editDogId, dogData.name)
       }
       // 更新缓存
-      dogStore.updateDog(editDogId, dogData)
+      dogStore.updateDog(editDogId, dogData as any)
     } else {
       const res = await createDog(dogData)
       // 新增到缓存

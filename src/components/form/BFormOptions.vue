@@ -8,6 +8,8 @@
     reminderDays — 自动计算提醒间隔天数（默认 21）
     dateLabel — 日期字段标签（默认"日期"）
     reminderDate — 提醒日期 timestamp (v-model:reminderDate)
+    reminderLabel — 提醒开关文案（默认"下次提醒"）
+    reminderHint — 提醒辅助文案
     hideTodo — 隐藏"标记为待办"开关（从待办/批量入口进入时使用）
 -->
 <template>
@@ -48,7 +50,7 @@
   <view class="field-group">
     <view class="option-row option-row--with-sub" @click="toggleReminder">
       <text class="material-icons-round option-row__icon" style="color: var(--primary);">notifications_active</text>
-      <text class="option-row__text">下次提醒</text>
+      <text class="option-row__text">{{ reminderLabel }}</text>
       <view class="custom-toggle" :class="{ 'custom-toggle--on': enableReminder }">
         <view class="custom-toggle__knob" />
       </view>
@@ -60,7 +62,7 @@
           <text class="material-icons-round form-input__suffix">calendar_today</text>
         </view>
       </picker>
-      <text class="helper-text">自动计算：+{{ reminderDays }}天，可手动修改</text>
+      <text class="helper-text">{{ reminderHint || `自动计算：+${reminderDays}天，可手动修改` }}</text>
     </template>
   </view>
 </template>
@@ -75,11 +77,15 @@ const props = withDefaults(defineProps<{
   reminderDate?: number | null
   reminderDays?: number
   dateLabel?: string
+  reminderLabel?: string
+  reminderHint?: string
   hideTodo?: boolean
 }>(), {
   reminderDate: null,
   reminderDays: 21,
   dateLabel: '日期',
+  reminderLabel: '下次提醒',
+  reminderHint: '',
   hideTodo: false,
 })
 

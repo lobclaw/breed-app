@@ -64,6 +64,8 @@
         v-model:enableReminder="enableReminder"
         v-model:reminderDate="reminderDate"
         :reminderDays="computedReminderDays"
+        reminderLabel="创建下次待办"
+        reminderHint="建议日期已自动计算，可手动修改"
         :hideTodo="fromTask"
         dateLabel="日期"
       />
@@ -176,12 +178,13 @@ const PRESET_DEWORMING_DRUGS: Record<string, string[]> = {
   external: ['福来恩', '大宠爱'],
   combo: ['超可信', '博来恩'],
 }
+type DewormDrugMap = Record<'internal' | 'external' | 'combo', string[]>
 const deletedCustomDrugs = ref<string[]>([])
 // 根据当前选中的驱虫类型，合并预设 + 用户自定义药品（过滤乐观删除）
 const dewormDrugs = computed(() => {
-  const subtype = details.deworming_type || 'internal'
+  const subtype = (details.deworming_type || 'internal') as keyof DewormDrugMap
   const preset = PRESET_DEWORMING_DRUGS[subtype] || []
-  const customSettings = currentFamily.value?.settings?.custom_deworming_drugs || {}
+  const customSettings = (currentFamily.value?.settings?.custom_deworming_drugs || { internal: [], external: [], combo: [] }) as DewormDrugMap
   const custom = (customSettings[subtype] || []).filter((v: string) => !deletedCustomDrugs.value.includes(v))
   const all = [...preset, ...custom]
   return [...new Set(all)]
@@ -201,7 +204,7 @@ function addCustomDrug() {
 const { run: updateFamilySettings } = useCloudCall('family-service', 'updateSettings')
 
 function isPresetDrug(drug: string): boolean {
-  const subtype = details.deworming_type || 'internal'
+  const subtype = (details.deworming_type || 'internal') as keyof DewormDrugMap
   return (PRESET_DEWORMING_DRUGS[subtype] || []).includes(drug)
 }
 
@@ -212,8 +215,8 @@ function deleteCustomDrug(val: string) {
     deletedCustomDrugs.value.push(val)
     if (details.drug_name === val) details.drug_name = ''
     if (customDrug.value === val) customDrug.value = ''
-    const subtype = details.deworming_type || 'internal'
-    const customSettings = currentFamily.value?.settings?.custom_deworming_drugs || {}
+    const subtype = (details.deworming_type || 'internal') as keyof DewormDrugMap
+    const customSettings = (currentFamily.value?.settings?.custom_deworming_drugs || { internal: [], external: [], combo: [] }) as DewormDrugMap
     const updated = { ...customSettings, [subtype]: (customSettings[subtype] || []).filter((v: string) => v !== val) }
     try {
       await updateFamilySettings({ custom_deworming_drugs: updated })
@@ -240,10 +243,10 @@ async function onCustomConfirm() {
   showCustomModal.value = false
 
   // 立即保存到 family settings
-  const subtype = details.deworming_type || 'internal'
+  const subtype = (details.deworming_type || 'internal') as keyof DewormDrugMap
   const presetList = PRESET_DEWORMING_DRUGS[subtype] || []
   if (!presetList.includes(val)) {
-    const customSettings = currentFamily.value?.settings?.custom_deworming_drugs || {}
+    const customSettings = (currentFamily.value?.settings?.custom_deworming_drugs || { internal: [], external: [], combo: [] }) as DewormDrugMap
     const existing = customSettings[subtype] || []
     if (!existing.includes(val)) {
       const updated = { ...customSettings, [subtype]: [...existing, val] }
@@ -322,7 +325,7 @@ async function submit() {
         cost: costInput.value ? parseFloat(costInput.value) : null,
         notes: notes.value || null,
         details: buildDetails(),
-        skip_reminder: !enableReminder.value,
+        create_task: enableReminder.value,
       })
 
       const allCompletedTasks = res?.data?.completedTasks || []

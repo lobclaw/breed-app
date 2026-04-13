@@ -44,7 +44,7 @@
         color="primary"
         size="large"
         :loading="creating"
-        :disabled="!canSubmit || submitting"
+        :disabled="!canSubmit || creating"
         style="width: 100%; margin-top: 20px;"
         @click="create"
       >

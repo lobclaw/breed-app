@@ -21,7 +21,7 @@
             :type="item.inputType || 'number'"
             class="settings-row__input"
             :focus="editingKey === item.key"
-            @input="editingValue = $event.detail.value"
+            @input="onEditingInput"
             @blur="finishEdit(item)"
             @confirm="finishEdit(item)"
           />
@@ -59,7 +59,8 @@ const saving = ref(false)
 
 // 直接从内存中的 currentFamily 读取，无需请求
 function getSettingValue(key: string, fallback: string): string {
-  const val = currentFamily.value?.settings?.[key as keyof typeof currentFamily.value.settings]
+  const settings = currentFamily.value?.settings
+  const val = settings ? settings[key as keyof typeof settings] : undefined
   return val != null ? String(val) : fallback
 }
 
@@ -86,6 +87,10 @@ function finishEdit(item: SettingItem) {
     item.value = editingValue.value
   }
   editingKey.value = ''
+}
+
+function onEditingInput(e: any) {
+  editingValue.value = e?.detail?.value ?? ''
 }
 
 async function saveAll() {

@@ -137,7 +137,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onLoad } from '@dcloudio/uni-app'
+import { ref, computed, watch } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
@@ -170,7 +171,7 @@ const selectedSymptoms = ref<string[]>([])
 const notes = ref('')
 
 // 当选择犬只变化时加载体温历史
-watch(selectedDog, (dog) => {
+watch(selectedDog, (dog: any) => {
   if (dog?._id) loadTempHistory(dog._id)
 })
 

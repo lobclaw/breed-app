@@ -88,7 +88,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onLoad } from '@dcloudio/uni-app'
+import { ref, computed } from 'vue'
+import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'

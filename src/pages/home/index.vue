@@ -2,31 +2,27 @@
   <view class="home">
     <!-- Header: 问候 + 头像 -->
     <view class="header">
-      <view class="header-top">
+        <view class="header-top">
         <view class="greeting-text">
           <text class="greeting-title">{{ greetingText }}</text>
-          <text class="greeting-sub">{{ formatFullDate(selectedDate) }} · 犬舍状态一览</text>
+          <text class="greeting-sub">{{ formatFullDate(selectedDate) }} · 今日概览</text>
         </view>
         <view class="avatar">
           <text class="material-icons-round" style="color: #fff; font-size: 22px;">pets</text>
         </view>
       </view>
-      <!-- 摘要 Pills: 今日 / 本周 / 30天 -->
+      <!-- 摘要 Pills: 逾期 / 流程 / 提醒 / 疗程 -->
       <view class="summary-pills">
-        <view class="pill" :class="counts.hasOverdue ? 'pill-red' : 'pill-amber'" @click="scrollToSection('today')">
-          <view class="pill-dot" :style="{ background: counts.hasOverdue ? 'var(--red)' : 'var(--amber)' }" />
-          <text class="pill-label">今日</text>
-          <text class="pill-num">{{ counts.today }}</text>
-        </view>
-        <view class="pill pill-dim">
-          <view class="pill-dot" style="background: var(--text-3);" />
-          <text class="pill-label">本周</text>
-          <text class="pill-num">{{ counts.week }}</text>
-        </view>
-        <view class="pill pill-dim">
-          <view class="pill-dot" style="background: var(--text-3);" />
-          <text class="pill-label">30天</text>
-          <text class="pill-num">{{ counts.month30 }}</text>
+        <view
+          v-for="pill in summaryPills"
+          :key="pill.key"
+          class="pill"
+          :class="pill.pillClass"
+          @click="scrollToSection(pill.key)"
+        >
+          <view class="pill-dot" :style="{ background: pill.dotColor }" />
+          <text class="pill-label">{{ pill.label }}</text>
+          <text class="pill-num">{{ pill.count }}</text>
         </view>
       </view>
     </view>
@@ -44,20 +40,24 @@
       <!-- ===== 今日模式：单列表（逾期在最上面，今日紧随其后） ===== -->
       <template v-if="viewMode === 'today'">
         <view v-if="cards.length > 0" id="section-today">
-          <view class="section-label">
-            <view class="section-dot" :style="{ background: counts.hasOverdue ? 'var(--red)' : 'var(--amber)' }" />
-            <text class="section-text">{{ counts.hasOverdue ? '今日待办（含逾期）' : '今日任务' }}</text>
-            <view class="section-badge"><text class="section-badge-text">{{ counts.today }}</text></view>
-          </view>
-          <view class="card-feed">
-            <SmartCard
-              v-for="card in cards" :key="card.id" :card="card"
-              :completing="completingCards.has(card.id)"
-              :completed="completedCards.has(card.id)"
-              @complete="onComplete" @postpone="onPostpone"
-              @batch-complete="onBatchComplete" @batch-skip="onBatchSkip" @batch-complete-med="onBatchCompleteMed"
-              @action="onAction" @record-dose="onRecordDose"
-            />
+          <view v-for="section in todaySections" :key="section.key">
+            <view v-if="section.cards.length > 0" class="home-section" :id="`section-${section.key}`">
+              <view class="section-label">
+                <view class="section-dot" :style="{ background: section.dotColor }" />
+                <text class="section-text">{{ section.title }}</text>
+                <view class="section-badge"><text class="section-badge-text">{{ section.cards.length }}</text></view>
+              </view>
+              <view class="card-feed">
+                <SmartCard
+                  v-for="card in section.cards" :key="card.id" :card="card"
+                  :completing="completingCards.has(card.id)"
+                  :completed="completedCards.has(card.id)"
+                  @complete="onComplete" @postpone="onPostpone"
+                  @batch-complete="onBatchComplete" @batch-skip="onBatchSkip" @batch-complete-med="onBatchCompleteMed"
+                  @action="onAction" @record-dose="onRecordDose"
+                />
+              </view>
+            </view>
           </view>
         </view>
 
@@ -303,6 +303,62 @@ const dayCounts = ref<Record<number, number>>({})
 // 选中日期（0点 timestamp）
 const selectedDate = ref(startOfDay(Date.now()))
 const isSelectedToday = computed(() => selectedDate.value === startOfDay(Date.now()))
+const todaySections = computed(() => [
+  {
+    key: 'overdue',
+    title: '逾期待处理',
+    dotColor: 'var(--red)',
+    cards: cards.value.filter(card => card.priority === 'overdue'),
+  },
+  {
+    key: 'workflow',
+    title: '繁育流程',
+    dotColor: 'var(--amber)',
+    cards: cards.value.filter(card => card.sectionType === 'workflow' && card.priority !== 'overdue'),
+  },
+  {
+    key: 'reminders',
+    title: '健康提醒',
+    dotColor: 'var(--blue)',
+    cards: cards.value.filter(card => card.sectionType === 'reminders' && card.priority !== 'overdue'),
+  },
+  {
+    key: 'therapy',
+    title: '今日用药',
+    dotColor: 'var(--green)',
+    cards: cards.value.filter(card => card.sectionType === 'therapy' && card.priority !== 'overdue'),
+  },
+])
+const summaryPills = computed(() => [
+  {
+    key: 'overdue',
+    label: '逾期',
+    count: todaySections.value.find(section => section.key === 'overdue')?.cards.length || 0,
+    dotColor: 'var(--red)',
+    pillClass: 'pill-red',
+  },
+  {
+    key: 'workflow',
+    label: '繁育',
+    count: todaySections.value.find(section => section.key === 'workflow')?.cards.length || 0,
+    dotColor: 'var(--amber)',
+    pillClass: 'pill-amber',
+  },
+  {
+    key: 'reminders',
+    label: '健康',
+    count: todaySections.value.find(section => section.key === 'reminders')?.cards.length || 0,
+    dotColor: 'var(--blue)',
+    pillClass: 'pill-dim',
+  },
+  {
+    key: 'therapy',
+    label: '用药',
+    count: todaySections.value.find(section => section.key === 'therapy')?.cards.length || 0,
+    dotColor: 'var(--green)',
+    pillClass: 'pill-dim',
+  },
+])
 
 // H-3: 快速完成
 const showQuickComplete = ref(false)
@@ -870,7 +926,8 @@ onShow(async () => {
 
 /* ==================== SUMMARY PILLS ==================== */
 .summary-pills {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   margin-top: 16px;
   padding-bottom: 16px;
@@ -878,27 +935,32 @@ onShow(async () => {
 .pill {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 0;
   border-radius: 16px;
   transition: transform 0.12s ease, filter 0.12s ease;
   &:active { transform: scale(0.95); filter: brightness(0.95); }
 }
 .pill-dot {
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
   border-radius: 50%;
   flex-shrink: 0;
 }
 .pill-label {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
 }
 .pill-num {
   font-family: var(--font-display);
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 800;
   line-height: 1;
+  white-space: nowrap;
 }
 .pill-red {
   background: var(--red-soft);

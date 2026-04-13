@@ -79,12 +79,25 @@ async function saveCustomType(familyId, type, details) {
   }
 }
 
+function getHealthVariantKey(type, details = {}) {
+  if (type === 'vaccination') {
+    return `vaccination:${details.vaccine_type || ''}`
+  }
+  if (type === 'deworming') {
+    return `deworming:${details.deworming_type || ''}:${details.drug_name || ''}`
+  }
+  if (type === 'illness') {
+    return `illness:${details.condition || ''}`
+  }
+  return type || ''
+}
+
 /**
  * 检查是否已有同类型的 pending 任务在 ±7 天内
  */
-async function hasDuplicateTask(familyId, dogId, taskType, dueDate) {
+async function hasDuplicateTask(familyId, dogId, taskType, dueDate, details) {
   const WEEK = 7 * 86400000
-  const { total } = await db.collection('tasks')
+  const { data: tasks } = await db.collection('tasks')
     .where({
       family_id: familyId,
       dog_id: dogId,
@@ -92,8 +105,31 @@ async function hasDuplicateTask(familyId, dogId, taskType, dueDate) {
       status: 'pending',
       due_date: dbCmd.gte(dueDate - WEEK).and(dbCmd.lte(dueDate + WEEK)),
     })
-    .count()
-  return total > 0
+    .get()
+
+  const expectedKey = getHealthVariantKey(taskType, details)
+  return (tasks || []).some(task => getHealthVariantKey(task.type, task.details || {}) === expectedKey)
+}
+
+function shouldCreateReminder(data) {
+  if (typeof data?.create_task === 'boolean') return data.create_task
+  return !data?.skip_reminder
+}
+
+function getHealthTaskTitle(type, details = {}) {
+  if (type === 'vaccination') {
+    return details.vaccine_type ? `疫苗 · ${details.vaccine_type}` : '疫苗'
+  }
+  if (type === 'deworming') {
+    const subtypeLabelMap = { internal: '内驱', external: '外驱', combo: '内外同驱' }
+    if (details.drug_name) return `驱虫 · ${details.drug_name}`
+    if (details.deworming_type) return `驱虫 · ${subtypeLabelMap[details.deworming_type] || details.deworming_type}`
+    return '驱虫'
+  }
+  if (type === 'illness') {
+    return `${details.condition || '疾病'}复查`
+  }
+  return type || '任务'
 }
 
 /**
@@ -125,7 +161,9 @@ async function autoCompletePendingTasks(familyId, dogId, type, details) {
       // 任一方无子类型视为通配，或两方匹配
       match = !task.details?.vaccine_type || !details?.vaccine_type || task.details.vaccine_type === details.vaccine_type
     } else if (type === 'deworming') {
-      match = !task.details?.deworming_type || !details?.deworming_type || task.details.deworming_type === details.deworming_type
+      const typeMatch = !task.details?.deworming_type || !details?.deworming_type || task.details.deworming_type === details.deworming_type
+      const drugMatch = !task.details?.drug_name || !details?.drug_name || task.details.drug_name === details.drug_name
+      match = typeMatch && drugMatch
     } else {
       match = true
     }
@@ -152,14 +190,14 @@ async function generateReminders(familyId, type, data, dog, recordId, preloadedS
       : (settings.default_vaccine_interval_puppy || 21)
     const dueDate = data.details?.next_reminder_date || (data.date + (vaccineInterval * 86400000))
     // 去重：该犬 ±7 天内已有同类型 pending 任务则不创建
-    if (await hasDuplicateTask(familyId, dog._id, 'vaccination', dueDate)) return
+    if (await hasDuplicateTask(familyId, dog._id, 'vaccination', dueDate, data.details)) return
 
     await db.collection('tasks').add({
       card_type: 'individual',
       dog_id: dog._id,
       dog_name: dog.name,
       type: 'vaccination',
-      title: data.details?.vaccine_type ? `疫苗 · ${data.details.vaccine_type}` : '疫苗',
+      title: getHealthTaskTitle('vaccination', data.details),
       due_date: dueDate,
       status: 'pending',
       priority: 'upcoming',
@@ -180,14 +218,14 @@ async function generateReminders(familyId, type, data, dog, recordId, preloadedS
     const nextDate = data.details?.next_reminder_date ||
       (data.date + (dewormInterval * 86400000))
 
-    if (await hasDuplicateTask(familyId, dog._id, 'deworming', nextDate)) return
+    if (await hasDuplicateTask(familyId, dog._id, 'deworming', nextDate, data.details)) return
 
     await db.collection('tasks').add({
       card_type: 'individual',
       dog_id: dog._id,
       dog_name: dog.name,
       type: 'deworming',
-      title: `${dog.name} · 下次驱虫`,
+      title: getHealthTaskTitle('deworming', data.details),
       due_date: nextDate,
       status: 'pending',
       priority: 'upcoming',
@@ -207,7 +245,7 @@ async function generateReminders(familyId, type, data, dog, recordId, preloadedS
       dog_id: dog._id,
       dog_name: dog.name,
       type: 'illness',
-      title: `${dog.name} · ${data.details?.condition || '疾病'}复查`,
+      title: getHealthTaskTitle('illness', data.details),
       due_date: data.details.next_reminder_date,
       status: 'pending',
       priority: 'upcoming',
@@ -336,7 +374,7 @@ module.exports = {
     const completedTasks = await autoCompletePendingTasks(familyId, data.dog_id, data.type, data.details)
 
     // 生成下次提醒任务（skip_reminder 时跳过）
-    if (!data.skip_reminder) {
+    if (shouldCreateReminder(data)) {
       await generateReminders(familyId, data.type, data, dog, recordId)
     }
 
@@ -404,7 +442,7 @@ module.exports = {
       const completedTasks = await autoCompletePendingTasks(familyId, dog._id, data.type, data.details)
 
       // 生成下次提醒任务（传入预加载的 settings）
-      if (!data.skip_reminder) {
+      if (shouldCreateReminder(data)) {
         await generateReminders(familyId, data.type, data, dog, recordId, settings)
       }
 
@@ -568,12 +606,19 @@ module.exports = {
       // 创建费用
       if (perDogCost && perDogCost > 0) {
         await db.collection('expenses').add({
-          family_id: familyId, dog_id: dog._id, dog_name: dog.name,
-          category: '医疗', sub_category: '用药',
-          amount: perDogCost, date: startDate,
+          total_amount: perDogCost,
+          category: '医疗',
+          date: startDate,
+          linked_dog_ids: [dog._id],
+          dog_names: [dog.name],
           notes: `${data.drug_name} ${durationDays}天`,
-          source_type: 'medication_task', source_id: medicationId,
-          created_by: uid, created_at: now, updated_at: now,
+          source_type: 'auto',
+          source_record_id: medicationId,
+          family_id: familyId,
+          created_by: uid,
+          deleted_at: null,
+          created_at: now,
+          updated_at: now,
         })
       }
 
@@ -652,17 +697,17 @@ module.exports = {
     // 如有费用 → 创建 expense
     if (data.cost && data.cost > 0) {
       await db.collection('expenses').add({
-        family_id: familyId,
-        dog_id: data.dog_id,
-        dog_name: dog.name,
+        total_amount: data.cost,
         category: '医疗',
-        sub_category: '用药',
-        amount: data.cost,
         date: startDate,
+        linked_dog_ids: [data.dog_id],
+        dog_names: [dog.name],
         notes: `${data.drug_name} ${durationDays}天`,
-        source_type: 'medication_task',
-        source_id: medicationId,
+        source_type: 'auto',
+        source_record_id: medicationId,
+        family_id: familyId,
         created_by: this.uid,
+        deleted_at: null,
         created_at: now,
         updated_at: now,
       })

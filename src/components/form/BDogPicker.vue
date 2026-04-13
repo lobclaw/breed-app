@@ -138,7 +138,7 @@ interface Dog {
   gender: string
   role: string
   breed?: string
-  birth_date?: number
+  birth_date?: number | null
   disposition?: string
   [key: string]: any
 }
@@ -390,7 +390,7 @@ function avatarColorClass(dog: Dog) {
   return 'b-dog-picker__avatar--teal'
 }
 
-function formatAge(birthTs?: number) {
+function formatAge(birthTs?: number | null) {
   if (!birthTs) return ''
   const days = Math.floor((Date.now() - birthTs) / 86400000)
   if (days < 30) return `${days}天`

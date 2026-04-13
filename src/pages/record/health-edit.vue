@@ -427,11 +427,12 @@ const PRESET_DEWORMING_DRUGS: Record<string, string[]> = {
   external: ['福来恩', '大宠爱'],
   combo: ['超可信', '博来恩'],
 }
+type DewormDrugMap = Record<'internal' | 'external' | 'combo', string[]>
 const deletedCustomDrugs = ref<string[]>([])
 const dewormDrugs = computed(() => {
-  const subtype = details.deworming_type || 'internal'
+  const subtype = (details.deworming_type || 'internal') as keyof DewormDrugMap
   const preset = PRESET_DEWORMING_DRUGS[subtype] || []
-  const customSettings = currentFamily.value?.settings?.custom_deworming_drugs || {}
+  const customSettings = (currentFamily.value?.settings?.custom_deworming_drugs || { internal: [], external: [], combo: [] }) as DewormDrugMap
   const custom = (customSettings[subtype] || []).filter((v: string) => !deletedCustomDrugs.value.includes(v))
   const all = [...preset, ...custom]
   return [...new Set(all)]
@@ -441,7 +442,7 @@ const showDrugModal = ref(false)
 const drugInput = ref('')
 
 function isPresetDrug(drug: string): boolean {
-  const subtype = details.deworming_type || 'internal'
+  const subtype = (details.deworming_type || 'internal') as keyof DewormDrugMap
   return (PRESET_DEWORMING_DRUGS[subtype] || []).includes(drug)
 }
 
@@ -452,8 +453,8 @@ function deleteCustomDrug(val: string) {
     deletedCustomDrugs.value.push(val)
     if (details.drug_name === val) details.drug_name = ''
     if (customDrug.value === val) customDrug.value = ''
-    const subtype = details.deworming_type || 'internal'
-    const customSettings = currentFamily.value?.settings?.custom_deworming_drugs || {}
+    const subtype = (details.deworming_type || 'internal') as keyof DewormDrugMap
+    const customSettings = (currentFamily.value?.settings?.custom_deworming_drugs || { internal: [], external: [], combo: [] }) as DewormDrugMap
     const updated = { ...customSettings, [subtype]: (customSettings[subtype] || []).filter((v: string) => v !== val) }
     try {
       await updateFamilySettings({ custom_deworming_drugs: updated })
@@ -478,9 +479,9 @@ async function onDrugConfirm() {
   customDrug.value = val
   details.drug_name = val
   showDrugModal.value = false
-  const subtype = details.deworming_type || 'internal'
+  const subtype = (details.deworming_type || 'internal') as keyof DewormDrugMap
   if (!(PRESET_DEWORMING_DRUGS[subtype] || []).includes(val)) {
-    const customSettings = currentFamily.value?.settings?.custom_deworming_drugs || {}
+    const customSettings = (currentFamily.value?.settings?.custom_deworming_drugs || { internal: [], external: [], combo: [] }) as DewormDrugMap
     const existing = customSettings[subtype] || []
     if (!existing.includes(val)) {
       await updateFamilySettings({ custom_deworming_drugs: { ...customSettings, [subtype]: [...existing, val] } })

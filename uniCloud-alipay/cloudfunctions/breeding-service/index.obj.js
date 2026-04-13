@@ -36,79 +36,92 @@ function validateDetails(type, details) {
   }
 }
 
+function isPregnancyConfirmed(details = {}) {
+  return details.confirmed === '是' || details.confirmed === true
+}
+
+function isPregnancyRejected(details = {}) {
+  return details.confirmed === '否' || details.confirmed === false
+}
+
+async function clearPendingBreedingMilestones(familyId, { cycleId = null, litterId = null } = {}) {
+  const where = {
+    family_id: familyId,
+    type: 'breeding_milestone',
+    status: 'pending',
+  }
+  if (cycleId) where.cycle_id = cycleId
+  if (litterId) where.litter_id = litterId
+
+  await db.collection('tasks').where(where).update({
+    status: 'cancelled',
+    updated_at: Date.now(),
+  })
+}
+
+async function createBreedingMilestoneTask(familyId, dog, {
+  cycleId = null,
+  litterId = null,
+  title,
+  dueDate,
+  sourceRecordId = null,
+  sourceCollection = 'breeding_records',
+  details = null,
+}) {
+  const now = Date.now()
+  await db.collection('tasks').add({
+    card_type: 'individual',
+    dog_id: dog._id,
+    dog_name: dog.name,
+    cycle_id: cycleId,
+    litter_id: litterId,
+    type: 'breeding_milestone',
+    title,
+    due_date: dueDate,
+    status: 'pending',
+    priority: dueDate <= now ? 'overdue' : 'upcoming',
+    source_record_id: sourceRecordId,
+    source_collection: sourceCollection,
+    family_id: familyId,
+    postpone_count: 0,
+    details,
+    created_at: now,
+    updated_at: now,
+  })
+}
+
 /**
  * 根据记录类型生成任务
  */
 async function generateTasks(familyId, type, data, cycleId, dog, recordId) {
-  const now = Date.now()
-
-  const tasksToCreate = []
-
   if (type === 'mating') {
-    // 生成孕检提醒（配种后 25-30 天）
+    await clearPendingBreedingMilestones(familyId, { cycleId })
     const checkupDate = data.details?.expected_checkup_date || (data.date + 25 * 86400000)
-    tasksToCreate.push({
-      card_type: 'individual',
-      dog_id: dog._id,
-      dog_name: dog.name,
-      cycle_id: cycleId,
-      type: 'breeding_milestone',
-      title: `${dog.name} · 预计孕检日`,
-      due_date: checkupDate,
-      status: 'pending',
-      priority: 'upcoming',
-      source_record_id: recordId,
-      source_collection: 'breeding_records',
-      family_id: familyId,
-      postpone_count: 0,
-      created_at: now,
-      updated_at: now,
-    })
-
-    // 生成预产期提醒（配种后 63 天）
-    const dueDate = data.details?.expected_due_date || (data.date + 63 * 86400000)
-    tasksToCreate.push({
-      card_type: 'individual',
-      dog_id: dog._id,
-      dog_name: dog.name,
-      cycle_id: cycleId,
-      type: 'breeding_milestone',
-      title: `${dog.name} · 预产期`,
-      due_date: dueDate,
-      status: 'pending',
-      priority: 'upcoming',
-      source_record_id: recordId,
-      source_collection: 'breeding_records',
-      family_id: familyId,
-      postpone_count: 0,
-      created_at: now,
-      updated_at: now,
+    const dueDate = data.details?.expected_due_date || (data.date + 59 * 86400000)
+    await createBreedingMilestoneTask(familyId, dog, {
+      cycleId,
+      title: `${dog.name} · 建议孕检`,
+      dueDate: checkupDate,
+      sourceRecordId: recordId,
+      details: {
+        step_type: 'pregnancy_check',
+        expected_due_date: dueDate,
+        expected_checkup_date: checkupDate,
+      },
     })
   }
 
   if (type === 'heat') {
-    // 建议查卵泡提醒（发情后可配置天数，默认 10 天）
-    tasksToCreate.push({
-      card_type: 'individual',
-      dog_id: dog._id,
-      dog_name: dog.name,
-      cycle_id: cycleId,
-      type: 'breeding_milestone',
-      title: `${dog.name} · 建议查卵泡`,
-      due_date: data.date + 10 * 86400000,
-      status: 'pending',
-      priority: 'upcoming',
-      source_record_id: recordId,
-      source_collection: 'breeding_records',
-      family_id: familyId,
-      postpone_count: 0,
-      created_at: now,
-      updated_at: now,
+    await clearPendingBreedingMilestones(familyId, { cycleId })
+    await createBreedingMilestoneTask(familyId, dog, {
+      cycleId,
+      title: `${dog.name} · 建议卵泡检查`,
+      dueDate: data.date + 10 * 86400000,
+      sourceRecordId: recordId,
+      details: {
+        step_type: 'follicle_check',
+      },
     })
-  }
-
-  for (const task of tasksToCreate) {
-    await db.collection('tasks').add(task)
   }
 }
 
@@ -306,7 +319,10 @@ module.exports = {
     const { id: recordId } = await db.collection('breeding_records').add(recordData)
 
     // 状态转换
-    const newStatus = STATUS_TRANSITIONS[data.type]
+    let newStatus = STATUS_TRANSITIONS[data.type]
+    if (data.type === 'pregnancy_check' && isPregnancyRejected(data.details)) {
+      newStatus = '失败'
+    }
     if (newStatus) {
       const updateData = { status: newStatus, updated_at: now }
 
@@ -320,6 +336,18 @@ module.exports = {
       }
 
       await db.collection('breeding_cycles').doc(cycleId).update(updateData)
+    }
+
+    if (data.type === 'pregnancy_check') {
+      if (isPregnancyRejected(data.details)) {
+        await clearPendingBreedingMilestones(familyId, { cycleId })
+      } else if (isPregnancyConfirmed(data.details)) {
+        await clearPendingBreedingMilestones(familyId, { cycleId })
+      }
+    }
+
+    if (data.type === 'abnormal_termination') {
+      await clearPendingBreedingMilestones(familyId, { cycleId })
     }
 
     // 生成任务
@@ -572,70 +600,24 @@ module.exports = {
       updated_at: now,
     })
 
-    // 生成窝级别任务
+    await clearPendingBreedingMilestones(familyId, { cycleId: data.cycle_id })
+
+    // 生成窝级别流程终点任务
     const settings = await getFamilySettings(familyId)
     const birthTs = data.birth_date
 
-    const tasks = [
-      {
-        card_type: 'batch',
-        dog_id: cycle.dam_id,
-        dog_name: cycle.dam_name,
-        litter_id: litterId,
-        cycle_id: data.cycle_id,
-        type: 'deworming',
-        title: `${cycle.dam_name}窝 · 首次驱虫`,
-        due_date: birthTs + (settings.default_deworming_interval_puppy * 86400000),
-        status: 'pending',
-        priority: 'upcoming',
-        source_record_id: litterId,
-        source_collection: 'litters',
-        family_id: familyId,
-        postpone_count: 0,
-        created_at: now,
-        updated_at: now,
+    await createBreedingMilestoneTask(familyId, { _id: cycle.dam_id, name: cycle.dam_name }, {
+      cycleId: data.cycle_id,
+      litterId,
+      title: `${cycle.dam_name}窝 · 确认断奶`,
+      dueDate: birthTs + (settings.default_weaning_days * 86400000),
+      sourceRecordId: litterId,
+      sourceCollection: 'litters',
+      details: {
+        step_type: 'weaning_confirm',
+        birth_date: birthTs,
       },
-      {
-        card_type: 'batch',
-        dog_id: cycle.dam_id,
-        dog_name: cycle.dam_name,
-        litter_id: litterId,
-        cycle_id: data.cycle_id,
-        type: 'vaccination',
-        title: `${cycle.dam_name}窝 · 首次疫苗`,
-        due_date: birthTs + (42 * 86400000),
-        status: 'pending',
-        priority: 'upcoming',
-        source_record_id: litterId,
-        source_collection: 'litters',
-        family_id: familyId,
-        postpone_count: 0,
-        created_at: now,
-        updated_at: now,
-      },
-      {
-        card_type: 'individual',
-        dog_id: cycle.dam_id,
-        dog_name: cycle.dam_name,
-        litter_id: litterId,
-        cycle_id: data.cycle_id,
-        type: 'breeding_milestone',
-        title: `${cycle.dam_name}窝 · 确认断奶`,
-        due_date: birthTs + (settings.default_weaning_days * 86400000),
-        status: 'pending',
-        priority: 'upcoming',
-        source_record_id: litterId,
-        source_collection: 'litters',
-        family_id: familyId,
-        postpone_count: 0,
-        created_at: now,
-        updated_at: now,
-      },
-    ]
-
-    for (const task of tasks) {
-      await db.collection('tasks').add(task)
-    }
+    })
 
     // 如有费用
     if (data.cost && data.cost > 0) {
@@ -663,7 +645,7 @@ module.exports = {
       data: {
         litterId,
         puppyIds,
-        taskCount: tasks.length,
+        taskCount: 1,
       }
     }
   },

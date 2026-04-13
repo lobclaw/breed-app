@@ -4,21 +4,11 @@
  */
 import { defineStore } from 'pinia'
 import { cloudCall } from '@/composables/useCloudCall'
-
-interface Dog {
-  _id: string
-  name: string
-  gender: string
-  role: string
-  breed?: string
-  birth_date?: number
-  disposition?: string
-  [key: string]: any
-}
+import type { DogWithStatus } from '@/types/dog'
 
 export const useDogStore = defineStore('dogs', {
   state: () => ({
-    list: [] as Dog[],
+    list: [] as DogWithStatus[],
     loaded: false,
   }),
 
@@ -32,7 +22,7 @@ export const useDogStore = defineStore('dogs', {
     async fetchFromServer() {
       try {
         const res = await cloudCall<{ data: any }>('dog-service', 'getDogListWithStatus')
-        const fresh: Dog[] = res?.data?.dogs || res?.data || []
+        const fresh: DogWithStatus[] = res?.data?.dogs || res?.data || []
         this.list = fresh
         this.loaded = true
       } catch {
@@ -53,7 +43,7 @@ export const useDogStore = defineStore('dogs', {
     },
 
     /** 按条件过滤 */
-    getFiltered(roleFilter?: string, genderFilter?: string): Dog[] {
+    getFiltered(roleFilter?: string, genderFilter?: string): DogWithStatus[] {
       let result = [...this.list]
       if (roleFilter) result = result.filter(d => d.role === roleFilter)
       if (genderFilter) result = result.filter(d => d.gender === genderFilter)
@@ -61,12 +51,12 @@ export const useDogStore = defineStore('dogs', {
     },
 
     /** 新增犬只到缓存 */
-    addDog(dog: Dog) {
+    addDog(dog: DogWithStatus) {
       this.list.push(dog)
     },
 
     /** 更新缓存中的犬只 */
-    updateDog(id: string, data: Partial<Dog>) {
+    updateDog(id: string, data: Partial<DogWithStatus>) {
       const idx = this.list.findIndex(d => d._id === id)
       if (idx >= 0) {
         this.list[idx] = { ...this.list[idx], ...data }

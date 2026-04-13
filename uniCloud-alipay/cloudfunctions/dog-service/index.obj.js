@@ -52,7 +52,7 @@ module.exports = {
       db.collection('health_records').where({
         family_id: this.familyId,
         type: 'illness',
-        'details.is_recovered': dbCmd.neq(true),
+        'details.treatment_status': dbCmd.neq('已康复'),
       }).get(),
       // 活跃用药任务
       db.collection('medication_tasks').where({
@@ -134,7 +134,7 @@ module.exports = {
       db.collection('dogs').where({ _id: dogId, family_id: familyId, deleted_at: null }).get(),
       db.collection('breeding_cycles').where({ dam_id: dogId, family_id: familyId }).get(),
       db.collection('health_records').where({ dog_id: dogId, family_id: familyId, type: 'illness' }).get(),
-      db.collection('tasks').where({ dog_id: dogId, family_id: familyId, type: 'medication', status: 'pending' }).get(),
+      db.collection('medication_tasks').where({ dog_id: dogId, family_id: familyId, status: '进行中' }).get(),
       db.collection('litters').where({ dam_id: dogId, family_id: familyId, weaned_at: null }).get(),
     ])
 
@@ -175,7 +175,7 @@ module.exports = {
     }
 
     // 疾病状态（未康复的）
-    const activeIllnesses = (illnessRes.data || []).filter(r => !r.details?.is_recovered)
+    const activeIllnesses = (illnessRes.data || []).filter(r => r.details?.treatment_status !== '已康复')
     for (const illness of activeIllnesses) {
       statuses.push({
         type: '生病中',
@@ -189,18 +189,26 @@ module.exports = {
     const medDrugMap = {}
     for (const task of medTasks) {
       const drug = task.details?.drug_name || '用药'
-      if (!medDrugMap[drug] || (task.details?.day || 0) > (medDrugMap[drug].details?.day || 0)) {
+      if (!medDrugMap[drug] || (task.duration_days || 0) > (medDrugMap[drug].duration_days || 0)) {
         medDrugMap[drug] = task
       }
     }
     for (const task of Object.values(medDrugMap)) {
-      const dd = task.details || {}
-      const parts = [dd.drug_name, dd.dosage ? `${dd.dosage}${dd.dosage_unit || ''}` : null, methodMap[dd.method] || dd.method].filter(Boolean)
+      const parts = [
+        task.drug_name,
+        task.dosage ? `${task.dosage}${task.dosage_unit || ''}` : null,
+        methodMap[task.method] || task.method,
+      ].filter(Boolean)
+      const startDate = new Date(task.actual_start_date)
+      startDate.setHours(0, 0, 0, 0)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const currentDay = Math.max(1, Math.floor((today.getTime() - startDate.getTime()) / 86400000) + 1)
       statuses.push({
         type: '用药中',
         taskId: task._id,
         detail: parts.join(' · '),
-        progress: dd.day && dd.total_days ? { current: dd.day, total: dd.total_days } : null,
+        progress: task.duration_days ? { current: Math.min(currentDay, task.duration_days), total: task.duration_days } : null,
       })
     }
 

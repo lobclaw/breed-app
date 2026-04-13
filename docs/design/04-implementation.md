@@ -99,7 +99,7 @@
 1. 查询所有在养犬只 → dogs[]
 2. 并行查询：
    a. breeding_cycles where status in [发情中, 怀孕中] → 发情中/怀孕中
-   b. health_records where type=illness and details.is_recovered=false → 生病中
+   b. health_records where type=illness and details.treatment_status!=已康复 → 生病中
    c. medication_tasks where status=active → 用药中
 3. 推导哺乳中：breeding_cycles.status=已生产 + litter.weaned_at=null
 4. 组装结果返回
@@ -125,11 +125,11 @@
 
 | 方法 | 说明 | 涉及集合 | 复杂度 |
 |------|------|---------|--------|
-| `addBreedingRecord(data)` | 录入繁育记录（8种type） | breeding_records + breeding_cycles + tasks + expenses | 高 |
+| `addBreedingRecord(data)` | 录入繁育记录（8种type）。当前主流程按「发情→建议卵泡检查→配种→建议孕检→生产→确认断奶」推进 | breeding_records + breeding_cycles + tasks + expenses | 高 |
 | `getCycleDetail(cycleId)` | 周期详情 + 所有子记录 | breeding_cycles + breeding_records + litters | 中 |
 | `getCycleHistory(damId)` | 某母犬的繁育历史 | breeding_cycles + breeding_records | 中 |
 | `closeCycle(cycleId, reason)` | 手动关闭周期（放弃/失败） | breeding_cycles + tasks | 中 |
-| `addBirthRecord(data)` | 生产记录（步骤式向导） | breeding_records + litters + dogs(幼崽) + tasks + expenses | 高 |
+| `addBirthRecord(data)` | 生产记录（步骤式向导）。当前仅自动创建「确认断奶」流程节点，不再自动铺首驱/首免链 | breeding_records + litters + dogs(幼崽) + tasks + expenses | 高 |
 | `getLitterDetail(litterId)` | 窝详情 + 幼崽列表 | litters + dogs | 低 |
 | `addPuppyToLitter(litterId, data)` | 后续添加幼崽 | dogs + litters | 低 |
 | `confirmWeaning(litterId)` | 确认断奶 | litters + tasks | 低 |
@@ -141,7 +141,10 @@
 2. 如果无进行中周期 → 自动创建 breeding_cycle（发情/卵泡/配种触发）
 3. 创建 breeding_record
 4. 状态转换：配种 → cycle.status=怀孕中
-5. 生成 tasks（孕检提醒/预产期提醒/etc）
+5. 根据记录类型推进主流程：
+   - 发情 → 生成「建议卵泡检查」
+   - 配种 → 生成「建议孕检」，预计预产日仅写入副信息
+   - 孕检失败/异常终止 → 结束当前流程并清理未完成节点
 6. 如有 cost → 创建 expense 记录
 7. 写入后校验（三层保障第二层）
 ```
@@ -153,7 +156,7 @@
 2. 创建 litter
 3. 逐只创建幼崽 dogs（role=幼崽, origin_litter_id=litterId）
 4. cycle.status → 已生产
-5. 生成 tasks：首次驱虫(+14d)、首次疫苗(+42d)、断奶确认(+45d)
+5. 清理当前周期未完成节点，仅生成「确认断奶」(+默认45d，可配置)
 6. 如有 cost → 创建 expense
 7. 注意事务 10 文档限制：幼崽多时分批
 ```
@@ -173,9 +176,9 @@
 
 | 方法 | 说明 | 涉及集合 | 复杂度 |
 |------|------|---------|--------|
-| `addHealthRecord(data)` | 录入健康记录（vaccination/deworming/illness）。支持 `skip_reminder=true` 跳过下次提醒任务生成（对应表单"下次提醒"开关关闭态） | health_records + tasks + expenses | 中 |
+| `addHealthRecord(data)` | 录入健康记录（vaccination/deworming/illness）。支持显式 `create_task=true` 创建下次提醒；默认只计算建议日期，不自动续链 | health_records + tasks + expenses | 中 |
 | `getHealthHistory(dogId, type?)` | 某犬的健康记录 | health_records | 低 |
-| `startMedication(data)` | 开始连续用药 | medication_tasks + tasks | 中 |
+| `startMedication(data)` | 开始连续用药（疗程状态独立于普通 tasks） | medication_tasks + tasks | 中 |
 | `completeDailyMedication(taskId)` | 标记今日用药完成 | medication_tasks + tasks | 低 |
 | `endMedication(medicationTaskId)` | 提前结束用药 | medication_tasks + tasks | 低 |
 
@@ -193,7 +196,7 @@
 
 | 方法 | 说明 | 涉及集合 | 复杂度 |
 |------|------|---------|--------|
-| `getHomeCards(date?)` | 获取首页卡片数据（含合并算法） | tasks + dogs | 高 |
+| `getHomeCards(date?)` | 获取首页卡片数据（按逾期/繁育/健康/用药分层输出） | tasks + dogs | 高 |
 | `completeTask(taskId)` | 标记任务完成 | tasks | 低 |
 | `postponeTask(taskId, newDate, reason?)` | 推迟任务 | tasks | 低 |
 | `createManualTask(data)` | 用户手动创建待办任务（表单"标记为待办"开关触发），支持指定犬只、标题、日期 | tasks | 低 |
@@ -201,21 +204,21 @@
 | `_timing_dailyAudit()` | 每日审计（三层保障第三层） | tasks + breeding_records + health_records + medication_tasks | 高 |
 | `_timing_autoCloseCycles()` | 自动关闭过期发情周期 | breeding_cycles + tasks | 中 |
 
-**getHomeCards 服务端合并算法：**
+**getHomeCards 当前服务端输出规则：**
 
 ```
 1. 查询 tasks where status=pending and due_date in range
-2. 按 priority 分组：overdue / today / upcoming
-3. 合并规则：
-   a. 同 litter_id → 窝级别合并
-   b. 同 type + 同 due_date + 3只以上 → 批量合并
-   c. 同 dog_id → 单犬多任务合并
-   d. 其余 → 个体卡片
-4. 排序：overdue(红) → today(黄) → upcoming(蓝)
-5. 截断：每区域最多 8 张卡片
+2. 单独汇总 medication_tasks + illness 状态，组装「今日用药」卡片
+3. 将首页数据分成四类：
+   a. overdue：已过期事项
+   b. workflow：繁育主流程节点
+   c. reminders：健康提醒（仅显示已确认创建的提醒）
+   d. therapy：疗程状态
+4. 各区块内部再按既有合并规则生成个体卡 / 批量卡 / 窝卡
+5. 首页顶部 pills 采用「逾期 / 繁育 / 健康 / 用药」，点击后滚动到对应区块
 ```
 
-> **第一批首页为简化版：** 只展示任务列表（无智能卡片合并），第三批再实现完整卡片系统。
+> **2026-04 当前实现：** 首页今日视图已按四区块分层展示；暂不做摘要卡、二级页或 Sheet，保持现有卡片直出布局。
 
 #### 3.5 第一批开发顺序
 
@@ -422,7 +425,7 @@ Step 30: 我的页面（个人信息/设置/数据备份）
 | 优先级 | 测试目标 | 示例 |
 |--------|---------|------|
 | P0 | 繁育状态机转换 | 配种→怀孕中、生产→已生产、异常转换阻止 |
-| P0 | 任务预生成 | 配种→生成孕检+预产期任务、疫苗→生成下次任务 |
+| P0 | 任务预生成 | 配种→生成建议孕检任务、生产→生成确认断奶任务、疫苗在 create_task=true 时生成下次任务 |
 | P0 | 销售状态流转 | 意向→收定金→完成、取消→退款 |
 | P1 | 犬只状态派生 | 多状态叠加、边界条件 |
 | P1 | 卡片合并算法 | 窝级别>批量>个体优先级 |
@@ -544,7 +547,7 @@ tests/
 | BCycleSelector | components/form/BCycleSelector.vue | 繁育周期选择面板 |
 | BImageUpload | components/form/BImageUpload.vue | 图片上传（拍照/相册 + 压缩） |
 | BSegmentedControl | components/form/BSegmentedControl.vue | 分段选择器（仅用于视图/标签页切换） |
-| BFormOptions | components/form/BFormOptions.vue | 表单公共选项组（待办开关 + 日期选择含今天/昨天/前天 chips + 下次提醒开关）。支持 `hideTodo` prop 隐藏待办开关。疫苗/驱虫/繁育表单使用完整功能；疾病表单隐藏待办（疾病是记录已发生的事）；用药表单不使用此组件（改用简单日期选择）；财务表单不使用此组件 |
+| BFormOptions | components/form/BFormOptions.vue | 表单公共选项组（待办开关 + 日期选择含今天/昨天/前天 chips + 提醒开关）。支持 `hideTodo` prop 隐藏待办开关，并可通过 `reminderLabel/reminderHint` 定制文案。繁育表单使用待办逻辑；疫苗/驱虫表单使用「创建下次待办」显式开关；疾病表单隐藏待办，仅保留复查提醒；用药表单不使用此组件（改用简单日期选择）；财务表单不使用此组件 |
 
 **Tier 4：数据展示组件**
 
@@ -609,17 +612,17 @@ Tier 5: 剩余页面
 
 #### 13.3 健康记录表单
 
-> **实现说明（2026-03-30 更新）：**
+> **实现说明（2026-04-13 更新）：**
 > - 健康记录已从单一 health.vue 拆分为 3 个独立页面：health-vaccination、health-deworming、health-illness（medication 独立于 R-13）
-> - 疫苗/驱虫表单：BFormOptions 完整功能（待办 + 日期 + 下次提醒），从待办/批量入口进入时隐藏待办开关
-> - 疾病表单：BFormOptions 隐藏待办开关（hideTodo=true），保留下次提醒（复查）。保存后如果 treatment_status≠已康复，弹出"需要用药吗？"跳转用药页面
+> - 疫苗/驱虫表单：BFormOptions 使用显式「创建下次待办」开关，默认关闭；从待办/批量入口进入时隐藏待办开关
+> - 疾病表单：BFormOptions 隐藏待办开关（hideTodo=true），保留复查提醒。保存后如果 treatment_status≠已康复，弹出"需要用药吗？"跳转用药页面
 > - 用药表单：不使用 BFormOptions，改用简单日期选择。无待办开关、无下次提醒（startMedication 不支持）
 > - 疫苗/驱虫提醒间隔根据犬只 role 动态计算：种狗用 adult 间隔，幼崽用 puppy 间隔
-> - 录入健康记录后自动完成该犬同类型的 pending 待办（autoCompletePendingTasks，子类型匹配）
+> - 录入健康记录后自动完成该犬同类型的 pending 待办；当前匹配规则为「同犬 + 同类型 + 同子类型」，驱虫额外比对 `drug_name`
 
 | type | 特有字段 |
 |------|---------|
-| vaccination | 疫苗名称、接种部位、批号、下次提醒 |
+| vaccination | 疫苗名称、接种部位、批号、建议日期/创建下次待办 |
 | deworming | 药品名称、剂量、内/外驱 |
 | illness | 症状描述、严重程度、诊断 |
 | medication | 药品、剂量、频次、疗程天数 |

@@ -23,15 +23,16 @@ export interface Dog extends BaseDocument, SoftDeletable {
   disposition: DogDisposition
   species: string
   breed: string
-  birth_date: number | null
-  purchase_date: number | null
-  purchase_price: number | null
-  latest_weight: number | null
-  origin_litter_id: string | null
-  owner_info: string | null
+  birth_date?: number | null
+  purchase_date?: number | null
+  purchase_price?: number | null
+  latest_weight?: number | null
+  origin_litter_id?: string | null
+  owner_info?: string | null
   avatar?: string
-  disposition_date: number | null
-  disposition_notes: string | null
+  disposition_date?: number | null
+  disposition_notes?: string | null
+  statuses?: DeriveStatus[]
 }
 
 // 实时派生状态

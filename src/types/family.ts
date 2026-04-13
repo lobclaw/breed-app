@@ -20,10 +20,9 @@ export interface FamilyMember {
 
 // 护理规则
 export interface CareRule {
-  name: string
-  target: string              // 适用范围（全部/幼犬/成犬/指定犬只）
-  target_dog_ids?: string[]
-  frequency: string           // 每日 / 每周 / 自定义
+  status_trigger: string
+  task_description: string
+  frequency: string
 }
 
 // 家庭设置
@@ -40,6 +39,8 @@ export interface FamilySettings {
     external: string[]
     combo: string[]
   }
+  custom_condition_types: string[]
+  custom_breed_types: string[]
 }
 
 // 家庭

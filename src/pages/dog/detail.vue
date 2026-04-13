@@ -219,7 +219,7 @@
               <text class="dog-detail__info-row-label">主人信息</text>
               <text class="dog-detail__info-row-value">{{ dog.owner_info }}</text>
             </view>
-            <view v-if="dog.origin_litter_id" class="dog-detail__info-row" @click="uni.navigateTo({ url: '/pages/breeding/litter?id=' + dog.origin_litter_id })">
+            <view v-if="dog.origin_litter_id" class="dog-detail__info-row" @click="goToOriginLitter(dog.origin_litter_id)">
               <text class="dog-detail__info-row-label">来源窝</text>
               <text class="dog-detail__info-row-value" style="color: var(--primary); text-decoration: underline;">查看窝信息</text>
             </view>
@@ -481,15 +481,15 @@
       <view v-if="activeTab === 'finance'" class="dog-detail__pane">
         <!-- 快捷操作 -->
         <view class="dog-detail__finance-links">
-          <view class="dog-detail__finance-link" @click="uni.navigateTo({ url: '/pages/finance/expense-add?dogId=' + dogId })">
+          <view class="dog-detail__finance-link" @click="goToExpenseAdd()">
             <text class="material-icons-round" style="font-size: 20px; color: var(--red);">remove_circle</text>
             <text class="dog-detail__finance-link-text">记录支出</text>
           </view>
-          <view class="dog-detail__finance-link" @click="uni.navigateTo({ url: '/pages/finance/expense-add?type=income&dogId=' + dogId })">
+          <view class="dog-detail__finance-link" @click="goToIncomeAdd()">
             <text class="material-icons-round" style="font-size: 20px; color: var(--green);">add_circle</text>
             <text class="dog-detail__finance-link-text">记录收入</text>
           </view>
-          <view v-if="dog?.role === '种狗' && dog?.gender === '母'" class="dog-detail__finance-link" @click="uni.navigateTo({ url: '/pages/finance/dam-roi?damId=' + dogId })">
+          <view v-if="dog?.role === '种狗' && dog?.gender === '母'" class="dog-detail__finance-link" @click="goToDamRoi()">
             <text class="material-icons-round" style="font-size: 20px; color: var(--primary);">trending_up</text>
             <text class="dog-detail__finance-link-text">投资回报</text>
           </view>
@@ -1128,6 +1128,22 @@ function navigateToRecord(page: string) {
 
 function goToHealthDetail(recordId: string) {
   uni.navigateTo({ url: `/pages/record/health-detail?id=${recordId}` })
+}
+
+function goToOriginLitter(litterId: string) {
+  uni.navigateTo({ url: `/pages/breeding/litter?id=${litterId}` })
+}
+
+function goToExpenseAdd() {
+  uni.navigateTo({ url: `/pages/finance/expense-add?dogId=${dogId}` })
+}
+
+function goToIncomeAdd() {
+  uni.navigateTo({ url: `/pages/finance/expense-add?type=income&dogId=${dogId}` })
+}
+
+function goToDamRoi() {
+  uni.navigateTo({ url: `/pages/finance/dam-roi?damId=${dogId}` })
 }
 
 // ==================== D-6: 快速标记状态 ====================

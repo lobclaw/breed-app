@@ -14,6 +14,11 @@ const isInitialized = ref(false)
 
 const FAMILY_CACHE_KEY = 'breed_family_cache'
 
+function getTokenExpired(info: ReturnType<typeof uniCloud.getCurrentUserInfo>): number {
+  const maybeInfo = info as typeof info & { tokenExpired?: number; token_expired?: number }
+  return maybeInfo.tokenExpired ?? maybeInfo.token_expired ?? 0
+}
+
 function cacheFamily(family: Family | null) {
   if (family) {
     uni.setStorageSync(FAMILY_CACHE_KEY, JSON.stringify(family))
@@ -75,7 +80,7 @@ export function useAuth() {
       const info = uniCloud.getCurrentUserInfo()
       const token = uni.getStorageSync('uni_id_token')
 
-      if (info.uid && info.tokenExpired > Date.now()) {
+      if (info.uid && getTokenExpired(info) > Date.now()) {
         currentUser.value = { uid: info.uid, token }
         // 先从缓存恢复，页面瞬间渲染正确状态
         const cached = restoreFamilyFromCache()

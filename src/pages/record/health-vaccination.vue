@@ -49,6 +49,8 @@
         v-model:enableReminder="enableReminder"
         v-model:reminderDate="reminderDate"
         :reminderDays="computedReminderDays"
+        reminderLabel="创建下次待办"
+        reminderHint="建议日期已自动计算，可手动修改"
         :hideTodo="fromTask"
         dateLabel="接种日期"
       />
@@ -278,7 +280,7 @@ async function submit() {
         cost: costInput.value ? parseFloat(costInput.value) : null,
         notes: notes.value || null,
         details: buildDetails(),
-        skip_reminder: !enableReminder.value,
+        create_task: enableReminder.value,
       })
 
       const allCompletedTasks = res?.data?.completedTasks || []
