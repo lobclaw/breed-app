@@ -305,6 +305,7 @@ const scrollTarget = ref('')
 const dayCounts = ref<Record<number, number>>({})
 const submitBannerMessage = ref('')
 let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
+const suppressedTaskMap = ref<Record<string, number>>({})
 
 // 选中日期（0点 timestamp）
 const selectedDate = ref(startOfDay(Date.now()))
@@ -477,7 +478,8 @@ async function loadTodayCards(loadToken = latestLoadToken) {
   const result = await fetchCards()
   if (loadToken !== latestLoadToken) return
   if (result?.data) {
-    cards.value = result.data.cards || []
+    pruneSuppressedTasks()
+    cards.value = filterSuppressedCards(result.data.cards || [])
     counts.today = result.data.counts?.today || 0
     counts.week = result.data.counts?.week || 0
     counts.month30 = result.data.counts?.month30 || 0
@@ -500,9 +502,10 @@ async function loadWeekCache(loadToken = latestLoadToken) {
   const result = await fetchWeekCards(start, end)
   if (loadToken !== latestLoadToken) return
   if (result?.data) {
+    pruneSuppressedTasks()
     const cache: Record<number, any[]> = {}
     for (const [k, v] of Object.entries(result.data)) {
-      cache[Number(k)] = v as any[]
+      cache[Number(k)] = filterSuppressedCards(v as any[])
     }
     weekCache.value = cache
   }
@@ -561,6 +564,55 @@ function showSubmitBanner(message: string) {
   }, 2200)
 }
 
+function pruneSuppressedTasks() {
+  const now = Date.now()
+  Object.entries(suppressedTaskMap.value).forEach(([taskId, expiresAt]) => {
+    if (expiresAt <= now) delete suppressedTaskMap.value[taskId]
+  })
+}
+
+function addSuppressedTasks(taskIds: string[] = [], duration = 2500) {
+  if (!taskIds.length) return
+  const expiresAt = Date.now() + duration
+  taskIds.forEach(taskId => {
+    if (taskId) suppressedTaskMap.value[taskId] = expiresAt
+  })
+}
+
+function isTaskSuppressed(taskId?: string) {
+  if (!taskId) return false
+  pruneSuppressedTasks()
+  return !!suppressedTaskMap.value[taskId]
+}
+
+function syncCardMeta(card: any, remainingTasks: any[]) {
+  if (!card) return null
+  card.tasks = remainingTasks
+
+  if (card.cardType === 'batch' || card.cardType === 'care_group') {
+    const dogIdSet = new Set(remainingTasks.map((t: any) => t.dog_id || t.dogId).filter(Boolean))
+    card.dogs = (card.dogs || []).filter((dog: any) => dogIdSet.has(dog.dogId || dog.dog_id))
+    if (card.progress) {
+      card.progress = { ...card.progress, total: card.dogs.length }
+    }
+    if (card.cardType === 'batch' && typeof card.groupTitle === 'string') {
+      card.groupTitle = card.groupTitle.replace(/ · \d+只$/, ` · ${card.dogs.length}只`)
+    }
+  }
+
+  return card
+}
+
+function filterSuppressedCards(cardList: any[]) {
+  return (cardList || []).map((card: any) => {
+    if (!card?.tasks?.length) return card
+    const remainingTasks = card.tasks.filter((task: any) => !isTaskSuppressed(task._id))
+    if (remainingTasks.length === card.tasks.length) return card
+    if (remainingTasks.length === 0) return null
+    return syncCardMeta({ ...card, dogs: Array.isArray(card.dogs) ? [...card.dogs] : card.dogs }, remainingTasks)
+  }).filter(Boolean)
+}
+
 // 乐观更新：标记正在消失的卡片
 const completingCards = ref(new Set<string>())
 const completedCards = ref(new Set<string>())
@@ -599,7 +651,7 @@ function removeCardLocally(taskId: string, forceRemoveCard = false, showSuccess 
         }, 220)
       }
     } else {
-      card.tasks = remainingTasks
+      syncCardMeta(card, remainingTasks)
     }
     break
   }
@@ -616,7 +668,7 @@ function syncWeekCache(taskId: string) {
     if (remaining.length === 0) {
       (cards as any[]).splice(cardIdx, 1)
     } else {
-      card.tasks = remaining
+      syncCardMeta(card, remaining)
     }
     // 更新 dayCounts
     const ts = Number(dayTs)
@@ -773,6 +825,8 @@ async function onBatchCompleteMed(medicationTaskIds: string[]) {
 }
 
 function applyHomeFeedback(payload: any) {
+  addSuppressedTasks(payload?.suppressTaskIds || payload?.completedTaskIds || [])
+
   if (payload?.completedTaskIds?.length) {
     if (payload.removeBatchCard) {
       removeCardLocally(payload.completedTaskIds[0], true)

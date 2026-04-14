@@ -175,6 +175,7 @@ const loading = ref(true)
 let cycleId = ''
 const submitBannerMessage = ref('')
 let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
+let hasLoadedOnce = false
 
 const { run: fetchDetail } = useCloudCall<{ data: any }>('breeding-service', 'getCycleDetail')
 const { run: doClose } = useCloudCall('breeding-service', 'closeCycle', { successMessage: '已关闭' })
@@ -286,6 +287,7 @@ async function loadData() {
     litter.value = res.data.litter
   }
   loading.value = false
+  hasLoadedOnce = true
 }
 
 onLoad((query) => {
@@ -298,7 +300,7 @@ onShow(() => {
   if (feedback?.message) {
     showSubmitBanner(feedback.message)
   }
-  if (cycleId) loadData()
+  if (cycleId && hasLoadedOnce) loadData()
 })
 </script>
 

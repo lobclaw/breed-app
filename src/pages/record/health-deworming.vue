@@ -348,11 +348,12 @@ async function submit() {
       const allCompletedTasks = res?.data?.completedTasks || []
       submitState.value = 'success'
       const completedTaskIds = allCompletedTasks.map((t: any) => t._id).filter(Boolean)
-      const fallbackTaskIds = sourceTaskIds.value.length > 0 ? sourceTaskIds.value : completedTaskIds
+      const suppressTaskIds = sourceTaskIds.value.length > 0 ? sourceTaskIds.value : completedTaskIds
       queueSubmitFeedback({
         message: buildRecordFeedbackMessage(selectedDogs.value.length, allCompletedTasks.length),
-        completedTaskIds: fallbackTaskIds,
-        removeBatchCard: fallbackTaskIds.length > 1,
+        completedTaskIds,
+        suppressTaskIds,
+        removeBatchCard: sourceTaskIds.value.length > 0 && completedTaskIds.length > 0 && completedTaskIds.length === sourceTaskIds.value.length,
         refreshHome: true,
       })
 

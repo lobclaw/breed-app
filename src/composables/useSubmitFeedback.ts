@@ -4,6 +4,7 @@ export interface SubmitFeedbackPayload {
   message: string
   targetRoute?: string
   completedTaskIds?: string[]
+  suppressTaskIds?: string[]
   removeBatchCard?: boolean
   createdDate?: number | null
   createdCount?: number
