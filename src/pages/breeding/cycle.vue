@@ -10,6 +10,7 @@
           <BTag :label="cycle.status" :color="statusColor(cycle.status)" />
         </template>
       </BPageHeader>
+      <BSubmitBanner :message="submitBannerMessage" />
 
       <!-- 周期信息卡片 -->
       <view class="card-feed">
@@ -155,7 +156,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BCard from '@/components/base/BCard.vue'
@@ -164,12 +165,16 @@ import BButton from '@/components/base/BButton.vue'
 import BSectionLabel from '@/components/base/BSectionLabel.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
+import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
+import { consumeSubmitFeedback } from '@/composables/useSubmitFeedback'
 
 const cycle = ref<any>(null)
 const records = ref<any[]>([])
 const litter = ref<any>(null)
 const loading = ref(true)
 let cycleId = ''
+const submitBannerMessage = ref('')
+let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
 
 const { run: fetchDetail } = useCloudCall<{ data: any }>('breeding-service', 'getCycleDetail')
 const { run: doClose } = useCloudCall('breeding-service', 'closeCycle', { successMessage: '已关闭' })
@@ -219,6 +224,14 @@ function formatShortDate(ts: number) {
   if (!ts) return '-'
   const d = new Date(ts)
   return `${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`
+}
+
+function showSubmitBanner(message: string) {
+  submitBannerMessage.value = message
+  if (submitBannerTimer) clearTimeout(submitBannerTimer)
+  submitBannerTimer = setTimeout(() => {
+    submitBannerMessage.value = ''
+  }, 2200)
 }
 
 function goToLitter(id: string) {
@@ -277,6 +290,14 @@ async function loadData() {
 
 onLoad((query) => {
   cycleId = query?.id || ''
+  if (cycleId) loadData()
+})
+
+onShow(() => {
+  const feedback = consumeSubmitFeedback('/pages/breeding/cycle')
+  if (feedback?.message) {
+    showSubmitBanner(feedback.message)
+  }
   if (cycleId) loadData()
 })
 </script>

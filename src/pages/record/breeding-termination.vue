@@ -54,11 +54,12 @@
     <view class="fixed-bottom">
       <button
         class="submit-btn"
-        :loading="submitting"
-        :disabled="!canSubmit || submitting"
+        :loading="submitState === 'submitting'"
+        :class="{ 'submit-btn--success': submitState === 'success' }"
+        :disabled="!canSubmit || submitState === 'submitting'"
         @click="submit"
       >
-        {{ isTodo ? '创建待办' : '保存记录' }}
+        {{ submitButtonText }}
       </button>
     </view>
 
@@ -69,6 +70,7 @@
 import { ref, reactive, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { buildRecordFeedbackMessage, buildTaskFeedbackMessage, queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 import BFormOptions from '@/components/form/BFormOptions.vue'
@@ -86,7 +88,7 @@ const isTodo = ref(false)
 const enableReminder = ref(false) // 异常终止默认不提醒
 const reminderDate = ref<number | null>(null)
 const details = reactive<Record<string, any>>({})
-const submitting = ref(false)
+const submitState = ref<'idle' | 'submitting' | 'success'>('idle')
 
 const terminationTypes = ['流产', '死胎', '医疗终止', '确认未怀孕']
 
@@ -94,40 +96,58 @@ const canSubmit = computed(() => {
   return !!date.value && !!selectedDog.value
 })
 
-const { run: addRecord } = useCloudCall('breeding-service', 'addBreedingRecord', {
-  successMessage: '已保存',
-  showLoading: true,
-  loadingText: '保存中...',
+const submitButtonText = computed(() => {
+  if (submitState.value === 'submitting') return '提交中...'
+  if (submitState.value === 'success') return isTodo.value ? '已创建' : '已保存'
+  return isTodo.value ? '创建待办' : '保存记录'
 })
 
-const { run: addTask } = useCloudCall('task-service', 'createManualTask', {
-  showLoading: true,
-  loadingText: '创建待办中...',
+const { run: addRecord } = useCloudCall('breeding-service', 'addBreedingRecord', {
+  successMode: 'silent',
+  loadingMode: 'local',
+  throwOnError: true,
+})
+
+const { run: addTask } = useCloudCall('task-service', 'batchCreateManualTasks', {
+  successMode: 'silent',
+  loadingMode: 'local',
+  throwOnError: true,
 })
 
 const { run: fetchTask } = useCloudCall('task-service', 'getTask')
-const { run: completeTask } = useCloudCall('task-service', 'completeTask')
+const { run: completeTask } = useCloudCall('task-service', 'completeTask', {
+  successMode: 'silent',
+  loadingMode: 'local',
+  throwOnError: true,
+})
 
 let prefillTaskId = ''
 
 async function submit() {
-  submitting.value = true
+  submitState.value = 'submitting'
   try {
     if (isTodo.value) {
-      await addTask({
+      const res = await addTask({
+        dogs: [{ dog_id: selectedDog.value?._id || '', dog_name: selectedDog.value?.name || '' }],
         card_type: 'individual',
-        dog_id: selectedDog.value?._id || '',
-        dog_name: selectedDog.value?.name || '',
         type: 'abnormal_termination',
         title: '异常终止',
         due_date: date.value,
-        status: 'pending',
-        priority: 'upcoming',
         details: {
           notes: form.notes || null,
         },
       })
-      uni.showToast({ title: '已创建待办', icon: 'success' })
+      const created = res?.data?.created || 0
+      const skipped = res?.data?.skipped || 0
+      submitState.value = 'success'
+      queueSubmitFeedback({
+        message: buildTaskFeedbackMessage(created, skipped),
+        createdDate: date.value,
+        createdCount: created,
+        skippedCount: skipped,
+        refreshHome: true,
+      })
+      await wait(140)
       uni.navigateBack()
     } else {
       const d: Record<string, any> = {}
@@ -145,11 +165,20 @@ async function submit() {
       })
       if (res) {
         if (prefillTaskId) await completeTask(prefillTaskId)
+        submitState.value = 'success'
+        queueSubmitFeedback({
+          message: buildRecordFeedbackMessage(1, prefillTaskId ? 1 : 0),
+          completedTaskIds: prefillTaskId ? [prefillTaskId] : [],
+          refreshHome: true,
+        })
+        await wait(140)
         uni.navigateBack()
       }
     }
+  } catch {
+    submitState.value = 'idle'
   } finally {
-    submitting.value = false
+    if (submitState.value !== 'success') submitState.value = 'idle'
   }
 }
 

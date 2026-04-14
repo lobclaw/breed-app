@@ -21,6 +21,9 @@
       <view class="custom-toggle__knob" />
     </view>
   </view>
+  <view v-if="!hideTodo && isTodo" class="option-mode-hint">
+    <text>将创建待办</text>
+  </view>
 
   <!-- 日期 -->
   <slot name="before-date" />
@@ -251,5 +254,17 @@ if (!props.date) {
   font-weight: 500;
   color: var(--text-3);
   margin-top: 4px;
+}
+
+.option-mode-hint {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 8px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--rose-soft);
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 700;
 }
 </style>

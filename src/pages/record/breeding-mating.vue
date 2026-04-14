@@ -104,11 +104,12 @@
     <view class="fixed-bottom">
       <button
         class="submit-btn"
-        :loading="submitting"
-        :disabled="!canSubmit || submitting"
+        :loading="submitState === 'submitting'"
+        :class="{ 'submit-btn--success': submitState === 'success' }"
+        :disabled="!canSubmit || submitState === 'submitting'"
         @click="submit"
       >
-        {{ isTodo ? '创建待办' : '保存记录' }}
+        {{ submitButtonText }}
       </button>
     </view>
 
@@ -119,6 +120,7 @@
 import { ref, reactive, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { buildRecordFeedbackMessage, buildTaskFeedbackMessage, queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 import BFormOptions from '@/components/form/BFormOptions.vue'
@@ -141,13 +143,19 @@ const details = reactive<Record<string, any>>({
   method: '自然交配',
   mating_number: 1,
 })
-const submitting = ref(false)
+const submitState = ref<'idle' | 'submitting' | 'success'>('idle')
 const manualDueDate = ref<number | null>(null)
 
 const matingMethods = ['自然交配', '人工授精']
 
 const canSubmit = computed(() => {
   return !!date.value && !!selectedSire.value && !!selectedDog.value
+})
+
+const submitButtonText = computed(() => {
+  if (submitState.value === 'submitting') return '提交中...'
+  if (submitState.value === 'success') return isTodo.value ? '已创建' : '已保存'
+  return isTodo.value ? '创建待办' : '保存记录'
 })
 
 const estimatedCheckDate = computed(() => {
@@ -175,37 +183,39 @@ function onDueDateChange(e: any) {
 }
 
 const { run: addRecord } = useCloudCall('breeding-service', 'addBreedingRecord', {
-  successMessage: '已保存',
-  showLoading: true,
-  loadingText: '保存中...',
+  successMode: 'silent',
+  loadingMode: 'local',
+  throwOnError: true,
 })
 
-const { run: addTask } = useCloudCall('task-service', 'createManualTask', {
-  showLoading: true,
-  loadingText: '创建待办中...',
+const { run: addTask } = useCloudCall('task-service', 'batchCreateManualTasks', {
+  successMode: 'silent',
+  loadingMode: 'local',
+  throwOnError: true,
 })
 
 const { run: fetchTask } = useCloudCall('task-service', 'getTask')
-const { run: completeTask } = useCloudCall('task-service', 'completeTask')
+const { run: completeTask } = useCloudCall('task-service', 'completeTask', {
+  successMode: 'silent',
+  loadingMode: 'local',
+  throwOnError: true,
+})
 
 let prefillTaskId = ''
 
 async function submit() {
-  submitting.value = true
+  submitState.value = 'submitting'
   try {
     if (isTodo.value) {
       const rd = enableReminder.value
         ? (reminderDate.value || (date.value ? date.value + 25 * 86400000 : null))
         : null
-      await addTask({
+      const res = await addTask({
+        dogs: [{ dog_id: selectedDog.value?._id || '', dog_name: selectedDog.value?.name || '' }],
         card_type: 'individual',
-        dog_id: selectedDog.value?._id || '',
-        dog_name: selectedDog.value?.name || '',
         type: 'mating',
         title: '配种',
         due_date: date.value,
-        status: 'pending',
-        priority: 'upcoming',
         next_reminder_date: rd,
         details: {
           sire_id: selectedSire.value?._id || null,
@@ -215,7 +225,17 @@ async function submit() {
           notes: form.notes || null,
         },
       })
-      uni.showToast({ title: '已创建待办', icon: 'success' })
+      const created = res?.data?.created || 0
+      const skipped = res?.data?.skipped || 0
+      submitState.value = 'success'
+      queueSubmitFeedback({
+        message: buildTaskFeedbackMessage(created, skipped),
+        createdDate: date.value,
+        createdCount: created,
+        skippedCount: skipped,
+        refreshHome: true,
+      })
+      await wait(140)
       uni.navigateBack()
     } else {
       const cost = costInput.value ? parseFloat(costInput.value) : null
@@ -239,11 +259,20 @@ async function submit() {
       })
       if (res) {
         if (prefillTaskId) await completeTask(prefillTaskId)
+        submitState.value = 'success'
+        queueSubmitFeedback({
+          message: buildRecordFeedbackMessage(1, prefillTaskId ? 1 : 0),
+          completedTaskIds: prefillTaskId ? [prefillTaskId] : [],
+          refreshHome: true,
+        })
+        await wait(140)
         uni.navigateBack()
       }
     }
+  } catch {
+    submitState.value = 'idle'
   } finally {
-    submitting.value = false
+    if (submitState.value !== 'success') submitState.value = 'idle'
   }
 }
 

@@ -319,6 +319,11 @@
   &[disabled] {
     opacity: 0.4;
   }
+
+  &--success {
+    background: var(--green);
+    box-shadow: 0 4px 16px rgba(79, 170, 115, 0.22);
+  }
 }
 
 /* ==================== 详情页操作区 ==================== */

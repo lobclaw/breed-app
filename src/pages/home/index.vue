@@ -35,6 +35,8 @@
       @toggle-calendar="toggleCalendar"
     />
 
+    <BSubmitBanner :message="submitBannerMessage" />
+
     <!-- 智能卡片区 -->
     <scroll-view scroll-y class="card-area" :scroll-into-view="scrollTarget">
       <!-- ===== 今日模式：单列表（逾期在最上面，今日紧随其后） ===== -->
@@ -277,10 +279,12 @@ import WeekStrip from '@/components/week-strip/WeekStrip.vue'
 import SmartCard from '@/components/smart-card/SmartCard.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
+import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
 import BNavBar from '@/components/layout/BNavBar.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import BIconBox from '@/components/base/BIconBox.vue'
 import { useTaskStore } from '@/stores/taskStore'
+import { consumeSubmitFeedback } from '@/composables/useSubmitFeedback'
 
 const { hasFamily, loadFamily } = useAuth()
 const taskStore = useTaskStore()
@@ -299,6 +303,8 @@ const hasCachedData = cards.value.length > 0
 const loading = ref(!hasCachedData)
 const scrollTarget = ref('')
 const dayCounts = ref<Record<number, number>>({})
+const submitBannerMessage = ref('')
+let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
 
 // 选中日期（0点 timestamp）
 const selectedDate = ref(startOfDay(Date.now()))
@@ -547,6 +553,14 @@ function toggleCalendar() {
   uni.showToast({ title: '月历功能后续迭代', icon: 'none' })
 }
 
+function showSubmitBanner(message: string) {
+  submitBannerMessage.value = message
+  if (submitBannerTimer) clearTimeout(submitBannerTimer)
+  submitBannerTimer = setTimeout(() => {
+    submitBannerMessage.value = ''
+  }, 2200)
+}
+
 // 乐观更新：标记正在消失的卡片
 const completingCards = ref(new Set<string>())
 const completedCards = ref(new Set<string>())
@@ -758,6 +772,24 @@ async function onBatchCompleteMed(medicationTaskIds: string[]) {
   await loadTodayCards()
 }
 
+function applyHomeFeedback(payload: any) {
+  if (payload?.completedTaskIds?.length) {
+    if (payload.removeBatchCard) {
+      removeCardLocally(payload.completedTaskIds[0], true)
+    } else {
+      payload.completedTaskIds.forEach((taskId: string) => removeCardLocally(taskId))
+    }
+  }
+
+  if (payload?.createdDate && payload?.createdCount) {
+    const createdTs = startOfDay(payload.createdDate)
+    dayCounts.value[createdTs] = (dayCounts.value[createdTs] || 0) + payload.createdCount
+    if (createdTs === startOfDay(Date.now())) {
+      counts.today += payload.createdCount
+    }
+  }
+}
+
 const { run: updateIllnessStatus } = useCloudCall('health-service', 'updateIllnessStatus')
 const { run: endMedication } = useCloudCall('health-service', 'endMedicationByDog')
 
@@ -882,6 +914,12 @@ async function confirmBatchComplete() {
 }
 
 onShow(async () => {
+  const feedback = consumeSubmitFeedback('/pages/home/index')
+  if (feedback?.message) {
+    applyHomeFeedback(feedback)
+    showSubmitBanner(feedback.message)
+  }
+
   // 确保家庭信息已加载
   if (!hasFamily.value) {
     await loadFamily()

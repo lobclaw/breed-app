@@ -6,6 +6,7 @@
 <template>
   <view class="record-types">
     <BPageHeader title="全部记录类型" />
+    <BSubmitBanner :message="submitBannerMessage" />
 
     <scroll-view scroll-y class="record-types__body">
       <!-- 繁育记录 -->
@@ -77,7 +78,11 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
+import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
+import { consumeSubmitFeedback } from '@/composables/useSubmitFeedback'
 
 interface RecordType {
   icon: string
@@ -114,9 +119,27 @@ const financeTypes: RecordType[] = [
   { icon: 'account_balance', iconBg: 'var(--icon-red)', iconColor: 'var(--red)', label: '收入', url: '/pages/finance/expense-add?type=income' },
 ]
 
+const submitBannerMessage = ref('')
+let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
+
+function showSubmitBanner(message: string) {
+  submitBannerMessage.value = message
+  if (submitBannerTimer) clearTimeout(submitBannerTimer)
+  submitBannerTimer = setTimeout(() => {
+    submitBannerMessage.value = ''
+  }, 2200)
+}
+
 function goToRecord(item: RecordType) {
   uni.navigateTo({ url: item.url })
 }
+
+onShow(() => {
+  const feedback = consumeSubmitFeedback('/pages/record/index')
+  if (feedback?.message) {
+    showSubmitBanner(feedback.message)
+  }
+})
 </script>
 
 <style lang="scss" scoped>

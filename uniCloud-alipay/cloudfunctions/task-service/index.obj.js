@@ -883,7 +883,14 @@ module.exports = {
         })
         .get()
       if ((existingTasks || []).some(task => getTaskVariantKey(task) === expectedVariant)) {
-        return { data: { taskId: null, skipped: true, message: '该犬已有同类型待办' } }
+        return {
+          data: {
+            taskId: null,
+            created: 0,
+            skipped: 1,
+            message: '该犬已有同类型待办',
+          }
+        }
       }
     }
 
@@ -908,7 +915,14 @@ module.exports = {
     }
 
     const { id } = await db.collection('tasks').add(taskData)
-    return { data: { taskId: id } }
+    return {
+      data: {
+        taskId: id,
+        created: 1,
+        skipped: 0,
+        message: '已创建待办',
+      }
+    }
   },
 
   /**
@@ -980,6 +994,7 @@ module.exports = {
       data: {
         created: results.length,
         skipped: data.dogs.length - results.length,
+        message: results.length > 0 ? '已创建待办' : '已有相同待办',
       }
     }
   },

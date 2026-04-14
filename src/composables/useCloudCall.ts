@@ -13,6 +13,12 @@ interface CloudCallOptions {
   showLoading?: boolean
   /** loading 提示文字 */
   loadingText?: string
+  /** 成功提示模式 */
+  successMode?: 'toast' | 'silent'
+  /** loading 呈现模式 */
+  loadingMode?: 'global' | 'local'
+  /** 失败时是否抛错，默认 false */
+  throwOnError?: boolean
 }
 
 interface CloudCallResult<T> {
@@ -47,13 +53,20 @@ export function useCloudCall<T = any>(
     showError = true,
     showLoading = false,
     loadingText = '加载中...',
+    successMode = 'toast',
+    loadingMode,
+    throwOnError = false,
   } = options
+
+  const shouldShowGlobalLoading = loadingMode
+    ? loadingMode === 'global'
+    : showLoading
 
   async function run(...args: any[]): Promise<T | null> {
     loading.value = true
     error.value = null
 
-    if (showLoading) {
+    if (shouldShowGlobalLoading) {
       uni.showLoading({ title: loadingText, mask: true })
     }
 
@@ -66,7 +79,7 @@ export function useCloudCall<T = any>(
         throw new Error(result.errMsg || result.message || '操作失败')
       }
 
-      if (successMessage) {
+      if (successMessage && successMode === 'toast') {
         uni.showToast({ title: successMessage, icon: 'success' })
       }
 
@@ -79,10 +92,14 @@ export function useCloudCall<T = any>(
         uni.showToast({ title: msg, icon: 'none', duration: 2000 })
       }
 
+      if (throwOnError) {
+        throw e
+      }
+
       return null
     } finally {
       loading.value = false
-      if (showLoading) {
+      if (shouldShowGlobalLoading) {
         uni.hideLoading()
       }
     }

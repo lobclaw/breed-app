@@ -108,11 +108,12 @@
     <view class="fixed-bottom">
       <button
         class="submit-btn"
-        :loading="submitting"
-        :disabled="!canSubmit || submitting"
+        :loading="submitState === 'submitting'"
+        :class="{ 'submit-btn--success': submitState === 'success' }"
+        :disabled="!canSubmit || submitState === 'submitting'"
         @click="submit"
       >
-        保存记录
+        {{ submitButtonText }}
       </button>
     </view>
 
@@ -160,6 +161,7 @@
 import { ref, reactive, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { buildRecordFeedbackMessage, queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
 import { useAuth } from '@/composables/useAuth'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BModal from '@/components/layout/BModal.vue'
@@ -174,12 +176,13 @@ const notes = ref('')
 const costInput = ref('')
 const details = reactive<Record<string, any>>({ treatment_status: '观察中', severity: '轻微' })
 const fromTask = ref(false)
-const submitting = ref(false)
+const submitState = ref<'idle' | 'submitting' | 'success'>('idle')
 const isTodo = ref(false)
 const enableReminder = ref(false)
 const reminderDate = ref<number | null>(null)
 const showMedPrompt = ref(false)
 const savedRecordId = ref('')
+const sourceTaskIds = ref<string[]>([])
 
 const PRESET_CONDITION_TYPES = ['感冒', '腹泻', '寄生虫', '皮肤病', '眼部', '骨骼', '犬瘟', '细小', '其他']
 const deletedCustomConditions = ref<string[]>([])
@@ -251,6 +254,12 @@ const canSubmit = computed(() => {
   return selectedDogs.value.length > 0 && !!date.value
 })
 
+const submitButtonText = computed(() => {
+  if (submitState.value === 'submitting') return '提交中...'
+  if (submitState.value === 'success') return '已保存'
+  return '保存记录'
+})
+
 // 日期/提醒相关逻辑由 BFormOptions 组件处理
 
 function buildDetails() {
@@ -265,14 +274,15 @@ function buildDetails() {
 }
 
 const { run: batchAddRecord } = useCloudCall('health-service', 'batchAddHealthRecords', {
-  showLoading: true,
-  loadingText: '保存中...',
+  successMode: 'silent',
+  loadingMode: 'local',
+  throwOnError: true,
 })
 
 const { run: fetchTask } = useCloudCall('task-service', 'getTask')
 
 async function submit() {
-  submitting.value = true
+  submitState.value = 'submitting'
   try {
     // 批量录入健康记录（一次云调用）
     const res = await batchAddRecord({
@@ -292,25 +302,38 @@ async function submit() {
       savedRecordId.value = res.data.records[0].recordId
     }
 
-    if (allCompletedTasks.length > 0) {
-      const names = allCompletedTasks.map((t: any) => t.dog_name).join('、')
-      uni.showToast({ title: `自动完成 ${allCompletedTasks.length} 条待办（${names}）`, icon: 'none', duration: 2500 })
-    }
+    submitState.value = 'success'
+    const completedTaskIds = allCompletedTasks.map((t: any) => t._id).filter(Boolean)
+    const fallbackTaskIds = sourceTaskIds.value.length > 0 ? sourceTaskIds.value : completedTaskIds
+    queueSubmitFeedback({
+      message: buildRecordFeedbackMessage(selectedDogs.value.length, allCompletedTasks.length),
+      completedTaskIds: fallbackTaskIds,
+      removeBatchCard: fallbackTaskIds.length > 1,
+      refreshHome: true,
+    })
 
     // 如果犬只还在治疗中，提示是否需要用药
     if (details.treatment_status !== '已康复') {
       showMedPrompt.value = true
     } else {
+      await wait(140)
       uni.navigateBack()
     }
+  } catch {
+    submitState.value = 'idle'
   } finally {
-    submitting.value = false
+    if (submitState.value !== 'success') submitState.value = 'idle'
   }
 }
 
 onLoad(async (query) => {
   if (query?.taskId || query?.batchDogs) {
     fromTask.value = true
+  }
+  if (query?.taskId) {
+    sourceTaskIds.value = [query.taskId]
+  } else if (query?.taskIds) {
+    sourceTaskIds.value = query.taskIds.split(',').filter(Boolean)
   }
   if (query?.taskId) {
     const res = await fetchTask(query.taskId)
@@ -364,7 +387,7 @@ function goToMedication() {
 
 function finishAndBack() {
   showMedPrompt.value = false
-  setTimeout(() => uni.navigateBack(), 300)
+  setTimeout(() => uni.navigateBack(), 140)
 }
 </script>
 

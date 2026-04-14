@@ -26,6 +26,8 @@
       </view>
     </view>
 
+    <BSubmitBanner :message="submitBannerMessage" />
+
     <!-- ==================== 紧凑 Hero ==================== -->
     <view class="dog-detail__hero">
       <view class="dog-detail__hero-avatar" :class="heroAvatarClass">
@@ -925,10 +927,12 @@ import { ref, computed } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
+import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import BModal from '@/components/layout/BModal.vue'
 import BDeleteConfirm from '@/components/layout/BDeleteConfirm.vue'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { consumeSubmitFeedback } from '@/composables/useSubmitFeedback'
 import { useDogStore } from '@/stores/dogStore'
 import type { Dog, DeriveStatus } from '@/types/dog'
 
@@ -941,7 +945,9 @@ const loading = ref(true)
 const showMore = ref(false)
 const showAddRecordSheet = ref(false)
 const infoExpanded = ref(false)
+const submitBannerMessage = ref('')
 let dogId = ''
+let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
 
 const tabs = [
   { key: 'overview', label: '概览' },
@@ -1095,6 +1101,14 @@ function formatAmount(amount: number) {
 
 function goBack() {
   uni.navigateBack()
+}
+
+function showSubmitBanner(message: string) {
+  submitBannerMessage.value = message
+  if (submitBannerTimer) clearTimeout(submitBannerTimer)
+  submitBannerTimer = setTimeout(() => {
+    submitBannerMessage.value = ''
+  }, 2200)
 }
 
 function goToCycle(cycleId: string) {
@@ -1484,6 +1498,10 @@ onLoad((query) => {
 })
 
 onShow(() => {
+  const feedback = consumeSubmitFeedback('/pages/dog/detail')
+  if (feedback?.message) {
+    showSubmitBanner(feedback.message)
+  }
   if (dogId) loadData()
 })
 </script>

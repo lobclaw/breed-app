@@ -97,11 +97,12 @@
     <view class="fixed-bottom">
       <button
         class="submit-btn"
-        :loading="submitting"
-        :disabled="!canSubmit || submitting"
+        :loading="submitState === 'submitting'"
+        :class="{ 'submit-btn--success': submitState === 'success' }"
+        :disabled="!canSubmit || submitState === 'submitting'"
         @click="submit"
       >
-        {{ isTodo ? '创建待办' : '保存记录' }}
+        {{ submitButtonText }}
       </button>
     </view>
 
@@ -135,6 +136,7 @@
 import { ref, reactive, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { buildRecordFeedbackMessage, buildTaskFeedbackMessage, queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
 import { useAuth } from '@/composables/useAuth'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BModal from '@/components/layout/BModal.vue'
@@ -148,11 +150,12 @@ const date = ref<number | null>(null)
 const notes = ref('')
 const costInput = ref('')
 const details = reactive<Record<string, any>>({ deworming_type: 'internal' })
-const submitting = ref(false)
+const submitState = ref<'idle' | 'submitting' | 'success'>('idle')
 const isTodo = ref(false)
 const enableReminder = ref(false)
 const reminderDate = ref<number | null>(null)
 const fromTask = ref(false)
+const sourceTaskIds = ref<string[]>([])
 
 // 根据选中犬只的 role 动态计算驱虫提醒间隔
 const computedReminderDays = computed(() => {
@@ -260,6 +263,12 @@ const canSubmit = computed(() => {
   return selectedDogs.value.length > 0 && !!date.value && !!details.deworming_type
 })
 
+const submitButtonText = computed(() => {
+  if (submitState.value === 'submitting') return '提交中...'
+  if (submitState.value === 'success') return isTodo.value ? '已创建' : '已保存'
+  return isTodo.value ? '创建待办' : '保存记录'
+})
+
 // 日期/提醒相关逻辑由 BFormOptions 组件处理
 
 function buildDetails() {
@@ -272,13 +281,15 @@ function buildDetails() {
 }
 
 const { run: batchAddRecord } = useCloudCall('health-service', 'batchAddHealthRecords', {
-  showLoading: true,
-  loadingText: '保存中...',
+  successMode: 'silent',
+  loadingMode: 'local',
+  throwOnError: true,
 })
 
 const { run: batchAddTask } = useCloudCall('task-service', 'batchCreateManualTasks', {
-  showLoading: true,
-  loadingText: '创建待办中...',
+  successMode: 'silent',
+  loadingMode: 'local',
+  throwOnError: true,
 })
 
 const { run: fetchTask } = useCloudCall('task-service', 'getTask')
@@ -291,7 +302,7 @@ const dewormingTypeLabels: Record<string, string> = {
 }
 
 async function submit() {
-  submitting.value = true
+  submitState.value = 'submitting'
   try {
     if (isTodo.value) {
       // 批量创建待办任务（一次云调用）
@@ -313,9 +324,15 @@ async function submit() {
         },
       })
       const created = res?.data?.created || 0
-      if (created === 0) {
-        uni.showToast({ title: '已有相同待办，未重复创建', icon: 'none' })
-      }
+      const skipped = res?.data?.skipped || 0
+      submitState.value = 'success'
+      queueSubmitFeedback({
+        message: buildTaskFeedbackMessage(created, skipped),
+        createdDate: date.value,
+        createdCount: created,
+        skippedCount: skipped,
+        refreshHome: true,
+      })
     } else {
       // 批量录入健康记录（一次云调用）
       const res = await batchAddRecord({
@@ -329,27 +346,36 @@ async function submit() {
       })
 
       const allCompletedTasks = res?.data?.completedTasks || []
-      if (allCompletedTasks.length > 0) {
-        const names = allCompletedTasks.map((t: any) => t.dog_name).join('、')
-        uni.showToast({
-          title: `自动完成 ${allCompletedTasks.length} 条待办（${names}）`,
-          icon: 'none',
-          duration: 2500,
-        })
-      }
+      submitState.value = 'success'
+      const completedTaskIds = allCompletedTasks.map((t: any) => t._id).filter(Boolean)
+      const fallbackTaskIds = sourceTaskIds.value.length > 0 ? sourceTaskIds.value : completedTaskIds
+      queueSubmitFeedback({
+        message: buildRecordFeedbackMessage(selectedDogs.value.length, allCompletedTasks.length),
+        completedTaskIds: fallbackTaskIds,
+        removeBatchCard: fallbackTaskIds.length > 1,
+        refreshHome: true,
+      })
 
       // 如果有自定义药品，刷新家庭设置以便下次显示
       if (customDrug.value) loadFamily()
     }
+    await wait(140)
     uni.navigateBack()
+  } catch {
+    submitState.value = 'idle'
   } finally {
-    submitting.value = false
+    if (submitState.value !== 'success') submitState.value = 'idle'
   }
 }
 
 onLoad(async (query) => {
   if (query?.taskId || query?.batchDogs) {
     fromTask.value = true
+  }
+  if (query?.taskId) {
+    sourceTaskIds.value = [query.taskId]
+  } else if (query?.taskIds) {
+    sourceTaskIds.value = query.taskIds.split(',').filter(Boolean)
   }
   if (query?.taskId) {
     const res = await fetchTask(query.taskId)
