@@ -457,17 +457,19 @@ const { run: doBatchCompleteMedDay } = useCloudCall('health-service', 'batchComp
 
 // 7天卡片缓存：{ [dayTimestamp]: Card[] }
 const weekCache = ref<Record<number, any[]>>({})
+let latestLoadToken = 0
 
 function scrollToSection(section: string) {
   scrollTarget.value = `section-${section}`
 }
 
 /** 加载今日卡片（逾期+今日合并为单列表） */
-async function loadTodayCards() {
+async function loadTodayCards(loadToken = latestLoadToken) {
   const hasData = cards.value.length > 0
   if (!hasData) loading.value = true
 
   const result = await fetchCards()
+  if (loadToken !== latestLoadToken) return
   if (result?.data) {
     cards.value = result.data.cards || []
     counts.today = result.data.counts?.today || 0
@@ -483,13 +485,14 @@ async function loadTodayCards() {
 }
 
 /** 加载未来日期的卡片缓存（今天+未来6天，用于 WeekStrip 点击） */
-async function loadWeekCache() {
+async function loadWeekCache(loadToken = latestLoadToken) {
   const DAY_MS = 86400000
   const todayTs = startOfDay(Date.now())
   // 只缓存今天之后的未来日期（过去日期不可点击）
   const start = todayTs + DAY_MS
   const end = todayTs + 7 * DAY_MS - 1 // 未来 6 天
   const result = await fetchWeekCards(start, end)
+  if (loadToken !== latestLoadToken) return
   if (result?.data) {
     const cache: Record<number, any[]> = {}
     for (const [k, v] of Object.entries(result.data)) {
@@ -499,12 +502,13 @@ async function loadWeekCache() {
   }
 }
 
-async function loadDateCounts() {
+async function loadDateCounts(loadToken = latestLoadToken) {
   const DAY_MS = 86400000
   const todayTs = startOfDay(Date.now())
   // 只查询今天到本周日的范围（过去日期不显示红点）
   const end = todayTs + 7 * DAY_MS - 1
   const result = await fetchDateCounts(todayTs, end)
+  if (loadToken !== latestLoadToken) return
   if (result?.data) {
     dayCounts.value = result.data
   }
@@ -512,7 +516,9 @@ async function loadDateCounts() {
 
 /** 并行加载所有首页数据 */
 async function loadAll() {
-  await Promise.all([loadTodayCards(), loadWeekCache(), loadDateCounts()])
+  const loadToken = ++latestLoadToken
+  await Promise.all([loadTodayCards(loadToken), loadWeekCache(loadToken), loadDateCounts(loadToken)])
+  if (loadToken !== latestLoadToken) return
   // 两个请求都完成后：以实际可见卡片数修正今天的红点
   // 不依赖 counts.today（它含用药卡，即使今日剂量全给完仍为 1）
   const todayTs = startOfDay(Date.now())

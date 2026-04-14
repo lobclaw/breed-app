@@ -420,7 +420,7 @@ async function submit() {
       protocolName.value = ''
       showNameModal.value = true
     } else {
-      setTimeout(() => uni.navigateBack(), 1000)
+      uni.navigateBack()
     }
   } finally {
     submitting.value = false

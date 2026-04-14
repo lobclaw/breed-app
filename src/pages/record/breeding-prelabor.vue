@@ -166,7 +166,7 @@ async function submit() {
         },
       })
       uni.showToast({ title: '已创建待办', icon: 'success' })
-      setTimeout(() => uni.navigateBack(), 1000)
+      uni.navigateBack()
     } else {
       const d: Record<string, any> = {}
       if (details.temperature) d.temperature = parseFloat(details.temperature)

@@ -119,7 +119,7 @@ async function submit() {
         },
       })
       uni.showToast({ title: '已创建待办', icon: 'success' })
-      setTimeout(() => uni.navigateBack(), 1000)
+      uni.navigateBack()
     } else {
       const res = await addRecord({
         type: 'heat',

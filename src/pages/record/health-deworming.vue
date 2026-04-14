@@ -341,7 +341,7 @@ async function submit() {
       // 如果有自定义药品，刷新家庭设置以便下次显示
       if (customDrug.value) loadFamily()
     }
-    setTimeout(() => uni.navigateBack(), 1000)
+    uni.navigateBack()
   } finally {
     submitting.value = false
   }

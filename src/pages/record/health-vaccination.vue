@@ -295,7 +295,7 @@ async function submit() {
     }
     // 如果有自定义疫苗类型，刷新家庭设置以便下次显示
     if (customVaccine.value) loadFamily()
-    setTimeout(() => uni.navigateBack(), 1000)
+    uni.navigateBack()
   } finally {
     submitting.value = false
   }

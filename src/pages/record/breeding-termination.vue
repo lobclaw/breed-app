@@ -128,7 +128,7 @@ async function submit() {
         },
       })
       uni.showToast({ title: '已创建待办', icon: 'success' })
-      setTimeout(() => uni.navigateBack(), 1000)
+      uni.navigateBack()
     } else {
       const d: Record<string, any> = {}
       if (details.termination_type) d.termination_type = details.termination_type

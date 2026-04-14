@@ -301,7 +301,7 @@ async function submit() {
     if (details.treatment_status !== '已康复') {
       showMedPrompt.value = true
     } else {
-      setTimeout(() => uni.navigateBack(), 1000)
+      uni.navigateBack()
     }
   } finally {
     submitting.value = false
