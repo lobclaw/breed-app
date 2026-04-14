@@ -168,6 +168,7 @@
 import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { queueSubmitFeedback } from '@/composables/useSubmitFeedback'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BCard from '@/components/base/BCard.vue'
 import BTag from '@/components/base/BTag.vue'
@@ -182,12 +183,18 @@ const puppies = ref<any[]>([])
 const weaning = ref(false)
 const loading = ref(true)
 let litterId = ''
+let sourceTaskId = ''
 
 const { run: fetchDetail } = useCloudCall<{ data: any }>('breeding-service', 'getLitterDetail')
 const { run: doWeaning } = useCloudCall('breeding-service', 'confirmWeaning', { successMessage: '已确认断奶' })
 const { run: doAddPuppy } = useCloudCall('breeding-service', 'addPuppyToLitter', { successMessage: '已添加' })
 const { run: doUpdateBirthDate } = useCloudCall('breeding-service', 'updateBirthDate', { successMessage: '已更新' })
 const { run: doUpdateNotes } = useCloudCall('breeding-service', 'updateLitter', { successMessage: '备注已更新' })
+const { run: completeTask } = useCloudCall('task-service', 'completeTask', {
+  successMode: 'silent',
+  loadingMode: 'local',
+  throwOnError: true,
+})
 
 // 共享输入弹窗状态
 const showPrompt = ref(false)
@@ -309,6 +316,15 @@ async function confirmWeaning() {
         weaning.value = true
         try {
           await doWeaning(litterId)
+          if (sourceTaskId) {
+            await completeTask(sourceTaskId)
+            queueSubmitFeedback({
+              message: '已确认断奶并处理待办',
+              completedTaskIds: [sourceTaskId],
+              suppressTaskIds: [sourceTaskId],
+              refreshHome: true,
+            })
+          }
           loadData()
         } finally {
           weaning.value = false
@@ -332,6 +348,7 @@ function addPuppy() {
 
 onLoad((query) => {
   litterId = query?.id || ''
+  sourceTaskId = query?.taskId || ''
   if (litterId) loadData()
 })
 </script>

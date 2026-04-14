@@ -7,10 +7,13 @@ import {
   resetDB,
   seedCollection,
   createMockUniCloud,
+  createCloudObjectContext,
 } from '../helpers/mock-unicloud'
 
 const mockUniCloud = createMockUniCloud()
 ;(globalThis as any).uniCloud = mockUniCloud
+process.env.NODE_ENV = 'test'
+const breedingService = require('../../uniCloud-alipay/cloudfunctions/breeding-service/index.obj.js')
 
 describe('breeding-service', () => {
   const db = mockUniCloud.database()
@@ -203,6 +206,38 @@ describe('breeding-service', () => {
 
       expect(tasks).toHaveLength(1)
       expect(tasks[0].title).toContain('卵泡')
+    })
+
+    it('保存繁育记录时可同次创建额外安排', async () => {
+      const now = Date.now()
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      const res = await breedingService.addBreedingRecord.call(ctx, {
+        type: 'heat',
+        dog_id: 'dam_1',
+        date: now,
+        details: { start_date: now },
+        extra_arrangement: {
+          kind: 'contact_doctor',
+          due_date: now + 2 * 86400000,
+          notes: '约周四B超',
+          anchor_type: 'cycle',
+        },
+      })
+
+      expect(res.data.recordId).toBeTruthy()
+      expect(res.data.cycleId).toBeTruthy()
+
+      const { data: tasks } = await db.collection('tasks')
+        .where({ cycle_id: res.data.cycleId })
+        .get()
+
+      expect(tasks.some(t => t.type === 'breeding_milestone')).toBe(true)
+      const extraTask = tasks.find(t => t.type === 'breeding_extra_arrangement')
+      expect(extraTask).toBeTruthy()
+      expect(extraTask.title).toBe('联系医生')
+      expect(extraTask.details?.notes).toBe('约周四B超')
+      expect(extraTask.details?.anchor_type).toBe('cycle')
+      expect(extraTask.details?.anchor_id).toBe(res.data.cycleId)
     })
   })
 

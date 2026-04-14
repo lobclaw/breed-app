@@ -30,8 +30,8 @@
 
     <!-- 操作按钮 -->
     <view v-if="!acting" class="card-actions">
-      <!-- 健康类才显示"完成"按钮 -->
-      <view v-if="isHealthType" class="btn btn--ghost-green" @click.stop="onComplete(visibleTasks[0]?._id, 'auto')">
+      <!-- 健康类与额外安排显示"完成"按钮 -->
+      <view v-if="isHealthType || isExtraArrangementType" class="btn btn--ghost-green" @click.stop="onComplete(visibleTasks[0]?._id, completeMode)">
         <text class="btn-text btn-text--green">完成</text>
       </view>
       <view class="btn btn--ghost" @click.stop="$emit('postpone', visibleTasks[0]?._id)">
@@ -48,6 +48,7 @@
 import { computed, ref } from 'vue'
 
 const HEALTH_TYPES = ['vaccination', 'deworming', 'medication']
+const EXTRA_ARRANGEMENT_TYPES = ['breeding_extra_arrangement']
 
 const props = defineProps<{ card: any }>()
 const emit = defineEmits<{
@@ -67,6 +68,8 @@ function onComplete(taskId: string, mode: string) {
 const visibleTasks = computed(() => (props.card.tasks || []).slice(0, 3))
 const firstTaskType = computed(() => visibleTasks.value[0]?.type || '')
 const isHealthType = computed(() => HEALTH_TYPES.includes(firstTaskType.value))
+const isExtraArrangementType = computed(() => EXTRA_ARRANGEMENT_TYPES.includes(firstTaskType.value))
+const completeMode = computed(() => (isHealthType.value ? 'auto' : 'manual'))
 
 const barColor = computed(() => {
   if (props.card.priority === 'overdue') return 'red'
@@ -93,6 +96,11 @@ function goRecordTask(task: any) {
   if (task._id) params.push(`taskId=${task._id}`)
   if (task.cycle_id) params.push(`cycleId=${task.cycle_id}`)
 
+  if (task.type === 'breeding_extra_arrangement' && task.cycle_id) {
+    uni.navigateTo({ url: `/pages/breeding/cycle?id=${task.cycle_id}` })
+    return
+  }
+
   let url = typeMap[task.type] || '/pages/record/health-vaccination'
   if (task.type === 'breeding_milestone') {
     params.push('locked=true')
@@ -102,7 +110,9 @@ function goRecordTask(task: any) {
     } else if (stepType === 'pregnancy_check') {
       url = '/pages/record/breeding-pregnancy'
     } else if (stepType === 'weaning_confirm' && task.litter_id) {
-      uni.navigateTo({ url: `/pages/breeding/litter?id=${task.litter_id}` })
+      const litterParams = [`id=${task.litter_id}`]
+      if (task._id) litterParams.push(`taskId=${task._id}`)
+      uni.navigateTo({ url: `/pages/breeding/litter?${litterParams.join('&')}` })
       return
     } else {
       url = '/pages/record/breeding-heat'
@@ -119,11 +129,13 @@ function taskDisplayTitle(task: any) {
   }
   if (task.type === 'deworming') return task.details?.drug_name || task.title || '驱虫'
   if (task.type === 'illness') return task.details?.condition || task.title || '疾病'
+  if (task.type === 'breeding_extra_arrangement') return task.title || '额外安排'
   return task.title || ''
 }
 
 function taskColor(task: any) {
   if (task.priority === 'overdue') return 'red'
+  if (task.type === 'breeding_extra_arrangement') return 'rose'
   if (task.type === 'vaccination' || task.type === 'deworming') return 'amber'
   return 'green'
 }

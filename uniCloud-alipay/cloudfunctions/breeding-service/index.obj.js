@@ -21,6 +21,12 @@ const STATUS_TRANSITIONS = {
 
 // 需要自动创建周期的记录类型
 const CYCLE_TRIGGER_TYPES = ['heat', 'follicle_check', 'mating']
+const EXTRA_ARRANGEMENT_TITLE_MAP = {
+  contact_doctor: '联系医生',
+  recheck_observe: '复测观察',
+  preparation: '准备事项',
+  other: '其他安排',
+}
 
 // ── 独立辅助函数（不能放在 module.exports 内，否则 _ 前缀会被 UniCloud 当作生命周期钩子）──
 
@@ -88,6 +94,54 @@ async function createBreedingMilestoneTask(familyId, dog, {
     created_at: now,
     updated_at: now,
   })
+}
+
+async function createExtraArrangementTask(familyId, dog, cycleId, sourceRecordId, extraArrangement) {
+  if (!extraArrangement?.kind || !extraArrangement?.due_date || !cycleId) return null
+
+  const now = Date.now()
+  const title = EXTRA_ARRANGEMENT_TITLE_MAP[extraArrangement.kind] || EXTRA_ARRANGEMENT_TITLE_MAP.other
+  const dueDate = extraArrangement.due_date
+
+  const { data: existingTasks } = await db.collection('tasks').where({
+    family_id: familyId,
+    type: 'breeding_extra_arrangement',
+    cycle_id: cycleId,
+    due_date: dueDate,
+    status: 'pending',
+    'details.kind': extraArrangement.kind,
+  }).get()
+
+  if (existingTasks && existingTasks.length > 0) return existingTasks[0]._id
+
+  const { id } = await db.collection('tasks').add({
+    card_type: 'individual',
+    dog_id: dog._id,
+    dog_name: dog.name,
+    cycle_id: cycleId,
+    type: 'breeding_extra_arrangement',
+    title,
+    due_date: dueDate,
+    status: 'pending',
+    priority: dueDate <= now ? 'overdue' : 'upcoming',
+    source_record_id: sourceRecordId,
+    source_collection: 'breeding_records',
+    family_id: familyId,
+    postpone_count: 0,
+    details: {
+      kind: extraArrangement.kind,
+      notes: extraArrangement.notes || null,
+      anchor_type: 'cycle',
+      anchor_id: cycleId,
+      dog_id: dog._id,
+      source_record_id: sourceRecordId,
+      manual: true,
+    },
+    created_at: now,
+    updated_at: now,
+  })
+
+  return id
 }
 
 /**
@@ -350,8 +404,19 @@ module.exports = {
       await clearPendingBreedingMilestones(familyId, { cycleId })
     }
 
-    // 生成任务
+    // 生成流程任务
     await generateTasks(familyId, data.type, data, cycleId, dog, recordId)
+
+    // 同次提交可选创建额外安排（仅挂周期，不影响主流程）
+    if (data.extra_arrangement?.kind && data.extra_arrangement?.due_date) {
+      await createExtraArrangementTask(
+        familyId,
+        dog,
+        cycleId,
+        recordId,
+        data.extra_arrangement
+      )
+    }
 
     // 如有费用 → 创建 expense
     if (data.cost && data.cost > 0) {

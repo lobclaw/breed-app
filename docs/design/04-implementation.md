@@ -125,7 +125,7 @@
 
 | 方法 | 说明 | 涉及集合 | 复杂度 |
 |------|------|---------|--------|
-| `addBreedingRecord(data)` | 录入繁育记录（8种type）。当前主流程按「发情→建议卵泡检查→配种→建议孕检→生产→确认断奶」推进 | breeding_records + breeding_cycles + tasks + expenses | 高 |
+| `addBreedingRecord(data)` | 录入繁育记录（8种type）。当前主流程按「发情→建议卵泡检查→配种→建议孕检→生产→确认断奶」推进，并支持同次提交创建一条 `额外安排` | breeding_records + breeding_cycles + tasks + expenses | 高 |
 | `getCycleDetail(cycleId)` | 周期详情 + 所有子记录 | breeding_cycles + breeding_records + litters | 中 |
 | `getCycleHistory(damId)` | 某母犬的繁育历史 | breeding_cycles + breeding_records | 中 |
 | `closeCycle(cycleId, reason)` | 手动关闭周期（放弃/失败） | breeding_cycles + tasks | 中 |
@@ -145,7 +145,8 @@
    - 发情 → 生成「建议卵泡检查」
    - 配种 → 生成「建议孕检」，预计预产日仅写入副信息
    - 孕检失败/异常终止 → 结束当前流程并清理未完成节点
-6. 如有 cost → 创建 expense 记录
+6. 如 `extra_arrangement` 存在 → 同次创建 `breeding_extra_arrangement`（默认挂 cycle，不影响主流程）
+7. 如有 cost → 创建 expense 记录
 7. 写入后校验（三层保障第二层）
 ```
 
@@ -196,7 +197,7 @@
 
 | 方法 | 说明 | 涉及集合 | 复杂度 |
 |------|------|---------|--------|
-| `getHomeCards(date?)` | 获取首页卡片数据（按逾期/繁育/健康/用药分层输出） | tasks + dogs | 高 |
+| `getHomeCards(date?)` | 获取首页卡片数据（按逾期/繁育/健康/用药分层输出；繁育区内再拆「当前流程 / 额外安排」） | tasks + dogs | 高 |
 | `completeTask(taskId)` | 标记任务完成 | tasks | 低 |
 | `postponeTask(taskId, newDate, reason?)` | 推迟任务 | tasks | 低 |
 | `createManualTask(data)` | 用户手动创建待办任务（表单"标记为待办"开关触发），支持指定犬只、标题、日期 | tasks | 低 |
@@ -212,9 +213,10 @@
 3. 将首页数据分成四类：
    a. overdue：已过期事项
    b. workflow：繁育主流程节点
+   c. extra_arrangements：繁育额外安排
    c. reminders：健康提醒（仅显示已确认创建的提醒）
    d. therapy：疗程状态
-4. 各区块内部再按既有合并规则生成个体卡 / 批量卡 / 窝卡
+4. 各区块内部再按既有合并规则生成个体卡 / 批量卡 / 窝卡；`breeding_extra_arrangement` 不参与批量合并，保持一任务一卡
 5. 首页顶部 pills 采用「逾期 / 繁育 / 健康 / 用药」，点击后滚动到对应区块
 ```
 
@@ -547,7 +549,8 @@ tests/
 | BCycleSelector | components/form/BCycleSelector.vue | 繁育周期选择面板 |
 | BImageUpload | components/form/BImageUpload.vue | 图片上传（拍照/相册 + 压缩） |
 | BSegmentedControl | components/form/BSegmentedControl.vue | 分段选择器（仅用于视图/标签页切换） |
-| BFormOptions | components/form/BFormOptions.vue | 表单公共选项组（待办开关 + 日期选择含今天/昨天/前天 chips + 提醒开关）。支持 `hideTodo` prop 隐藏待办开关，并可通过 `reminderLabel/reminderHint` 定制文案。繁育表单使用待办逻辑；疫苗/驱虫表单使用「创建下次待办」显式开关；疾病表单隐藏待办，仅保留复查提醒；用药表单不使用此组件（改用简单日期选择）；财务表单不使用此组件 |
+| BFormOptions | components/form/BFormOptions.vue | 健康表单公共选项组（待办开关 + 日期选择含今天/昨天/前天 chips + 提醒开关）。支持 `hideTodo` prop 隐藏待办开关，并可通过 `reminderLabel/reminderHint` 定制文案。疫苗/驱虫表单使用「创建下次待办」显式开关；疾病表单隐藏待办，仅保留复查提醒；用药表单不使用此组件（改用简单日期选择）；财务表单不使用此组件 |
+| BExtraArrangementSection | components/form/BExtraArrangementSection.vue | 繁育表单专用轻组件，仅承载「额外安排」的 kind / due_date / notes，不再复用 BFormOptions |
 
 **Tier 4：数据展示组件**
 
@@ -595,7 +598,7 @@ Tier 5: 剩余页面
 
 #### 13.2 繁育记录表单
 
-> **实现说明（2026-03-28）：** 繁育记录已从单一 breeding.vue 拆分为 7 个独立页面：breeding-heat、breeding-follicle、breeding-mating、breeding-pregnancy、breeding-prenatal、breeding-prelabor、breeding-termination。每个页面包含 BFormOptions（待办/提醒开关）和固定底部提交按钮。
+> **实现说明（2026-04-14）：** 繁育记录已从单一 breeding.vue 拆分为 7 个独立页面：breeding-heat、breeding-follicle、breeding-mating、breeding-pregnancy、breeding-prenatal、breeding-prelabor、breeding-termination。上述页面已移除旧的“待办/下次提醒”开关，统一改为繁育专用 `BExtraArrangementSection`。
 
 7 种类型（birth 跳转 birth-wizard），每个独立页面：
 

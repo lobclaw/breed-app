@@ -511,6 +511,49 @@ describe('task-service', () => {
       const res = await taskService.getHomeCards.call(ctx)
       expect(res.data.cards.length).toBe(13)
     })
+
+    it('繁育额外安排应单独进入繁育分层，不混入健康提醒', async () => {
+      const now = Date.now()
+      const todayStart = new Date(now)
+      todayStart.setHours(0, 0, 0, 0)
+
+      seedCollection('tasks', [
+        {
+          _id: 'flow_1',
+          family_id: familyId,
+          dog_id: 'dog_1',
+          dog_name: '花花',
+          cycle_id: 'cycle_1',
+          type: 'breeding_milestone',
+          title: '花花 · 建议孕检',
+          details: { step_type: 'pregnancy_check' },
+          status: 'pending',
+          due_date: todayStart.getTime(),
+        },
+        {
+          _id: 'extra_1',
+          family_id: familyId,
+          dog_id: 'dog_1',
+          dog_name: '花花',
+          cycle_id: 'cycle_1',
+          type: 'breeding_extra_arrangement',
+          title: '联系医生',
+          details: { kind: 'contact_doctor', anchor_id: 'cycle_1', anchor_type: 'cycle', manual: true },
+          status: 'pending',
+          due_date: todayStart.getTime() + 1000,
+        },
+      ])
+      seedCollection('health_records', [])
+      seedCollection('medication_tasks', [])
+
+      const ctx = createCloudObjectContext({ familyId })
+      const res = await taskService.getHomeCards.call(ctx)
+
+      expect(res.data.sections.workflow).toHaveLength(1)
+      expect(res.data.sections.extra_arrangements).toHaveLength(1)
+      expect(res.data.sections.reminders).toHaveLength(0)
+      expect(res.data.sections.extra_arrangements[0].tasks[0].type).toBe('breeding_extra_arrangement')
+    })
   })
 
   describe('_timing_dailyAudit 每日审计', () => {

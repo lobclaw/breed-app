@@ -49,7 +49,25 @@
                 <text class="section-text">{{ section.title }}</text>
                 <view class="section-badge"><text class="section-badge-text">{{ section.cards.length }}</text></view>
               </view>
-              <view class="card-feed">
+              <view v-if="section.groups?.length" class="section-groups">
+                <view v-for="group in section.groups" :key="group.key" v-show="group.cards.length > 0" class="section-group">
+                  <view class="subsection-label">
+                    <text class="subsection-text">{{ group.title }}</text>
+                    <view class="subsection-badge"><text class="subsection-badge-text">{{ group.cards.length }}</text></view>
+                  </view>
+                  <view class="card-feed">
+                    <SmartCard
+                      v-for="card in group.cards" :key="card.id" :card="card"
+                      :completing="completingCards.has(card.id)"
+                      :completed="completedCards.has(card.id)"
+                      @complete="onComplete" @postpone="onPostpone"
+                      @batch-complete="onBatchComplete" @batch-skip="onBatchSkip" @batch-complete-med="onBatchCompleteMed"
+                      @action="onAction" @record-dose="onRecordDose"
+                    />
+                  </view>
+                </view>
+              </view>
+              <view v-else class="card-feed">
                 <SmartCard
                   v-for="card in section.cards" :key="card.id" :card="card"
                   :completing="completingCards.has(card.id)"
@@ -310,6 +328,19 @@ const suppressedTaskMap = ref<Record<string, number>>({})
 // 选中日期（0点 timestamp）
 const selectedDate = ref(startOfDay(Date.now()))
 const isSelectedToday = computed(() => selectedDate.value === startOfDay(Date.now()))
+const breedingGroups = computed(() => [
+  {
+    key: 'workflow-main',
+    title: '当前流程',
+    cards: cards.value.filter(card => card.sectionType === 'workflow' && card.priority !== 'overdue'),
+  },
+  {
+    key: 'workflow-extra',
+    title: '额外安排',
+    cards: cards.value.filter(card => card.sectionType === 'workflow_extra' && card.priority !== 'overdue'),
+  },
+])
+const breedingCardsCount = computed(() => breedingGroups.value.reduce((sum, group) => sum + group.cards.length, 0))
 const todaySections = computed(() => [
   {
     key: 'overdue',
@@ -318,10 +349,11 @@ const todaySections = computed(() => [
     cards: cards.value.filter(card => card.priority === 'overdue'),
   },
   {
-    key: 'workflow',
+    key: 'breeding',
     title: '繁育流程',
     dotColor: 'var(--amber)',
-    cards: cards.value.filter(card => card.sectionType === 'workflow' && card.priority !== 'overdue'),
+    cards: breedingGroups.value.flatMap(group => group.cards),
+    groups: breedingGroups.value,
   },
   {
     key: 'reminders',
@@ -345,9 +377,9 @@ const summaryPills = computed(() => [
     pillClass: 'pill-red',
   },
   {
-    key: 'workflow',
+    key: 'breeding',
     label: '繁育',
-    count: todaySections.value.find(section => section.key === 'workflow')?.cards.length || 0,
+    count: breedingCardsCount.value,
     dotColor: 'var(--amber)',
     pillClass: 'pill-amber',
   },
@@ -467,7 +499,8 @@ const weekCache = ref<Record<number, any[]>>({})
 let latestLoadToken = 0
 
 function scrollToSection(section: string) {
-  scrollTarget.value = `section-${section}`
+  const normalized = section === 'workflow' ? 'breeding' : section
+  scrollTarget.value = `section-${normalized}`
 }
 
 /** 加载今日卡片（逾期+今日合并为单列表） */
@@ -1112,6 +1145,43 @@ onShow(async () => {
   font-size: 12px;
   font-weight: 800;
   color: var(--text-2);
+}
+
+.section-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.section-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.subsection-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 20px 6px;
+}
+
+.subsection-text {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.subsection-badge {
+  background: var(--card-dim);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
+.subsection-badge-text {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-3);
 }
 
 /* ==================== CARD FEED ==================== */

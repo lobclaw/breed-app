@@ -223,6 +223,7 @@ WeekStrip（周历条）：
 | 配种记录 | 繁育流程 | 自动生成「建议孕检」主流程节点；预计预产日作为副信息展示，不再单独铺一条待办 |
 | 孕检结果=未怀孕/异常终止 | 繁育流程 | 结束当前繁育流程，清理未完成后续节点 |
 | 生产记录 | 繁育流程 | 仅自动生成「确认断奶」终点节点；不再自动铺首驱/首免链 |
+| 繁育页额外安排 | 繁育流程（子层） | 由用户在发情/卵泡/配种/孕检/产检/临产/异常终止页手动添加，显示在首页繁育区的「额外安排」层 |
 | 疫苗记录 | 健康提醒 | 默认只计算建议日期；仅当用户显式勾选「创建下次待办」时生成任务 |
 | 驱虫记录 | 健康提醒 | 默认只计算建议日期；仅当用户显式勾选「创建下次待办」时生成任务 |
 | 疾病记录 | 健康提醒 | 仅在明确填写复查日期时生成提醒 |
@@ -246,7 +247,7 @@ WeekStrip（周历条）：
   dog_name（冗余，避免联表查询）
   litter_id（选填）
   cycle_id（选填，关联繁育周期，用于周期关闭时批量取消该周期所有未完成任务）
-  type: 'vaccination' | 'deworming' | 'breeding_milestone' | 'care_group' | 'custom' | 'manual'
+  type: 'vaccination' | 'deworming' | 'breeding_milestone' | 'breeding_extra_arrangement' | 'care_group' | 'custom' | 'manual'
   // manual = 用户通过表单"标记为待办"开关手动创建的任务（task-service.createManualTask）
   title（任务标题，如「确认断奶」「疫苗·卫佳5」）
   due_date（timestamp 毫秒数）
@@ -264,6 +265,12 @@ WeekStrip（周历条）：
   deleted_at                        // timestamp 毫秒数，默认 null
 }
 ```
+
+**繁育额外安排约束：**
+- `type='breeding_extra_arrangement'`
+- 仅由繁育表单顺手创建，不作为主流程节点
+- 默认挂到 `cycle_id`
+- 完成后只更新 task 状态，不生成新的 breeding_record
 
 **首页查询示例：**
 
@@ -316,7 +323,7 @@ db.collection('tasks')
 - 错误处理：审计失败时记录错误日志到 `audit_logs` 集合，不发送用户通知
 - 性能：30-50 只犬的数据量下，审计查询为毫秒级，无需分批
 
-**任务取消：** 繁育周期关闭（失败/放弃）、犬只死亡等场景触发批量取消，status 设为 cancelled。取消的任务保留记录不删除，便于审计。
+**任务取消：** 繁育周期关闭（失败/放弃）、犬只死亡等场景触发批量取消，status 设为 cancelled。取消的任务保留记录不删除，便于审计。周期关闭时也要一并取消挂在该 `cycle_id` 下的 `breeding_extra_arrangement`。
 
 **任务归档：** 已完成任务（status=completed）超过 30 天的，通过定时任务清理（软删除或移至归档集合），保持 tasks 集合精简高效。
 

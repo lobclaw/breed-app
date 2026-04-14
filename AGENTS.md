@@ -40,7 +40,7 @@ Phase 1 功能 + 性能优化完成，进入验收测试阶段。
 ### 样式约定
 
 - **common.scss 全局导入**：所有公共样式（输入框、字段组、固定底部按钮、信息行等）定义在 `src/styles/common.scss`，通过 `App.vue` 全局导入。页面 scoped style 仅写差异部分，禁止重复定义。
-- **BFormOptions 组件**：所有记录表单（繁育/健康/财务）统一使用 `BFormOptions` 组件，封装"标记为待办"开关 + 日期选择（今天/明天/后天 chips）+ 提醒开关。疫苗/驱虫页当前使用显式文案「创建下次待办」，默认关闭。
+- **BFormOptions 组件**：健康记录表单继续使用 `BFormOptions`，封装"标记为待办"开关 + 日期选择（今天/明天/后天 chips）+ 提醒开关。疫苗/驱虫页当前使用显式文案「创建下次待办」，默认关闭。繁育表单不再复用 `BFormOptions`，统一改用繁育专用的 `BExtraArrangementSection`。
 - **记录表单提交反馈**：创建待办/保存记录默认采用“局部 loading + 弱成功反馈”方案，不再优先使用全屏 `showLoading(mask)` + 成功 toast。提交中由底部按钮承接状态，成功后短暂停留即返回，来源页再用轻量 banner/弱提示承接结果。
 - **提交按钮三态**：记录表单提交按钮统一支持 `默认 / 提交中 / 成功瞬态` 三态；成功态仅短暂展示，用于降低“点了没反应”的不确定感，不额外叠加强成功 toast。
 - **Pill 选择器 vs 分段控件**：表单中的互斥选项（如生产方式、驱虫类型）使用 pill-select 样式（card-dim 背景、无边框、胶囊圆角）；Segmented Control 仅用于视图/标签页切换（如"疫苗/驱虫/疾病" tab）。
@@ -67,6 +67,10 @@ Phase 1 功能 + 性能优化完成，进入验收测试阶段。
 - **健康提醒是建议型**：疫苗/驱虫记录默认只计算建议日期；只有显式 `create_task=true` / 勾选「创建下次待办」才生成下次任务
 - **批量健康卡完成语义**：从首页批量完成疫苗/驱虫时，必须同时创建真实 `health_record`，不能只把 task 标记完成
 - **繁育流程是推进器**：当前主链按 `发情 → 建议卵泡检查 → 配种 → 建议孕检 → 生产 → 确认断奶`
+- **繁育表单不再有“下次提醒”**：发情 / 卵泡 / 配种 / 孕检 / 产检 / 临产 / 异常终止页统一移除 `skip_reminder / next_reminder_date / enableReminder` 旧逻辑
+- **额外安排是手动附加事项**：繁育表单可顺手添加 `额外安排`，字段仅 `kind + due_date + notes`，由 `breeding-service.addBreedingRecord` 同次提交创建 `breeding_extra_arrangement`
+- **额外安排的归属与展示**：周期类繁育页创建的额外安排默认挂 `cycle_id`；首页仍在 `繁育` 大区块内，但单独放在 `额外安排` 子层，不混入 `健康提醒`
+- **额外安排完成语义**：完成 / 推迟 / 跳过仅作用于任务本身，不生成 `breeding_record`，不改变主流程状态机
 - **流程卡跳转规则**：`breeding_milestone` 必须按 `details.step_type` 路由；`follicle_check` → 卵泡页，`pregnancy_check` → 孕检页，`weaning_confirm` → 窝详情页
 - **流程卡参数承接**：从首页进入繁育流程页时，必须传 `dogId + dogName + cycleId + taskId + locked=true`，保证犬只预填且锁定
 - **首页卡片不可静默截断**：返回和展示首页卡片时，不要再恢复 `slice(0, 12)` 这类硬截断

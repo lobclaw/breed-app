@@ -9,6 +9,16 @@ const dbCmd = db.command
 
 // 一天的毫秒数
 const DAY_MS = 86400000
+const BREEDING_EXTRA_TYPES = new Set([
+  'breeding_extra_arrangement',
+  'heat',
+  'follicle_check',
+  'mating',
+  'pregnancy_check',
+  'prenatal_check',
+  'pre_labor',
+  'abnormal_termination',
+])
 
 /**
  * 取一组任务中的最高优先级
@@ -26,6 +36,9 @@ function highestPriority(tasks) {
 
 function getTaskVariantKey(task) {
   if (!task) return ''
+  if (task.type === 'breeding_extra_arrangement') {
+    return `breeding_extra_arrangement:${task.details?.kind || ''}:${task.details?.anchor_id || task.cycle_id || ''}:${task.due_date || ''}`
+  }
   if (task.type === 'vaccination') {
     return `vaccination:${task.details?.vaccine_type || ''}`
   }
@@ -38,8 +51,15 @@ function getTaskVariantKey(task) {
   return task.type || ''
 }
 
+function isBreedingExtraTask(task) {
+  return BREEDING_EXTRA_TYPES.has(task?.type)
+}
+
 function getTaskDisplayTitle(task) {
   if (!task) return ''
+  if (task.type === 'breeding_extra_arrangement') {
+    return task.title || '额外安排'
+  }
   if (task.type === 'vaccination') {
     if (task.details?.vaccine_type) return `疫苗 · ${task.details.vaccine_type}`
     return task.title || '疫苗'
@@ -345,7 +365,7 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
   }
 
   // 第 3 轮：窝级别合并（同 litter_id + 同 type）
-  const litterTasks = tasks.filter(t => t.litter_id && !consumed.has(t._id))
+  const litterTasks = tasks.filter(t => t.litter_id && !consumed.has(t._id) && !isBreedingExtraTask(t))
   const litterGroups = new Map()
   for (const t of litterTasks) {
     const key = `${t.litter_id}__${getTaskVariantKey(t)}`
@@ -377,7 +397,10 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
   // 第 4 轮：批量合并（同 type + 同天 + 2只以上，含今日已完成）
   const remaining = tasks.filter(t => !consumed.has(t._id))
   // 将 pending 和今日已完成任务一起分组
-  const allForBatch = [...remaining, ...todayCompleted.filter(t => !completedConsumed.has(t._id))]
+  const allForBatch = [
+    ...remaining.filter(t => !isBreedingExtraTask(t)),
+    ...todayCompleted.filter(t => !completedConsumed.has(t._id) && !isBreedingExtraTask(t)),
+  ]
   const batchGroups = new Map()
   for (const t of allForBatch) {
     const dayKey = new Date(t.due_date).toDateString()
@@ -414,10 +437,26 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
     }
   }
 
-  // 第 5 轮：剩余任务 → 按犬只合并为个体卡片
+  // 第 5 轮：额外安排 → 一任务一卡，避免同犬多标签但只操作第一条
   const leftover = tasks.filter(t => !consumed.has(t._id))
+  const breedingExtraTasks = leftover.filter(isBreedingExtraTask)
+  for (const task of breedingExtraTasks) {
+    consumed.add(task._id)
+    cards.push({
+      cardType: 'dog',
+      id: `dog-${task.dog_id || task._id}-${task._id}`,
+      priority: task.priority,
+      dogName: task.dog_name,
+      dogId: task.dog_id,
+      statusLabel: '手动安排',
+      tasks: [task],
+    })
+  }
+
+  // 第 6 轮：剩余任务 → 按犬只合并为个体卡片
+  const plainLeftover = tasks.filter(t => !consumed.has(t._id))
   const dogGroups = new Map()
-  for (const t of leftover) {
+  for (const t of plainLeftover) {
     const key = t.dog_id || t._id
     if (!dogGroups.has(key)) dogGroups.set(key, [])
     dogGroups.get(key).push(t)
@@ -519,10 +558,13 @@ module.exports = {
     const medItems = computeMedItemsForDay(activeMedications, Date.now())
     const workflowPendingTasks = pendingTasks.filter(task => task.type === 'breeding_milestone')
     const workflowCompletedTasks = todayCompletedTasks.filter(task => task.type === 'breeding_milestone')
-    const reminderPendingTasks = pendingTasks.filter(task => task.type !== 'breeding_milestone' && task.type !== 'medication')
-    const reminderCompletedTasks = todayCompletedTasks.filter(task => task.type !== 'breeding_milestone' && task.type !== 'medication')
+    const breedingExtraPendingTasks = pendingTasks.filter(task => isBreedingExtraTask(task))
+    const breedingExtraCompletedTasks = todayCompletedTasks.filter(task => isBreedingExtraTask(task))
+    const reminderPendingTasks = pendingTasks.filter(task => task.type !== 'breeding_milestone' && task.type !== 'medication' && !isBreedingExtraTask(task))
+    const reminderCompletedTasks = todayCompletedTasks.filter(task => task.type !== 'breeding_milestone' && task.type !== 'medication' && !isBreedingExtraTask(task))
 
     const workflowCards = mergeTasks(workflowPendingTasks, workflowCompletedTasks, [], [])
+    const breedingExtraCards = mergeTasks(breedingExtraPendingTasks, breedingExtraCompletedTasks, [], [])
     const reminderCards = mergeTasks(reminderPendingTasks, reminderCompletedTasks, [], [])
     const therapyCards = mergeTasks([], [], activeIllnesses, medItems)
 
@@ -538,9 +580,10 @@ module.exports = {
     }
 
     const orderedWorkflowCards = annotateOverdue(workflowCards).map(card => ({ ...card, sectionType: 'workflow' }))
+    const orderedBreedingExtraCards = annotateOverdue(breedingExtraCards).map(card => ({ ...card, sectionType: 'workflow_extra' }))
     const orderedReminderCards = annotateOverdue(reminderCards).map(card => ({ ...card, sectionType: 'reminders' }))
     const orderedTherapyCards = annotateOverdue(therapyCards).map(card => ({ ...card, sectionType: 'therapy' }))
-    const allCards = [...orderedWorkflowCards, ...orderedReminderCards, ...orderedTherapyCards]
+    const allCards = [...orderedWorkflowCards, ...orderedBreedingExtraCards, ...orderedReminderCards, ...orderedTherapyCards]
 
     // 计算 本周 和 30天 的 pending 任务数
     const sundayEnd = new Date(todayStart)
@@ -568,6 +611,7 @@ module.exports = {
         cards: allCards,
         sections: {
           workflow: orderedWorkflowCards,
+          extra_arrangements: orderedBreedingExtraCards,
           reminders: orderedReminderCards,
           therapy: orderedTherapyCards,
         },
