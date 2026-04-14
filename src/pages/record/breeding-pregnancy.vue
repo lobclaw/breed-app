@@ -201,9 +201,11 @@ async function submit() {
       if (res) {
         if (prefillTaskId) await completeTask(prefillTaskId)
         submitState.value = 'success'
+        const completedTaskIds = prefillTaskId ? [prefillTaskId] : []
         queueSubmitFeedback({
           message: buildRecordFeedbackMessage(1, prefillTaskId ? 1 : 0),
-          completedTaskIds: prefillTaskId ? [prefillTaskId] : [],
+          completedTaskIds,
+          suppressTaskIds: completedTaskIds,
           refreshHome: true,
         })
         await wait(140)

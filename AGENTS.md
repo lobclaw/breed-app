@@ -40,7 +40,9 @@ Phase 1 功能 + 性能优化完成，进入验收测试阶段。
 ### 样式约定
 
 - **common.scss 全局导入**：所有公共样式（输入框、字段组、固定底部按钮、信息行等）定义在 `src/styles/common.scss`，通过 `App.vue` 全局导入。页面 scoped style 仅写差异部分，禁止重复定义。
-- **BFormOptions 组件**：所有记录表单（繁育/健康/财务）统一使用 `BFormOptions` 组件，封装"标记为待办"开关 + 日期选择（今天/明天/后天 chips）+ "下次提醒"开关。
+- **BFormOptions 组件**：所有记录表单（繁育/健康/财务）统一使用 `BFormOptions` 组件，封装"标记为待办"开关 + 日期选择（今天/明天/后天 chips）+ 提醒开关。疫苗/驱虫页当前使用显式文案「创建下次待办」，默认关闭。
+- **记录表单提交反馈**：创建待办/保存记录默认采用“局部 loading + 弱成功反馈”方案，不再优先使用全屏 `showLoading(mask)` + 成功 toast。提交中由底部按钮承接状态，成功后短暂停留即返回，来源页再用轻量 banner/弱提示承接结果。
+- **提交按钮三态**：记录表单提交按钮统一支持 `默认 / 提交中 / 成功瞬态` 三态；成功态仅短暂展示，用于降低“点了没反应”的不确定感，不额外叠加强成功 toast。
 - **Pill 选择器 vs 分段控件**：表单中的互斥选项（如生产方式、驱虫类型）使用 pill-select 样式（card-dim 背景、无边框、胶囊圆角）；Segmented Control 仅用于视图/标签页切换（如"疫苗/驱虫/疾病" tab）。
 - **滚动锁定**：BSheet、BModal、BDeleteConfirm 打开时锁定页面滚动。
 - **box-sizing**：全局设置 `box-sizing: border-box`（App.vue）。
@@ -56,6 +58,23 @@ Phase 1 功能 + 性能优化完成，进入验收测试阶段。
 - **以注意力单元组织首页**：不是纯犬优先也不是纯事件优先，匹配繁育者实际思维
 - **状态语言优于日期语言**：显示「孕期第58天」而非「3月26日」
 - **YAGNI**：只做当前确认的需求，不提前设计未讨论的功能
+
+## 首页任务系统（2026-04 当前口径）
+
+- **首页固定分层**：顶部 pills 和正文区块统一为 `逾期 / 繁育 / 健康 / 用药`
+- **今天页顺序**：`逾期待处理` → `繁育流程` → `健康提醒` → `今日用药`
+- **不做摘要/二级页/Sheet**：当前首页保持卡片直出，不要擅自改回摘要卡或统一任务池
+- **健康提醒是建议型**：疫苗/驱虫记录默认只计算建议日期；只有显式 `create_task=true` / 勾选「创建下次待办」才生成下次任务
+- **批量健康卡完成语义**：从首页批量完成疫苗/驱虫时，必须同时创建真实 `health_record`，不能只把 task 标记完成
+- **繁育流程是推进器**：当前主链按 `发情 → 建议卵泡检查 → 配种 → 建议孕检 → 生产 → 确认断奶`
+- **流程卡跳转规则**：`breeding_milestone` 必须按 `details.step_type` 路由；`follicle_check` → 卵泡页，`pregnancy_check` → 孕检页，`weaning_confirm` → 窝详情页
+- **流程卡参数承接**：从首页进入繁育流程页时，必须传 `dogId + dogName + cycleId + taskId + locked=true`，保证犬只预填且锁定
+- **首页卡片不可静默截断**：返回和展示首页卡片时，不要再恢复 `slice(0, 12)` 这类硬截断
+- **批量卡 key 必须带子类型**：疫苗/驱虫批量卡 ID 要包含 `vaccine_type` / `deworming_type + drug_name`，避免同天不同子类型 key 冲突
+- **返回首页先承接后刷新**：记录页/待办页提交成功后，优先用前端本地状态承接首页变化，再做后台刷新；不要回到“等待首页全量重拉后才看到变化”的交互。
+- **批量卡只移除真实完成子集**：从首页批量卡进入记录页时，返回后只能按后端真实 `completedTasks` 局部移除已完成任务。只有当 `completedTasks.length === sourceTaskIds.length` 时，才允许整张批量卡消失。
+- **首页短期抑制防闪回**：刚提交成功并在首页已局部移除的任务，需要短时间加入 suppression 集合；服务端刷新返回时先过滤这些 task，避免“卡片刚消失又立刻刷回来”。
+- **局部承接要同步批量卡元数据**：批量卡部分完成时，除了过滤 `tasks`，还要同步 `dogs`、`progress.total`、标题里的“X只”数量，不能只删 task 列表导致卡面信息失真。
 
 ## 用药任务模块
 
@@ -76,8 +95,9 @@ Phase 1 功能 + 性能优化完成，进入验收测试阶段。
 
 ### 数据流
 
-- `dayCounts` 由 `getDateCounts` 从 `tasks` 集合（`status: pending`）聚合返回，**不含**用药卡/健康关注卡
+- `dayCounts` 由 `getDateCounts` 聚合返回，**包含**普通 pending tasks，也包含未来日期仅有疗程状态时的红点兜底
 - `loadAll()` 并行执行 `loadTodayCards()` + `loadDateCounts()` + `loadWeekCache()`，存在时序竞争
+- 首页加载链路已加 **latest token** 保护；修改 `loadAll/loadTodayCards/loadWeekCache/loadDateCounts` 时不要去掉“只认最新请求”的逻辑，否则卡片可能乐观移除后又被旧响应刷回
 
 ### 红点同步规则
 
@@ -85,6 +105,11 @@ Phase 1 功能 + 性能优化完成，进入验收测试阶段。
 - **以实际可见卡片数为准**：`cards.value.length === 0` → 强制 0；cards 非空且服务端返回 0 → 补 1
 - **不依赖 `counts.today`**：该字段含「用药卡计 1」逻辑，即使今日剂量全给完也可能为 1，不能作为红点依据
 - **乐观更新**：卡片被 `removeCardLocally` 移除时，同步 `dayCounts[startOfDay(Date.now())] = counts.today`
+- **未来日期一致性**：如果某天只有 `medication_tasks` 形成的“今日用药”卡，也应该有红点；不能出现“无红点但点进去有卡”
+
+## 页面刷新时机
+
+- **`onLoad` / `onShow` 防双请求**：详情页若需要“首次进入加载 + 子页返回刷新”，必须避免首屏 `onLoad` 与紧随其后的 `onShow` 各打一次请求。推荐加 `hasLoadedOnce` 之类标记，只在首次加载完成后再允许 `onShow` 刷新。
 
 ### `counts.today` 计算说明（后端）
 
@@ -103,12 +128,6 @@ counts.today = pendingTasks.length - oldMedCount + (hasHealthCard ? 1 : 0)
 
 - 滚动条隐藏：`scrollbar-width: none` + `&::-webkit-scrollbar { display: none }` + `:deep(::-webkit-scrollbar) { display: none }`
 - 内部列表横向滚动条同样隐藏
-
-## gstack
-
-gstack 技能和路由规则见 `~/AGENTS.md`（全局配置，避免重复）。
-
-如果 gstack 技能不起作用：`cd .Codex/skills/gstack && ./setup`
 
 ## graphify
 
@@ -131,3 +150,4 @@ Rules:
 - If graphify-out/wiki/index.md exists, navigate it instead of reading raw files
 - If `graphify-out/graph.json` is missing, run `$graphify .` once from the repo root to create the initial graph
 - After modifying code files in this session, run `./scripts/graphify-rebuild.sh` to keep the graph current
+- Current graphify status is expected to be **active and up to date**; if `GRAPH_REPORT.md` / `graph.json` timestamps are stale after code changes, rebuild before继续做架构判断
