@@ -554,6 +554,51 @@ describe('task-service', () => {
       expect(res.data.sections.reminders).toHaveLength(0)
       expect(res.data.sections.extra_arrangements[0].tasks[0].type).toBe('breeding_extra_arrangement')
     })
+
+    it('指定日期卡片也应保留繁育流程与额外安排分层', async () => {
+      const now = Date.now()
+      const todayStart = new Date(now)
+      todayStart.setHours(0, 0, 0, 0)
+      const tomorrow = todayStart.getTime() + DAY_MS
+
+      seedCollection('tasks', [
+        {
+          _id: 'future_flow_1',
+          family_id: familyId,
+          dog_id: 'dog_1',
+          dog_name: '花花',
+          cycle_id: 'cycle_1',
+          type: 'breeding_milestone',
+          title: '花花 · 建议孕检',
+          details: { step_type: 'pregnancy_check' },
+          status: 'pending',
+          due_date: tomorrow,
+        },
+        {
+          _id: 'future_extra_1',
+          family_id: familyId,
+          dog_id: 'dog_1',
+          dog_name: '花花',
+          cycle_id: 'cycle_1',
+          type: 'breeding_extra_arrangement',
+          title: '联系医生',
+          details: { kind: 'contact_doctor', anchor_id: 'cycle_1', anchor_type: 'cycle', manual: true },
+          status: 'pending',
+          due_date: tomorrow,
+        },
+      ])
+      seedCollection('health_records', [])
+      seedCollection('medication_tasks', [])
+
+      const ctx = createCloudObjectContext({ familyId })
+      const res = await taskService.getWeekCards.call(ctx, tomorrow, tomorrow + DAY_MS - 1)
+      const dayData = res.data[tomorrow]
+
+      expect(dayData.cards).toHaveLength(2)
+      expect(dayData.sections.workflow).toHaveLength(1)
+      expect(dayData.sections.extra_arrangements).toHaveLength(1)
+      expect(dayData.cards.map((card: any) => card.sectionType)).toEqual(['workflow', 'workflow_extra'])
+    })
   })
 
   describe('_timing_dailyAudit 每日审计', () => {

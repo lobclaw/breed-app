@@ -76,6 +76,44 @@ function getTaskDisplayTitle(task) {
   return task.title || task.type || ''
 }
 
+function buildSectionedCards(pendingTasks, todayCompletedTasks, activeIllnesses, medItems) {
+  const workflowPendingTasks = pendingTasks.filter(task => task.type === 'breeding_milestone')
+  const workflowCompletedTasks = todayCompletedTasks.filter(task => task.type === 'breeding_milestone')
+  const breedingExtraPendingTasks = pendingTasks.filter(task => isBreedingExtraTask(task))
+  const breedingExtraCompletedTasks = todayCompletedTasks.filter(task => isBreedingExtraTask(task))
+  const reminderPendingTasks = pendingTasks.filter(task => task.type !== 'breeding_milestone' && task.type !== 'medication' && !isBreedingExtraTask(task))
+  const reminderCompletedTasks = todayCompletedTasks.filter(task => task.type !== 'breeding_milestone' && task.type !== 'medication' && !isBreedingExtraTask(task))
+
+  const workflowCards = mergeTasks(workflowPendingTasks, workflowCompletedTasks, [], [])
+  const breedingExtraCards = mergeTasks(breedingExtraPendingTasks, breedingExtraCompletedTasks, [], [])
+  const reminderCards = mergeTasks(reminderPendingTasks, reminderCompletedTasks, [], [])
+  const therapyCards = mergeTasks([], [], activeIllnesses, medItems)
+
+  const annotateOverdue = (cardList) => {
+    const overdueCards = cardList.filter(card => card.priority === 'overdue')
+    for (const card of overdueCards) {
+      const oldestDue = card.tasks?.reduce((min, t) => Math.min(min, t.due_date || Infinity), Infinity)
+      card.overdueDays = oldestDue < Infinity ? Math.ceil((Date.now() - oldestDue) / DAY_MS) : 1
+    }
+    overdueCards.sort((a, b) => (b.overdueDays || 0) - (a.overdueDays || 0))
+    const todayCards = cardList.filter(card => card.priority === 'today')
+    return [...overdueCards, ...todayCards]
+  }
+
+  const workflow = annotateOverdue(workflowCards).map(card => ({ ...card, sectionType: 'workflow' }))
+  const extra_arrangements = annotateOverdue(breedingExtraCards).map(card => ({ ...card, sectionType: 'workflow_extra' }))
+  const reminders = annotateOverdue(reminderCards).map(card => ({ ...card, sectionType: 'reminders' }))
+  const therapy = annotateOverdue(therapyCards).map(card => ({ ...card, sectionType: 'therapy' }))
+
+  return {
+    workflow,
+    extra_arrangements,
+    reminders,
+    therapy,
+    cards: [...workflow, ...extra_arrangements, ...reminders, ...therapy],
+  }
+}
+
 function toLegacyMedItem(task) {
   const frequency = task.details?.frequency || 1
   const todayDoses = task.doses_given || 0
@@ -556,34 +594,8 @@ module.exports = {
     }
 
     const medItems = computeMedItemsForDay(activeMedications, Date.now())
-    const workflowPendingTasks = pendingTasks.filter(task => task.type === 'breeding_milestone')
-    const workflowCompletedTasks = todayCompletedTasks.filter(task => task.type === 'breeding_milestone')
-    const breedingExtraPendingTasks = pendingTasks.filter(task => isBreedingExtraTask(task))
-    const breedingExtraCompletedTasks = todayCompletedTasks.filter(task => isBreedingExtraTask(task))
-    const reminderPendingTasks = pendingTasks.filter(task => task.type !== 'breeding_milestone' && task.type !== 'medication' && !isBreedingExtraTask(task))
-    const reminderCompletedTasks = todayCompletedTasks.filter(task => task.type !== 'breeding_milestone' && task.type !== 'medication' && !isBreedingExtraTask(task))
-
-    const workflowCards = mergeTasks(workflowPendingTasks, workflowCompletedTasks, [], [])
-    const breedingExtraCards = mergeTasks(breedingExtraPendingTasks, breedingExtraCompletedTasks, [], [])
-    const reminderCards = mergeTasks(reminderPendingTasks, reminderCompletedTasks, [], [])
-    const therapyCards = mergeTasks([], [], activeIllnesses, medItems)
-
-    const annotateOverdue = (cardList) => {
-      const overdueCards = cardList.filter(card => card.priority === 'overdue')
-      for (const card of overdueCards) {
-        const oldestDue = card.tasks?.reduce((min, t) => Math.min(min, t.due_date || Infinity), Infinity)
-        card.overdueDays = oldestDue < Infinity ? Math.ceil((todayStart.getTime() - oldestDue) / DAY_MS) : 1
-      }
-      overdueCards.sort((a, b) => (b.overdueDays || 0) - (a.overdueDays || 0))
-      const todayCards = cardList.filter(card => card.priority === 'today')
-      return [...overdueCards, ...todayCards]
-    }
-
-    const orderedWorkflowCards = annotateOverdue(workflowCards).map(card => ({ ...card, sectionType: 'workflow' }))
-    const orderedBreedingExtraCards = annotateOverdue(breedingExtraCards).map(card => ({ ...card, sectionType: 'workflow_extra' }))
-    const orderedReminderCards = annotateOverdue(reminderCards).map(card => ({ ...card, sectionType: 'reminders' }))
-    const orderedTherapyCards = annotateOverdue(therapyCards).map(card => ({ ...card, sectionType: 'therapy' }))
-    const allCards = [...orderedWorkflowCards, ...orderedBreedingExtraCards, ...orderedReminderCards, ...orderedTherapyCards]
+    const sectioned = buildSectionedCards(pendingTasks, todayCompletedTasks, activeIllnesses, medItems)
+    const allCards = sectioned.cards
 
     // 计算 本周 和 30天 的 pending 任务数
     const sundayEnd = new Date(todayStart)
@@ -594,7 +606,7 @@ module.exports = {
 
     const day30End = new Date(todayStart)
     day30End.setDate(day30End.getDate() + 30)
-    day30End.setHours(23, 59, 59, 999)
+          day30End.setHours(23, 59, 59, 999)
 
     // 并行查询 本周 和 30天 的 pending count
     const [weekRes, month30Res] = await Promise.all([
@@ -610,15 +622,15 @@ module.exports = {
       data: {
         cards: allCards,
         sections: {
-          workflow: orderedWorkflowCards,
-          extra_arrangements: orderedBreedingExtraCards,
-          reminders: orderedReminderCards,
-          therapy: orderedTherapyCards,
+          workflow: sectioned.workflow,
+          extra_arrangements: sectioned.extra_arrangements,
+          reminders: sectioned.reminders,
+          therapy: sectioned.therapy,
         },
         counts: {
           today: allCards.length,
-          week: weekRes.total + orderedTherapyCards.length,
-          month30: month30Res.total + orderedTherapyCards.length,
+          week: weekRes.total + sectioned.therapy.length,
+          month30: month30Res.total + sectioned.therapy.length,
           hasOverdue: allCards.some(card => card.priority === 'overdue'),
         },
       }
@@ -724,14 +736,32 @@ module.exports = {
     for (const [dayTs, dayTasks] of dayGroups) {
       const dayMedItems = computeMedItemsForDay(activeMedications, dayTs)
       if (dayTs < todayMs) {
-        result[dayTs] = mergeTasks(dayTasks, [], [], dayMedItems)
+        const sectioned = buildSectionedCards(dayTasks, [], [], dayMedItems)
+        result[dayTs] = {
+          cards: sectioned.cards,
+          sections: {
+            workflow: sectioned.workflow,
+            extra_arrangements: sectioned.extra_arrangements,
+            reminders: sectioned.reminders,
+            therapy: sectioned.therapy,
+          },
+        }
       } else {
         // 未来日期：只保留有用药的犬的 illness
         const medDogIds = new Set(dayMedItems.map(m => m.dog_id))
         const filteredIllnesses = medDogIds.size > 0
           ? activeIllnesses.filter(ill => medDogIds.has(ill.dog_id))
           : []
-        result[dayTs] = mergeTasks(dayTasks, [], filteredIllnesses, dayMedItems)
+        const sectioned = buildSectionedCards(dayTasks, [], filteredIllnesses, dayMedItems)
+        result[dayTs] = {
+          cards: sectioned.cards,
+          sections: {
+            workflow: sectioned.workflow,
+            extra_arrangements: sectioned.extra_arrangements,
+            reminders: sectioned.reminders,
+            therapy: sectioned.therapy,
+          },
+        }
       }
     }
 
@@ -746,7 +776,16 @@ module.exports = {
           const filteredIllnesses = medDogIds.size > 0
             ? activeIllnesses.filter(ill => medDogIds.has(ill.dog_id))
             : []
-          result[key] = mergeTasks([], [], filteredIllnesses, dayMedItems)
+          const sectioned = buildSectionedCards([], [], filteredIllnesses, dayMedItems)
+          result[key] = {
+            cards: sectioned.cards,
+            sections: {
+              workflow: sectioned.workflow,
+              extra_arrangements: sectioned.extra_arrangements,
+              reminders: sectioned.reminders,
+              therapy: sectioned.therapy,
+            },
+          }
         }
       }
     }

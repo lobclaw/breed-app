@@ -90,7 +90,7 @@
         />
       </template>
 
-      <!-- ===== 指定日期模式：单列 ===== -->
+      <!-- ===== 指定日期模式：分层列表 ===== -->
       <template v-else>
         <view v-if="dayCards.length > 0">
           <view class="section-label">
@@ -98,15 +98,42 @@
             <text class="section-text">{{ formatFullDate(selectedDate) }}</text>
             <view class="section-badge"><text class="section-badge-text">{{ dayCards.length }}</text></view>
           </view>
-          <view class="card-feed">
-            <SmartCard
-              v-for="card in dayCards" :key="card.id" :card="card"
-              :completing="completingCards.has(card.id)"
-              :completed="completedCards.has(card.id)"
-              @complete="onComplete" @postpone="onPostpone"
-              @batch-complete="onBatchComplete" @batch-skip="onBatchSkip" @batch-complete-med="onBatchCompleteMed"
-              @action="onAction" @record-dose="onRecordDose"
-            />
+          <view v-for="section in daySections" :key="section.key">
+            <view v-if="section.cards.length > 0" class="home-section">
+              <view class="section-label section-label--nested">
+                <view class="section-dot" :style="{ background: section.dotColor }" />
+                <text class="section-text">{{ section.title }}</text>
+                <view class="section-badge"><text class="section-badge-text">{{ section.cards.length }}</text></view>
+              </view>
+              <view v-if="section.groups?.length" class="section-groups">
+                <view v-for="group in section.groups" :key="group.key" v-show="group.cards.length > 0" class="section-group">
+                  <view class="subsection-label">
+                    <text class="subsection-text">{{ group.title }}</text>
+                    <view class="subsection-badge"><text class="subsection-badge-text">{{ group.cards.length }}</text></view>
+                  </view>
+                  <view class="card-feed">
+                    <SmartCard
+                      v-for="card in group.cards" :key="card.id" :card="card"
+                      :completing="completingCards.has(card.id)"
+                      :completed="completedCards.has(card.id)"
+                      @complete="onComplete" @postpone="onPostpone"
+                      @batch-complete="onBatchComplete" @batch-skip="onBatchSkip" @batch-complete-med="onBatchCompleteMed"
+                      @action="onAction" @record-dose="onRecordDose"
+                    />
+                  </view>
+                </view>
+              </view>
+              <view v-else class="card-feed">
+                <SmartCard
+                  v-for="card in section.cards" :key="card.id" :card="card"
+                  :completing="completingCards.has(card.id)"
+                  :completed="completedCards.has(card.id)"
+                  @complete="onComplete" @postpone="onPostpone"
+                  @batch-complete="onBatchComplete" @batch-skip="onBatchSkip" @batch-complete-med="onBatchCompleteMed"
+                  @action="onAction" @record-dose="onRecordDose"
+                />
+              </view>
+            </view>
           </view>
         </view>
 
@@ -341,6 +368,39 @@ const breedingGroups = computed(() => [
   },
 ])
 const breedingCardsCount = computed(() => breedingGroups.value.reduce((sum, group) => sum + group.cards.length, 0))
+const dayBreedingGroups = computed(() => [
+  {
+    key: 'workflow-main',
+    title: '当前流程',
+    cards: dayCards.value.filter(card => card.sectionType === 'workflow' && card.priority !== 'overdue'),
+  },
+  {
+    key: 'workflow-extra',
+    title: '额外安排',
+    cards: dayCards.value.filter(card => card.sectionType === 'workflow_extra' && card.priority !== 'overdue'),
+  },
+])
+const daySections = computed(() => [
+  {
+    key: 'breeding',
+    title: '繁育流程',
+    dotColor: 'var(--amber)',
+    cards: dayBreedingGroups.value.flatMap(group => group.cards),
+    groups: dayBreedingGroups.value,
+  },
+  {
+    key: 'reminders',
+    title: '健康提醒',
+    dotColor: 'var(--blue)',
+    cards: dayCards.value.filter(card => card.sectionType === 'reminders' && card.priority !== 'overdue'),
+  },
+  {
+    key: 'therapy',
+    title: '今日用药',
+    dotColor: 'var(--green)',
+    cards: dayCards.value.filter(card => card.sectionType === 'therapy' && card.priority !== 'overdue'),
+  },
+])
 const todaySections = computed(() => [
   {
     key: 'overdue',
@@ -495,7 +555,8 @@ const { run: doRecordMedDose } = useCloudCall('health-service', 'recordMedicatio
 const { run: doBatchCompleteMedDay } = useCloudCall('health-service', 'batchCompleteMedicationDay')
 
 // 7天卡片缓存：{ [dayTimestamp]: Card[] }
-const weekCache = ref<Record<number, any[]>>({})
+type WeekCacheEntry = { cards: any[] }
+const weekCache = ref<Record<number, WeekCacheEntry>>({})
 let latestLoadToken = 0
 
 function scrollToSection(section: string) {
@@ -536,9 +597,12 @@ async function loadWeekCache(loadToken = latestLoadToken) {
   if (loadToken !== latestLoadToken) return
   if (result?.data) {
     pruneSuppressedTasks()
-    const cache: Record<number, any[]> = {}
+    const cache: Record<number, WeekCacheEntry> = {}
     for (const [k, v] of Object.entries(result.data)) {
-      cache[Number(k)] = filterSuppressedCards(v as any[])
+      const dayData = v as { cards?: any[] }
+      cache[Number(k)] = {
+        cards: filterSuppressedCards(dayData.cards || []),
+      }
     }
     weekCache.value = cache
   }
@@ -581,7 +645,7 @@ function onDateSelect(ts: number) {
   } else {
     // 其他日期：从缓存读取，零延迟
     viewMode.value = 'date'
-    dayCards.value = weekCache.value[ts] || []
+    dayCards.value = weekCache.value[ts]?.cards || []
   }
 }
 
@@ -693,13 +757,14 @@ function removeCardLocally(taskId: string, forceRemoveCard = false, showSuccess 
 
 /** 从 weekCache 中移除指定 task */
 function syncWeekCache(taskId: string) {
-  for (const [dayTs, cards] of Object.entries(weekCache.value)) {
-    const cardIdx = (cards as any[]).findIndex(c => c.tasks?.some((t: any) => t._id === taskId))
+  for (const [dayTs, entry] of Object.entries(weekCache.value)) {
+    const cachedCards = entry?.cards || []
+    const cardIdx = cachedCards.findIndex(c => c.tasks?.some((t: any) => t._id === taskId))
     if (cardIdx < 0) continue
-    const card = (cards as any[])[cardIdx]
+    const card = cachedCards[cardIdx]
     const remaining = card.tasks?.filter((t: any) => t._id !== taskId) || []
     if (remaining.length === 0) {
-      (cards as any[]).splice(cardIdx, 1)
+      cachedCards.splice(cardIdx, 1)
     } else {
       syncCardMeta(card, remaining)
     }
@@ -1122,6 +1187,9 @@ onShow(async () => {
   align-items: center;
   gap: 8px;
   padding: 8px 20px 10px;
+}
+.section-label--nested {
+  padding-top: 2px;
 }
 .section-dot {
   width: 7px;

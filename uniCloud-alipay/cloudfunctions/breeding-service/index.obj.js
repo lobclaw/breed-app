@@ -109,6 +109,7 @@ async function createExtraArrangementTask(familyId, dog, cycleId, sourceRecordId
     cycle_id: cycleId,
     due_date: dueDate,
     status: 'pending',
+    source_record_id: sourceRecordId,
     'details.kind': extraArrangement.kind,
   }).get()
 

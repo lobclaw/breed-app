@@ -239,6 +239,57 @@ describe('breeding-service', () => {
       expect(extraTask.details?.anchor_type).toBe('cycle')
       expect(extraTask.details?.anchor_id).toBe(res.data.cycleId)
     })
+
+    it('不同来源记录的同日同类额外安排不应被误判为重复', async () => {
+      const now = Date.now()
+      seedCollection('breeding_cycles', [{
+        _id: 'cycle_dup',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        status: '发情中',
+        created_at: now,
+        updated_at: now,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      await breedingService.addBreedingRecord.call(ctx, {
+        type: 'follicle_check',
+        dog_id: 'dam_1',
+        cycle_id: 'cycle_dup',
+        date: now,
+        details: { left_count: 2, right_count: 1 },
+        extra_arrangement: {
+          kind: 'contact_doctor',
+          due_date: now + 2 * 86400000,
+          notes: '第一次联系',
+        },
+      })
+
+      await breedingService.addBreedingRecord.call(ctx, {
+        type: 'prenatal_check',
+        dog_id: 'dam_1',
+        cycle_id: 'cycle_dup',
+        date: now + 1000,
+        details: { fetal_count: 3 },
+        extra_arrangement: {
+          kind: 'contact_doctor',
+          due_date: now + 2 * 86400000,
+          notes: '第二次联系',
+        },
+      })
+
+      const { data: tasks } = await db.collection('tasks')
+        .where({
+          family_id: familyId,
+          cycle_id: 'cycle_dup',
+          type: 'breeding_extra_arrangement',
+        })
+        .get()
+
+      expect(tasks).toHaveLength(2)
+      expect(new Set(tasks.map(t => t.source_record_id)).size).toBe(2)
+    })
   })
 
   describe('生产记录', () => {
