@@ -554,7 +554,7 @@ function removeCardLocally(taskId: string, forceRemoveCard = false, showSuccess 
     const remainingTasks = card.tasks?.filter((t: any) => t._id !== taskId) || []
     if (remainingTasks.length === 0 || forceRemoveCard) {
       if (showSuccess) {
-        // 完成：弹跳 + 绿色光环 1500ms，再退场
+        // 完成：极短确认后退场，优先保证首页操作流畅
         completedCards.value.add(card.id)
         setTimeout(() => {
           completedCards.value.delete(card.id)
@@ -565,8 +565,8 @@ function removeCardLocally(taskId: string, forceRemoveCard = false, showSuccess 
             completingCards.value.delete(card.id)
             counts.today = Math.max(0, counts.today - 1)
             dayCounts.value[startOfDay(Date.now())] = counts.today
-          }, 450)
-        }, 1500)
+          }, 220)
+        }, 280)
       } else {
         // 推迟/跳过：直接滑出
         completingCards.value.add(card.id)
@@ -576,7 +576,7 @@ function removeCardLocally(taskId: string, forceRemoveCard = false, showSuccess 
           completingCards.value.delete(card.id)
           counts.today = Math.max(0, counts.today - 1)
           dayCounts.value[startOfDay(Date.now())] = counts.today
-        }, 450)
+        }, 220)
       }
     } else {
       card.tasks = remainingTasks
@@ -617,6 +617,15 @@ async function onComplete(taskId: string, mode?: boolean | string) {
   // 批量卡片部分勾选
   if (mode === false) {
     doCompleteTask(taskId)
+    return
+  }
+  if (mode === 'batch-auto') {
+    removeCardLocally(taskId)
+    doCompleteTask(taskId, true)
+    return
+  }
+  if (mode === 'batch-auto-partial') {
+    doCompleteTask(taskId, true)
     return
   }
   // DogCard "完成" (mode='auto'): 一键完成 + 自动创建记录
@@ -717,11 +726,12 @@ async function onBatchComplete(payload: any) {
     return
   }
   // 数组方式（BatchCard/MedicationCard 的"完成"按钮）— 整张卡片移除
-  const taskIds = Array.isArray(payload) ? payload : []
+  const taskIds = Array.isArray(payload) ? payload : (payload?.taskIds || [])
+  const autoRecord = !Array.isArray(payload) && !!payload?.autoRecord
   if (taskIds.length > 0) {
     removeCardLocally(taskIds[0], true)
   }
-  doBatchComplete(taskIds)
+  doBatchComplete(taskIds, autoRecord)
 }
 
 function onBatchSkip(taskIds: string[]) {

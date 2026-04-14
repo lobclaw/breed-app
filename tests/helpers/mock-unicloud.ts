@@ -28,15 +28,21 @@ export function seedCollection(name: string, docs: any[]) {
 
 /** 创建 mock db command */
 function createDbCommand() {
+  const withAnd = (base: Record<string, any>) => ({
+    ...base,
+    and(other: Record<string, any>) {
+      return { ...base, ...other }
+    },
+  })
   return {
     push: (val: any) => ({ $push: val }),
     pull: (val: any) => ({ $pull: val }),
     inc: (val: number) => ({ $inc: val }),
     set: (val: any) => ({ $set: val }),
     lt: (val: any) => ({ $lt: val }),
-    lte: (val: any) => ({ $lte: val }),
+    lte: (val: any) => withAnd({ $lte: val }),
     gt: (val: any) => ({ $gt: val }),
-    gte: (val: any) => ({ $gte: val }),
+    gte: (val: any) => withAnd({ $gte: val }),
     eq: (val: any) => ({ $eq: val }),
     neq: (val: any) => ({ $neq: val }),
     in: (val: any[]) => ({ $in: val }),

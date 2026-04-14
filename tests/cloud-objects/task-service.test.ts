@@ -7,6 +7,7 @@ import {
   resetDB,
   seedCollection,
   createMockUniCloud,
+  createCloudObjectContext,
 } from '../helpers/mock-unicloud'
 
 const mockUniCloud = createMockUniCloud()
@@ -119,6 +120,40 @@ describe('task-service', () => {
       const { data } = await db.collection('tasks').doc('task_1').get()
       expect(data[0].status).toBe('completed')
       expect(data[0].completed_by).toBe('user_1')
+    })
+
+    it('批量健康完成启用 autoRecord 时应创建 health_record', async () => {
+      const now = Date.now()
+      seedCollection('tasks', [
+        {
+          _id: 'vac_batch_1',
+          family_id: familyId,
+          dog_id: 'dog_1',
+          dog_name: '奶盖',
+          type: 'vaccination',
+          status: 'pending',
+          due_date: now,
+          details: { vaccine_type: '卫佳5' },
+        },
+        {
+          _id: 'vac_batch_2',
+          family_id: familyId,
+          dog_id: 'dog_2',
+          dog_name: '布丁',
+          type: 'vaccination',
+          status: 'pending',
+          due_date: now,
+          details: { vaccine_type: '卫佳5' },
+        },
+      ])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      await taskService.batchCompleteTask.call(ctx, ['vac_batch_1', 'vac_batch_2'], true)
+
+      const { data: records } = await db.collection('health_records').get()
+      expect(records).toHaveLength(2)
+      expect(records.map(r => r.dog_name).sort()).toEqual(['奶盖', '布丁'])
+      expect(records.every(r => r.type === 'vaccination')).toBe(true)
     })
   })
 
@@ -373,6 +408,108 @@ describe('task-service', () => {
       expect(cards).toHaveLength(1)
       expect(cards[0].cardType).toBe('batch')
       expect(cards[0].groupTitle).toContain('疫苗 · 卫佳5')
+    })
+
+    it('同天不同疫苗批量卡应生成不同 id，避免前端 key 冲突', () => {
+      const dueDate = todayStart.getTime() + 1000
+      const tasks = [
+        {
+          _id: 'vac_batch_a1',
+          dog_id: 'dog_1',
+          dog_name: '奶盖',
+          type: 'vaccination',
+          title: '疫苗',
+          due_date: dueDate,
+          priority: 'today',
+          status: 'pending',
+          details: { vaccine_type: '卫佳5' },
+        },
+        {
+          _id: 'vac_batch_a2',
+          dog_id: 'dog_2',
+          dog_name: '布丁',
+          type: 'vaccination',
+          title: '疫苗',
+          due_date: dueDate,
+          priority: 'today',
+          status: 'pending',
+          details: { vaccine_type: '卫佳5' },
+        },
+        {
+          _id: 'vac_batch_b1',
+          dog_id: 'dog_3',
+          dog_name: '年糕',
+          type: 'vaccination',
+          title: '疫苗',
+          due_date: dueDate,
+          priority: 'today',
+          status: 'pending',
+          details: { vaccine_type: '狂犬' },
+        },
+        {
+          _id: 'vac_batch_b2',
+          dog_id: 'dog_4',
+          dog_name: '团子',
+          type: 'vaccination',
+          title: '疫苗',
+          due_date: dueDate,
+          priority: 'today',
+          status: 'pending',
+          details: { vaccine_type: '狂犬' },
+        },
+      ]
+
+      const cards = mergeTasks(tasks, [], [])
+      expect(cards).toHaveLength(2)
+      expect(new Set(cards.map((c: any) => c.id)).size).toBe(2)
+    })
+  })
+
+  describe('getDateCounts / getHomeCards 当前首页规则', () => {
+    it('未来日期仅有疗程状态时也应返回红点计数', async () => {
+      const todayStart = new Date()
+      todayStart.setHours(0, 0, 0, 0)
+      const tomorrow = todayStart.getTime() + DAY_MS
+
+      seedCollection('medication_tasks', [{
+        _id: 'med_1',
+        family_id: familyId,
+        dog_id: 'dog_1',
+        dog_name: '肉肉',
+        status: '进行中',
+        actual_start_date: todayStart.getTime(),
+        frequency: 1,
+        duration_days: 3,
+        daily_doses: {},
+      }])
+
+      const ctx = createCloudObjectContext({ familyId })
+      const res = await taskService.getDateCounts.call(ctx, todayStart.getTime(), tomorrow + DAY_MS - 1)
+      expect(res.data[tomorrow]).toBeGreaterThan(0)
+    })
+
+    it('首页返回不应被 12 张卡静默截断', async () => {
+      const now = Date.now()
+      const todayStart = new Date(now)
+      todayStart.setHours(0, 0, 0, 0)
+
+      seedCollection('tasks', Array.from({ length: 13 }, (_, i) => ({
+        _id: `task_${i + 1}`,
+        family_id: familyId,
+        dog_id: `dog_${i + 1}`,
+        dog_name: `狗${i + 1}`,
+        type: 'vaccination',
+        title: '疫苗',
+        details: { vaccine_type: `类型${i + 1}` },
+        status: 'pending',
+        due_date: todayStart.getTime() + i,
+      })))
+      seedCollection('health_records', [])
+      seedCollection('medication_tasks', [])
+
+      const ctx = createCloudObjectContext({ familyId })
+      const res = await taskService.getHomeCards.call(ctx)
+      expect(res.data.cards.length).toBe(13)
     })
   })
 

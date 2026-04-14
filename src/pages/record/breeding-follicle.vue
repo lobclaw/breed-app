@@ -206,12 +206,25 @@ async function submit() {
 onLoad(async (query) => {
   cycleId = query?.cycleId || ''
   if (query?.dogId) {
-    selectedDog.value = { _id: query.dogId, name: decodeURIComponent(query.dogName || ''), gender: '母', role: '种狗' }
-    if (query.locked === 'true') dogLocked.value = true
+    const taskDogName = query?.dogName ? decodeURIComponent(query.dogName) : ''
+    selectedDog.value = {
+      _id: query.dogId,
+      name: taskDogName,
+      gender: '母',
+      role: '种狗',
+    }
+    if (query?.locked === 'true' || !!taskDogName) dogLocked.value = true
   }
   if (query?.taskId) {
     prefillTaskId = query.taskId
     const res = await fetchTask(query.taskId)
+    if (res?.data?.dog_name && selectedDog.value?._id === res.data.dog_id) {
+      selectedDog.value = {
+        ...selectedDog.value,
+        name: selectedDog.value.name || res.data.dog_name,
+      }
+      dogLocked.value = true
+    }
     if (res?.data?.details) {
       const d = res.data.details
       if (d.cost) costInput.value = String(d.cost)

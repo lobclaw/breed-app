@@ -83,15 +83,31 @@ const typeMap: Record<string, string> = {
   pregnancy_check: '/pages/record/breeding-pregnancy',
   prenatal_check: '/pages/record/breeding-prenatal',
   pre_labor: '/pages/record/breeding-prelabor',
-  breeding_milestone: '/pages/record/breeding-heat',
 }
 
 function goRecordTask(task: any) {
   if (!task) return
   const params: string[] = []
   if (props.card.dogId) params.push(`dogId=${props.card.dogId}`)
+  if (props.card.dogName) params.push(`dogName=${encodeURIComponent(props.card.dogName)}`)
   if (task._id) params.push(`taskId=${task._id}`)
-  const url = typeMap[task.type] || '/pages/record/health-vaccination'
+  if (task.cycle_id) params.push(`cycleId=${task.cycle_id}`)
+
+  let url = typeMap[task.type] || '/pages/record/health-vaccination'
+  if (task.type === 'breeding_milestone') {
+    params.push('locked=true')
+    const stepType = task.details?.step_type
+    if (stepType === 'follicle_check') {
+      url = '/pages/record/breeding-follicle'
+    } else if (stepType === 'pregnancy_check') {
+      url = '/pages/record/breeding-pregnancy'
+    } else if (stepType === 'weaning_confirm' && task.litter_id) {
+      uni.navigateTo({ url: `/pages/breeding/litter?id=${task.litter_id}` })
+      return
+    } else {
+      url = '/pages/record/breeding-heat'
+    }
+  }
   uni.navigateTo({ url: url + '?' + params.join('&') })
 }
 

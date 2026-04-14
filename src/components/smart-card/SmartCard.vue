@@ -45,7 +45,7 @@ defineProps<{
 const emit = defineEmits<{
   (e: 'complete', taskId: string, mode?: boolean | string): void
   (e: 'postpone', taskIds: string | string[], title?: string): void
-  (e: 'batch-complete', taskIds: string[]): void
+  (e: 'batch-complete', payload: { taskIds: string[]; autoRecord?: boolean } | string[]): void
   (e: 'batch-skip', taskIds: string[]): void
   (e: 'batch-complete-med', medicationTaskIds: string[]): void
   (e: 'action', payload: { type: string; data: any }): void
@@ -54,7 +54,7 @@ const emit = defineEmits<{
 
 function onComplete(taskId: string, mode?: boolean | string) { emit('complete', taskId, mode) }
 function onPostpone(taskIds: string | string[], title?: string) { emit('postpone', taskIds, title) }
-function onBatchComplete(taskIds: string[]) { emit('batch-complete', taskIds) }
+function onBatchComplete(payload: { taskIds: string[]; autoRecord?: boolean } | string[]) { emit('batch-complete', payload) }
 function onBatchSkip(taskIds: string[]) { emit('batch-skip', taskIds) }
 function onBatchCompleteMed(medIds: string[]) { emit('batch-complete-med', medIds) }
 function onAction(payload: { type: string; data: any }) { emit('action', payload) }
@@ -66,44 +66,25 @@ function onRecordDose(payload: { medicationTaskId: string }) { emit('record-dose
   position: relative;
   transform: translateX(0) scale(1);
   opacity: 1;
-  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1),
-              opacity 0.3s ease;
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.22s ease;
 }
 
 .smart-card--completing {
-  transform: translateX(-30%) scale(0.9);
+  transform: translateX(-14%) scale(0.985);
   opacity: 0;
   pointer-events: none;
 }
 
 .smart-card--completed {
   pointer-events: none;
-  animation: card-done-bounce 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-
-  &::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: 16px;
-    box-shadow: inset 0 0 0 2px var(--green), 0 4px 20px rgba(61, 174, 111, 0.25);
-    opacity: 0;
-    pointer-events: none;
-    z-index: 10;
-    animation: card-done-glow 1.5s ease forwards;
-  }
+  animation: card-done-bounce 0.2s ease-out forwards;
 }
 
 @keyframes card-done-bounce {
   0%   { transform: scale(1); }
-  55%  { transform: scale(1.018); }
+  50%  { transform: scale(1.008); }
   100% { transform: scale(1); }
-}
-
-@keyframes card-done-glow {
-  0%   { opacity: 0; }
-  12%  { opacity: 1; }
-  80%  { opacity: 1; }
-  100% { opacity: 0; }
 }
 
 .smart-card--overdue {

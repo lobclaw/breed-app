@@ -77,6 +77,32 @@ function toLegacyMedItem(task) {
   }
 }
 
+async function createAutoHealthRecord({ familyId, uid, task, now }) {
+  if (!task || !['vaccination', 'deworming'].includes(task.type)) return false
+
+  const details = {}
+  if (task.type === 'vaccination') details.vaccine_type = task.details?.vaccine_type || null
+  if (task.type === 'deworming') {
+    details.deworming_type = task.details?.deworming_type || null
+    details.drug_name = task.details?.drug_name || null
+  }
+
+  const recordData = {
+    family_id: familyId,
+    dog_id: task.dog_id,
+    dog_name: task.dog_name,
+    type: task.type,
+    date: now,
+    details,
+    source: 'auto_complete',
+    created_by: uid,
+    created_at: now,
+    updated_at: now,
+  }
+  await db.collection('health_records').add(recordData)
+  return true
+}
+
 /**
  * 智能合并任务为卡片
  * 合并优先级：健康关注 > 窝级别 > 护理群组 > 批量(2+同类同天) > 个体犬只
@@ -338,7 +364,7 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
       const dogs = Array.from(dogMap.values())
       cards.push({
         cardType: 'batch',
-        id: `litter-${group[0].litter_id}-${group[0].type}`,
+        id: `litter-${group[0].litter_id}-${getTaskVariantKey(group[0])}`,
         priority: highestPriority(group),
         groupTitle: `${group[0].dog_name || ''}窝 · ${group[0].display_title || group[0].title}`,
         dogs,
@@ -378,7 +404,7 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
       const dogs = Array.from(dogMap.values())
       cards.push({
         cardType: 'batch',
-        id: `batch-${group[0].type}-${group[0].due_date}`,
+        id: `batch-${getTaskVariantKey(group[0])}-${group[0].due_date}`,
         priority: highestPriority(pendingInGroup),
         groupTitle: `${group[0].display_title || group[0].title} · ${dogs.length}只`,
         dogs,
@@ -539,7 +565,7 @@ module.exports = {
 
     return {
       data: {
-        cards: allCards.slice(0, 12),
+        cards: allCards,
         sections: {
           workflow: orderedWorkflowCards,
           reminders: orderedReminderCards,
@@ -561,14 +587,19 @@ module.exports = {
   async getDateCounts(startDate, endDate) {
     const familyId = this.familyId
 
-    const { data: tasks } = await db.collection('tasks')
-      .where({
-        family_id: familyId,
-        status: 'pending',
-        due_date: dbCmd.gte(startDate).and(dbCmd.lte(endDate)),
-      })
-      .field({ due_date: true })
-      .get()
+    const [{ data: tasks }, { data: activeMedications }] = await Promise.all([
+      db.collection('tasks')
+        .where({
+          family_id: familyId,
+          status: 'pending',
+          due_date: dbCmd.gte(startDate).and(dbCmd.lte(endDate)),
+        })
+        .field({ due_date: true })
+        .get(),
+      db.collection('medication_tasks')
+        .where({ family_id: familyId, status: '进行中' })
+        .get(),
+    ])
 
     // 按天聚合
     const counts = {}
@@ -577,6 +608,18 @@ module.exports = {
       d.setHours(0, 0, 0, 0)
       const key = d.getTime()
       counts[key] = (counts[key] || 0) + 1
+    }
+
+    // 疗程状态也会出现在未来日期页：只要当天有用药卡，就给该天一个红点计数
+    const seenMedicationDays = new Set()
+    for (let d = new Date(startDate); d.getTime() <= endDate; d.setDate(d.getDate() + 1)) {
+      const dayTs = new Date(d); dayTs.setHours(0, 0, 0, 0)
+      const key = dayTs.getTime()
+      const dayMedItems = computeMedItemsForDay(activeMedications || [], key)
+      if (dayMedItems.length > 0 && !seenMedicationDays.has(key)) {
+        counts[key] = Math.max(counts[key] || 0, 1)
+        seenMedicationDays.add(key)
+      }
     }
 
     return { data: counts }
@@ -670,7 +713,7 @@ module.exports = {
   /**
    * 批量完成任务
    */
-  async batchCompleteTask(taskIds) {
+  async batchCompleteTask(taskIds, autoRecord) {
     if (!taskIds || !taskIds.length) throw new Error('缺少任务 ID')
 
     const now = Date.now()
@@ -683,12 +726,27 @@ module.exports = {
           .get()
         if (!tasks || tasks.length === 0) continue
 
+        const task = tasks[0]
+
         await db.collection('tasks').doc(taskId).update({
           status: 'completed',
           completed_by: this.uid,
           completed_at: now,
           updated_at: now,
         })
+
+        if (autoRecord) {
+          try {
+            await createAutoHealthRecord({
+              familyId: this.familyId,
+              uid: this.uid,
+              task,
+              now,
+            })
+          } catch (e) {
+            console.log('[batchCompleteTask] auto-record failed:', e.message)
+          }
+        }
         completed++
       } catch (e) {
         // 跳过不存在或已处理的任务
@@ -768,27 +826,7 @@ module.exports = {
     const HEALTH_TYPES = ['vaccination', 'deworming']
     if (autoRecord && HEALTH_TYPES.includes(task.type)) {
       try {
-        // 创建 health_record
-        const details = {}
-        if (task.type === 'vaccination') details.vaccine_type = task.details?.vaccine_type || null
-        if (task.type === 'deworming') {
-          details.deworming_type = task.details?.deworming_type || null
-          details.drug_name = task.details?.drug_name || null
-        }
-
-        const recordData = {
-          family_id: familyId,
-          dog_id: task.dog_id,
-          dog_name: task.dog_name,
-          type: task.type,
-          date: now,
-          details,
-          source: 'auto_complete',
-          created_by: this.uid,
-          created_at: now,
-          updated_at: now,
-        }
-        await db.collection('health_records').add(recordData)
+        await createAutoHealthRecord({ familyId, uid: this.uid, task, now })
       } catch (e) {
         console.log('[completeTask] auto-record failed:', e.message)
         // 不影响任务完成，静默失败

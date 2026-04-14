@@ -65,8 +65,8 @@ const dogStore = useDogStore()
 
 const props = defineProps<{ card: any }>()
 const emit = defineEmits<{
-  (e: 'complete', taskId: string, allDone?: boolean): void
-  (e: 'batch-complete', taskIds: string[]): void
+  (e: 'complete', taskId: string, mode?: boolean | string): void
+  (e: 'batch-complete', payload: { taskIds: string[]; autoRecord?: boolean }): void
   (e: 'batch-skip', taskIds: string[]): void
   (e: 'postpone', taskIds: string | string[], title?: string): void
   (e: 'action', payload: any): void
@@ -83,7 +83,7 @@ function toggleDog(dog: any) {
   // 检查是否全部完成（后端已完成 + 本地勾选）
   const allDogs = props.card.dogs || []
   const allDone = allDogs.every((d: any) => d.completed || checkedDogs.value.has(d.dogId))
-  emit('complete', task._id, allDone)
+  emit('complete', task._id, allDone ? 'batch-auto' : 'batch-auto-partial')
 }
 
 function goProcess() {
@@ -135,13 +135,11 @@ function batchComplete() {
   acting.value = true
 
   const taskIds = props.card.tasks.filter((t: any) => t.status === 'pending').map((t: any) => t._id)
-
-  // 逐一勾选所有未打钩的犬只，再触发完成动画
-  const unchecked = (props.card.dogs || []).filter((d: any) => !d.completed && !checkedDogs.value.has(d.dogId))
-  unchecked.forEach((dog: any, i: number) => {
-    setTimeout(() => checkedDogs.value.add(dog.dogId), i * 40)
+  // 批量完成时直接全勾，强调“整张卡已完成”，避免逐个勾选拖慢退场
+  ;(props.card.dogs || []).forEach((dog: any) => {
+    if (!dog.completed) checkedDogs.value.add(dog.dogId)
   })
-  setTimeout(() => emit('batch-complete', taskIds), unchecked.length * 40)
+  emit('batch-complete', { taskIds, autoRecord: true })
 }
 
 function batchSkip() {
