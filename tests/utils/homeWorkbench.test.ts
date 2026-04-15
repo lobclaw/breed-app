@@ -1,7 +1,12 @@
+import { readFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 import type { HomeCard, HomeTask, HomeWorkbenchDog } from '@/types/home-workbench'
 import { buildHomeWorkbench, WORKBENCH_SECTION_META } from '@/utils/homeWorkbench'
+
+const testDir = dirname(fileURLToPath(import.meta.url))
 
 function makeTask(overrides: Partial<HomeTask> = {}): HomeTask {
   return {
@@ -261,5 +266,25 @@ describe('buildHomeWorkbench', () => {
     buildHomeWorkbench(cards, { visibleRowLimit: 2 })
 
     expect(JSON.stringify(cards)).toBe(before)
+  })
+
+  it('不引入首页副作用边界依赖', () => {
+    const adapterSource = readFileSync(resolve(testDir, '../../src/utils/homeWorkbench.ts'), 'utf8')
+    const forbiddenStrings = [
+      'uniCloud',
+      'useCloudCall',
+      "from 'vue'",
+      "from 'pinia'",
+      'navigateTo',
+      'showToast',
+      'suppressedTaskMap',
+      'dayCounts',
+      'latestLoadToken',
+      'weekCache',
+    ]
+
+    for (const forbidden of forbiddenStrings) {
+      expect(adapterSource).not.toContain(forbidden)
+    }
   })
 })
