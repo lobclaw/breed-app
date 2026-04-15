@@ -27,6 +27,14 @@
 
 Phase 1 功能 + 性能优化完成，进入验收测试阶段。
 
+## GSD 项目状态
+
+- GSD 已初始化，项目上下文位于 `.planning/PROJECT.md`。
+- 当前 GSD 里程碑：`首页工作台密度自适应优化`，路线图位于 `.planning/ROADMAP.md`。
+- 当前焦点：Phase 1 `Workbench Contract & Test Foundation`，下一步使用 `$gsd-plan-phase 1`。
+- 当前路线固定为 6 阶段：契约/测试底座 → 繁育步骤工作台 → 健康批量优先工作台 → 用药状态工作台 → 逾期/计数/防闪回校准 → 今日重点。
+- 需求与覆盖关系位于 `.planning/REQUIREMENTS.md`，研究结论位于 `.planning/research/SUMMARY.md`。
+
 ## 开发约定
 
 - 代码：变量名/函数名用英文，注释用中文。文档用中文。
