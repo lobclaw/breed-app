@@ -28,7 +28,11 @@
   2. 首页仍固定呈现 `逾期 / 繁育 / 健康 / 用药` 四层语义，数量过多时只通过显式展开/收起承接，不静默硬截断。
   3. 新增工作台组件只向 `src/pages/home/index.vue` emit typed events；云调用、路由、乐观移除、suppression 和红点同步仍由首页统一处理。
   4. 单元测试覆盖区块顺序、繁育分组、健康批量保留、用药排序、隐藏数量、输入不可变、繁育不进 batch、健康 subtype key 和未来用药红点。
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 01-01-PLAN.md — Define the workbench view-model contract, pure adapter, and adapter tests.
+- [ ] 01-02-PLAN.md — Strengthen task-service invariant tests for subtype keys, future medication cards, and breeding non-batch behavior.
+- [ ] 01-03-PLAN.md — Wire computed-only workbench state into the home page and run integrated validation.
 **UI hint**: yes
 
 ### Phase 2: Breeding Step Workbench
