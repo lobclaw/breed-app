@@ -507,6 +507,48 @@ describe('task-service', () => {
       expect(cards.map((c: any) => c.tasks[0]._id)).toEqual(['breed_flow_1', 'breed_flow_2'])
     })
 
+    it('确认断奶繁育流程节点带 litter_id 也不应合并为批量卡', () => {
+      const dueDate = todayStart.getTime() + 1000
+      const tasks = [
+        {
+          _id: 'weaning_confirm_1',
+          dog_id: 'dog_1',
+          dog_name: '小米',
+          litter_id: 'litter_1',
+          cycle_id: 'cycle_1',
+          type: 'breeding_milestone',
+          title: '小米窝 · 确认断奶',
+          due_date: dueDate,
+          priority: 'today',
+          status: 'pending',
+          details: { step_type: 'weaning_confirm' },
+        },
+        {
+          _id: 'weaning_confirm_2',
+          dog_id: 'dog_2',
+          dog_name: '妮蔻',
+          litter_id: 'litter_1',
+          cycle_id: 'cycle_2',
+          type: 'breeding_milestone',
+          title: '妮蔻窝 · 确认断奶',
+          due_date: dueDate,
+          priority: 'today',
+          status: 'pending',
+          details: { step_type: 'weaning_confirm' },
+        },
+      ]
+
+      const cards = mergeTasks(tasks, [], [])
+
+      expect(cards).toHaveLength(2)
+      expect(cards.every((card: any) => card.cardType === 'dog')).toBe(true)
+      expect(cards.every((card: any) => card.sectionType === undefined)).toBe(true)
+      expect(cards.every((card: any) => card.domain === 'breeding')).toBe(true)
+      for (const card of cards) {
+        expect(card.cardType).not.toBe('batch')
+      }
+    })
+
     it('同天不同疫苗批量卡应生成不同 id，避免前端 key 冲突', () => {
       const dueDate = todayStart.getTime() + 1000
       const tasks = [
@@ -583,6 +625,36 @@ describe('task-service', () => {
       const ctx = createCloudObjectContext({ familyId })
       const res = await taskService.getDateCounts.call(ctx, todayStart.getTime(), tomorrow + DAY_MS - 1)
       expect(res.data[tomorrow]).toBeGreaterThan(0)
+    })
+
+    it('未来日期仅有疗程状态时 getWeekCards 也应返回今日用药卡', async () => {
+      const todayStart = new Date()
+      todayStart.setHours(0, 0, 0, 0)
+      const tomorrow = todayStart.getTime() + DAY_MS
+
+      seedCollection('tasks', [])
+      seedCollection('health_records', [])
+      seedCollection('medication_tasks', [{
+        _id: 'med_future_week_1',
+        family_id: familyId,
+        dog_id: 'dog_1',
+        dog_name: '肉肉',
+        status: '进行中',
+        actual_start_date: todayStart.getTime(),
+        frequency: 1,
+        duration_days: 3,
+        daily_doses: {},
+      }])
+
+      const ctx = createCloudObjectContext({ familyId })
+      const res = await taskService.getWeekCards.call(ctx, tomorrow, tomorrow + DAY_MS - 1)
+      const therapyCards = res.data[tomorrow].sections.therapy
+      const card = therapyCards[0]
+
+      expect(therapyCards).toHaveLength(1)
+      expect(card.cardType).toBe('medication')
+      expect(card.domain).toBe('medication')
+      expect(card.dogs[0].dogId).toBe('dog_1')
     })
 
     it('首页返回不应被 12 张卡静默截断', async () => {
