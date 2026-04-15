@@ -412,6 +412,64 @@ describe('task-service', () => {
       expect(cards[0].groupTitle).toContain('疫苗 · 卫佳5')
     })
 
+    it('不同驱虫类型和药名的同日任务不应合并到同一批量卡', () => {
+      const dueDate = todayStart.getTime() + 1000
+      const tasks = [
+        {
+          _id: 'dew_internal_1',
+          dog_id: 'dog_1',
+          dog_name: '奶盖',
+          type: 'deworming',
+          title: '驱虫',
+          due_date: dueDate,
+          priority: 'today',
+          status: 'pending',
+          details: { deworming_type: 'internal', drug_name: '海乐妙' },
+        },
+        {
+          _id: 'dew_internal_2',
+          dog_id: 'dog_2',
+          dog_name: '布丁',
+          type: 'deworming',
+          title: '驱虫',
+          due_date: dueDate,
+          priority: 'today',
+          status: 'pending',
+          details: { deworming_type: 'internal', drug_name: '海乐妙' },
+        },
+        {
+          _id: 'dew_external_1',
+          dog_id: 'dog_3',
+          dog_name: '年糕',
+          type: 'deworming',
+          title: '驱虫',
+          due_date: dueDate,
+          priority: 'today',
+          status: 'pending',
+          details: { deworming_type: 'external', drug_name: '福来恩' },
+        },
+        {
+          _id: 'dew_external_2',
+          dog_id: 'dog_4',
+          dog_name: '团子',
+          type: 'deworming',
+          title: '驱虫',
+          due_date: dueDate,
+          priority: 'today',
+          status: 'pending',
+          details: { deworming_type: 'external', drug_name: '福来恩' },
+        },
+      ]
+
+      const cards = mergeTasks(tasks, [], [])
+
+      expect(cards).toHaveLength(2)
+      expect(cards.every((card: any) => card.cardType === 'batch')).toBe(true)
+      expect(cards.some((card: any) => card.id.includes('batch-deworming:internal:海乐妙-'))).toBe(true)
+      expect(cards.some((card: any) => card.id.includes('batch-deworming:external:福来恩-'))).toBe(true)
+      expect(new Set(cards.map((card: any) => card.id)).size).toBe(2)
+    })
+
     it('相同繁育流程节点的同日任务不应合并为批量卡', () => {
       const dueDate = todayStart.getTime() + 1000
       const tasks = [
