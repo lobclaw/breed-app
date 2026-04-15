@@ -330,6 +330,7 @@ import BSheet from '@/components/layout/BSheet.vue'
 import BIconBox from '@/components/base/BIconBox.vue'
 import { useTaskStore } from '@/stores/taskStore'
 import { consumeSubmitFeedback } from '@/composables/useSubmitFeedback'
+import { buildHomeWorkbench } from '@/utils/homeWorkbench'
 
 const { hasFamily, loadFamily } = useAuth()
 const taskStore = useTaskStore()
@@ -428,6 +429,8 @@ const todaySections = computed(() => [
     cards: cards.value.filter(card => card.sectionType === 'therapy' && card.priority !== 'overdue'),
   },
 ])
+const todayWorkbench = computed(() => buildHomeWorkbench(cards.value, { visibleRowLimit: 4 }))
+const dayWorkbench = computed(() => buildHomeWorkbench(dayCards.value, { visibleRowLimit: 4 }))
 const summaryPills = computed(() => [
   {
     key: 'overdue',
