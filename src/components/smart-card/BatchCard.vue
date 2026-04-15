@@ -33,6 +33,9 @@
         </view>
         <text class="cb-label">{{ dog.dogName }}</text>
       </view>
+      <view v-if="hiddenDogCount > 0" class="dog-expand" @click.stop="dogsExpanded = !dogsExpanded">
+        <text class="dog-expand-text">{{ dogExpandText }}</text>
+      </view>
     </view>
 
     <!-- 进度条 -->
@@ -62,6 +65,7 @@ import { computed, ref } from 'vue'
 import { useDogStore } from '@/stores/dogStore'
 
 const dogStore = useDogStore()
+const DOG_COMPACT_LIMIT = 12
 
 const props = defineProps<{ card: any }>()
 const emit = defineEmits<{
@@ -74,6 +78,7 @@ const emit = defineEmits<{
 
 const checkedDogs = ref(new Set<string>())
 const acting = ref(false)
+const dogsExpanded = ref(false)
 
 function toggleDog(dog: any) {
   if (dog.completed || checkedDogs.value.has(dog.dogId)) return
@@ -81,8 +86,7 @@ function toggleDog(dog: any) {
   if (!task) return
   checkedDogs.value.add(dog.dogId)
   // 检查是否全部完成（后端已完成 + 本地勾选）
-  const allDogs = props.card.dogs || []
-  const allDone = allDogs.every((d: any) => d.completed || checkedDogs.value.has(d.dogId))
+  const allDone = allDogs.value.every((d: any) => d.completed || checkedDogs.value.has(d.dogId))
   emit('complete', task._id, allDone ? 'batch-auto' : 'batch-auto-partial')
 }
 
@@ -122,8 +126,14 @@ function batchPostpone() {
   emit('postpone', taskIds, props.card.groupTitle || '批量推迟')
 }
 
-const visibleDogs = computed(() => (props.card.dogs || []).slice(0, 12))
-const totalDogs = computed(() => (props.card.dogs || []).length)
+const allDogs = computed(() => props.card.dogs || [])
+const hiddenDogCount = computed(() => Math.max(0, allDogs.value.length - DOG_COMPACT_LIMIT))
+const dogExpandText = computed(() => (dogsExpanded.value ? '收起' : `还有 ${hiddenDogCount.value} 只，展开`))
+const visibleDogs = computed(() => {
+  if (dogsExpanded.value) return allDogs.value
+  return allDogs.value.slice(0, DOG_COMPACT_LIMIT)
+})
+const totalDogs = computed(() => allDogs.value.length)
 const doneCount = computed(() => checkedDogs.value.size)
 const cardColor = computed(() => {
   if (props.card.priority === 'overdue') return 'red'
@@ -225,6 +235,19 @@ function batchSkip() {
 }
 .cb-check { font-size: 10px; color: #FFFFFF; font-weight: 700; }
 .cb-label { font-size: 12px; font-weight: 600; color: var(--text-1); }
+.dog-expand {
+  display: flex;
+  align-items: center;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--card-dim);
+  &:active { opacity: 0.75; }
+}
+.dog-expand-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+}
 
 /* 进度条 */
 .progress-area { margin-top: 12px; }

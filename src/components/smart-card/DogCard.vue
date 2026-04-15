@@ -26,6 +26,9 @@
       >
         <text class="tag-text">{{ taskDisplayTitle(task) }}</text>
       </view>
+      <view v-if="hiddenTaskCount > 0" class="tag-expand" @click.stop="tasksExpanded = !tasksExpanded">
+        <text class="tag-expand-text">{{ taskExpandText }}</text>
+      </view>
     </view>
 
     <!-- 操作按钮 -->
@@ -49,6 +52,7 @@ import { computed, ref, watch } from 'vue'
 
 const HEALTH_TYPES = ['vaccination', 'deworming', 'medication']
 const EXTRA_ARRANGEMENT_TYPES = ['breeding_extra_arrangement']
+const TASK_COMPACT_LIMIT = 3
 
 const props = defineProps<{ card: any }>()
 const emit = defineEmits<{
@@ -58,6 +62,7 @@ const emit = defineEmits<{
 }>()
 
 const acting = ref(false)
+const tasksExpanded = ref(false)
 let actingTimer: ReturnType<typeof setTimeout> | null = null
 
 function onComplete(taskId: string, mode: string) {
@@ -79,7 +84,13 @@ watch(() => props.card?.tasks?.length, () => {
   acting.value = false
 })
 
-const visibleTasks = computed(() => (props.card.tasks || []).slice(0, 3))
+const allTasks = computed(() => props.card.tasks || [])
+const hiddenTaskCount = computed(() => Math.max(0, allTasks.value.length - TASK_COMPACT_LIMIT))
+const taskExpandText = computed(() => (tasksExpanded.value ? '收起' : `还有 ${hiddenTaskCount.value} 项，展开`))
+const visibleTasks = computed(() => {
+  if (tasksExpanded.value) return allTasks.value
+  return allTasks.value.slice(0, TASK_COMPACT_LIMIT)
+})
 const firstTaskType = computed(() => visibleTasks.value[0]?.type || '')
 const isHealthType = computed(() => HEALTH_TYPES.includes(firstTaskType.value))
 const isExtraArrangementType = computed(() => EXTRA_ARRANGEMENT_TYPES.includes(firstTaskType.value))
@@ -209,6 +220,17 @@ function taskColor(task: any) {
   &--plum { background: var(--plum-soft); box-shadow: 0 1px 4px rgba(134, 104, 176, 0.2); .tag-text { color: var(--plum); } }
 }
 .tag-text { font-size: 11px; font-weight: 600; }
+.tag-expand {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--card-dim);
+  &:active { opacity: 0.75; }
+}
+.tag-expand-text {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+}
 
 .card-actions { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
 .btn {
