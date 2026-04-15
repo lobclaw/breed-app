@@ -31,7 +31,7 @@
 **Plans**: 3 plans
 Plans:
 - [ ] 01-01-PLAN.md — Define the workbench view-model contract, pure adapter, and adapter tests.
-- [ ] 01-02-PLAN.md — Strengthen task-service invariant tests for subtype keys, future medication cards, and breeding non-batch behavior.
+- [x] 01-02-PLAN.md — Strengthen task-service invariant tests for subtype keys, future medication cards, and breeding non-batch behavior.
 - [ ] 01-03-PLAN.md — Wire computed-only workbench state into the home page and run integrated validation.
 **UI hint**: yes
 
@@ -102,7 +102,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Workbench Contract & Test Foundation | 0/TBD | Not started | - |
+| 1. Workbench Contract & Test Foundation | 1/3 | In Progress | - |
 | 2. Breeding Step Workbench | 0/TBD | Not started | - |
 | 3. Health Batch-First Workbench | 0/TBD | Not started | - |
 | 4. Medication State Workbench | 0/TBD | Not started | - |
