@@ -32,7 +32,7 @@
 Plans:
 - [x] 01-01-PLAN.md — Define the workbench view-model contract, pure adapter, and adapter tests.
 - [x] 01-02-PLAN.md — Strengthen task-service invariant tests for subtype keys, future medication cards, and breeding non-batch behavior.
-- [ ] 01-03-PLAN.md — Wire computed-only workbench state into the home page and run integrated validation.
+- [x] 01-03-PLAN.md — Wire computed-only workbench state into the home page and run integrated validation.
 **UI hint**: yes
 
 ### Phase 2: Breeding Step Workbench
