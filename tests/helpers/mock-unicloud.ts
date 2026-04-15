@@ -78,6 +78,8 @@ function createQueryChain(collectionName: string) {
               if ('$gte' in (val as any) && !(docVal >= (val as any).$gte)) return false
             } else if (val && typeof val === 'object' && '$in' in (val as any)) {
               if (!(val as any).$in.includes(docVal)) return false
+            } else if (val && typeof val === 'object' && '$neq' in (val as any)) {
+              if (docVal === (val as any).$neq) return false
             } else if (Array.isArray(docVal)) {
               // 数组字段包含查询（如 members.user_id 匹配嵌入数组）
               if (!docVal.includes(val)) return false

@@ -67,6 +67,15 @@ function isBreedingExtraTask(task) {
   return BREEDING_EXTRA_TYPES.has(task?.type)
 }
 
+function getTaskDomain(task) {
+  if (!task) return 'health'
+  if (task.type === 'medication') return 'medication'
+  if (task.type === 'breeding_milestone' || task.type === 'care_group' || isBreedingExtraTask(task)) {
+    return 'breeding'
+  }
+  return 'health'
+}
+
 function getTaskDisplayTitle(task) {
   if (!task) return ''
   if (task.type === 'breeding_extra_arrangement') {
@@ -99,7 +108,9 @@ function buildSectionedCards(pendingTasks, todayCompletedTasks, activeIllnesses,
   const workflowCards = mergeTasks(workflowPendingTasks, workflowCompletedTasks, [], [])
   const breedingExtraCards = mergeTasks(breedingExtraPendingTasks, breedingExtraCompletedTasks, [], [])
   const reminderCards = mergeTasks(reminderPendingTasks, reminderCompletedTasks, [], [])
-  const therapyCards = mergeTasks([], [], activeIllnesses, medItems)
+  const attentionCards = mergeTasks([], [], activeIllnesses, medItems)
+  const therapyCards = attentionCards.filter(card => card.cardType === 'medication' || card.cardType === 'health_attention')
+  const healthObservationCards = attentionCards.filter(card => card.cardType === 'sick_observation')
 
   const annotateOverdue = (cardList) => {
     const overdueCards = cardList.filter(card => card.priority === 'overdue')
@@ -113,10 +124,10 @@ function buildSectionedCards(pendingTasks, todayCompletedTasks, activeIllnesses,
     return [...overdueCards, ...todayCards, ...upcomingCards]
   }
 
-  const workflow = annotateOverdue(workflowCards).map(card => ({ ...card, sectionType: 'workflow' }))
-  const extra_arrangements = annotateOverdue(breedingExtraCards).map(card => ({ ...card, sectionType: 'workflow_extra' }))
-  const reminders = annotateOverdue(reminderCards).map(card => ({ ...card, sectionType: 'reminders' }))
-  const therapy = annotateOverdue(therapyCards).map(card => ({ ...card, sectionType: 'therapy' }))
+  const workflow = annotateOverdue(workflowCards).map(card => ({ ...card, sectionType: 'workflow', domain: 'breeding' }))
+  const extra_arrangements = annotateOverdue(breedingExtraCards).map(card => ({ ...card, sectionType: 'workflow_extra', domain: 'breeding' }))
+  const reminders = annotateOverdue([...reminderCards, ...healthObservationCards]).map(card => ({ ...card, sectionType: 'reminders', domain: 'health' }))
+  const therapy = annotateOverdue(therapyCards).map(card => ({ ...card, sectionType: 'therapy', domain: 'medication' }))
 
   return {
     workflow,
@@ -368,6 +379,7 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
     cards.push({
       cardType: 'medication',
       id: 'medication',
+      domain: 'medication',
       priority: 'today',
       groupTitle: '今日用药',
       dogs: medDogs,
@@ -380,6 +392,7 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
     cards.push({
       cardType: 'sick_observation',
       id: 'sick-observation',
+      domain: 'health',
       priority: 'today',
       groupTitle: '疾病观察',
       dogs: sickObserveDogs,
@@ -407,6 +420,7 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
       cards.push({
         cardType: 'care_group',
         id: 'care-' + title,
+        domain: 'breeding',
         priority: highestPriority(group),
         groupTitle: title,
         dogs: Array.from(dogMap.values()),
@@ -436,6 +450,7 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
       cards.push({
         cardType: 'batch',
         id: `litter-${group[0].litter_id}-${getTaskVariantKey(group[0])}`,
+        domain: getTaskDomain(group[0]),
         priority: highestPriority(group),
         groupTitle: `${group[0].dog_name || ''}窝 · ${group[0].display_title || group[0].title}`,
         dogs,
@@ -479,6 +494,7 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
       cards.push({
         cardType: 'batch',
         id: `batch-${getTaskVariantKey(group[0])}-${group[0].due_date}`,
+        domain: getTaskDomain(group[0]),
         priority: highestPriority(pendingInGroup),
         groupTitle: `${group[0].display_title || group[0].title} · ${dogs.length}只`,
         dogs,
@@ -496,6 +512,7 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
     cards.push({
       cardType: 'dog',
       id: `dog-${task.dog_id || task._id}-${task._id}`,
+      domain: 'breeding',
       priority: task.priority,
       dogName: task.dog_name,
       dogId: task.dog_id,
@@ -516,6 +533,7 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
     cards.push({
       cardType: 'dog',
       id: `dog-${dogId}`,
+      domain: getTaskDomain(group[0]),
       priority: highestPriority(group),
       dogName: group[0].dog_name,
       dogId: group[0].dog_id,

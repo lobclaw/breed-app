@@ -23,6 +23,7 @@ import SickObservationCard from './SickObservationCard.vue'
 
 export interface SmartCardData {
   cardType: 'dog' | 'care_group' | 'batch' | 'medication' | 'health_attention' | 'sick_observation'
+  domain?: 'breeding' | 'health' | 'medication'
   id: string
   priority: 'overdue' | 'today' | 'upcoming'
   overdueDays?: number

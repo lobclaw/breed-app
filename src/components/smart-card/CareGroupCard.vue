@@ -4,9 +4,9 @@
   左色条 + 图标 + 群组标题 + 犬只行列表 + 批量完成按钮
 -->
 <template>
-  <view class="card" :class="card.priority === 'overdue' ? 'card--red' : 'card--rose'">
+  <view class="card" :class="card.priority === 'overdue' ? 'card--red' : 'card--amber'">
     <view class="card-header">
-      <view class="card-icon" :class="card.priority === 'overdue' ? 'card-icon--red' : 'card-icon--rose'">
+      <view class="card-icon" :class="card.priority === 'overdue' ? 'card-icon--red' : 'card-icon--amber'">
         <text style="font-size: 20px;">🤰</text>
       </view>
       <view class="card-title-area">
@@ -25,7 +25,7 @@
 
     <!-- 批量完成按钮 -->
     <view v-if="!acting" class="card-actions">
-      <view class="btn btn--filled btn--primary" @click="batchComplete">
+      <view class="btn btn--filled btn--amber" @click="batchComplete">
         <text class="btn-text btn-text--white">批量标记今日已完成</text>
       </view>
     </view>
@@ -52,7 +52,7 @@ function batchComplete() {
 
 function statusClass(dog: any) {
   if (dog.statusLabel?.includes('预产期')) return 'group-item-status--amber'
-  return 'group-item-status--rose'
+  return 'group-item-status--amber'
 }
 </script>
 
@@ -70,14 +70,16 @@ function statusClass(dog: any) {
   &::before { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 0; }
   > * { position: relative; z-index: 1; }
 
-  &--rose { border-left-color: var(--rose); &::before { background: linear-gradient(135deg, var(--rose-soft) 0%, transparent 40%); } }
+  &--red { border-left-color: var(--red); &::before { background: linear-gradient(135deg, var(--red-soft) 0%, transparent 40%); } }
+  &--amber { border-left-color: var(--amber); &::before { background: linear-gradient(135deg, var(--amber-soft) 0%, transparent 40%); } }
 }
 
 .card-header { display: flex; align-items: flex-start; gap: 12px; }
 .card-icon {
   width: 36px; height: 36px; border-radius: 10px;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-  &--rose { background: var(--icon-rose); }
+  &--red { background: var(--icon-red); }
+  &--amber { background: var(--icon-amber); }
 }
 .card-title-area { flex: 1; }
 .card-name { display: block; font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--text-1); }
@@ -94,7 +96,6 @@ function statusClass(dog: any) {
 .group-item-name { font-size: 13px; font-weight: 600; color: var(--text-1); }
 .group-item-status {
   font-size: 12px; font-weight: 600;
-  &--rose { color: var(--rose); }
   &--amber { color: var(--amber); }
 }
 
@@ -103,7 +104,7 @@ function statusClass(dog: any) {
   padding: 8px 18px; border-radius: 999px; border: none;
   transition: transform 0.12s ease, opacity 0.12s ease;
   &:active { transform: scale(0.94); opacity: 0.85; }
-  &--filled.btn--primary { background: var(--primary); }
+  &--filled.btn--amber { background: var(--amber); }
 }
 .btn-text { font-family: var(--font-display); font-size: 13px; font-weight: 700; &--white { color: #FFFFFF; } }
 </style>

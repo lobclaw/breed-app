@@ -4,9 +4,9 @@
   左色条(蓝) + 图标 + 标题 + checkbox 列表 + 进度条 + 批量按钮
 -->
 <template>
-  <view class="card" :class="card.priority === 'overdue' ? 'card--red' : 'card--blue'">
+  <view class="card" :class="`card--${cardColor}`">
     <view class="card-header" @click="goProcess">
-      <view class="card-icon" :class="card.priority === 'overdue' ? 'card-icon--red' : 'card-icon--blue'">
+      <view class="card-icon" :class="`card-icon--${cardColor}`">
         <text style="font-size: 20px;">💉</text>
       </view>
       <view class="card-title-area">
@@ -38,14 +38,14 @@
     <!-- 进度条 -->
     <view class="progress-area">
       <view class="progress-track">
-        <view class="progress-fill" :style="{ width: progressPct + '%' }" />
+        <view class="progress-fill" :style="progressFillStyle" />
       </view>
     </view>
 
     <!-- 操作按钮 -->
     <view v-if="!acting" class="card-actions">
-      <view class="btn btn--ghost-green" @click="batchComplete">
-        <text class="btn-text btn-text--green">完成</text>
+      <view class="btn" :class="`btn--ghost-${cardColor}`" @click="batchComplete">
+        <text class="btn-text" :class="`btn-text--${cardColor}`">完成</text>
       </view>
       <view class="btn btn--ghost" @click="batchPostpone">
         <text class="btn-text btn-text--ghost">推迟</text>
@@ -125,9 +125,28 @@ function batchPostpone() {
 const visibleDogs = computed(() => (props.card.dogs || []).slice(0, 12))
 const totalDogs = computed(() => (props.card.dogs || []).length)
 const doneCount = computed(() => checkedDogs.value.size)
+const cardColor = computed(() => {
+  if (props.card.priority === 'overdue') return 'red'
+  if (props.card.domain === 'breeding') return 'amber'
+  if (props.card.domain === 'medication') return 'plum'
+  return 'blue'
+})
 const progressPct = computed(() => {
   if (!totalDogs.value) return 0
   return Math.round((doneCount.value / totalDogs.value) * 100)
+})
+const progressFillStyle = computed(() => {
+  const colorMap: Record<string, string> = {
+    red: 'var(--red)',
+    blue: 'var(--blue)',
+    amber: 'var(--amber)',
+    plum: 'var(--plum)',
+  }
+  const color = colorMap[cardColor.value] || 'var(--blue)'
+  return {
+    width: `${progressPct.value}%`,
+    background: `linear-gradient(90deg, ${color}, ${color})`,
+  }
 })
 
 function batchComplete() {
@@ -159,12 +178,20 @@ function batchSkip() {
   /* 批量卡片整体不可点击，不加按压反馈 */
   &::before { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 0; }
   > * { position: relative; z-index: 1; }
-  &--blue { border-left-color: var(--blue); &::before { background: linear-gradient(135deg, var(--blue-soft) 0%, transparent 40%); } }
   &--red { border-left-color: var(--red); &::before { background: linear-gradient(135deg, var(--red-soft) 0%, transparent 40%); } }
+  &--blue { border-left-color: var(--blue); &::before { background: linear-gradient(135deg, var(--blue-soft) 0%, transparent 40%); } }
+  &--amber { border-left-color: var(--amber); &::before { background: linear-gradient(135deg, var(--amber-soft) 0%, transparent 40%); } }
+  &--plum { border-left-color: var(--plum); &::before { background: linear-gradient(135deg, var(--plum-soft) 0%, transparent 40%); } }
 }
 
 .card-header { display: flex; align-items: flex-start; gap: 12px; }
-.card-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; &--blue { background: var(--icon-blue); } &--red { background: var(--icon-red); } }
+.card-icon {
+  width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  &--red { background: var(--icon-red); }
+  &--blue { background: var(--icon-blue); }
+  &--amber { background: var(--icon-amber); }
+  &--plum { background: var(--icon-plum); }
+}
 .card-title-area { flex: 1; }
 .card-name { display: block; font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--text-1); }
 .card-sub { display: block; font-size: 12px; color: var(--text-2); margin-top: 1px; }
@@ -190,7 +217,7 @@ function batchSkip() {
 /* 进度条 */
 .progress-area { margin-top: 12px; }
 .progress-track { height: 5px; background: var(--card-dim); border-radius: 999px; overflow: hidden; }
-.progress-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--primary), var(--amber)); transition: width 0.6s ease; }
+.progress-fill { height: 100%; border-radius: 999px; transition: width 0.6s ease; }
 
 .card-actions { display: flex; gap: 8px; margin-top: 14px; }
 .btn {
@@ -199,9 +226,20 @@ function batchSkip() {
   &:active { transform: scale(0.94); opacity: 0.85; }
   &--filled.btn--blue { background: var(--blue); }
   &--ghost { background: transparent; border: 1.5px solid var(--text-4); }
-  &--ghost-green { background: transparent; border: 1.5px solid var(--green); }
+  &--ghost-red { background: transparent; border: 1.5px solid var(--red); }
+  &--ghost-blue { background: transparent; border: 1.5px solid var(--blue); }
+  &--ghost-amber { background: transparent; border: 1.5px solid var(--amber); }
+  &--ghost-plum { background: transparent; border: 1.5px solid var(--plum); }
 }
-.btn-text { font-family: var(--font-display); font-size: 13px; font-weight: 700; &--white { color: #FFFFFF; } &--ghost { color: var(--text-2); } &--green { color: var(--green); } }
+.btn-text {
+  font-family: var(--font-display); font-size: 13px; font-weight: 700;
+  &--white { color: #FFFFFF; }
+  &--ghost { color: var(--text-2); }
+  &--red { color: var(--red); }
+  &--blue { color: var(--blue); }
+  &--amber { color: var(--amber); }
+  &--plum { color: var(--plum); }
+}
 .btn-skip { padding: 8px 12px; &:active { opacity: 0.5; } }
 .btn-skip-text { font-size: 12px; color: var(--text-3); }
 </style>

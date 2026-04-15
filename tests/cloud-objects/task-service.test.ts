@@ -301,6 +301,7 @@ describe('task-service', () => {
       const cards = mergeTasks([], [], illnesses)
       expect(cards).toHaveLength(1)
       expect(cards[0].cardType).toBe('sick_observation')
+      expect(cards[0].domain).toBe('health')
       expect(cards[0].dogs[0].dogId).toBe('肉肉')
     })
 
@@ -311,6 +312,7 @@ describe('task-service', () => {
       const cardTypes = cards.map((c: any) => c.cardType)
       expect(cardTypes).toContain('medication')
       expect(cardTypes).not.toContain('sick_observation')
+      expect(cards.find((c: any) => c.cardType === 'medication')?.domain).toBe('medication')
     })
 
     it('单犬：两个疾病（一个治疗中+用药，一个观察中）→ 两张卡都出现', () => {
@@ -512,6 +514,32 @@ describe('task-service', () => {
       expect(res.data.cards.length).toBe(13)
     })
 
+    it('疾病观察应进入健康提醒分层，不应归到今日用药', async () => {
+      const now = Date.now()
+
+      seedCollection('tasks', [])
+      seedCollection('health_records', [{
+        _id: 'ill_observe_1',
+        family_id: familyId,
+        dog_id: 'dog_1',
+        dog_name: '1号',
+        type: 'illness',
+        date: now,
+        created_at: now,
+        details: { condition: '感冒', treatment_status: '观察中', severity: '轻微' },
+      }])
+      seedCollection('medication_tasks', [])
+
+      const ctx = createCloudObjectContext({ familyId })
+      const res = await taskService.getHomeCards.call(ctx)
+
+      expect(res.data.sections.reminders).toHaveLength(1)
+      expect(res.data.sections.reminders[0].cardType).toBe('sick_observation')
+      expect(res.data.sections.reminders[0].sectionType).toBe('reminders')
+      expect(res.data.sections.reminders[0].domain).toBe('health')
+      expect(res.data.sections.therapy).toHaveLength(0)
+    })
+
     it('繁育额外安排应单独进入繁育分层，不混入健康提醒', async () => {
       const now = Date.now()
       const todayStart = new Date(now)
@@ -550,7 +578,9 @@ describe('task-service', () => {
       const res = await taskService.getHomeCards.call(ctx)
 
       expect(res.data.sections.workflow).toHaveLength(1)
+      expect(res.data.sections.workflow[0].domain).toBe('breeding')
       expect(res.data.sections.extra_arrangements).toHaveLength(1)
+      expect(res.data.sections.extra_arrangements[0].domain).toBe('breeding')
       expect(res.data.sections.reminders).toHaveLength(0)
       expect(res.data.sections.extra_arrangements[0].tasks[0].type).toBe('breeding_extra_arrangement')
     })
@@ -582,6 +612,7 @@ describe('task-service', () => {
 
       expect(res.data.sections.workflow).toHaveLength(1)
       expect(res.data.sections.workflow[0].priority).toBe('upcoming')
+      expect(res.data.sections.workflow[0].domain).toBe('breeding')
       expect(res.data.cards.some((card: any) => card.tasks?.[0]?.title?.includes('卵泡'))).toBe(true)
     })
 
@@ -654,8 +685,13 @@ describe('task-service', () => {
 
       expect(dayData.cards).toHaveLength(2)
       expect(dayData.sections.workflow).toHaveLength(1)
+      expect(dayData.sections.workflow[0].domain).toBe('breeding')
       expect(dayData.sections.extra_arrangements).toHaveLength(1)
-      expect(dayData.cards.map((card: any) => card.sectionType)).toEqual(['workflow', 'workflow_extra'])
+      expect(dayData.sections.extra_arrangements[0].domain).toBe('breeding')
+      expect(dayData.cards.map((card: any) => ({ sectionType: card.sectionType, domain: card.domain }))).toEqual([
+        { sectionType: 'workflow', domain: 'breeding' },
+        { sectionType: 'workflow_extra', domain: 'breeding' },
+      ])
     })
   })
 

@@ -4,10 +4,10 @@
   操作：标记康复 / 开始治疗 / 开始用药
 -->
 <template>
-  <view class="card card--red">
+  <view class="card card--blue">
     <view class="card-header">
-      <view class="card-icon card-icon--red">
-        <text class="material-icons-round" style="font-size: 20px; color: var(--red);">sick</text>
+      <view class="card-icon card-icon--blue">
+        <text class="material-icons-round" style="font-size: 20px; color: var(--blue);">sick</text>
       </view>
       <view class="card-title-area">
         <text class="card-name">{{ card.groupTitle || '疾病观察' }}</text>
@@ -104,14 +104,14 @@ function onAction(dog: any) {
   box-shadow: var(--shadow); overflow: hidden;
   &::before { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 0; }
   > * { position: relative; z-index: 1; }
-  &--red { border-left-color: var(--red); &::before { background: linear-gradient(135deg, var(--red-soft) 0%, transparent 40%); } }
+  &--blue { border-left-color: var(--blue); &::before { background: linear-gradient(135deg, var(--blue-soft) 0%, transparent 40%); } }
 }
 
 .card-header { display: flex; align-items: flex-start; gap: 12px; }
 .card-icon {
   width: 36px; height: 36px; border-radius: 10px;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-  &--red { background: var(--red-soft); }
+  &--blue { background: var(--icon-blue); }
 }
 .card-title-area { flex: 1; }
 .card-name { display: block; font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--text-1); }

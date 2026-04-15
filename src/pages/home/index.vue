@@ -397,7 +397,7 @@ const daySections = computed(() => [
   {
     key: 'therapy',
     title: '今日用药',
-    dotColor: 'var(--green)',
+    dotColor: 'var(--plum)',
     cards: dayCards.value.filter(card => card.sectionType === 'therapy' && card.priority !== 'overdue'),
   },
 ])
@@ -424,7 +424,7 @@ const todaySections = computed(() => [
   {
     key: 'therapy',
     title: '今日用药',
-    dotColor: 'var(--green)',
+    dotColor: 'var(--plum)',
     cards: cards.value.filter(card => card.sectionType === 'therapy' && card.priority !== 'overdue'),
   },
 ])
@@ -448,14 +448,14 @@ const summaryPills = computed(() => [
     label: '健康',
     count: todaySections.value.find(section => section.key === 'reminders')?.cards.length || 0,
     dotColor: 'var(--blue)',
-    pillClass: 'pill-dim',
+    pillClass: 'pill-blue',
   },
   {
     key: 'therapy',
     label: '用药',
     count: todaySections.value.find(section => section.key === 'therapy')?.cards.length || 0,
-    dotColor: 'var(--green)',
-    pillClass: 'pill-dim',
+    dotColor: 'var(--plum)',
+    pillClass: 'pill-plum',
   },
 ])
 
@@ -1204,9 +1204,13 @@ onShow(async () => {
   background: var(--amber-soft);
   .pill-label, .pill-num { color: var(--amber); }
 }
-.pill-dim {
-  background: var(--card-dim);
-  .pill-label, .pill-num { color: var(--text-3); }
+.pill-blue {
+  background: var(--blue-soft);
+  .pill-label, .pill-num { color: var(--blue); }
+}
+.pill-plum {
+  background: var(--plum-soft);
+  .pill-label, .pill-num { color: var(--plum); }
 }
 
 /* ==================== SECTION LABELS ==================== */
