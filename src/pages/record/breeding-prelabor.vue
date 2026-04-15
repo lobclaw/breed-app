@@ -28,13 +28,6 @@
         </view>
       </view>
 
-      <BExtraArrangementSection
-        v-model:enabled="extraArrangementEnabled"
-        v-model:kind="extraArrangementKind"
-        v-model:dueDate="extraArrangementDate"
-        v-model:notes="extraArrangementNotes"
-      />
-
       <!-- 体温 -->
       <view class="field-group">
         <view class="field-label"><text>体温 (°C)</text></view>
@@ -74,14 +67,21 @@
         <input v-model="details.other_signs" class="form-input" placeholder="如：焦躁、喘气" />
       </view>
 
-      <!-- 备注 -->
+      <!-- 记录备注 -->
       <view class="field-group">
         <view class="field-label">
-          <text>备注</text>
+          <text>记录备注</text>
           <text class="field-label__optional">（选填）</text>
         </view>
         <textarea v-model="form.notes" class="form-textarea" :auto-height="true" placeholder="补充说明" />
       </view>
+
+      <BExtraArrangementSection
+        v-model:enabled="extraArrangementEnabled"
+        v-model:kind="extraArrangementKind"
+        v-model:dueDate="extraArrangementDate"
+        v-model:notes="extraArrangementNotes"
+      />
 
       <!-- 体温预警 -->
       <view v-if="showTempWarning" class="temp-warning">

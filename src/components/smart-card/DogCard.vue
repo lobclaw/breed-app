@@ -45,7 +45,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 const HEALTH_TYPES = ['vaccination', 'deworming', 'medication']
 const EXTRA_ARRANGEMENT_TYPES = ['breeding_extra_arrangement']
@@ -58,12 +58,26 @@ const emit = defineEmits<{
 }>()
 
 const acting = ref(false)
+let actingTimer: ReturnType<typeof setTimeout> | null = null
 
 function onComplete(taskId: string, mode: string) {
   if (acting.value) return
   acting.value = true
+  if (actingTimer) clearTimeout(actingTimer)
+  actingTimer = setTimeout(() => {
+    acting.value = false
+    actingTimer = null
+  }, 1800)
   emit('complete', taskId, mode)
 }
+
+watch(() => props.card?.tasks?.length, () => {
+  if (actingTimer) {
+    clearTimeout(actingTimer)
+    actingTimer = null
+  }
+  acting.value = false
+})
 
 const visibleTasks = computed(() => (props.card.tasks || []).slice(0, 3))
 const firstTaskType = computed(() => visibleTasks.value[0]?.type || '')

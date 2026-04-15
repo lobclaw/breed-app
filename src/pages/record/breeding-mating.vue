@@ -82,13 +82,6 @@
         </view>
       </view>
 
-      <BExtraArrangementSection
-        v-model:enabled="extraArrangementEnabled"
-        v-model:kind="extraArrangementKind"
-        v-model:dueDate="extraArrangementDate"
-        v-model:notes="extraArrangementNotes"
-      />
-
       <!-- 借配费用 -->
       <view class="field-group">
         <view class="field-label">
@@ -101,14 +94,21 @@
         </view>
       </view>
 
-      <!-- 备注 -->
+      <!-- 记录备注 -->
       <view class="field-group">
         <view class="field-label">
-          <text>备注</text>
+          <text>记录备注</text>
           <text class="field-label__optional">（选填）</text>
         </view>
         <textarea v-model="form.notes" class="form-textarea" :auto-height="true" placeholder="配种情况、注意事项等" />
       </view>
+
+      <BExtraArrangementSection
+        v-model:enabled="extraArrangementEnabled"
+        v-model:kind="extraArrangementKind"
+        v-model:dueDate="extraArrangementDate"
+        v-model:notes="extraArrangementNotes"
+      />
 
     </view>
 

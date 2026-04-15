@@ -555,6 +555,64 @@ describe('task-service', () => {
       expect(res.data.sections.extra_arrangements[0].tasks[0].type).toBe('breeding_extra_arrangement')
     })
 
+    it('发情后生成的未来繁育节点也应出现在今日首页流程区', async () => {
+      const now = Date.now()
+      const todayStart = new Date(now)
+      todayStart.setHours(0, 0, 0, 0)
+
+      seedCollection('tasks', [
+        {
+          _id: 'future_flow_home_1',
+          family_id: familyId,
+          dog_id: 'dog_1',
+          dog_name: '花花',
+          cycle_id: 'cycle_1',
+          type: 'breeding_milestone',
+          title: '花花 · 建议卵泡检查',
+          details: { step_type: 'follicle_check' },
+          status: 'pending',
+          due_date: todayStart.getTime() + 10 * DAY_MS,
+        },
+      ])
+      seedCollection('health_records', [])
+      seedCollection('medication_tasks', [])
+
+      const ctx = createCloudObjectContext({ familyId })
+      const res = await taskService.getHomeCards.call(ctx)
+
+      expect(res.data.sections.workflow).toHaveLength(1)
+      expect(res.data.sections.workflow[0].priority).toBe('upcoming')
+      expect(res.data.cards.some((card: any) => card.tasks?.[0]?.title?.includes('卵泡'))).toBe(true)
+    })
+
+    it('昨天的逾期任务应显示为逾期 1 天，而不是 2 天', async () => {
+      const now = Date.now()
+      const todayStart = new Date(now)
+      todayStart.setHours(0, 0, 0, 0)
+      const yesterdayAtNoon = todayStart.getTime() - DAY_MS + 12 * 60 * 60 * 1000
+
+      seedCollection('tasks', [
+        {
+          _id: 'overdue_yesterday_1',
+          family_id: familyId,
+          dog_id: 'dog_1',
+          dog_name: '海乐妙',
+          type: 'deworming',
+          title: '驱虫',
+          details: { drug_name: '海乐妙', deworming_type: 'internal' },
+          status: 'pending',
+          due_date: yesterdayAtNoon,
+        },
+      ])
+      seedCollection('health_records', [])
+      seedCollection('medication_tasks', [])
+
+      const ctx = createCloudObjectContext({ familyId })
+      const res = await taskService.getHomeCards.call(ctx)
+      expect(res.data.cards[0].priority).toBe('overdue')
+      expect(res.data.cards[0].overdueDays).toBe(1)
+    })
+
     it('指定日期卡片也应保留繁育流程与额外安排分层', async () => {
       const now = Date.now()
       const todayStart = new Date(now)

@@ -34,6 +34,18 @@ function highestPriority(tasks) {
   return best
 }
 
+function startOfDay(ts) {
+  const date = new Date(ts)
+  date.setHours(0, 0, 0, 0)
+  return date.getTime()
+}
+
+function getOverdueDays(dueDate, now = Date.now()) {
+  if (!dueDate) return 1
+  const diff = Math.floor((startOfDay(now) - startOfDay(dueDate)) / DAY_MS)
+  return Math.max(1, diff)
+}
+
 function getTaskVariantKey(task) {
   if (!task) return ''
   if (task.type === 'breeding_extra_arrangement') {
@@ -93,11 +105,12 @@ function buildSectionedCards(pendingTasks, todayCompletedTasks, activeIllnesses,
     const overdueCards = cardList.filter(card => card.priority === 'overdue')
     for (const card of overdueCards) {
       const oldestDue = card.tasks?.reduce((min, t) => Math.min(min, t.due_date || Infinity), Infinity)
-      card.overdueDays = oldestDue < Infinity ? Math.ceil((Date.now() - oldestDue) / DAY_MS) : 1
+      card.overdueDays = oldestDue < Infinity ? getOverdueDays(oldestDue) : 1
     }
     overdueCards.sort((a, b) => (b.overdueDays || 0) - (a.overdueDays || 0))
     const todayCards = cardList.filter(card => card.priority === 'today')
-    return [...overdueCards, ...todayCards]
+    const upcomingCards = cardList.filter(card => card.priority === 'upcoming')
+    return [...overdueCards, ...todayCards, ...upcomingCards]
   }
 
   const workflow = annotateOverdue(workflowCards).map(card => ({ ...card, sectionType: 'workflow' }))
@@ -545,10 +558,13 @@ module.exports = {
     const todayEnd = new Date()
     todayEnd.setHours(23, 59, 59, 999)
 
-    // 并行查询：pending 任务 + 今日已完成 + 当前生病犬只 + 进行中的用药
-    const [pendingRes, completedRes, illnessRes, medRes] = await Promise.all([
+    // 并行查询：首页到期任务 + 主流程任务（允许未来） + 今日已完成 + 当前生病犬只 + 进行中的用药
+    const [pendingRes, workflowRes, completedRes, illnessRes, medRes] = await Promise.all([
       db.collection('tasks')
         .where({ family_id: familyId, status: 'pending', due_date: dbCmd.lte(todayEnd.getTime()) })
+        .orderBy('due_date', 'asc').limit(200).get(),
+      db.collection('tasks')
+        .where({ family_id: familyId, status: 'pending', type: 'breeding_milestone' })
         .orderBy('due_date', 'asc').limit(200).get(),
       db.collection('tasks')
         .where({ family_id: familyId, status: 'completed', completed_at: dbCmd.gte(todayStart.getTime()).and(dbCmd.lte(todayEnd.getTime())) })
@@ -561,7 +577,15 @@ module.exports = {
         .get(),
     ])
 
-    const pendingTasks = pendingRes.data
+    const workflowTasks = workflowRes.data || []
+    const pendingTasks = [...pendingRes.data]
+    const existingTaskIds = new Set(pendingTasks.map(task => task._id))
+    for (const task of workflowTasks) {
+      if (!existingTaskIds.has(task._id)) {
+        pendingTasks.push(task)
+        existingTaskIds.add(task._id)
+      }
+    }
     const todayCompletedTasks = completedRes.data
     const activeIllnesses = illnessRes.data || []
     const activeMedications = medRes.data || []
@@ -583,8 +607,10 @@ module.exports = {
     for (const task of pendingTasks) {
       if (task.due_date < todayStart.getTime()) {
         task.priority = 'overdue'
-      } else {
+      } else if (task.due_date <= todayEnd.getTime()) {
         task.priority = 'today'
+      } else {
+        task.priority = 'upcoming'
       }
       task._completed = false
     }

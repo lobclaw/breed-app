@@ -529,6 +529,12 @@ function startOfDay(ts: number) {
   return d.getTime()
 }
 
+function getOverdueDays(dueDate?: number | null) {
+  if (!dueDate) return 1
+  const diff = Math.floor((startOfDay(Date.now()) - startOfDay(dueDate)) / 86400000)
+  return Math.max(1, diff)
+}
+
 /** 问候语（按时段） */
 const greetingText = computed(() => {
   const h = new Date().getHours()
@@ -714,6 +720,30 @@ function filterSuppressedCards(cardList: any[]) {
 const completingCards = ref(new Set<string>())
 const completedCards = ref(new Set<string>())
 
+function markCardCompleted(cardId: string) {
+  const next = new Set(completedCards.value)
+  next.add(cardId)
+  completedCards.value = next
+}
+
+function clearCardCompleted(cardId: string) {
+  const next = new Set(completedCards.value)
+  next.delete(cardId)
+  completedCards.value = next
+}
+
+function markCardCompleting(cardId: string) {
+  const next = new Set(completingCards.value)
+  next.add(cardId)
+  completingCards.value = next
+}
+
+function clearCardCompleting(cardId: string) {
+  const next = new Set(completingCards.value)
+  next.delete(cardId)
+  completingCards.value = next
+}
+
 function removeCardLocally(taskId: string, forceRemoveCard = false, showSuccess = true) {
   const lists = [cards, dayCards]
   for (const list of lists) {
@@ -724,25 +754,25 @@ function removeCardLocally(taskId: string, forceRemoveCard = false, showSuccess 
     if (remainingTasks.length === 0 || forceRemoveCard) {
       if (showSuccess) {
         // 完成：极短确认后退场，优先保证首页操作流畅
-        completedCards.value.add(card.id)
+        markCardCompleted(card.id)
         setTimeout(() => {
-          completedCards.value.delete(card.id)
-          completingCards.value.add(card.id)
+          clearCardCompleted(card.id)
+          markCardCompleting(card.id)
           setTimeout(() => {
             const currentIdx = list.value.findIndex(c => c.id === card.id)
             if (currentIdx >= 0) list.value.splice(currentIdx, 1)
-            completingCards.value.delete(card.id)
+            clearCardCompleting(card.id)
             counts.today = Math.max(0, counts.today - 1)
             dayCounts.value[startOfDay(Date.now())] = counts.today
           }, 220)
         }, 280)
       } else {
         // 推迟/跳过：直接滑出
-        completingCards.value.add(card.id)
+        markCardCompleting(card.id)
         setTimeout(() => {
           const currentIdx = list.value.findIndex(c => c.id === card.id)
           if (currentIdx >= 0) list.value.splice(currentIdx, 1)
-          completingCards.value.delete(card.id)
+          clearCardCompleting(card.id)
           counts.today = Math.max(0, counts.today - 1)
           dayCounts.value[startOfDay(Date.now())] = counts.today
         }, 220)
@@ -833,9 +863,7 @@ function onPostpone(taskIds: string | string[], title?: string) {
     dogName: isBatch ? (title || card?.groupTitle || '') : (card?.dogName || task?.dog_name || ''),
     title: isBatch ? '' : (task?.title || card?.groupTitle || ''),
     isOverdue: card?.priority === 'overdue',
-    overdueDays: card?.priority === 'overdue' && task?.due_date
-      ? Math.ceil((Date.now() - task.due_date) / 86400000)
-      : 0,
+    overdueDays: card?.priority === 'overdue' && task?.due_date ? getOverdueDays(task.due_date) : 0,
   }
   showPostponeModal.value = true
 }
@@ -858,11 +886,11 @@ async function doPostpone() {
       const idx = list.value.findIndex(c => c.tasks?.some((t: any) => ids.includes(t._id)))
       if (idx >= 0) {
         const card = list.value[idx]
-        completingCards.value.add(card.id)
+        markCardCompleting(card.id)
         setTimeout(() => {
           const ci = list.value.findIndex(c => c.id === card.id)
           if (ci >= 0) list.value.splice(ci, 1)
-          completingCards.value.delete(card.id)
+          clearCardCompleting(card.id)
           counts.today = Math.max(0, counts.today - 1)
         }, 450)
         break
@@ -961,11 +989,11 @@ function removeSickDogLocally(dogId: string) {
     const remaining = (card.dogs || []).filter((d: any) => d.dogId !== dogId)
     if (remaining.length === 0) {
       // 最后一只：整张卡片滑出
-      completingCards.value.add(card.id)
+      markCardCompleting(card.id)
       setTimeout(() => {
         const ci = list.value.findIndex(c => c.id === card.id)
         if (ci >= 0) list.value.splice(ci, 1)
-        completingCards.value.delete(card.id)
+        clearCardCompleting(card.id)
         counts.today = Math.max(0, counts.today - 1)
         dayCounts.value[startOfDay(Date.now())] = counts.today
       }, 450)

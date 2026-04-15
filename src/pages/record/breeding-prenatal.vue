@@ -28,13 +28,6 @@
         </view>
       </view>
 
-      <BExtraArrangementSection
-        v-model:enabled="extraArrangementEnabled"
-        v-model:kind="extraArrangementKind"
-        v-model:dueDate="extraArrangementDate"
-        v-model:notes="extraArrangementNotes"
-      />
-
       <!-- 检查结果 -->
       <view class="field-group">
         <view class="field-label"><text>检查结果</text></view>
@@ -53,14 +46,21 @@
         </view>
       </view>
 
-      <!-- 备注 -->
+      <!-- 记录备注 -->
       <view class="field-group">
         <view class="field-label">
-          <text>备注</text>
+          <text>记录备注</text>
           <text class="field-label__optional">（选填）</text>
         </view>
         <textarea v-model="form.notes" class="form-textarea" :auto-height="true" placeholder="补充说明" />
       </view>
+
+      <BExtraArrangementSection
+        v-model:enabled="extraArrangementEnabled"
+        v-model:kind="extraArrangementKind"
+        v-model:dueDate="extraArrangementDate"
+        v-model:notes="extraArrangementNotes"
+      />
 
     </view>
 

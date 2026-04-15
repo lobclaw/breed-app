@@ -28,13 +28,6 @@
         </view>
       </view>
 
-      <BExtraArrangementSection
-        v-model:enabled="extraArrangementEnabled"
-        v-model:kind="extraArrangementKind"
-        v-model:dueDate="extraArrangementDate"
-        v-model:notes="extraArrangementNotes"
-      />
-
       <!-- 确认怀孕 -->
       <view class="field-group">
         <view class="field-label"><text>确认怀孕</text></view>
@@ -77,14 +70,21 @@
         <BImageUpload v-model="images" :max="6" />
       </view>
 
-      <!-- 备注 -->
+      <!-- 记录备注 -->
       <view class="field-group">
         <view class="field-label">
-          <text>备注</text>
+          <text>记录备注</text>
           <text class="field-label__optional">（选填）</text>
         </view>
         <textarea v-model="form.notes" class="form-textarea" :auto-height="true" placeholder="检查结果详情、医生建议等" />
       </view>
+
+      <BExtraArrangementSection
+        v-model:enabled="extraArrangementEnabled"
+        v-model:kind="extraArrangementKind"
+        v-model:dueDate="extraArrangementDate"
+        v-model:notes="extraArrangementNotes"
+      />
 
     </view>
 

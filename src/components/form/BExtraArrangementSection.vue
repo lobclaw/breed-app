@@ -41,14 +41,14 @@
 
       <view class="field-group field-group--compact">
         <view class="field-label">
-          <text>额外安排备注</text>
+          <text>安排说明</text>
           <text class="field-label__optional">（选填）</text>
         </view>
         <textarea
           :value="notes"
           class="form-textarea"
           :auto-height="true"
-          placeholder="补充要做的事，例如：约周四B超、准备产箱和尿垫"
+          placeholder="补充这项安排的细节，例如：约周四B超、准备产箱和尿垫"
           @input="onNotesInput"
         />
       </view>
