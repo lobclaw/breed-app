@@ -430,7 +430,8 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
   }
 
   // 第 3 轮：窝级别合并（同 litter_id + 同 type）
-  const litterTasks = tasks.filter(t => t.litter_id && !consumed.has(t._id) && !isBreedingExtraTask(t))
+  // 繁育流程是单犬/单窝推进器，不进入批量卡。
+  const litterTasks = tasks.filter(t => t.litter_id && !consumed.has(t._id) && t.type !== 'breeding_milestone' && !isBreedingExtraTask(t))
   const litterGroups = new Map()
   for (const t of litterTasks) {
     const key = `${t.litter_id}__${getTaskVariantKey(t)}`
@@ -464,8 +465,8 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
   const remaining = tasks.filter(t => !consumed.has(t._id))
   // 将 pending 和今日已完成任务一起分组
   const allForBatch = [
-    ...remaining.filter(t => !isBreedingExtraTask(t)),
-    ...todayCompleted.filter(t => !completedConsumed.has(t._id) && !isBreedingExtraTask(t)),
+    ...remaining.filter(t => t.type !== 'breeding_milestone' && !isBreedingExtraTask(t)),
+    ...todayCompleted.filter(t => !completedConsumed.has(t._id) && t.type !== 'breeding_milestone' && !isBreedingExtraTask(t)),
   ]
   const batchGroups = new Map()
   for (const t of allForBatch) {
@@ -504,10 +505,10 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
     }
   }
 
-  // 第 5 轮：额外安排 → 一任务一卡，避免同犬多标签但只操作第一条
+  // 第 5 轮：繁育流程/额外安排 → 一任务一卡，避免把流程推进误做成批量待办
   const leftover = tasks.filter(t => !consumed.has(t._id))
-  const breedingExtraTasks = leftover.filter(isBreedingExtraTask)
-  for (const task of breedingExtraTasks) {
+  const breedingStandaloneTasks = leftover.filter(t => t.type === 'breeding_milestone' || isBreedingExtraTask(t))
+  for (const task of breedingStandaloneTasks) {
     consumed.add(task._id)
     cards.push({
       cardType: 'dog',
@@ -516,7 +517,7 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
       priority: task.priority,
       dogName: task.dog_name,
       dogId: task.dog_id,
-      statusLabel: '手动安排',
+      statusLabel: task.type === 'breeding_extra_arrangement' ? '手动安排' : '',
       tasks: [task],
     })
   }

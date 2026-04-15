@@ -14,8 +14,8 @@
         <text class="card-sub">{{ card.dogs?.length || 0 }}只犬</text>
       </view>
       <!-- 分数角标 -->
-      <view class="fraction-badge">
-        <text class="fraction-badge-text">{{ doneCount }}/{{ totalDogs }}</text>
+      <view class="fraction-badge" :class="`fraction-badge--${cardColor}`">
+        <text class="fraction-badge-text" :class="`fraction-badge-text--${cardColor}`">{{ doneCount }}/{{ totalDogs }}</text>
       </view>
     </view>
 
@@ -197,8 +197,20 @@ function batchSkip() {
 .card-sub { display: block; font-size: 12px; color: var(--text-2); margin-top: 1px; }
 
 /* 分数角标 */
-.fraction-badge { background: var(--primary-soft); padding: 3px 10px; border-radius: 999px; }
-.fraction-badge-text { font-family: var(--font-display); font-size: 13px; font-weight: 800; color: var(--primary); }
+.fraction-badge {
+  padding: 3px 10px; border-radius: 999px;
+  &--red { background: var(--red-soft); }
+  &--blue { background: var(--blue-soft); }
+  &--amber { background: var(--amber-soft); }
+  &--plum { background: var(--plum-soft); }
+}
+.fraction-badge-text {
+  font-family: var(--font-display); font-size: 13px; font-weight: 800;
+  &--red { color: var(--red); }
+  &--blue { color: var(--blue); }
+  &--amber { color: var(--amber); }
+  &--plum { color: var(--plum); }
+}
 
 /* Checkbox 列表 */
 .checkbox-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }

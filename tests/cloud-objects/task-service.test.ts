@@ -412,6 +412,43 @@ describe('task-service', () => {
       expect(cards[0].groupTitle).toContain('疫苗 · 卫佳5')
     })
 
+    it('相同繁育流程节点的同日任务不应合并为批量卡', () => {
+      const dueDate = todayStart.getTime() + 1000
+      const tasks = [
+        {
+          _id: 'breed_flow_1',
+          dog_id: 'dog_1',
+          dog_name: '小米',
+          cycle_id: 'cycle_1',
+          type: 'breeding_milestone',
+          title: '小米 · 建议卵泡检查',
+          due_date: dueDate,
+          priority: 'today',
+          status: 'pending',
+          details: { step_type: 'follicle_check' },
+        },
+        {
+          _id: 'breed_flow_2',
+          dog_id: 'dog_2',
+          dog_name: '妮蔻',
+          cycle_id: 'cycle_2',
+          type: 'breeding_milestone',
+          title: '妮蔻 · 建议卵泡检查',
+          due_date: dueDate,
+          priority: 'today',
+          status: 'pending',
+          details: { step_type: 'follicle_check' },
+        },
+      ]
+
+      const cards = mergeTasks(tasks, [], [])
+
+      expect(cards).toHaveLength(2)
+      expect(cards.every((c: any) => c.cardType === 'dog')).toBe(true)
+      expect(cards.every((c: any) => c.domain === 'breeding')).toBe(true)
+      expect(cards.map((c: any) => c.tasks[0]._id)).toEqual(['breed_flow_1', 'breed_flow_2'])
+    })
+
     it('同天不同疫苗批量卡应生成不同 id，避免前端 key 冲突', () => {
       const dueDate = todayStart.getTime() + 1000
       const tasks = [
