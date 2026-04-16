@@ -12,12 +12,13 @@ import {
   type WorkbenchSection,
   type WorkbenchSectionKey,
 } from '@/types/home-workbench'
+import { getWorkbenchSectionColor } from '@/utils/themeSemantics'
 
 export const WORKBENCH_SECTION_META: Record<WorkbenchSectionKey, { title: string; dotColor: string }> = {
-  overdue: { title: '逾期待处理', dotColor: 'var(--red)' },
-  breeding: { title: '繁育流程', dotColor: 'var(--amber)' },
-  reminders: { title: '健康提醒', dotColor: 'var(--blue)' },
-  therapy: { title: '今日用药', dotColor: 'var(--plum)' },
+  overdue: { title: '逾期待处理', dotColor: `var(--${getWorkbenchSectionColor('overdue')})` },
+  breeding: { title: '繁育流程', dotColor: `var(--${getWorkbenchSectionColor('breeding')})` },
+  reminders: { title: '健康提醒', dotColor: `var(--${getWorkbenchSectionColor('reminders')})` },
+  therapy: { title: '今日用药', dotColor: `var(--${getWorkbenchSectionColor('therapy')})` },
 }
 
 const DEFAULT_VISIBLE_ROW_LIMIT = 4

@@ -120,6 +120,11 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import {
+  getMedicationTodayProgress,
+  hasMedicationMissedHistory,
+  startOfMedicationDay,
+} from '@/utils/medicationState'
 
 const props = defineProps<{ card: any }>()
 const emit = defineEmits<{
@@ -137,6 +142,7 @@ const expandedDogs = ref(new Set<string>())
 
 // 乐观 doses 计数（在后端刷新前提供即时反馈）
 const localDoses = ref(new Map<string, number>())
+const todayTs = startOfMedicationDay(Date.now())
 
 function getLocalDoses(taskId: string, baseDoses: number): number {
   return localDoses.value.has(taskId) ? localDoses.value.get(taskId)! : (baseDoses || 0)
@@ -148,9 +154,18 @@ const actionableDogs = computed(() => props.card.dogs || [])
 // --- 状态判断 ---
 
 function isTaskDone(task: any): boolean {
-  if (task.status === 'completed') return true
-  const doses = getLocalDoses(task._id, task.doses_given || 0)
-  return doses >= (task.details?.frequency || 1)
+  return getTaskTodayProgress(task) === 'done'
+}
+
+function getTaskTodayProgress(task: any): 'empty' | 'partial' | 'done' {
+  return getMedicationTodayProgress(task, {
+    todayTs,
+    localTodayDoses: getLocalDoses(task._id, task.doses_given || 0),
+  })
+}
+
+function hasTaskMissed(task: any): boolean {
+  return hasMedicationMissedHistory(task, { todayTs })
 }
 
 function dogState(dog: any): 'empty' | 'partial' | 'done' {
@@ -159,10 +174,31 @@ function dogState(dog: any): 'empty' | 'partial' | 'done' {
     // 旧数据兼容：没有 allMedTasks 时退回 completed 字段
     return dog.completed ? 'done' : 'empty'
   }
-  const doneCount = allTasks.filter(t => isTaskDone(t)).length
-  if (doneCount === 0) return 'empty'
-  if (doneCount === allTasks.length) return 'done'
-  return 'partial'
+  const progressStates = allTasks.map(task => getTaskTodayProgress(task))
+  if (progressStates.every(state => state === 'done')) return 'done'
+  if (progressStates.some(state => state !== 'empty')) return 'partial'
+  return 'empty'
+}
+
+function hasDogMissed(dog: any): boolean {
+  const allTasks: any[] = dog.allMedTasks || []
+  return allTasks.some(task => hasTaskMissed(task))
+}
+
+function dogStatusLabel(dog: any): string {
+  if (hasDogMissed(dog)) return '漏服'
+  const state = dogState(dog)
+  if (state === 'partial') return '部分完成'
+  if (state === 'empty') return '待完成'
+  return '已完成'
+}
+
+function taskStatusLabel(task: any): string {
+  if (hasTaskMissed(task)) return '漏服'
+  const progress = getTaskTodayProgress(task)
+  if (progress === 'partial') return '部分完成'
+  if (progress === 'empty') return '待完成'
+  return '已完成'
 }
 
 function hasMultiDrug(dog: any): boolean {

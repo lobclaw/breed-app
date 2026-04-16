@@ -44,7 +44,7 @@
             v-for="(s, idx) in statuses"
             :key="'status-' + idx"
             class="dog-detail__hero-tag"
-            :class="`dog-detail__hero-tag--${statusColorMap[s.type] || 'primary'}`"
+            :class="statusToneClass(s.type, 'hero')"
             @click="openStatusSheet"
           >
             <text class="dog-detail__hero-tag-text">{{ s.label || s.type }}</text>
@@ -107,11 +107,11 @@
               v-for="(s, idx) in statuses"
               :key="'st-' + idx"
               class="dog-detail__status-row"
-              :class="`dog-detail__status-row--${statusColorMap[s.type] || 'rose'}`"
+              :class="statusToneClass(s.type, 'row')"
             >
               <view class="dog-detail__st-header">
                 <view class="dog-detail__st-left">
-                  <view class="dog-detail__st-icon" :class="`dog-detail__st-icon--${statusColorMap[s.type] || 'rose'}`">
+                  <view class="dog-detail__st-icon" :class="statusToneClass(s.type, 'icon')">
                     <text class="material-icons-round">{{ statusIconMap[s.type] || 'info' }}</text>
                   </view>
                   <view>
@@ -126,7 +126,7 @@
                 <view class="dog-detail__st-progress-track">
                   <view
                     class="dog-detail__st-progress-fill"
-                    :class="`dog-detail__st-progress-fill--${statusColorMap[s.type] || 'rose'}`"
+                    :class="statusToneClass(s.type, 'progress')"
                     :style="{ width: Math.min(100, Math.round(s.progress.current / s.progress.total * 100)) + '%' }"
                   />
                 </view>
@@ -452,7 +452,7 @@
           </view>
           <!-- 疾病 -->
           <view v-if="illnessRecords.length > 0">
-            <view class="dog-detail__sec dog-detail__sec--rose">
+            <view class="dog-detail__sec dog-detail__sec--red">
               <text class="dog-detail__sec-text">疾病</text>
               <view class="dog-detail__sec-badge">
                 <text class="dog-detail__sec-badge-text">{{ illnessRecords.length }}</text>
@@ -465,7 +465,7 @@
                 class="dog-detail__rec-item"
                 @click="goToHealthDetail(record._id)"
               >
-                <view class="dog-detail__rec-icon dog-detail__rec-icon--rose">
+                <view class="dog-detail__rec-icon dog-detail__rec-icon--red">
                   <text class="material-icons-round">healing</text>
                 </view>
                 <view class="dog-detail__rec-body">
@@ -935,6 +935,7 @@ import { useCloudCall } from '@/composables/useCloudCall'
 import { consumeSubmitFeedback } from '@/composables/useSubmitFeedback'
 import { useDogStore } from '@/stores/dogStore'
 import type { Dog, DeriveStatus } from '@/types/dog'
+import { getDogStatusTone, getHealthTypeTone } from '@/utils/themeSemantics'
 
 const dog = ref<Dog | null>(null)
 const statuses = ref<DeriveStatus[]>([])
@@ -958,11 +959,11 @@ const tabs = [
 
 // 状态 → 功能色映射
 const statusColorMap: Record<string, 'amber' | 'rose' | 'green' | 'red' | 'plum'> = {
-  '发情中': 'amber',
-  '怀孕中': 'rose',
-  '哺乳中': 'green',
-  '生病中': 'red',
-  '用药中': 'plum',
+  '发情中': getDogStatusTone('发情中').color as 'amber',
+  '怀孕中': getDogStatusTone('怀孕中').color as 'rose',
+  '哺乳中': getDogStatusTone('哺乳中').color as 'green',
+  '生病中': getDogStatusTone('生病中').color as 'red',
+  '用药中': getDogStatusTone('用药中').color as 'plum',
 }
 
 // 状态 → 图标映射
@@ -1069,12 +1070,7 @@ function healthIcon(type: string) {
 }
 
 function healthIconColor(type: string) {
-  const map: Record<string, string> = {
-    vaccination: 'blue',
-    deworming: 'teal',
-    illness: 'plum',
-  }
-  return map[type] || 'blue'
+  return getHealthTypeTone(type).color
 }
 
 function statusTitle(s: DeriveStatus): string {
@@ -1082,6 +1078,15 @@ function statusTitle(s: DeriveStatus): string {
   if (s.type === '用药中' && s.detail) return s.detail.split(' ')[0]
   if (s.type === '生病中' && s.label) return s.label
   return s.type
+}
+
+function statusToneClass(type: string, prefix: 'hero' | 'row' | 'icon' | 'progress') {
+  if (type === '生病中') return `dog-detail__st-${prefix}--illness`
+  const tone = statusColorMap[type] || 'rose'
+  if (prefix === 'hero') return `dog-detail__hero-tag--${tone}`
+  if (prefix === 'row') return `dog-detail__status-row--${tone}`
+  if (prefix === 'icon') return `dog-detail__st-icon--${tone}`
+  return `dog-detail__st-progress-fill--${tone}`
 }
 
 function cycleNodes(cycle: any) {
@@ -1664,6 +1669,10 @@ onShow(() => {
   background: var(--green-soft);
   .dog-detail__hero-tag-text, .dog-detail__hero-tag-arrow { color: var(--green); }
 }
+.dog-detail__st-hero--illness {
+  background: rgba(224, 82, 82, 0.1);
+  .dog-detail__hero-tag-text, .dog-detail__hero-tag-arrow { color: var(--red); }
+}
 .dog-detail__hero-tag--red {
   background: var(--red-soft);
   .dog-detail__hero-tag-text, .dog-detail__hero-tag-arrow { color: var(--red); }
@@ -1786,6 +1795,7 @@ onShow(() => {
 .dog-detail__sec--teal::before { background: var(--teal); }
 .dog-detail__sec--amber::before { background: var(--amber); }
 .dog-detail__sec--plum::before { background: var(--plum); }
+.dog-detail__sec--red::before { background: var(--red); }
 .dog-detail__sec-text {
   font-size: 12px;
   font-weight: 700;
@@ -1843,6 +1853,10 @@ onShow(() => {
 .dog-detail__status-row--rose { border-left-color: var(--rose); }
 .dog-detail__status-row--plum { border-left-color: var(--plum); }
 .dog-detail__status-row--red { border-left-color: var(--red); }
+.dog-detail__st-row--illness {
+  border-left-color: rgba(224, 82, 82, 0.72);
+  background: linear-gradient(135deg, rgba(224, 82, 82, 0.08) 0%, transparent 34%);
+}
 .dog-detail__status-row--amber { border-left-color: var(--amber); }
 .dog-detail__status-row--green { border-left-color: var(--green); }
 
@@ -1869,6 +1883,7 @@ onShow(() => {
 .dog-detail__st-icon--rose { background: var(--icon-rose); .material-icons-round { color: var(--rose); } }
 .dog-detail__st-icon--plum { background: var(--icon-plum); .material-icons-round { color: var(--plum); } }
 .dog-detail__st-icon--red { background: var(--icon-red); .material-icons-round { color: var(--red); } }
+.dog-detail__st-icon--illness { background: rgba(255, 217, 212, 0.8); .material-icons-round { color: var(--red); } }
 .dog-detail__st-icon--amber { background: var(--icon-amber); .material-icons-round { color: var(--amber); } }
 .dog-detail__st-icon--green { background: var(--icon-green); .material-icons-round { color: var(--green); } }
 .dog-detail__st-title {
@@ -2753,6 +2768,7 @@ onShow(() => {
   &--rose { background: var(--rose); }
   &--plum { background: var(--plum); }
   &--red { background: var(--red); }
+  &--illness { background: rgba(224, 82, 82, 0.72); }
   &--amber { background: var(--amber); }
   &--green { background: var(--green); }
 }

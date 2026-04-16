@@ -133,11 +133,12 @@
     <view class="fixed-bottom">
       <button
         class="submit-btn"
-        :loading="submitting"
-        :disabled="!canSubmit || submitting"
+        :loading="submitState === 'submitting'"
+        :class="{ 'submit-btn--success': submitState === 'success' }"
+        :disabled="!canSubmit || submitState === 'submitting'"
         @click="submit"
       >
-        创建用药任务
+        {{ submitButtonText }}
       </button>
     </view>
 
@@ -259,6 +260,7 @@
 import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { buildTaskFeedbackMessage, queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
 import { useProtocolStore, type MedicationProtocol } from '@/stores/protocolStore'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSheet from '@/components/layout/BSheet.vue'
@@ -274,7 +276,7 @@ const frequency = ref('once_daily')
 const durationDays = ref('')
 const notes = ref('')
 const costInput = ref('')
-const submitting = ref(false)
+const submitState = ref<'idle' | 'submitting' | 'success'>('idle')
 
 // 日期
 const today = new Date()
@@ -336,11 +338,18 @@ const canSubmit = computed(() => {
     && !!date.value
 })
 
+const submitButtonText = computed(() => {
+  if (submitState.value === 'submitting') return '提交中...'
+  if (submitState.value === 'success') return '已创建'
+  return '创建用药任务'
+})
+
 // ==================== 提交 ====================
 
 const { run: batchStartMedication } = useCloudCall('health-service', 'batchStartMedication', {
-  showLoading: true,
-  loadingText: '创建中...',
+  successMode: 'silent',
+  loadingMode: 'local',
+  throwOnError: true,
 })
 
 const { run: batchCheckDuplicate } = useCloudCall<{ data: any[] }>('health-service', 'batchCheckDuplicateMedication')
@@ -363,7 +372,7 @@ const methodLabels: Record<string, string> = {
 }
 
 async function submit() {
-  submitting.value = true
+  submitState.value = 'submitting'
   try {
     const drug = drugName.value.trim()
     const dogIds = selectedDogs.value.map((d: any) => d._id)
@@ -380,7 +389,7 @@ async function submit() {
       showDupModal.value = false
       dupResolve.value = null
       if (!confirmed || dupFinalCount.value === 0) {
-        submitting.value = false
+        submitState.value = 'idle'
         return
       }
     }
@@ -408,11 +417,15 @@ async function submit() {
       protocol_id: null,
       illnessRecordId: selectedDogs.value.length === 1 ? (illnessRecordId.value || null) : null,
     })
-    uni.showToast({
-      title: finalDogIds.length > 1
-        ? `已创建 ${finalDogIds.length} 个用药任务`
-        : '已创建用药任务',
-      icon: 'success',
+    const created = finalDogIds.length
+    const skipped = Math.max(0, dogIds.length - finalDogIds.length)
+    submitState.value = 'success'
+    queueSubmitFeedback({
+      message: buildTaskFeedbackMessage(created, skipped),
+      createdDate: date.value,
+      createdCount: created,
+      skippedCount: skipped,
+      refreshHome: true,
     })
 
     // 如果勾选了保存为方案，弹出命名弹窗
@@ -420,10 +433,13 @@ async function submit() {
       protocolName.value = ''
       showNameModal.value = true
     } else {
+      await wait(140)
       uni.navigateBack()
     }
+  } catch {
+    submitState.value = 'idle'
   } finally {
-    submitting.value = false
+    if (submitState.value !== 'success') submitState.value = 'idle'
   }
 }
 
@@ -514,7 +530,8 @@ async function doSaveProtocol() {
   showNameModal.value = false
   // 刷新 store，方案库页面和选择器都会同步更新
   protocolStore.reload()
-  setTimeout(() => uni.navigateBack(), 500)
+  await wait(140)
+  uni.navigateBack()
 }
 
 // 从疾病页面跳转过来时预选犬只，并读取关联的疾病记录 ID

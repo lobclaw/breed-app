@@ -4,7 +4,7 @@
   繁育类：推迟 + 跳过。点卡片→跳转表单（唯一处理入口）
 -->
 <template>
-  <view class="card" :class="`card--${barColor}`" @click="goRecordTask(visibleTasks[0])">
+  <view class="card" :class="[`card--${barColor}`, { 'card--illness': cardVariant === 'illness' }]" @click="goRecordTask(visibleTasks[0])">
     <!-- 头部 -->
     <view class="card-header">
       <view class="card-icon" :class="`card-icon--${barColor}`">
@@ -34,8 +34,13 @@
     <!-- 操作按钮 -->
     <view v-if="!acting" class="card-actions">
       <!-- 健康类与额外安排显示"完成"按钮 -->
-      <view v-if="isHealthType || isExtraArrangementType" class="btn" :class="`btn--ghost-${barColor}`" @click.stop="onComplete(visibleTasks[0]?._id, completeMode)">
-        <text class="btn-text" :class="`btn-text--${barColor}`">完成</text>
+      <view
+        v-if="isHealthType || isExtraArrangementType"
+        class="btn"
+        :class="cardVariant === 'illness' ? 'btn--ghost-illness' : `btn--ghost-${barColor}`"
+        @click.stop="onComplete(visibleTasks[0]?._id, completeMode)"
+      >
+        <text class="btn-text" :class="cardVariant === 'illness' ? 'btn-text--illness' : `btn-text--${barColor}`">完成</text>
       </view>
       <view class="btn btn--ghost" @click.stop="$emit('postpone', visibleTasks[0]?._id)">
         <text class="btn-text btn-text--ghost">推迟</text>
@@ -49,6 +54,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { getHealthTypeTone, isIllnessTaskType } from '@/utils/themeSemantics'
 
 const HEALTH_TYPES = ['vaccination', 'deworming', 'medication']
 const EXTRA_ARRANGEMENT_TYPES = ['breeding_extra_arrangement']
@@ -95,6 +101,7 @@ const firstTaskType = computed(() => visibleTasks.value[0]?.type || '')
 const isHealthType = computed(() => HEALTH_TYPES.includes(firstTaskType.value))
 const isExtraArrangementType = computed(() => EXTRA_ARRANGEMENT_TYPES.includes(firstTaskType.value))
 const completeMode = computed(() => (isHealthType.value ? 'auto' : 'manual'))
+const primaryTaskTone = computed(() => getHealthTypeTone(firstTaskType.value, props.card.priority))
 
 const domainColor = computed(() => {
   if (props.card.domain === 'breeding') return 'amber'
@@ -104,8 +111,10 @@ const domainColor = computed(() => {
 
 const barColor = computed(() => {
   if (props.card.priority === 'overdue') return 'red'
+  if (props.card.domain !== 'breeding' && props.card.domain !== 'medication') return primaryTaskTone.value.color
   return domainColor.value
 })
+const cardVariant = computed(() => primaryTaskTone.value.variant)
 
 const typeMap: Record<string, string> = {
   vaccination: '/pages/record/health-vaccination',
@@ -166,6 +175,7 @@ function taskDisplayTitle(task: any) {
 
 function taskColor(task: any) {
   if (task.priority === 'overdue') return 'red'
+  if (isIllnessTaskType(task?.type)) return 'red'
   return domainColor.value
 }
 </script>
@@ -192,9 +202,14 @@ function taskColor(task: any) {
   > * { position: relative; z-index: 1; }
 
   &--red { border-left-color: var(--red); &::before { background: linear-gradient(135deg, var(--red-soft) 0%, transparent 40%); } }
+  &--illness {
+    border-left-color: rgba(224, 82, 82, 0.72);
+    &::before { background: linear-gradient(135deg, rgba(224, 82, 82, 0.12) 0%, transparent 34%); }
+  }
   &--blue { border-left-color: var(--blue); &::before { background: linear-gradient(135deg, var(--blue-soft) 0%, transparent 40%); } }
   &--amber { border-left-color: var(--amber); &::before { background: linear-gradient(135deg, var(--amber-soft) 0%, transparent 40%); } }
   &--plum { border-left-color: var(--plum); &::before { background: linear-gradient(135deg, var(--plum-soft) 0%, transparent 40%); } }
+  &--teal { border-left-color: var(--teal); &::before { background: linear-gradient(135deg, var(--teal-soft) 0%, transparent 40%); } }
 }
 
 .card-header { display: flex; align-items: flex-start; gap: 12px; }
@@ -206,6 +221,7 @@ function taskColor(task: any) {
   &--blue { background: var(--icon-blue); }
   &--amber { background: var(--icon-amber); }
   &--plum { background: var(--icon-plum); }
+  &--teal { background: var(--icon-teal); }
 }
 .card-title-area { flex: 1; min-width: 0; }
 .card-name { display: block; font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--text-1); line-height: 1.3; }
@@ -218,6 +234,7 @@ function taskColor(task: any) {
   &--blue { background: var(--blue-soft); box-shadow: 0 1px 4px rgba(74, 141, 212, 0.2); .tag-text { color: var(--blue); } }
   &--amber { background: var(--amber-soft); box-shadow: 0 1px 4px rgba(232, 155, 62, 0.2); .tag-text { color: var(--amber); } }
   &--plum { background: var(--plum-soft); box-shadow: 0 1px 4px rgba(134, 104, 176, 0.2); .tag-text { color: var(--plum); } }
+  &--teal { background: var(--teal-soft); box-shadow: 0 1px 4px rgba(61, 168, 160, 0.18); .tag-text { color: var(--teal); } }
 }
 .tag-text { font-size: 11px; font-weight: 600; }
 .tag-expand {
@@ -239,17 +256,21 @@ function taskColor(task: any) {
   &:active { transform: scale(0.94); opacity: 0.85; }
   &--ghost { background: transparent; border: 1.5px solid var(--text-4); }
   &--ghost-red { background: transparent; border: 1.5px solid var(--red); }
+  &--ghost-illness { background: transparent; border: 1.5px solid rgba(224, 82, 82, 0.68); }
   &--ghost-blue { background: transparent; border: 1.5px solid var(--blue); }
   &--ghost-amber { background: transparent; border: 1.5px solid var(--amber); }
   &--ghost-plum { background: transparent; border: 1.5px solid var(--plum); }
+  &--ghost-teal { background: transparent; border: 1.5px solid var(--teal); }
 }
 .btn-text {
   font-family: var(--font-display); font-size: 13px; font-weight: 700;
   &--ghost { color: var(--text-2); }
   &--red { color: var(--red); }
+  &--illness { color: var(--red); }
   &--blue { color: var(--blue); }
   &--amber { color: var(--amber); }
   &--plum { color: var(--plum); }
+  &--teal { color: var(--teal); }
 }
 .btn-skip {
   padding: 8px 12px;

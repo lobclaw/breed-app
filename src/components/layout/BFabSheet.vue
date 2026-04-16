@@ -93,6 +93,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useTaskStore } from '@/stores/taskStore'
+import { getHealthTypeTone } from '@/utils/themeSemantics'
 
 const props = defineProps<{ visible: boolean }>()
 const emit = defineEmits<{ 'update:visible': [value: boolean] }>()
@@ -132,7 +133,7 @@ const recordGroups = [
     items: [
       { icon: 'vaccines', iconBg: 'var(--icon-blue)', iconColor: 'var(--blue)', label: '疫苗', url: '/pages/record/health-vaccination' },
       { icon: 'shield', iconBg: 'var(--icon-teal)', iconColor: 'var(--teal)', label: '驱虫', url: '/pages/record/health-deworming' },
-      { icon: 'sick', iconBg: 'var(--icon-plum)', iconColor: 'var(--plum)', label: '疾病', url: '/pages/record/health-illness' },
+      { icon: 'sick', iconBg: 'var(--icon-red)', iconColor: `var(--${getHealthTypeTone('illness').color})`, label: '疾病', url: '/pages/record/health-illness' },
       { icon: 'medication', iconBg: 'var(--icon-plum)', iconColor: 'var(--plum)', label: '用药', url: '/pages/record/health-medication' },
       { icon: 'monitor_weight', iconBg: 'var(--icon-teal)', iconColor: 'var(--teal)', label: '体重', url: '/pages/health/batch-weight' },
     ],

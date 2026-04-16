@@ -4,9 +4,9 @@
   左色条(蓝) + 图标 + 标题 + checkbox 列表 + 进度条 + 批量按钮
 -->
 <template>
-  <view class="card" :class="`card--${cardColor}`">
+  <view class="card" :class="[`card--${cardTone.color}`, { 'card--illness': cardTone.variant === 'illness' }]">
     <view class="card-header" @click="goProcess">
-      <view class="card-icon" :class="`card-icon--${cardColor}`">
+      <view class="card-icon" :class="`card-icon--${cardTone.color}`">
         <text style="font-size: 20px;">💉</text>
       </view>
       <view class="card-title-area">
@@ -14,8 +14,8 @@
         <text class="card-sub">{{ card.dogs?.length || 0 }}只犬</text>
       </view>
       <!-- 分数角标 -->
-      <view class="fraction-badge" :class="`fraction-badge--${cardColor}`">
-        <text class="fraction-badge-text" :class="`fraction-badge-text--${cardColor}`">{{ doneCount }}/{{ totalDogs }}</text>
+      <view class="fraction-badge" :class="`fraction-badge--${cardTone.color}`">
+        <text class="fraction-badge-text" :class="`fraction-badge-text--${cardTone.color}`">{{ doneCount }}/{{ totalDogs }}</text>
       </view>
     </view>
 
@@ -47,8 +47,8 @@
 
     <!-- 操作按钮 -->
     <view v-if="!acting" class="card-actions">
-      <view class="btn" :class="`btn--ghost-${cardColor}`" @click="batchComplete">
-        <text class="btn-text" :class="`btn-text--${cardColor}`">完成</text>
+      <view class="btn" :class="cardTone.variant === 'illness' ? 'btn--ghost-illness' : `btn--ghost-${cardTone.color}`" @click="batchComplete">
+        <text class="btn-text" :class="cardTone.variant === 'illness' ? 'btn-text--illness' : `btn-text--${cardTone.color}`">完成</text>
       </view>
       <view class="btn btn--ghost" @click="batchPostpone">
         <text class="btn-text btn-text--ghost">推迟</text>
@@ -63,6 +63,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useDogStore } from '@/stores/dogStore'
+import { getHealthTypeTone } from '@/utils/themeSemantics'
 
 const dogStore = useDogStore()
 const DOG_COMPACT_LIMIT = 12
@@ -135,11 +136,13 @@ const visibleDogs = computed(() => {
 })
 const totalDogs = computed(() => allDogs.value.length)
 const doneCount = computed(() => checkedDogs.value.size)
-const cardColor = computed(() => {
-  if (props.card.priority === 'overdue') return 'red'
-  if (props.card.domain === 'breeding') return 'amber'
-  if (props.card.domain === 'medication') return 'plum'
-  return 'blue'
+const firstTaskType = computed(() => props.card.tasks?.[0]?.type || '')
+const cardTone = computed(() => {
+  if (props.card.priority === 'overdue') return getHealthTypeTone(firstTaskType.value, 'overdue')
+  if (props.card.domain !== 'breeding' && props.card.domain !== 'medication') return getHealthTypeTone(firstTaskType.value)
+  if (props.card.domain === 'breeding') return { color: 'amber', variant: 'default' as const }
+  if (props.card.domain === 'medication') return { color: 'plum', variant: 'default' as const }
+  return { color: 'blue', variant: 'default' as const }
 })
 const progressPct = computed(() => {
   if (!totalDogs.value) return 0
@@ -151,8 +154,9 @@ const progressFillStyle = computed(() => {
     blue: 'var(--blue)',
     amber: 'var(--amber)',
     plum: 'var(--plum)',
+    teal: 'var(--teal)',
   }
-  const color = colorMap[cardColor.value] || 'var(--blue)'
+  const color = colorMap[cardTone.value.color] || 'var(--blue)'
   return {
     width: `${progressPct.value}%`,
     background: `linear-gradient(90deg, ${color}, ${color})`,
@@ -189,9 +193,14 @@ function batchSkip() {
   &::before { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 0; }
   > * { position: relative; z-index: 1; }
   &--red { border-left-color: var(--red); &::before { background: linear-gradient(135deg, var(--red-soft) 0%, transparent 40%); } }
+  &--illness {
+    border-left-color: rgba(224, 82, 82, 0.72);
+    &::before { background: linear-gradient(135deg, rgba(224, 82, 82, 0.12) 0%, transparent 34%); }
+  }
   &--blue { border-left-color: var(--blue); &::before { background: linear-gradient(135deg, var(--blue-soft) 0%, transparent 40%); } }
   &--amber { border-left-color: var(--amber); &::before { background: linear-gradient(135deg, var(--amber-soft) 0%, transparent 40%); } }
   &--plum { border-left-color: var(--plum); &::before { background: linear-gradient(135deg, var(--plum-soft) 0%, transparent 40%); } }
+  &--teal { border-left-color: var(--teal); &::before { background: linear-gradient(135deg, var(--teal-soft) 0%, transparent 40%); } }
 }
 
 .card-header { display: flex; align-items: flex-start; gap: 12px; }
@@ -201,6 +210,7 @@ function batchSkip() {
   &--blue { background: var(--icon-blue); }
   &--amber { background: var(--icon-amber); }
   &--plum { background: var(--icon-plum); }
+  &--teal { background: var(--icon-teal); }
 }
 .card-title-area { flex: 1; }
 .card-name { display: block; font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--text-1); }
@@ -213,6 +223,7 @@ function batchSkip() {
   &--blue { background: var(--blue-soft); }
   &--amber { background: var(--amber-soft); }
   &--plum { background: var(--plum-soft); }
+  &--teal { background: var(--teal-soft); }
 }
 .fraction-badge-text {
   font-family: var(--font-display); font-size: 13px; font-weight: 800;
@@ -220,6 +231,7 @@ function batchSkip() {
   &--blue { color: var(--blue); }
   &--amber { color: var(--amber); }
   &--plum { color: var(--plum); }
+  &--teal { color: var(--teal); }
 }
 
 /* Checkbox 列表 */
@@ -262,18 +274,22 @@ function batchSkip() {
   &--filled.btn--blue { background: var(--blue); }
   &--ghost { background: transparent; border: 1.5px solid var(--text-4); }
   &--ghost-red { background: transparent; border: 1.5px solid var(--red); }
+  &--ghost-illness { background: transparent; border: 1.5px solid rgba(224, 82, 82, 0.68); }
   &--ghost-blue { background: transparent; border: 1.5px solid var(--blue); }
   &--ghost-amber { background: transparent; border: 1.5px solid var(--amber); }
   &--ghost-plum { background: transparent; border: 1.5px solid var(--plum); }
+  &--ghost-teal { background: transparent; border: 1.5px solid var(--teal); }
 }
 .btn-text {
   font-family: var(--font-display); font-size: 13px; font-weight: 700;
   &--white { color: #FFFFFF; }
   &--ghost { color: var(--text-2); }
   &--red { color: var(--red); }
+  &--illness { color: var(--red); }
   &--blue { color: var(--blue); }
   &--amber { color: var(--amber); }
   &--plum { color: var(--plum); }
+  &--teal { color: var(--teal); }
 }
 .btn-skip { padding: 8px 12px; &:active { opacity: 0.5; } }
 .btn-skip-text { font-size: 12px; color: var(--text-3); }

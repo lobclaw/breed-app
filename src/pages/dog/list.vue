@@ -213,6 +213,7 @@ import BNavBar from '@/components/layout/BNavBar.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import { useCloudCall } from '@/composables/useCloudCall'
 import type { DogWithStatus, DeriveStatusType } from '@/types/dog'
+import { getDogStatusTone } from '@/utils/themeSemantics'
 
 const dogs = ref<DogWithStatus[]>([])
 const loading = ref(true)
@@ -348,14 +349,8 @@ const filteredDogs = computed(() => {
 
 /** 状态类型 → 功能色映射 */
 function statusColor(type: DeriveStatusType): 'red' | 'amber' | 'green' | 'rose' | 'plum' | 'teal' {
-  const map: Record<string, any> = {
-    '发情中': 'amber',
-    '怀孕中': 'rose',
-    '哺乳中': 'green',
-    '生病中': 'red',
-    '用药中': 'plum',
-  }
-  return map[type] || 'green'
+  const tone = getDogStatusTone(type)
+  return tone.color === 'blue' ? 'green' : tone.color
 }
 
 /** 卡片左侧色条 class */

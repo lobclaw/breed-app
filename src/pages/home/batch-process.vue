@@ -139,6 +139,7 @@ import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { getHealthTypeTone } from '@/utils/themeSemantics'
 
 interface TaskItem {
   id: string
@@ -275,7 +276,7 @@ async function batchComplete() {
 const typeLabels: Record<string, { title: string; icon: string; color: string }> = {
   vaccination: { title: '疫苗', icon: 'vaccines', color: 'blue' },
   deworming: { title: '驱虫', icon: 'shield', color: 'teal' },
-  illness: { title: '疾病', icon: 'sick', color: 'plum' },
+  illness: { title: '疾病', icon: 'sick', color: getHealthTypeTone('illness').color },
   breeding_milestone: { title: '繁育', icon: 'favorite', color: 'rose' },
   medication: { title: '用药', icon: 'medication', color: 'plum' },
 }

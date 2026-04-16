@@ -4,10 +4,10 @@
   操作：标记康复 / 开始治疗 / 开始用药
 -->
 <template>
-  <view class="card card--blue">
+  <view class="card" :class="cardClasses">
     <view class="card-header">
-      <view class="card-icon card-icon--blue">
-        <text class="material-icons-round" style="font-size: 20px; color: var(--blue);">sick</text>
+      <view class="card-icon" :class="`card-icon--${cardTone.color}`">
+        <text class="material-icons-round sick-icon">sick</text>
       </view>
       <view class="card-title-area">
         <text class="card-name">{{ card.groupTitle || '疾病观察' }}</text>
@@ -51,6 +51,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { getHealthTypeTone } from '@/utils/themeSemantics'
 
 const props = defineProps<{ card: any }>()
 const emit = defineEmits<{
@@ -58,6 +59,14 @@ const emit = defineEmits<{
 }>()
 
 const dogs = computed(() => props.card.dogs || [])
+const cardTone = computed(() => getHealthTypeTone('illness', props.card.priority))
+const cardClasses = computed(() => [
+  `card--${cardTone.value.color}`,
+  {
+    'card--illness': cardTone.value.variant === 'illness',
+    'card--overdue': cardTone.value.variant === 'overdue',
+  },
+])
 
 // 折叠（≥3只默认折叠）
 const COLLAPSE_KEY = 'sick_obs_collapsed'
@@ -104,15 +113,25 @@ function onAction(dog: any) {
   box-shadow: var(--shadow); overflow: hidden;
   &::before { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 0; }
   > * { position: relative; z-index: 1; }
-  &--blue { border-left-color: var(--blue); &::before { background: linear-gradient(135deg, var(--blue-soft) 0%, transparent 40%); } }
+  &--red { border-left-color: var(--red); &::before { background: linear-gradient(135deg, var(--red-soft) 0%, transparent 40%); } }
+  &--illness {
+    border-left-color: rgba(224, 82, 82, 0.72);
+    &::before { background: linear-gradient(135deg, rgba(224, 82, 82, 0.12) 0%, transparent 34%); }
+  }
+  &--overdue {
+    border-left-color: var(--red);
+    box-shadow: 0 4px 18px rgba(224, 82, 82, 0.14);
+    &::before { background: linear-gradient(135deg, rgba(224, 82, 82, 0.18) 0%, transparent 40%); }
+  }
 }
 
 .card-header { display: flex; align-items: flex-start; gap: 12px; }
 .card-icon {
   width: 36px; height: 36px; border-radius: 10px;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-  &--blue { background: var(--icon-blue); }
+  &--red { background: var(--icon-red); }
 }
+.sick-icon { font-size: 20px; color: var(--red); }
 .card-title-area { flex: 1; }
 .card-name { display: block; font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--text-1); }
 .card-sub { display: block; font-size: 12px; color: var(--text-2); margin-top: 1px; }
@@ -156,9 +175,9 @@ function onAction(dog: any) {
 }
 .sick-row__days { font-size: 11px; color: var(--text-3); }
 .sick-row__action {
-  font-size: 11px; font-weight: 700; color: var(--text-1);
+  font-size: 11px; font-weight: 700; color: var(--red);
   padding: 2px 8px; border-radius: 4px;
-  background: var(--card-dim);
+  background: var(--red-soft);
   flex-shrink: 0;
   &:active { transform: scale(0.9); opacity: 0.8; }
 }

@@ -226,11 +226,11 @@
       <button
         v-if="step === 3"
         class="btn-next btn-next--submit"
-        :disabled="submitting"
+        :disabled="submitState === 'submitting'"
         @click="submit"
       >
-        <text>{{ submitting ? '保存中...' : '提交生产记录' }}</text>
-        <text v-if="!submitting" class="material-icons-round" style="font-size: 18px;">check</text>
+        <text>{{ submitButtonText }}</text>
+        <text v-if="submitState !== 'submitting'" class="material-icons-round" style="font-size: 18px;">check</text>
       </button>
     </view>
   </view>
@@ -240,12 +240,13 @@
 import { ref, reactive, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
 
 let cycleId = ''
 const damName = ref('花花')
 
 const step = ref(1)
-const submitting = ref(false)
+const submitState = ref<'idle' | 'submitting' | 'success'>('idle')
 const costInput = ref('')
 
 const form = reactive({
@@ -294,6 +295,12 @@ const canNext = computed(() => {
   return true
 })
 
+const submitButtonText = computed(() => {
+  if (submitState.value === 'submitting') return '保存中...'
+  if (submitState.value === 'success') return '已保存'
+  return '提交生产记录'
+})
+
 function onBack() {
   if (step.value > 1) {
     step.value--
@@ -315,13 +322,13 @@ function removePuppy(idx: number) {
 }
 
 const { run: addBirthRecord } = useCloudCall('breeding-service', 'addBirthRecord', {
-  successMessage: '生产记录已保存',
-  showLoading: true,
-  loadingText: '保存中...',
+  successMode: 'silent',
+  loadingMode: 'local',
+  throwOnError: true,
 })
 
 async function submit() {
-  submitting.value = true
+  submitState.value = 'submitting'
   try {
     const cost = costInput.value ? parseFloat(costInput.value) : null
 
@@ -340,10 +347,17 @@ async function submit() {
     })
 
     if (res) {
+      submitState.value = 'success'
+      queueSubmitFeedback({
+        message: '已保存生产记录',
+      })
+      await wait(140)
       uni.navigateBack({ delta: 1 })
     }
+  } catch {
+    submitState.value = 'idle'
   } finally {
-    submitting.value = false
+    if (submitState.value !== 'success') submitState.value = 'idle'
   }
 }
 
