@@ -1011,10 +1011,10 @@ const { run: fetchCycles } = useCloudCall<{ data: any[] }>('breeding-service', '
 const { run: fetchHealth } = useCloudCall<{ data: any[] }>('health-service', 'getHealthHistory')
 const { run: fetchLitters } = useCloudCall<{ data: any[] }>('breeding-service', 'getLittersByDam')
 const { run: fetchDogFinance } = useCloudCall<{ data: any }>('finance-service', 'getDogFinanceSummary')
-const { run: updateDisposition } = useCloudCall('dog-service', 'updateDisposition', { successMessage: '操作成功' })
-const { run: updateStatus } = useCloudCall('dog-service', 'updateStatus', { successMessage: '状态已更新' })
-const { run: deleteDog } = useCloudCall('dog-service', 'deleteDog', { successMessage: '已删除' })
-const { run: promoteToBreeder } = useCloudCall('dog-service', 'promoteToBreeder', { successMessage: '已升级为种狗' })
+const { run: updateDisposition } = useCloudCall('dog-service', 'updateDisposition', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
+const { run: updateStatus } = useCloudCall('dog-service', 'updateStatus', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
+const { run: deleteDog } = useCloudCall('dog-service', 'deleteDog', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
+const { run: promoteToBreeder } = useCloudCall('dog-service', 'promoteToBreeder', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 
 // ==================== 工具函数 ====================
 
@@ -1357,9 +1357,9 @@ const weightDateStr = ref(todayStr())
 const weightNotes = ref('')
 
 const { run: addWeightRecord } = useCloudCall('health-service', 'addWeightRecord', {
-  successMessage: '体重已保存',
-  showLoading: true,
-  loadingText: '保存中...',
+  successMode: 'silent',
+  loadingMode: 'local',
+  throwOnError: true,
 })
 
 function openWeightEntry() {

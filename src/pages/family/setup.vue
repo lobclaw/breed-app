@@ -58,6 +58,7 @@
 import { ref, computed } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
 import BButton from '@/components/base/BButton.vue'
 
 const { createFamily } = useAuth()
@@ -66,9 +67,9 @@ const inviteCode = ref('')
 const creating = ref(false)
 
 const { run: joinFamily } = useCloudCall('family-service', 'joinFamily', {
-  successMessage: '加入成功',
-  showLoading: true,
-  loadingText: '加入中...',
+  successMode: 'silent',
+  loadingMode: 'local',
+  throwOnError: true,
 })
 
 const canSubmit = computed(() => familyName.value.trim() || inviteCode.value.trim())
@@ -79,15 +80,20 @@ async function create() {
   try {
     if (inviteCode.value.trim()) {
       await joinFamily({ invite_code: inviteCode.value.trim() })
-      setTimeout(() => {
-        uni.reLaunch({ url: '/pages/home/index' })
-      }, 1000)
+      queueSubmitFeedback({
+        message: '已加入家庭',
+        targetRoute: '/pages/home/index',
+      })
+      await wait(140)
+      uni.reLaunch({ url: '/pages/home/index' })
     } else {
       await createFamily(familyName.value.trim())
-      uni.showToast({ title: '创建成功', icon: 'success' })
-      setTimeout(() => {
-        uni.reLaunch({ url: '/pages/home/index' })
-      }, 1000)
+      queueSubmitFeedback({
+        message: '已创建家庭',
+        targetRoute: '/pages/home/index',
+      })
+      await wait(140)
+      uni.reLaunch({ url: '/pages/home/index' })
     }
   } catch (e: any) {
     uni.showToast({ title: e.message || '操作失败', icon: 'none' })

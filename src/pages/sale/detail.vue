@@ -543,9 +543,9 @@ function getDogCardBorderColor(status: string) {
 }
 
 const { run: fetchDetail } = useCloudCall<{ data: any }>('finance-service', 'getSaleDetail')
-const { run: receiveDeposit } = useCloudCall('finance-service', 'receiveSaleDeposit', { successMessage: '已收定金', showLoading: true })
-const { run: completeSale } = useCloudCall('finance-service', 'completeSale', { successMessage: '交易完成', showLoading: true })
-const { run: cancelSale } = useCloudCall('finance-service', 'cancelSale', { successMessage: '已取消', showLoading: true })
+const { run: receiveDeposit } = useCloudCall('finance-service', 'receiveSaleDeposit', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
+const { run: completeSale } = useCloudCall('finance-service', 'completeSale', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
+const { run: cancelSale } = useCloudCall('finance-service', 'cancelSale', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 
 function formatDate(ts: number) {
   if (!ts) return ''

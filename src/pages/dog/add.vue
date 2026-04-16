@@ -160,11 +160,12 @@
     <view class="fixed-bottom">
       <button
         class="submit-btn"
-        :loading="submitting"
-        :disabled="!canSubmit || submitting"
+        :loading="submitState === 'submitting'"
+        :class="{ 'submit-btn--success': submitState === 'success' }"
+        :disabled="!canSubmit || submitState === 'submitting'"
         @click="submit"
       >
-        {{ isEdit ? '保存修改' : '创建犬只' }}
+        {{ submitButtonText }}
       </button>
     </view>
 
@@ -198,6 +199,7 @@
 import { ref, computed, reactive, watch } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
 import { useAuth } from '@/composables/useAuth'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BModal from '@/components/layout/BModal.vue'
@@ -221,7 +223,7 @@ const form = reactive({
 
 const purchasePriceInput = ref('')
 
-const submitting = ref(false)
+const submitState = ref<'idle' | 'submitting' | 'success'>('idle')
 
 const PRESET_BREEDS = ['马尔济斯', '西施', '约克夏']
 const deletedCustomBreeds = ref<string[]>([])
@@ -309,6 +311,12 @@ const canSubmit = computed(() => {
   return true
 })
 
+const submitButtonText = computed(() => {
+  if (submitState.value === 'submitting') return '提交中...'
+  if (submitState.value === 'success') return isEdit.value ? '已保存' : '已创建'
+  return isEdit.value ? '保存修改' : '创建犬只'
+})
+
 const birthDateStr = computed(() => {
   if (!form.birth_date) return ''
   const d = new Date(form.birth_date)
@@ -330,14 +338,14 @@ function onPurchaseDateChange(e: any) {
   form.purchase_date = new Date(e.detail.value + 'T00:00:00+08:00').getTime()
 }
 
-const { run: createDog } = useCloudCall('dog-service', 'createDog', { successMessage: '已添加' })
-const { run: updateDog } = useCloudCall('dog-service', 'updateDog', { successMessage: '已更新' })
+const { run: createDog } = useCloudCall('dog-service', 'createDog', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
+const { run: updateDog } = useCloudCall('dog-service', 'updateDog', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 const { run: updateDogName } = useCloudCall('dog-service', 'updateDogName')
 const { run: fetchDetail } = useCloudCall<{ data: any }>('dog-service', 'getDogDetail')
 let originalName = ''
 
 async function submit() {
-  submitting.value = true
+  submitState.value = 'submitting'
 
   try {
     const dogData = {
@@ -367,9 +375,16 @@ async function submit() {
       }
     }
 
+    submitState.value = 'success'
+    queueSubmitFeedback({
+      message: isEdit.value ? '已保存犬只信息' : '已创建犬只',
+    })
+    await wait(140)
     uni.navigateBack()
+  } catch {
+    submitState.value = 'idle'
   } finally {
-    submitting.value = false
+    if (submitState.value !== 'success') submitState.value = 'idle'
   }
 }
 

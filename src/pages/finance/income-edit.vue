@@ -131,6 +131,7 @@
 import { ref, reactive, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 
@@ -204,8 +205,9 @@ const { run: getIncome } = useCloudCall('finance-service', 'getIncomeDetail', {
 })
 
 const { run: updateIncome } = useCloudCall('finance-service', 'updateIncome', {
-  successMessage: '已更新',
-  showLoading: true,
+  successMode: 'silent',
+  loadingMode: 'local',
+  throwOnError: true,
 })
 
 async function loadIncome(id: string) {
@@ -237,7 +239,11 @@ async function submit() {
       images: photos.value,
       source_type: 'manual',
     })
-    if (res) uni.navigateBack()
+    if (res) {
+      queueSubmitFeedback({ message: '已更新收入记录' })
+      await wait(140)
+      uni.navigateBack()
+    }
   } finally {
     submitting.value = false
   }

@@ -86,11 +86,12 @@
     <view class="fixed-bottom">
       <button
         class="submit-btn"
-        :loading="submitting"
-        :disabled="!canSubmit || submitting"
+        :loading="submitState === 'submitting'"
+        :class="{ 'submit-btn--success': submitState === 'success' }"
+        :disabled="!canSubmit || submitState === 'submitting'"
         @click="submit"
       >
-        保存收入
+        {{ submitButtonText }}
       </button>
     </view>
 
@@ -112,11 +113,12 @@
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 
 const amountInput = ref('')
-const submitting = ref(false)
+const submitState = ref<'idle' | 'submitting' | 'success'>('idle')
 const photos = ref<string[]>([])
 const showTypeSheet = ref(false)
 
@@ -170,6 +172,12 @@ const canSubmit = computed(() => {
   return amount > 0 && form.type && !!date.value
 })
 
+const submitButtonText = computed(() => {
+  if (submitState.value === 'submitting') return '提交中...'
+  if (submitState.value === 'success') return '已保存'
+  return '保存收入'
+})
+
 function pickLink() {
   uni.showToast({ title: '关联记录功能开发中', icon: 'none' })
 }
@@ -186,12 +194,13 @@ function addPhoto() {
 }
 
 const { run: addIncome } = useCloudCall('finance-service', 'addIncome', {
-  successMessage: '已保存',
-  showLoading: true,
+  successMode: 'silent',
+  loadingMode: 'local',
+  throwOnError: true,
 })
 
 async function submit() {
-  submitting.value = true
+  submitState.value = 'submitting'
   try {
     const res = await addIncome({
       amount: parseFloat(amountInput.value),
@@ -201,9 +210,16 @@ async function submit() {
       images: photos.value,
       source_type: 'manual',
     })
-    if (res) uni.navigateBack()
+    if (res) {
+      submitState.value = 'success'
+      queueSubmitFeedback({ message: '已保存收入' })
+      await wait(140)
+      uni.navigateBack()
+    }
+  } catch {
+    submitState.value = 'idle'
   } finally {
-    submitting.value = false
+    if (submitState.value !== 'success') submitState.value = 'idle'
   }
 }
 </script>

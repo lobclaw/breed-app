@@ -293,11 +293,12 @@
       <view class="submit-area">
         <button
           class="submit-btn"
-          :loading="submitting"
-          :disabled="!canSubmit || submitting"
+          :loading="submitState === 'submitting'"
+          :class="{ 'submit-btn--success': submitState === 'success' }"
+          :disabled="!canSubmit || submitState === 'submitting'"
           @click="submit"
         >
-          保存记录
+          {{ submitButtonText }}
         </button>
       </view>
     </view>
@@ -363,6 +364,7 @@
 import { ref, reactive, computed, watch } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { buildRecordFeedbackMessage, queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import BModal from '@/components/layout/BModal.vue'
@@ -378,7 +380,7 @@ const form = reactive({
 
 const costInput = ref('')
 const details = reactive<Record<string, any>>({})
-const submitting = ref(false)
+const submitState = ref<'idle' | 'submitting' | 'success'>('idle')
 const dateChipActive = ref('today')
 
 const typeOptions = [
@@ -431,6 +433,12 @@ const canSubmit = computed(() => {
   if (form.type === 'vaccination' && !details.vaccine_type) return false
   if (form.type === 'deworming' && !details.deworming_type) return false
   return true
+})
+
+const submitButtonText = computed(() => {
+  if (submitState.value === 'submitting') return '提交中...'
+  if (submitState.value === 'success') return '已保存'
+  return '保存记录'
 })
 
 function setDateChip(chip: string) {
@@ -488,13 +496,13 @@ function buildDetails() {
 }
 
 const { run: addRecord } = useCloudCall('health-service', 'addHealthRecord', {
-  successMessage: '已保存',
-  showLoading: true,
-  loadingText: '保存中...',
+  successMode: 'silent',
+  loadingMode: 'local',
+  throwOnError: true,
 })
 
 async function submit() {
-  submitting.value = true
+  submitState.value = 'submitting'
   try {
     const cost = costInput.value ? parseFloat(costInput.value) : null
     const res = await addRecord({
@@ -507,15 +515,22 @@ async function submit() {
     })
 
     if (res) {
+      submitState.value = 'success'
+      queueSubmitFeedback({
+        message: buildRecordFeedbackMessage(1),
+      })
       // 如果是驱虫类型且有药品信息，提示保存为方案
       if (form.type === 'deworming' && details.drug_name) {
         offerSaveAsProtocol()
       } else {
+        await wait(140)
         uni.navigateBack()
       }
     }
+  } catch {
+    submitState.value = 'idle'
   } finally {
-    submitting.value = false
+    if (submitState.value !== 'success') submitState.value = 'idle'
   }
 }
 
@@ -565,7 +580,9 @@ const showSaveProtocol = ref(false)
 const protocolName = ref('')
 
 const { run: saveProtocol } = useCloudCall('health-service', 'saveMedicationProtocol', {
-  successMessage: '方案已保存',
+  successMode: 'silent',
+  loadingMode: 'local',
+  throwOnError: true,
 })
 
 function offerSaveAsProtocol() {
@@ -586,7 +603,8 @@ async function doSaveProtocol() {
     notes: form.notes || null,
   })
   showSaveProtocol.value = false
-  setTimeout(() => uni.navigateBack(), 500)
+  await wait(140)
+  uni.navigateBack()
 }
 
 onLoad((query) => {

@@ -65,8 +65,8 @@ const deletedItems = ref<DeletedItem[]>([])
 const loading = ref(true)
 
 const { run: fetchDeleted } = useCloudCall<{ data: DeletedItem[] }>('family-service', 'getDeletedItems')
-const { run: doRestore } = useCloudCall('family-service', 'restoreItem', { successMessage: '已恢复' })
-const { run: doDelete } = useCloudCall('family-service', 'permanentDeleteItem', { successMessage: '已永久删除' })
+const { run: doRestore } = useCloudCall('family-service', 'restoreItem', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
+const { run: doDelete } = useCloudCall('family-service', 'permanentDeleteItem', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 
 function getIcon(type: string): string {
   const map: Record<string, string> = { dog: 'pets', record: 'description', sale: 'receipt_long' }

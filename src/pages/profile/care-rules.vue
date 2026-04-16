@@ -170,8 +170,8 @@ function selectTrigger(opt: string) {
   }
 }
 
-const { run: addCareRule } = useCloudCall('family-service', 'addCareRule', { successMessage: '已添加' })
-const { run: removeCareRule } = useCloudCall('family-service', 'removeCareRule', { successMessage: '已删除' })
+const { run: addCareRule } = useCloudCall('family-service', 'addCareRule', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
+const { run: removeCareRule } = useCloudCall('family-service', 'removeCareRule', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 
 function openAddModal() {
   form.status_trigger = ''

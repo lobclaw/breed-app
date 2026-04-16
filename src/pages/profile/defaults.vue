@@ -73,8 +73,9 @@ const settingsItems = reactive<SettingItem[]>([
 ])
 
 const { run: updateSettings } = useCloudCall('family-service', 'updateSettings', {
-  successMessage: '已保存',
-  showLoading: true,
+  successMode: 'silent',
+  loadingMode: 'local',
+  throwOnError: true,
 })
 
 function startEdit(item: SettingItem) {

@@ -453,11 +453,12 @@
       <!-- 提交按钮 -->
       <button
         class="submit-btn"
-        :loading="submitting"
-        :disabled="!canSubmit || submitting"
+        :loading="submitState === 'submitting'"
+        :class="{ 'submit-btn--success': submitState === 'success' }"
+        :disabled="!canSubmit || submitState === 'submitting'"
         @click="submit"
       >
-        保存记录
+        {{ submitButtonText }}
       </button>
     </view>
 
@@ -468,6 +469,7 @@
 import { ref, reactive, computed, watch } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { buildRecordFeedbackMessage, queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 
@@ -484,7 +486,7 @@ const form = reactive({
 
 const costInput = ref('')
 const details = reactive<Record<string, any>>({})
-const submitting = ref(false)
+const submitState = ref<'idle' | 'submitting' | 'success'>('idle')
 const dateChipActive = ref('today')
 
 const typeOptions = [
@@ -530,6 +532,12 @@ const canSubmit = computed(() => {
   if (form.type === 'mating' && !selectedSire.value) return false
   if (form.type === 'follicle_check' && !details.left_count) return false
   return true
+})
+
+const submitButtonText = computed(() => {
+  if (submitState.value === 'submitting') return '提交中...'
+  if (submitState.value === 'success') return '已保存'
+  return '保存记录'
 })
 
 // 自动计算日期
@@ -605,13 +613,13 @@ function buildDetails() {
 }
 
 const { run: addRecord } = useCloudCall('breeding-service', 'addBreedingRecord', {
-  successMessage: '已保存',
-  showLoading: true,
-  loadingText: '保存中...',
+  successMode: 'silent',
+  loadingMode: 'local',
+  throwOnError: true,
 })
 
 async function submit() {
-  submitting.value = true
+  submitState.value = 'submitting'
   try {
     const cost = costInput.value ? parseFloat(costInput.value) : null
     const res = await addRecord({
@@ -625,10 +633,17 @@ async function submit() {
     })
 
     if (res) {
+      submitState.value = 'success'
+      queueSubmitFeedback({
+        message: buildRecordFeedbackMessage(1),
+      })
+      await wait(140)
       uni.navigateBack()
     }
+  } catch {
+    submitState.value = 'idle'
   } finally {
-    submitting.value = false
+    if (submitState.value !== 'success') submitState.value = 'idle'
   }
 }
 

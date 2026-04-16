@@ -76,7 +76,7 @@
       <!-- 时间 + 保存 -->
       <view class="heat-observation__bottom">
         <view class="heat-observation__save-btn" @click="handleSave">
-          <text class="heat-observation__save-text">保存记录</text>
+          <text class="heat-observation__save-text">{{ submitting ? '提交中...' : '保存记录' }}</text>
         </view>
         <view class="heat-observation__time" @click="pickTime">
           <text class="material-icons-round" style="font-size: 14px; color: var(--text-3);">schedule</text>
@@ -91,6 +91,7 @@
 import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 
@@ -110,6 +111,7 @@ const notes = ref('')
 
 // 时间
 const recordTime = ref(new Date())
+const submitting = ref(false)
 const displayTime = computed(() => {
   const h = String(recordTime.value.getHours()).padStart(2, '0')
   const m = String(recordTime.value.getMinutes()).padStart(2, '0')
@@ -153,12 +155,13 @@ function pickTime() {
 }
 
 const { run: addHealthRecord } = useCloudCall('health-service', 'addHealthRecord', {
-  successMessage: '保存成功',
-  showLoading: true,
-  loadingText: '保存中...',
+  successMode: 'silent',
+  loadingMode: 'local',
+  throwOnError: true,
 })
 
 async function handleSave() {
+  if (submitting.value) return
   if (!selectedDog.value) {
     uni.showToast({ title: '请选择犬只', icon: 'none' })
     return
@@ -168,20 +171,25 @@ async function handleSave() {
     return
   }
 
-  const res = await addHealthRecord({
-    type: 'heat_observation',
-    dog_id: selectedDog.value._id,
-    date: recordTime.value.getTime(),
-    details: {
-      vulva_status: vulvaStatus.value,
-      symptoms: selectedSymptoms.value,
-    },
-    notes: notes.value || null,
-  })
-  if (res) {
-    setTimeout(() => {
+  submitting.value = true
+  try {
+    const res = await addHealthRecord({
+      type: 'heat_observation',
+      dog_id: selectedDog.value._id,
+      date: recordTime.value.getTime(),
+      details: {
+        vulva_status: vulvaStatus.value,
+        symptoms: selectedSymptoms.value,
+      },
+      notes: notes.value || null,
+    })
+    if (res) {
+      queueSubmitFeedback({ message: '已保存观察记录' })
+      await wait(140)
       uni.navigateBack({ delta: 1 })
-    }, 1200)
+    }
+  } finally {
+    submitting.value = false
   }
 }
 </script>

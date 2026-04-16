@@ -64,21 +64,30 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BButton from '@/components/base/BButton.vue'
 
 const code = ref('')
 const joining = ref(false)
 
-const { run: joinFamily } = useCloudCall<{ data: any }>('family-service', 'joinFamily', { successMessage: '已加入', showLoading: true })
+const { run: joinFamily } = useCloudCall<{ data: any }>('family-service', 'joinFamily', {
+  successMode: 'silent',
+  loadingMode: 'local',
+  throwOnError: true,
+})
 
 async function doJoin() {
   joining.value = true
   try {
     const res = await joinFamily({ invite_code: code.value })
     if (res?.data) {
-      uni.showToast({ title: `已加入「${res.data.familyName}」`, icon: 'success' })
-      setTimeout(() => uni.switchTab({ url: '/pages/home/index' }), 1500)
+      queueSubmitFeedback({
+        message: `已加入「${res.data.familyName}」`,
+        targetRoute: '/pages/home/index',
+      })
+      await wait(140)
+      uni.switchTab({ url: '/pages/home/index' })
     }
   } finally {
     joining.value = false

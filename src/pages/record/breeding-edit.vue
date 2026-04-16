@@ -346,6 +346,7 @@
 import { ref, reactive, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 
 let recordId = ''
@@ -397,8 +398,9 @@ const { run: getRecord } = useCloudCall('breeding-service', 'getBreedingRecordDe
 })
 
 const { run: updateRecord } = useCloudCall('breeding-service', 'updateBreedingRecord', {
-  successMessage: '已更新',
-  showLoading: true,
+  successMode: 'silent',
+  loadingMode: 'local',
+  throwOnError: true,
 })
 
 async function loadRecord(id: string) {
@@ -481,6 +483,8 @@ async function submit() {
       details: buildDetails(),
     })
     if (res) {
+      queueSubmitFeedback({ message: '已更新繁育记录' })
+      await wait(140)
       uni.navigateBack()
     }
   } finally {

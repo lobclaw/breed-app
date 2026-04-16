@@ -2,6 +2,8 @@
   <view class="page">
     <BPageHeader title="收入详情" />
 
+    <BSubmitBanner :message="submitBannerMessage" />
+
     <!-- 加载中 -->
     <view v-if="loading" class="card-feed">
       <BSkeleton :rows="4" />
@@ -89,9 +91,11 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { consumeSubmitFeedback, queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
+import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
 import BCard from '@/components/base/BCard.vue'
 import BTag from '@/components/base/BTag.vue'
 import BButton from '@/components/base/BButton.vue'
@@ -100,6 +104,8 @@ import BEmpty from '@/components/feedback/BEmpty.vue'
 
 const record = ref<any>(null)
 const loading = ref(true)
+const submitBannerMessage = ref('')
+let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
 
 let recordId = ''
 
@@ -121,9 +127,9 @@ function formatAmount(n: number): string {
 
 const { run: fetchRecord } = useCloudCall('finance-service', 'getIncomeDetail')
 const { run: deleteRecord } = useCloudCall('finance-service', 'deleteIncome', {
-  successMessage: '已删除',
-  showLoading: true,
-  loadingText: '删除中...',
+  successMode: 'silent',
+  loadingMode: 'local',
+  throwOnError: true,
 })
 
 async function loadRecord() {
@@ -154,11 +160,21 @@ function confirmDelete() {
       if (res.confirm) {
         const result = await deleteRecord(recordId)
         if (result) {
+          queueSubmitFeedback({ message: '已删除收入记录' })
+          await wait(140)
           uni.navigateBack()
         }
       }
     },
   })
+}
+
+function showSubmitBanner(message: string) {
+  submitBannerMessage.value = message
+  if (submitBannerTimer) clearTimeout(submitBannerTimer)
+  submitBannerTimer = setTimeout(() => {
+    submitBannerMessage.value = ''
+  }, 2200)
 }
 
 onLoad((query) => {
@@ -167,6 +183,13 @@ onLoad((query) => {
     loadRecord()
   } else {
     loading.value = false
+  }
+})
+
+onShow(() => {
+  const feedback = consumeSubmitFeedback('/pages/finance/income-detail')
+  if (feedback?.message) {
+    showSubmitBanner(feedback.message)
   }
 })
 </script>

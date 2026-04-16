@@ -123,9 +123,9 @@ const showDeleteConfirm = ref(false)
 const deletingName = ref('')
 
 const { run: fetchCategories } = useCloudCall<{ data: ExpenseCategory[] }>('finance-service', 'getExpenseCategories')
-const { run: addCategory } = useCloudCall('finance-service', 'addExpenseCategory', { successMessage: '已添加' })
-const { run: updateCategory } = useCloudCall('finance-service', 'updateExpenseCategory', { successMessage: '已更新' })
-const { run: deleteCategory } = useCloudCall('finance-service', 'removeExpenseCategory', { successMessage: '已删除' })
+const { run: addCategory } = useCloudCall('finance-service', 'addExpenseCategory', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
+const { run: updateCategory } = useCloudCall('finance-service', 'updateExpenseCategory', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
+const { run: deleteCategory } = useCloudCall('finance-service', 'removeExpenseCategory', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 
 async function load() {
   const res = await fetchCategories()

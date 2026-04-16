@@ -13,6 +13,8 @@
       </template>
     </BPageHeader>
 
+    <BSubmitBanner :message="submitBannerMessage" />
+
     <!-- 加载中 -->
     <view v-if="loading" class="card-feed">
       <BSkeleton :rows="5" />
@@ -156,9 +158,11 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { consumeSubmitFeedback, queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
+import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
 import BCard from '@/components/base/BCard.vue'
 import BTag from '@/components/base/BTag.vue'
 import BButton from '@/components/base/BButton.vue'
@@ -171,6 +175,8 @@ const loading = ref(true)
 const showMore = ref(false)
 
 let recordId = ''
+const submitBannerMessage = ref('')
+let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
 
 const typeMap: Record<string, { label: string; tagColor: any; cardColor: any }> = {
   vaccination: { label: '疫苗', tagColor: 'blue', cardColor: 'blue' },
@@ -234,9 +240,9 @@ function formatAmount(n: number): string {
 
 const { run: fetchRecord } = useCloudCall('health-service', 'getHealthRecord')
 const { run: deleteRecord } = useCloudCall('health-service', 'deleteHealthRecord', {
-  successMessage: '已删除',
-  showLoading: true,
-  loadingText: '删除中...',
+  successMode: 'silent',
+  loadingMode: 'local',
+  throwOnError: true,
 })
 
 async function loadRecord() {
@@ -267,6 +273,8 @@ function confirmDelete() {
       if (res.confirm) {
         const result = await deleteRecord(recordId)
         if (result) {
+          queueSubmitFeedback({ message: '已删除健康记录' })
+          await wait(140)
           uni.navigateBack()
         }
       }
@@ -278,12 +286,27 @@ function handleDeleteFromMore() {
   confirmDelete()
 }
 
+function showSubmitBanner(message: string) {
+  submitBannerMessage.value = message
+  if (submitBannerTimer) clearTimeout(submitBannerTimer)
+  submitBannerTimer = setTimeout(() => {
+    submitBannerMessage.value = ''
+  }, 2200)
+}
+
 onLoad((query) => {
   recordId = query?.id || ''
   if (recordId) {
     loadRecord()
   } else {
     loading.value = false
+  }
+})
+
+onShow(() => {
+  const feedback = consumeSubmitFeedback('/pages/record/health-detail')
+  if (feedback?.message) {
+    showSubmitBanner(feedback.message)
   }
 })
 </script>

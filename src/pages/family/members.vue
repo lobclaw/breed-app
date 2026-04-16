@@ -106,9 +106,9 @@ const createdDate = computed(() => formatDate(currentFamily.value?.created_at))
 const showNameModal = ref(false)
 const nameInput = ref('')
 
-const { run: updateRole } = useCloudCall('family-service', 'updateMemberRole', { successMessage: '已更新' })
-const { run: removeMember } = useCloudCall('family-service', 'removeMember', { successMessage: '已移除' })
-const { run: doUpdateFamilyName } = useCloudCall('family-service', 'updateFamilyName', { successMessage: '已更新' })
+const { run: updateRole } = useCloudCall('family-service', 'updateMemberRole', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
+const { run: removeMember } = useCloudCall('family-service', 'removeMember', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
+const { run: doUpdateFamilyName } = useCloudCall('family-service', 'updateFamilyName', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 
 function roleLabel(role: string) {
   const labels: Record<string, string> = { creator: '创建者', admin: '管理员', helper: '协助者' }

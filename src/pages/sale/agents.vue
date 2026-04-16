@@ -103,9 +103,9 @@ const deletingId = ref('')
 const form = reactive({ name: '', contact_info: '' })
 
 const { run: fetchAgents } = useCloudCall<{ data: any[] }>('finance-service', 'getAgentList')
-const { run: addAgent } = useCloudCall('finance-service', 'addAgent', { successMessage: '已添加' })
-const { run: updateAgent } = useCloudCall('finance-service', 'updateAgent', { successMessage: '已更新' })
-const { run: removeAgent } = useCloudCall('finance-service', 'removeAgent', { successMessage: '已删除' })
+const { run: addAgent } = useCloudCall('finance-service', 'addAgent', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
+const { run: updateAgent } = useCloudCall('finance-service', 'updateAgent', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
+const { run: removeAgent } = useCloudCall('finance-service', 'removeAgent', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 
 async function load() {
   const res = await fetchAgents()

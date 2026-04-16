@@ -186,10 +186,10 @@ let litterId = ''
 let sourceTaskId = ''
 
 const { run: fetchDetail } = useCloudCall<{ data: any }>('breeding-service', 'getLitterDetail')
-const { run: doWeaning } = useCloudCall('breeding-service', 'confirmWeaning', { successMessage: '已确认断奶' })
-const { run: doAddPuppy } = useCloudCall('breeding-service', 'addPuppyToLitter', { successMessage: '已添加' })
-const { run: doUpdateBirthDate } = useCloudCall('breeding-service', 'updateBirthDate', { successMessage: '已更新' })
-const { run: doUpdateNotes } = useCloudCall('breeding-service', 'updateLitter', { successMessage: '备注已更新' })
+const { run: doWeaning } = useCloudCall('breeding-service', 'confirmWeaning', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
+const { run: doAddPuppy } = useCloudCall('breeding-service', 'addPuppyToLitter', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
+const { run: doUpdateBirthDate } = useCloudCall('breeding-service', 'updateBirthDate', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
+const { run: doUpdateNotes } = useCloudCall('breeding-service', 'updateLitter', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 const { run: completeTask } = useCloudCall('task-service', 'completeTask', {
   successMode: 'silent',
   loadingMode: 'local',

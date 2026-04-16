@@ -509,7 +509,9 @@ function toggleAllOverride() {
 }
 
 const { run: saveProtocol } = useCloudCall('health-service', 'addMedicationProtocol', {
-  successMessage: '方案已保存',
+  successMode: 'silent',
+  loadingMode: 'local',
+  throwOnError: true,
 })
 
 async function doSaveProtocol() {

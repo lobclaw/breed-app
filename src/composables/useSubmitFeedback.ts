@@ -10,6 +10,11 @@ export interface SubmitFeedbackPayload {
   createdCount?: number
   skippedCount?: number
   refreshHome?: boolean
+  undoAction?: {
+    key: string
+    label: string
+    expiresAt: number
+  }
 }
 
 function normalizeRoute(route?: string) {

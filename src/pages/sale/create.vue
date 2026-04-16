@@ -44,9 +44,10 @@
       <button
         class="submit-btn"
         :disabled="!selectedDog"
-        :loading="submitting"
+        :loading="submitState === 'submitting'"
+        :class="{ 'submit-btn--success': submitState === 'success' }"
         @click="submit"
-      >确认设定底价</button>
+      >{{ submitButtonText }}</button>
       <text class="submit-note">设定后犬只状态变为「待售」</text>
     </view>
 
@@ -54,13 +55,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 
 const selectedDog = ref<any>(null)
-const submitting = ref(false)
+const submitState = ref<'idle' | 'submitting' | 'success'>('idle')
 const floorPriceInput = ref('')
 
 const form = reactive({
@@ -68,13 +70,20 @@ const form = reactive({
   notes: '',
 })
 
+const submitButtonText = computed(() => {
+  if (submitState.value === 'submitting') return '提交中...'
+  if (submitState.value === 'success') return '已创建'
+  return '确认设定底价'
+})
+
 const { run: createSale } = useCloudCall('finance-service', 'createSaleRecord', {
-  successMessage: '已创建',
-  showLoading: true,
+  successMode: 'silent',
+  loadingMode: 'local',
+  throwOnError: true,
 })
 
 async function submit() {
-  submitting.value = true
+  submitState.value = 'submitting'
   try {
     const res = await createSale({
       dog_id: selectedDog.value?._id || '',
@@ -82,9 +91,16 @@ async function submit() {
       buyer_info: form.buyer_info || null,
       notes: form.notes || null,
     })
-    if (res) uni.navigateBack()
+    if (res) {
+      submitState.value = 'success'
+      queueSubmitFeedback({ message: '已创建销售记录' })
+      await wait(140)
+      uni.navigateBack()
+    }
+  } catch {
+    submitState.value = 'idle'
   } finally {
-    submitting.value = false
+    if (submitState.value !== 'success') submitState.value = 'idle'
   }
 }
 </script>

@@ -135,8 +135,8 @@
 
       <!-- 保存按钮 + 时间 -->
       <view class="bottom-area">
-        <button class="save-btn" :disabled="!hasAnyWeight || submitting" @click="submit">
-          <text>{{ submitting ? '保存中...' : '保存全部' }}</text>
+        <button class="save-btn" :class="{ 'save-btn--success': submitState === 'success' }" :disabled="!hasAnyWeight || submitState === 'submitting'" @click="submit">
+          <text>{{ submitButtonText }}</text>
         </button>
         <view class="time-display">
           <text class="material-icons-round" style="font-size: 14px;">schedule</text>
@@ -154,6 +154,7 @@
 import { ref, computed } from 'vue'
 import { onShow, onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { wait } from '@/composables/useSubmitFeedback'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 
@@ -162,7 +163,7 @@ const loading = ref(true)
 const selectedLitter = ref<any>(null)
 const puppies = ref<any[]>([])
 const weights = ref<string[]>([])
-const submitting = ref(false)
+const submitState = ref<'idle' | 'submitting' | 'success'>('idle')
 const weightDate = ref(Date.now())
 const timeStr = ref('')
 const inputRefs = ref<any[]>([])
@@ -173,6 +174,11 @@ const dateStr = computed(() => {
 })
 
 const hasAnyWeight = computed(() => weights.value.some(w => parseFloat(w) > 0))
+const submitButtonText = computed(() => {
+  if (submitState.value === 'submitting') return '保存中...'
+  if (submitState.value === 'success') return '已保存'
+  return '保存全部'
+})
 const filledCount = computed(() => weights.value.filter(w => parseFloat(w) > 0).length)
 
 const filledWeights = computed(() => weights.value.map(w => parseFloat(w)).filter(w => w > 0))
@@ -255,7 +261,11 @@ function goBack() {
 }
 
 const { run: fetchLitters } = useCloudCall<{ data: any[] }>('breeding-service', 'getActiveLitters')
-const { run: batchAdd } = useCloudCall('health-service', 'batchAddWeights', { successMessage: '已保存', showLoading: true })
+const { run: batchAdd } = useCloudCall('health-service', 'batchAddWeights', {
+  successMode: 'silent',
+  loadingMode: 'local',
+  throwOnError: true,
+})
 
 function selectLitter(litter: any) {
   selectedLitter.value = litter
@@ -286,7 +296,7 @@ async function loadLitters() {
 
 async function submit() {
   if (!selectedLitter.value) return
-  submitting.value = true
+  submitState.value = 'submitting'
 
   // 将 timeStr (HH:MM) 解析并加到 weightDate（midnight）上
   let finalDate = weightDate.value
@@ -309,10 +319,13 @@ async function submit() {
     const res = await batchAdd(selectedLitter.value._id, weightEntries)
     if (res) {
       weights.value = puppies.value.map(() => '')
-      uni.showToast({ title: `已保存${weightEntries.length}条`, icon: 'success' })
+      submitState.value = 'success'
+      await wait(140)
     }
+  } catch {
+    submitState.value = 'idle'
   } finally {
-    submitting.value = false
+    if (submitState.value !== 'success') submitState.value = 'idle'
   }
 }
 
@@ -694,6 +707,11 @@ onShow(() => {
 
   &[disabled] {
     opacity: 0.5;
+  }
+
+  &.save-btn--success {
+    background: var(--green);
+    box-shadow: 0 4px 16px rgba(68, 170, 107, 0.22);
   }
 }
 
