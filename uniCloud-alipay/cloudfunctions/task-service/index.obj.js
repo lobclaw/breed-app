@@ -477,7 +477,7 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
         id: `batch-${getTaskVariantKey(group[0])}-${group[0].due_date}`,
         domain: getTaskDomain(group[0]),
         priority: highestPriority(pendingInGroup),
-        groupTitle: `${group[0].display_title || group[0].title} · ${dogs.length}只`,
+        groupTitle: `${group[0].display_title || group[0].title}`,
         dogs,
         tasks: pendingInGroup,
         progress: { done: 0, total: dogs.length },

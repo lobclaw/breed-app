@@ -844,9 +844,6 @@ function syncCardMeta(card: any, remainingTasks: any[]) {
     if (card.progress) {
       card.progress = { ...card.progress, total: card.dogs.length }
     }
-    if (card.cardType === 'batch' && typeof card.groupTitle === 'string') {
-      card.groupTitle = card.groupTitle.replace(/ · \d+只$/, ` · ${card.dogs.length}只`)
-    }
   }
 
   return card

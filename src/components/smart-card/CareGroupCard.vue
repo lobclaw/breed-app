@@ -10,8 +10,11 @@
         <text style="font-size: 20px;">🤰</text>
       </view>
       <view class="card-title-area">
-        <text class="card-name">{{ card.groupTitle }} · {{ card.dogs?.length || 0 }}只</text>
+        <text class="card-name">{{ card.groupTitle }}</text>
         <text class="card-sub">{{ card.tasks?.[0]?.title || '' }}</text>
+      </view>
+      <view class="fraction-badge" :class="card.priority === 'overdue' ? 'fraction-badge--red' : 'fraction-badge--amber'">
+        <text class="fraction-badge-text" :class="card.priority === 'overdue' ? 'fraction-badge-text--red' : 'fraction-badge-text--amber'">{{ card.dogs?.length || 0 }}只</text>
       </view>
     </view>
 
@@ -85,6 +88,19 @@ function statusClass(dog: any) {
 .card-title-area { flex: 1; }
 .card-name { display: block; font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--text-1); }
 .card-sub { display: block; font-size: 12px; color: var(--text-2); margin-top: 1px; }
+.fraction-badge {
+  padding: 3px 10px;
+  border-radius: 999px;
+  &--red { background: var(--red-soft); }
+  &--amber { background: var(--amber-soft); }
+}
+.fraction-badge-text {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 800;
+  &--red { color: var(--red); }
+  &--amber { color: var(--amber); }
+}
 
 /* 群组行 — 一比一还原 .group-items/.group-item */
 .group-items { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }

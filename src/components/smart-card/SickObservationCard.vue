@@ -11,7 +11,10 @@
       </view>
       <view class="card-title-area">
         <text class="card-name">{{ card.groupTitle || '疾病观察' }}</text>
-        <text class="card-sub">{{ card.dogs?.length || 0 }}项观察中</text>
+        <text class="card-sub">{{ uniqueDogCount }}只犬</text>
+      </view>
+      <view class="fraction-badge fraction-badge--illness">
+        <text class="fraction-badge-text fraction-badge-text--illness">{{ dogs.length }}项</text>
       </view>
     </view>
 
@@ -71,6 +74,7 @@ const emit = defineEmits<{
 }>()
 
 const dogs = computed(() => props.card.dogs || [])
+const uniqueDogCount = computed(() => new Set(dogs.value.map((dog: any) => dog.dogId).filter(Boolean)).size)
 const cardTone = computed(() => getHealthTypeTone('illness', props.card.priority))
 const cardClasses = computed(() => [
   `card--${cardTone.value.color}`,
@@ -151,6 +155,17 @@ function onBatchAction() {
 .card-title-area { flex: 1; }
 .card-name { display: block; font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--text-1); }
 .card-sub { display: block; font-size: 12px; color: var(--text-2); margin-top: 1px; }
+.fraction-badge {
+  padding: 3px 10px;
+  border-radius: 999px;
+  &--illness { background: rgba(224, 82, 82, 0.10); }
+}
+.fraction-badge-text {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 800;
+  &--illness { color: rgba(224, 82, 82, 0.84); }
+}
 
 /* 折叠栏 */
 .collapse-bar {
