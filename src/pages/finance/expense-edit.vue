@@ -67,8 +67,16 @@
       <view class="form-row">
         <text class="form-label">关联</text>
         <view class="form-right" @click="pickLink">
-          <text class="material-icons-round" style="font-size:18px;color:var(--text-3);">link</text>
-          <text style="color:var(--text-3);font-size:14px;">点击选择关联</text>
+          <text class="material-icons-round" style="font-size:18px;" :style="{ color: currentLinkText ? 'var(--text-2)' : 'var(--text-3)' }">link</text>
+          <text style="font-size:14px;" :style="{ color: currentLinkText ? 'var(--text-2)' : 'var(--text-3)' }">
+            {{ currentLinkText || '点击选择关联' }}
+          </text>
+          <text
+            v-if="currentLinkText"
+            class="material-icons-round"
+            style="font-size:16px;color:var(--text-4);"
+            @click.stop="clearLink"
+          >close</text>
         </view>
       </view>
 
@@ -112,28 +120,50 @@
       </button>
     </view>
 
-    <!-- 分类选择面板 -->
-    <BSheet v-model:visible="showCategorySheet" title="选择分类">
-      <view class="picker-pills">
-        <text
-          v-for="cat in categories"
-          :key="cat"
-          class="picker-pill"
-          :class="{ active: form.category === cat }"
-          @click="form.category = cat; showCategorySheet = false"
-        >{{ cat }}</text>
-      </view>
-    </BSheet>
+    <BExpenseCategorySheet
+      v-model:visible="showCategorySheet"
+      v-model="form.category"
+      :categories="categories"
+      :recent-categories="recentCategories"
+      @manage="openExpenseCategoryManager"
+    />
+
+    <BFinanceLinkSheet
+      v-model:visible="showLinkSheet"
+      mode="expense"
+      @select="onLinkKindSelect"
+    />
+
+    <BDogPicker
+      v-model:visible="showDogPicker"
+      :multiple="true"
+      title="选择犬只"
+      @selectMultiple="onDogsSelected"
+    />
+
+    <BLitterSelector
+      v-model:visible="showLitterPicker"
+      @select="onLitterSelected"
+    />
+
+    <BCycleSelector
+      v-model:visible="showCyclePicker"
+      @select="onCycleSelected"
+    />
   </view>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import { queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
-import BSheet from '@/components/layout/BSheet.vue'
+import BExpenseCategorySheet from '@/components/form/BExpenseCategorySheet.vue'
+import BFinanceLinkSheet from '@/components/form/BFinanceLinkSheet.vue'
+import BDogPicker from '@/components/form/BDogPicker.vue'
+import BLitterSelector from '@/components/form/BLitterSelector.vue'
+import BCycleSelector from '@/components/form/BCycleSelector.vue'
 
 let expenseId = ''
 
@@ -142,7 +172,12 @@ const submitting = ref(false)
 const photos = ref<string[]>([])
 const loading = ref(true)
 const showCategorySheet = ref(false)
+const showLinkSheet = ref(false)
+const showDogPicker = ref(false)
+const showLitterPicker = ref(false)
+const showCyclePicker = ref(false)
 const dateChipActive = ref('')
+const RECENT_EXPENSE_CATEGORY_KEY = 'finance_recent_expense_categories'
 
 const form = reactive({
   category: '食品',
@@ -150,7 +185,13 @@ const form = reactive({
   notes: '',
 })
 
-const categories = ['食品', '营养品', '消耗品', '日常用品', '固定开销', '交通', '医疗', '配种费', '其他']
+const DEFAULT_EXPENSE_CATEGORIES = ['食品', '营养品', '消耗品', '日常用品', '固定开销', '交通', '医疗', '配种费', '其他']
+const customCategories = ref<string[]>([])
+const categories = computed(() => [...DEFAULT_EXPENSE_CATEGORIES, ...customCategories.value])
+const recentCategories = ref<string[]>([])
+const linkedDogs = ref<any[]>([])
+const linkedLitter = ref<any | null>(null)
+const linkedCycle = ref<any | null>(null)
 
 const categoryIcons: Record<string, string> = {
   '食品': 'restaurant',
@@ -165,6 +206,22 @@ const categoryIcons: Record<string, string> = {
 }
 
 const categoryIcon = computed(() => categoryIcons[form.category] || 'more_horiz')
+const currentLinkText = computed(() => {
+  if (linkedDogs.value.length) {
+    return linkedDogs.value.length === 1 ? linkedDogs.value[0].name : `${linkedDogs.value.length}只犬`
+  }
+  if (linkedLitter.value) {
+    const damName = linkedLitter.value.damName || linkedLitter.value.dam_name || '未知母犬'
+    const litterNumber = linkedLitter.value.litterNumber || linkedLitter.value.litter_number || '?'
+    return `${damName} · 第${litterNumber}窝`
+  }
+  if (linkedCycle.value) {
+    const damName = linkedCycle.value.damName || linkedCycle.value.dam_name || '未知母犬'
+    const cycleNumber = linkedCycle.value.cycleNumber || linkedCycle.value.cycle_number || '?'
+    return `${damName} · 第${cycleNumber}次繁育`
+  }
+  return ''
+})
 
 const dateStr = computed(() => {
   const d = new Date(form.date)
@@ -190,8 +247,74 @@ function onDateChange(e: any) {
   dateChipActive.value = ''
 }
 
+function readRecentExpenseCategories() {
+  try {
+    return JSON.parse(uni.getStorageSync(RECENT_EXPENSE_CATEGORY_KEY) || '[]')
+  } catch {
+    return []
+  }
+}
+
+function syncRecentCategories() {
+  recentCategories.value = readRecentExpenseCategories().filter((item: string) => categories.value.includes(item))
+}
+
+function saveRecentExpenseCategory(name: string) {
+  const next = [name, ...recentCategories.value.filter(item => item !== name)].slice(0, 2)
+  recentCategories.value = next
+  try {
+    uni.setStorageSync(RECENT_EXPENSE_CATEGORY_KEY, JSON.stringify(next))
+  } catch {
+    // ignore
+  }
+}
+
+function openExpenseCategoryManager() {
+  uni.navigateTo({ url: '/pages/profile/expense-categories' })
+}
+
 function pickLink() {
-  uni.showToast({ title: '关联记录功能开发中', icon: 'none' })
+  showLinkSheet.value = true
+}
+
+function clearLink() {
+  linkedDogs.value = []
+  linkedLitter.value = null
+  linkedCycle.value = null
+}
+
+function onLinkKindSelect(kind: 'dogs' | 'litter' | 'cycle' | 'none') {
+  if (kind === 'none') {
+    clearLink()
+    return
+  }
+  if (kind === 'dogs') {
+    linkedLitter.value = null
+    linkedCycle.value = null
+    showDogPicker.value = true
+    return
+  }
+  if (kind === 'litter') {
+    linkedDogs.value = []
+    linkedCycle.value = null
+    showLitterPicker.value = true
+    return
+  }
+  linkedDogs.value = []
+  linkedLitter.value = null
+  showCyclePicker.value = true
+}
+
+function onDogsSelected(dogs: any[]) {
+  linkedDogs.value = dogs || []
+}
+
+function onLitterSelected(litter: any) {
+  linkedLitter.value = litter
+}
+
+function onCycleSelected(cycle: any) {
+  linkedCycle.value = cycle
 }
 
 function addPhoto() {
@@ -209,23 +332,61 @@ const { run: getExpense } = useCloudCall('finance-service', 'getExpenseDetail', 
   showLoading: false,
 })
 
+const { run: fetchCategories } = useCloudCall<{ data: Array<{ name: string; is_default: boolean }> }>('finance-service', 'getExpenseCategories', {
+  showLoading: false,
+})
+
 const { run: updateExpense } = useCloudCall('finance-service', 'updateExpense', {
   successMode: 'silent',
   loadingMode: 'local',
   throwOnError: true,
 })
 
+async function refreshCategoryOptions() {
+  const catRes = await fetchCategories()
+  if (catRes?.data) {
+    customCategories.value = catRes.data.filter(item => !item.is_default).map(item => item.name)
+  }
+  syncRecentCategories()
+}
+
 async function loadExpense(id: string) {
   loading.value = true
   try {
-    const res = await getExpense({ id })
-    if (res) {
-      const data = res as any
+    const [catRes, res] = await Promise.all([
+      fetchCategories(),
+      getExpense({ id }),
+    ])
+    if (catRes?.data) {
+      customCategories.value = catRes.data.filter(item => !item.is_default).map(item => item.name)
+      syncRecentCategories()
+    }
+    if (res?.data) {
+      const data = res.data as any
       amountInput.value = String(data.total_amount || '')
       form.category = data.category || '食品'
       form.date = data.date || Date.now()
       form.notes = data.notes || ''
       photos.value = data.photos || data.images || []
+      linkedDogs.value = data.linked_dogs || []
+      if (data.linked_litter_id) {
+        linkedLitter.value = {
+          _id: data.linked_litter_id,
+          damName: data.dam_name,
+          litterNumber: data.litter_number,
+        }
+      } else {
+        linkedLitter.value = null
+      }
+      if (data.linked_cycle_id) {
+        linkedCycle.value = {
+          _id: data.linked_cycle_id,
+          damName: data.dam_name,
+          cycleNumber: data.cycle_number,
+        }
+      } else {
+        linkedCycle.value = null
+      }
     }
   } finally {
     loading.value = false
@@ -242,9 +403,16 @@ async function submit() {
       date: form.date,
       notes: form.notes || null,
       images: photos.value,
+      linked_cycle_id: linkedCycle.value?._id || null,
+      linked_litter_id: linkedLitter.value?._id || null,
+      linked_dog_ids: linkedDogs.value.map((dog: any) => dog._id),
+      dam_name: linkedCycle.value?.damName || linkedCycle.value?.dam_name || linkedLitter.value?.damName || linkedLitter.value?.dam_name || null,
+      litter_number: linkedLitter.value?.litterNumber || linkedLitter.value?.litter_number || null,
+      dog_names: linkedDogs.value.map((dog: any) => dog.name).filter(Boolean),
       source_type: 'manual',
     })
     if (res) {
+      saveRecentExpenseCategory(form.category)
       queueSubmitFeedback({ message: '已更新支出记录' })
       await wait(140)
       uni.navigateBack()
@@ -261,6 +429,10 @@ onLoad((query) => {
   } else {
     loading.value = false
   }
+})
+
+onShow(() => {
+  refreshCategoryOptions()
 })
 </script>
 

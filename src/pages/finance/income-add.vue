@@ -48,9 +48,17 @@
       <!-- 关联 -->
       <view class="form-row">
         <text class="form-label">关联</text>
-        <view class="form-right" @click="pickLink">
-          <text class="material-icons-round" style="font-size:18px;color:var(--text-3);">link</text>
-          <text style="color:var(--text-3);font-size:14px;">点击选择关联</text>
+        <view class="form-right" @click="showDogPicker = true">
+          <text class="material-icons-round" style="font-size:18px;" :style="{ color: linkedDog?.name ? 'var(--text-2)' : 'var(--text-3)' }">link</text>
+          <text style="font-size:14px;" :style="{ color: linkedDog?.name ? 'var(--text-2)' : 'var(--text-3)' }">
+            {{ linkedDog?.name || '点击选择关联犬只' }}
+          </text>
+          <text
+            v-if="linkedDog?.name"
+            class="material-icons-round"
+            style="font-size:16px;color:var(--text-4);"
+            @click.stop="clearLinkedDog"
+          >close</text>
         </view>
       </view>
 
@@ -96,17 +104,18 @@
     </view>
 
     <!-- 分类选择面板 -->
-    <BSheet v-model:visible="showTypeSheet" title="选择分类">
-      <view class="picker-pills">
-        <text
-          v-for="t in incomeTypes"
-          :key="t"
-          class="picker-pill"
-          :class="{ active: form.type === t }"
-          @click="form.type = t; showTypeSheet = false"
-        >{{ t }}</text>
-      </view>
-    </BSheet>
+    <BIncomeTypeSheet
+      v-model:visible="showTypeSheet"
+      v-model="form.type"
+      :types="incomeTypes"
+      :recent-types="recentIncomeTypes"
+    />
+
+    <BDogPicker
+      v-model:visible="showDogPicker"
+      title="选择犬只"
+      @select="onDogSelect"
+    />
   </view>
 </template>
 
@@ -115,12 +124,17 @@ import { ref, reactive, computed } from 'vue'
 import { useCloudCall } from '@/composables/useCloudCall'
 import { queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
-import BSheet from '@/components/layout/BSheet.vue'
+import BIncomeTypeSheet from '@/components/form/BIncomeTypeSheet.vue'
+import BDogPicker from '@/components/form/BDogPicker.vue'
 
 const amountInput = ref('')
 const submitState = ref<'idle' | 'submitting' | 'success'>('idle')
 const photos = ref<string[]>([])
 const showTypeSheet = ref(false)
+const showDogPicker = ref(false)
+const recentIncomeTypes = ref<string[]>([])
+const RECENT_INCOME_TYPE_KEY = 'finance_recent_income_types'
+const linkedDog = ref<any | null>(null)
 
 // 日期
 const today = new Date()
@@ -167,6 +181,21 @@ const typeIcons: Record<string, string> = {
 
 const typeIcon = computed(() => typeIcons[form.type] || 'more_horiz')
 
+function readRecentIncomeTypes() {
+  try {
+    const raw = uni.getStorageSync(RECENT_INCOME_TYPE_KEY)
+    return Array.isArray(raw) ? raw.filter(item => typeof item === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function saveRecentIncomeType(name: string) {
+  const next = [name, ...readRecentIncomeTypes().filter(item => item !== name)].slice(0, 2)
+  recentIncomeTypes.value = next
+  uni.setStorageSync(RECENT_INCOME_TYPE_KEY, next)
+}
+
 const canSubmit = computed(() => {
   const amount = parseFloat(amountInput.value)
   return amount > 0 && form.type && !!date.value
@@ -178,8 +207,12 @@ const submitButtonText = computed(() => {
   return '保存收入'
 })
 
-function pickLink() {
-  uni.showToast({ title: '关联记录功能开发中', icon: 'none' })
+function onDogSelect(dog: any) {
+  linkedDog.value = dog || null
+}
+
+function clearLinkedDog() {
+  linkedDog.value = null
 }
 
 function addPhoto() {
@@ -208,9 +241,12 @@ async function submit() {
       date: date.value,
       notes: form.notes || null,
       images: photos.value,
+      dog_id: linkedDog.value?._id || null,
+      dog_name: linkedDog.value?.name || null,
       source_type: 'manual',
     })
     if (res) {
+      saveRecentIncomeType(form.type)
       submitState.value = 'success'
       queueSubmitFeedback({ message: '已保存收入' })
       await wait(140)
@@ -222,6 +258,8 @@ async function submit() {
     if (submitState.value !== 'success') submitState.value = 'idle'
   }
 }
+
+recentIncomeTypes.value = readRecentIncomeTypes()
 </script>
 
 <style lang="scss" scoped>
@@ -354,34 +392,6 @@ async function submit() {
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-/* ---- Picker pills ---- */
-.picker-pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding: 8px 4px 24px;
-}
-
-.picker-pill {
-  padding: 8px 18px;
-  border-radius: 20px;
-  font-size: 14px;
-  font-weight: 600;
-  background: var(--card-dim);
-  color: var(--text-2);
-  transition: all 0.12s ease;
-
-  &:active {
-    transform: scale(0.92);
-  }
-
-  &.active {
-    background: var(--primary);
-    color: #fff;
-    box-shadow: 0 2px 8px rgba(234, 62, 119, 0.25);
-  }
 }
 
 /* ---- Note section ---- */

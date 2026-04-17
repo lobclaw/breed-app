@@ -278,6 +278,113 @@
       </view>
     </BSheet>
 
+    <BSheet v-model:visible="showSickBatch" title="疾病批量操作">
+      <view class="task-sheet">
+        <view class="task-sheet__select-bar">
+          <view class="task-sheet__select-toggle" @click="toggleSelectAllSickBatch">
+            <view class="task-sheet__checkbox" :class="{ checked: isAllSickBatchSelected }">
+              <text v-if="isAllSickBatchSelected" style="color: #fff; font-size: 12px; font-weight: 700;">&#10003;</text>
+            </view>
+            <text class="task-sheet__select-label">
+              {{ isAllSickBatchSelected ? '取消全选' : '全选' }}（{{ sickBatchSelectedCount }}/{{ sickBatchList.length }}）
+            </text>
+          </view>
+        </view>
+        <scroll-view scroll-y class="task-sheet__dog-list">
+          <view
+            v-for="item in sickBatchList"
+            :key="item.id"
+            class="task-sheet__dog-item"
+            @click="toggleSickBatchItem(item.id)"
+          >
+            <view class="task-sheet__checkbox" :class="{ checked: sickBatchSelected[item.id] }">
+              <text v-if="sickBatchSelected[item.id]" style="color: #fff; font-size: 12px; font-weight: 700;">&#10003;</text>
+            </view>
+            <view class="task-sheet__dog-avatar task-sheet__dog-avatar--illness">
+              <text class="material-icons-round" style="color: #fff; font-size: 14px;">sick</text>
+            </view>
+            <view class="task-sheet__dog-copy">
+              <text class="task-sheet__dog-name-text">{{ item.name }}</text>
+              <text class="task-sheet__dog-detail-text">{{ item.illness }} · {{ item.treatmentStatus || '观察中' }} · 第{{ item.daysSick || 1 }}天</text>
+            </view>
+          </view>
+        </scroll-view>
+        <view class="task-sheet__actions task-sheet__actions--triple">
+          <view
+            class="task-sheet__btn task-sheet__btn--sick-secondary"
+            :class="{ disabled: sickBatchSelectedCount === 0 }"
+            @click="confirmSickBatchAction('recover')"
+          >
+            <text class="task-sheet__btn-label task-sheet__btn-label--success">康复</text>
+          </view>
+          <view
+            class="task-sheet__btn task-sheet__btn--sick-warning"
+            :class="{ disabled: sickBatchSelectedCount === 0 }"
+            @click="confirmSickBatchAction('update_status')"
+          >
+            <text class="task-sheet__btn-label task-sheet__btn-label--warning">开始治疗</text>
+          </view>
+          <view
+            class="task-sheet__btn task-sheet__btn--sick-primary"
+            :class="{ disabled: sickBatchSelectedCount === 0 }"
+            @click="confirmSickBatchAction('start_medication')"
+          >
+            <text class="task-sheet__btn-label task-sheet__btn-label--primary">开始用药</text>
+          </view>
+        </view>
+      </view>
+    </BSheet>
+
+    <BSheet v-model:visible="showMedBatch" title="今日用药批量操作">
+      <view class="task-sheet">
+        <view class="task-sheet__select-bar">
+          <view class="task-sheet__select-toggle" @click="toggleSelectAllMedBatch">
+            <view class="task-sheet__checkbox" :class="{ checked: isAllMedBatchSelected }">
+              <text v-if="isAllMedBatchSelected" style="color: #fff; font-size: 12px; font-weight: 700;">&#10003;</text>
+            </view>
+            <text class="task-sheet__select-label">
+              {{ isAllMedBatchSelected ? '取消全选' : '全选' }}（{{ medBatchSelectedCount }}/{{ medBatchList.length }}）
+            </text>
+          </view>
+        </view>
+        <scroll-view scroll-y class="task-sheet__dog-list">
+          <view
+            v-for="item in medBatchList"
+            :key="item.id"
+            class="task-sheet__dog-item"
+            @click="toggleMedBatchItem(item.id)"
+          >
+            <view class="task-sheet__checkbox" :class="{ checked: medBatchSelected[item.id] }">
+              <text v-if="medBatchSelected[item.id]" style="color: #fff; font-size: 12px; font-weight: 700;">&#10003;</text>
+            </view>
+            <view class="task-sheet__dog-avatar task-sheet__dog-avatar--plum">
+              <text class="material-icons-round" style="color: #fff; font-size: 14px;">medication</text>
+            </view>
+            <view class="task-sheet__dog-copy">
+              <text class="task-sheet__dog-name-text">{{ item.name }}</text>
+              <text class="task-sheet__dog-detail-text">{{ item.detail }}</text>
+            </view>
+          </view>
+        </scroll-view>
+        <view class="task-sheet__actions">
+          <view
+            class="task-sheet__btn task-sheet__btn--sick-secondary"
+            :class="{ disabled: medBatchRecoverCount === 0 }"
+            @click="confirmMedBatchRecover"
+          >
+            <text class="task-sheet__btn-label task-sheet__btn-label--success">批量康复</text>
+          </view>
+          <view
+            class="task-sheet__btn task-sheet__btn--sick-primary"
+            :class="{ disabled: medBatchSelectedCount === 0 }"
+            @click="confirmMedBatchComplete"
+          >
+            <text class="task-sheet__btn-label task-sheet__btn-label--primary">完成今日用药</text>
+          </view>
+        </view>
+      </view>
+    </BSheet>
+
     <!-- 健康关注卡：操作菜单 -->
     <BSheet v-model:visible="showSickMenu" :title="sickMenuDog?.dogName || ''">
       <view class="sick-menu-body">
@@ -285,9 +392,12 @@
           v-for="(item, idx) in sickMenuItems"
           :key="idx"
           class="sick-menu-item"
+          :class="`sick-menu-item--${getSickMenuTone(item.action)}`"
           @click="onSickMenuSelect(item)"
         >
-          <text class="material-icons-round sick-menu-item__icon">{{ item.icon }}</text>
+          <view class="sick-menu-item__icon-wrap" :class="`sick-menu-item__icon-wrap--${getSickMenuTone(item.action)}`">
+            <text class="material-icons-round sick-menu-item__icon" :class="`sick-menu-item__icon--${getSickMenuTone(item.action)}`">{{ item.icon }}</text>
+          </view>
           <text class="sick-menu-item__label">{{ item.label }}</text>
         </view>
       </view>
@@ -504,12 +614,23 @@ const batchCompleteTitle = ref('批量完成')
 const batchDogList = ref<Array<{ id: string; name: string; completed: boolean }>>([])
 const batchSelected = reactive<Record<string, boolean>>({})
 let batchTaskIds: string[] = []
+const showSickBatch = ref(false)
+const sickBatchList = ref<Array<{ id: string; dogId: string; name: string; illness: string; treatmentStatus: string; daysSick: number; illnessId: string }>>([])
+const sickBatchSelected = reactive<Record<string, boolean>>({})
+const showMedBatch = ref(false)
+const medBatchList = ref<Array<{ id: string; dogId: string; name: string; detail: string; medicationTaskIds: string[]; illnessId: string }>>([])
+const medBatchSelected = reactive<Record<string, boolean>>({})
 
 const batchSelectedCount = computed(() => Object.values(batchSelected).filter(Boolean).length)
 const isAllSelected = computed(() => {
   const uncompleted = batchDogList.value.filter(d => !d.completed)
   return uncompleted.length > 0 && uncompleted.every(d => batchSelected[d.id])
 })
+const sickBatchSelectedCount = computed(() => Object.values(sickBatchSelected).filter(Boolean).length)
+const isAllSickBatchSelected = computed(() => sickBatchList.value.length > 0 && sickBatchList.value.every(item => sickBatchSelected[item.id]))
+const medBatchSelectedCount = computed(() => Object.values(medBatchSelected).filter(Boolean).length)
+const isAllMedBatchSelected = computed(() => medBatchList.value.length > 0 && medBatchList.value.every(item => medBatchSelected[item.id]))
+const medBatchRecoverCount = computed(() => medBatchList.value.filter(item => medBatchSelected[item.id] && !!item.illnessId).length)
 
 function toggleSelectAll() {
   const uncompleted = batchDogList.value.filter(d => !d.completed)
@@ -524,6 +645,28 @@ function toggleBatchDog(id: string) {
   const dog = batchDogList.value.find(d => d.id === id)
   if (dog?.completed) return
   batchSelected[id] = !batchSelected[id]
+}
+
+function toggleSelectAllSickBatch() {
+  const nextValue = !isAllSickBatchSelected.value
+  sickBatchList.value.forEach((item) => {
+    sickBatchSelected[item.id] = nextValue
+  })
+}
+
+function toggleSickBatchItem(id: string) {
+  sickBatchSelected[id] = !sickBatchSelected[id]
+}
+
+function toggleSelectAllMedBatch() {
+  const nextValue = !isAllMedBatchSelected.value
+  medBatchList.value.forEach((item) => {
+    medBatchSelected[item.id] = nextValue
+  })
+}
+
+function toggleMedBatchItem(id: string) {
+  medBatchSelected[id] = !medBatchSelected[id]
 }
 
 function startOfDay(ts: number) {
@@ -976,20 +1119,20 @@ function applyHomeFeedback(payload: any) {
 const { run: updateIllnessStatus } = useCloudCall('health-service', 'updateIllnessStatus')
 const { run: endMedication } = useCloudCall('health-service', 'endMedicationByDog')
 
-/** 乐观移除疾病观察卡中的犬只行（带淡出动画） */
-function removeSickDogLocally(dogId: string) {
+/** 乐观移除疾病观察卡中的观察项（带淡出动画） */
+function removeSickDogLocally(dogId: string, illnessId?: string) {
   const list = cards
   const idx = list.value.findIndex(c => c.cardType === 'sick_observation')
   if (idx < 0) return
   const card = list.value[idx]
-  const dog = (card.dogs || []).find((d: any) => d.dogId === dogId)
+  const dog = (card.dogs || []).find((d: any) => (illnessId ? d.illnessId === illnessId : d.dogId === dogId))
   if (!dog) return
 
   // 标记淡出动画
   dog._removing = true
 
   setTimeout(() => {
-    const remaining = (card.dogs || []).filter((d: any) => d.dogId !== dogId)
+    const remaining = (card.dogs || []).filter((d: any) => (illnessId ? d.illnessId !== illnessId : d.dogId !== dogId))
     if (remaining.length === 0) {
       // 最后一只：整张卡片滑出
       markCardCompleting(card.id)
@@ -1010,6 +1153,7 @@ function removeSickDogLocally(dogId: string) {
 const showSickMenu = ref(false)
 const sickMenuDog = ref<any>(null)
 const sickMenuItems = ref<any[]>([])
+type SickBatchAction = 'recover' | 'update_status' | 'start_medication'
 
 // 健康关注卡：停止用药确认状态
 const showStopConfirm = ref(false)
@@ -1023,24 +1167,127 @@ function onAction(payload: { type: string; data: any }) {
     sickMenuDog.value = payload.data.dog
     sickMenuItems.value = payload.data.items
     showSickMenu.value = true
+  } else if (payload.type === 'show_sick_batch') {
+    sickBatchList.value = (payload.data?.dogs || []).map((dog: any) => ({
+      id: dog.illnessId || `${dog.dogId}-${dog.illness}-${dog._createdAt || 0}`,
+      illnessId: dog.illnessId || '',
+      dogId: dog.dogId,
+      name: dog.dogName,
+      illness: dog.illness || '生病',
+      treatmentStatus: dog.treatmentStatus || '观察中',
+      daysSick: dog.daysSick || 1,
+    }))
+    Object.keys(sickBatchSelected).forEach(key => delete sickBatchSelected[key])
+    sickBatchList.value.forEach((item) => {
+      sickBatchSelected[item.id] = true
+    })
+    showSickBatch.value = true
+  } else if (payload.type === 'show_med_batch') {
+    medBatchList.value = (payload.data?.dogs || []).map((dog: any, index: number) => ({
+      id: dog.dogId || `med-${index}`,
+      dogId: dog.dogId,
+      name: dog.dogName,
+      detail: [dog.illnessNames || dog.illness, dog.drugName, dog.progress].filter(Boolean).join(' · '),
+      medicationTaskIds: (dog.allMedTasks || []).map((task: any) => task._id).filter(Boolean),
+      illnessId: dog.illnessId || '',
+    }))
+    Object.keys(medBatchSelected).forEach(key => delete medBatchSelected[key])
+    medBatchList.value.forEach((item) => {
+      medBatchSelected[item.id] = true
+    })
+    showMedBatch.value = true
   } else if (payload.type === 'show_stop_confirm') {
     // 打开停止用药确认 BSheet
     stopConfirmData.value = payload.data
     showStopConfirm.value = true
   } else if (payload.type === 'recover' && payload.data?.illnessId) {
-    removeSickDogLocally(payload.data.dogId)
+    removeSickDogLocally(payload.data.dogId, payload.data.illnessId)
     updateIllnessStatus(payload.data.illnessId, '已康复')
   } else if (payload.type === 'update_status' && payload.data?.illnessId) {
     // 就地更新状态标签（不移除行）
     const sickCard = cards.value.find(c => c.cardType === 'sick_observation')
     if (sickCard) {
-      const dog = (sickCard.dogs || []).find((d: any) => d.dogId === payload.data.dogId)
+      const dog = (sickCard.dogs || []).find((d: any) => d.illnessId === payload.data.illnessId)
       if (dog) dog.treatmentStatus = payload.data.status
     }
     updateIllnessStatus(payload.data.illnessId, payload.data.status)
   } else if (payload.type === 'stop_medication' && payload.data?.dogId) {
     endMedication(payload.data.dogId).then(() => loadAll())
   }
+}
+
+async function confirmMedBatchComplete() {
+  const selectedItems = medBatchList.value.filter(item => medBatchSelected[item.id])
+  if (selectedItems.length === 0) return
+  showMedBatch.value = false
+
+  const medIds = selectedItems.flatMap(item => item.medicationTaskIds)
+  if (medIds.length > 0) {
+    removeCardLocally('medication', true)
+    await doBatchCompleteMedDay(medIds)
+    await loadTodayCards()
+  }
+}
+
+async function confirmMedBatchRecover() {
+  const selectedItems = medBatchList.value.filter(item => medBatchSelected[item.id] && item.illnessId)
+  if (selectedItems.length === 0) return
+  showMedBatch.value = false
+
+  await Promise.all(selectedItems.map(item => updateIllnessStatus(item.illnessId, '已康复')))
+  await loadAll()
+}
+
+async function confirmSickBatchAction(action: SickBatchAction) {
+  const selectedItems = sickBatchList.value.filter(item => sickBatchSelected[item.id])
+  if (selectedItems.length === 0) return
+
+  showSickBatch.value = false
+
+  if (action === 'recover') {
+    selectedItems.forEach((item) => {
+      removeSickDogLocally(item.dogId, item.illnessId)
+      updateIllnessStatus(item.illnessId, '已康复')
+    })
+    return
+  }
+
+  if (action === 'update_status') {
+    const sickCard = cards.value.find(c => c.cardType === 'sick_observation')
+    if (sickCard) {
+      selectedItems.forEach((item) => {
+        const dog = (sickCard.dogs || []).find((d: any) => d.illnessId === item.illnessId)
+        if (dog) dog.treatmentStatus = '治疗中'
+      })
+    }
+    selectedItems.forEach((item) => {
+      updateIllnessStatus(item.illnessId, '治疗中')
+    })
+    return
+  }
+
+  const duplicateDogIds = new Set<string>()
+  const seenDogIds = new Set<string>()
+  selectedItems.forEach((item) => {
+    if (seenDogIds.has(item.dogId)) duplicateDogIds.add(item.dogId)
+    seenDogIds.add(item.dogId)
+  })
+  if (duplicateDogIds.size > 0) {
+    uni.showToast({ title: '同一犬多条疾病请逐条开始用药', icon: 'none' })
+    return
+  }
+
+  const dogList = selectedItems.map(item => ({ _id: item.dogId, name: item.name }))
+  const illnessParam = selectedItems.length === 1 && selectedItems[0].illnessId
+    ? `&illnessRecordId=${selectedItems[0].illnessId}`
+    : ''
+  uni.navigateTo({ url: `/pages/record/health-medication?batchDogs=${encodeURIComponent(JSON.stringify(dogList))}${illnessParam}` })
+}
+
+function getSickMenuTone(action?: string) {
+  if (action === 'recover') return 'success'
+  if (action === 'start_medication') return 'plum'
+  return 'illness'
 }
 
 function onSickMenuSelect(item: any) {
@@ -1054,7 +1301,8 @@ function onSickMenuSelect(item: any) {
     onAction({ type: 'update_status', data: { dogId: dog.dogId, status: '治疗中', illnessId: dog.illnessId } })
   } else if (item.action === 'start_medication') {
     const dogList = [{ _id: dog.dogId, name: dog.dogName }]
-    uni.navigateTo({ url: `/pages/record/health-medication?batchDogs=${encodeURIComponent(JSON.stringify(dogList))}` })
+    const illnessParam = dog.illnessId ? `&illnessRecordId=${dog.illnessId}` : ''
+    uni.navigateTo({ url: `/pages/record/health-medication?batchDogs=${encodeURIComponent(JSON.stringify(dogList))}${illnessParam}` })
   }
 }
 
@@ -1407,6 +1655,9 @@ onShow(async () => {
   gap: 12px;
   margin-top: 4px;
 }
+.task-sheet__actions--triple {
+  gap: 8px;
+}
 .task-sheet__btn {
   flex: 1;
   height: 44px;
@@ -1418,7 +1669,28 @@ onShow(async () => {
   &:active { transform: scale(0.94); opacity: 0.85; }
   &--cancel { background: var(--card-dim); }
   &--confirm { background: var(--primary); }
+  &--warning { background: var(--amber); }
   &.disabled { opacity: 0.4; pointer-events: none; }
+}
+.task-sheet__btn-label {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  &--success { color: #2f8f68; }
+  &--warning { color: #fff; }
+  &--primary { color: #fff; }
+}
+.task-sheet__btn--sick-secondary {
+  background: linear-gradient(180deg, rgba(72, 190, 137, 0.14), rgba(72, 190, 137, 0.08));
+  border: 1px solid rgba(72, 190, 137, 0.18);
+}
+.task-sheet__btn--sick-warning {
+  background: linear-gradient(180deg, #f3b45a, #eda342);
+  box-shadow: 0 6px 14px rgba(237, 163, 66, 0.18);
+}
+.task-sheet__btn--sick-primary {
+  background: linear-gradient(135deg, rgba(147, 102, 201, 0.96), rgba(119, 86, 188, 0.96));
+  box-shadow: 0 8px 18px rgba(132, 94, 194, 0.2);
 }
 
 /* H-5: 批量完成 */
@@ -1475,11 +1747,27 @@ onShow(async () => {
   justify-content: center;
   flex-shrink: 0;
 }
-.task-sheet__dog-name-text {
+.task-sheet__dog-avatar--illness {
+  background: linear-gradient(135deg, var(--red), #ef8d70);
+}
+.task-sheet__dog-avatar--plum {
+  background: linear-gradient(135deg, var(--plum), #8e7de2);
+}
+.task-sheet__dog-copy {
   flex: 1;
+  min-width: 0;
+}
+.task-sheet__dog-name-text {
+  display: block;
   font-size: 14px;
   font-weight: 600;
   color: var(--text-1);
+}
+.task-sheet__dog-detail-text {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-3);
 }
 .task-sheet__done-badge {
   font-size: 11px;
@@ -1491,15 +1779,48 @@ onShow(async () => {
 }
 
 /* 健康关注操作菜单 */
-.sick-menu-body { padding: 0 0 20px; }
+.sick-menu-body { padding: 4px 0 16px; }
 .sick-menu-item {
   display: flex; align-items: center; gap: 14px;
-  padding: 16px 20px;
-  border-bottom: 0.5px solid var(--card-dim);
-  &:last-child { border-bottom: none; }
-  &:active { background: var(--card-dim); }
+  margin: 0 12px 8px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid transparent;
+  transition: transform 0.12s ease, opacity 0.12s ease, box-shadow 0.12s ease;
+  &:last-child { margin-bottom: 0; }
+  &:active { transform: scale(0.98); opacity: 0.9; }
+  &--success {
+    background: linear-gradient(180deg, rgba(72, 190, 137, 0.12), rgba(72, 190, 137, 0.06));
+    border-color: rgba(72, 190, 137, 0.14);
+  }
+  &--illness {
+    background: linear-gradient(180deg, rgba(224, 82, 82, 0.1), rgba(224, 82, 82, 0.05));
+    border-color: rgba(224, 82, 82, 0.12);
+  }
+  &--plum {
+    background: linear-gradient(180deg, rgba(147, 102, 201, 0.12), rgba(147, 102, 201, 0.06));
+    border-color: rgba(132, 94, 194, 0.14);
+    box-shadow: 0 8px 18px rgba(132, 94, 194, 0.08);
+  }
 }
-.sick-menu-item__icon { font-size: 20px; color: var(--primary); }
+.sick-menu-item__icon-wrap {
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  &--success { background: rgba(72, 190, 137, 0.14); }
+  &--illness { background: rgba(224, 82, 82, 0.12); }
+  &--plum { background: rgba(147, 102, 201, 0.14); }
+}
+.sick-menu-item__icon {
+  font-size: 18px;
+  &--success { color: #2f8f68; }
+  &--illness { color: var(--red); }
+  &--plum { color: var(--plum); }
+}
 .sick-menu-item__label { font-size: 15px; font-weight: 600; color: var(--text-1); }
 
 /* 停止用药确认 */

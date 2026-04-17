@@ -47,11 +47,12 @@
 
     <!-- 操作按钮 -->
     <view v-if="!acting" class="card-actions">
-      <view class="btn" :class="cardTone.variant === 'illness' ? 'btn--ghost-illness' : `btn--ghost-${cardTone.color}`" @click="batchComplete">
-        <text class="btn-text" :class="cardTone.variant === 'illness' ? 'btn-text--illness' : `btn-text--${cardTone.color}`">完成</text>
+      <view class="btn btn--primary" :class="`btn--primary-${cardTone.color}`" @click="batchComplete">
+        <text class="material-icons-round btn-icon btn-icon--white">check_circle</text>
+        <text class="btn-text btn-text--white">完成</text>
       </view>
-      <view class="btn btn--ghost" @click="batchPostpone">
-        <text class="btn-text btn-text--ghost">推迟</text>
+      <view class="btn btn--secondary" :class="`btn--secondary-${cardTone.color}`" @click="batchPostpone">
+        <text class="btn-text" :class="`btn-text--${cardTone.color}`">推迟</text>
       </view>
       <view class="btn-skip" @click="batchSkip">
         <text class="btn-skip-text">跳过</text>
@@ -268,22 +269,44 @@ function batchSkip() {
 
 .card-actions { display: flex; gap: 8px; margin-top: 14px; }
 .btn {
-  padding: 8px 18px; border-radius: 999px; border: none;
+  min-height: 34px;
+  padding: 0 18px;
+  border-radius: 999px;
+  border: none;
+  min-width: 64px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   transition: transform 0.12s ease, opacity 0.12s ease;
   &:active { transform: scale(0.94); opacity: 0.85; }
-  &--filled.btn--blue { background: var(--blue); }
-  &--ghost { background: transparent; border: 1.5px solid var(--text-4); }
-  &--ghost-red { background: transparent; border: 1.5px solid var(--red); }
-  &--ghost-illness { background: transparent; border: 1.5px solid rgba(224, 82, 82, 0.68); }
-  &--ghost-blue { background: transparent; border: 1.5px solid var(--blue); }
-  &--ghost-amber { background: transparent; border: 1.5px solid var(--amber); }
-  &--ghost-plum { background: transparent; border: 1.5px solid var(--plum); }
-  &--ghost-teal { background: transparent; border: 1.5px solid var(--teal); }
+  &--primary {
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08);
+  }
+  &--primary-red { background: linear-gradient(135deg, rgba(224, 82, 82, 0.92), rgba(240, 134, 91, 0.92)); }
+  &--primary-blue { background: linear-gradient(135deg, rgba(71, 144, 255, 0.92), rgba(101, 177, 255, 0.92)); }
+  &--primary-amber { background: linear-gradient(135deg, rgba(242, 167, 62, 0.92), rgba(255, 192, 108, 0.92)); }
+  &--primary-plum { background: linear-gradient(135deg, rgba(145, 116, 219, 0.94), rgba(178, 149, 242, 0.94)); }
+  &--primary-teal { background: linear-gradient(135deg, rgba(39, 171, 171, 0.92), rgba(90, 194, 194, 0.92)); }
+  &--secondary {
+    background: rgba(255, 255, 255, 0.72);
+    border: 1.5px solid transparent;
+  }
+  &--secondary-red { border-color: rgba(224, 82, 82, 0.18); background: linear-gradient(180deg, rgba(224, 82, 82, 0.06), rgba(224, 82, 82, 0.03)); }
+  &--secondary-blue { border-color: rgba(71, 144, 255, 0.18); background: linear-gradient(180deg, rgba(71, 144, 255, 0.06), rgba(71, 144, 255, 0.03)); }
+  &--secondary-amber { border-color: rgba(242, 167, 62, 0.18); background: linear-gradient(180deg, rgba(242, 167, 62, 0.06), rgba(242, 167, 62, 0.03)); }
+  &--secondary-plum { border-color: rgba(145, 116, 219, 0.18); background: linear-gradient(180deg, rgba(145, 116, 219, 0.06), rgba(145, 116, 219, 0.03)); }
+  &--secondary-teal { border-color: rgba(39, 171, 171, 0.18); background: linear-gradient(180deg, rgba(39, 171, 171, 0.06), rgba(39, 171, 171, 0.03)); }
+}
+.btn-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+  &--white { color: #FFFFFF; }
 }
 .btn-text {
   font-family: var(--font-display); font-size: 13px; font-weight: 700;
   &--white { color: #FFFFFF; }
-  &--ghost { color: var(--text-2); }
   &--red { color: var(--red); }
   &--illness { color: var(--red); }
   &--blue { color: var(--blue); }

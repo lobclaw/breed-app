@@ -7,7 +7,7 @@
   <view class="card card--plum">
     <view class="card-header">
       <view class="card-icon card-icon--plum">
-        <text class="material-icons-round" style="font-size: 20px; color: var(--plum);">health_and_safety</text>
+        <text class="material-icons-round" style="font-size: 20px; color: var(--plum);">medication</text>
       </view>
       <view class="card-title-area">
         <text class="card-name">{{ card.groupTitle || '今日用药' }}</text>
@@ -75,8 +75,14 @@
 
           <!-- 动作按钮（未完成时显示）-->
           <template v-if="dogState(dog) !== 'done'">
-            <text v-if="dog.state === 'sick_with_med'" class="health-row__action" @click.stop="onSickAction(dog)">康复</text>
-            <text v-else-if="dog.state === 'med_only'" class="health-row__action health-row__action--stop" @click.stop="onStopMedication(dog)">停药</text>
+            <view v-if="dog.state === 'sick_with_med'" class="health-row__action" @click.stop="onSickAction(dog)">
+              <text class="health-row__action-text">康复</text>
+              <text class="material-icons-round health-row__action-icon">chevron_right</text>
+            </view>
+            <view v-else-if="dog.state === 'med_only'" class="health-row__action health-row__action--stop" @click.stop="onStopMedication(dog)">
+              <text class="health-row__action-text health-row__action-text--stop">停药</text>
+              <text class="material-icons-round health-row__action-icon health-row__action-icon--stop">chevron_right</text>
+            </view>
           </template>
         </view>
 
@@ -112,7 +118,11 @@
     <!-- 底部按钮（有未完成任务时显示）-->
     <view v-if="hasPendingMed && !acting" class="card-actions__btns">
       <view class="btn btn--filled btn--plum" @click="batchComplete">
+        <text class="material-icons-round btn-icon btn-icon--white">check_circle</text>
         <text class="btn-text btn-text--white">完成</text>
+      </view>
+      <view class="btn btn--ghost-plum" @click="showBatchActions">
+        <text class="btn-text btn-text--plum">批量操作</text>
       </view>
     </view>
   </view>
@@ -292,6 +302,10 @@ function batchComplete() {
     emit('batch-complete-med', medIds)
   }, 120)
 }
+
+function showBatchActions() {
+  emit('action', { type: 'show_med_batch', data: { dogs: props.card.dogs || [], medicationTaskIds: props.card.medicationTaskIds || [] } })
+}
 </script>
 
 <style lang="scss" scoped>
@@ -353,16 +367,33 @@ function batchComplete() {
   font-size: 18px; color: var(--text-3); flex-shrink: 0;
 }
 .health-row__action {
-  font-size: 11px; font-weight: 700; color: var(--green);
-  padding: 2px 8px; border-radius: 4px;
-  background: var(--green-soft);
-  box-shadow: 0 1px 4px rgba(61, 174, 111, 0.2);
+  min-width: 54px;
+  height: 28px;
+  padding: 0 8px 0 10px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(72, 190, 137, 0.10), rgba(72, 190, 137, 0.06));
+  border: 1px solid rgba(72, 190, 137, 0.14);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
   flex-shrink: 0;
-  &:active { transform: scale(0.9); box-shadow: none; }
+  &:active { transform: scale(0.9); }
   &--stop {
-    color: var(--text-2); background: var(--card-dim);
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+    background: linear-gradient(180deg, rgba(147, 102, 201, 0.08), rgba(147, 102, 201, 0.04));
+    border-color: rgba(132, 94, 194, 0.12);
   }
+}
+.health-row__action-text {
+  font-size: 11px;
+  font-weight: 700;
+  color: #2f8f68;
+  &--stop { color: var(--plum); }
+}
+.health-row__action-icon {
+  font-size: 14px;
+  color: #2f8f68;
+  &--stop { color: var(--plum); }
 }
 
 /* 展开子行 */
@@ -413,13 +444,20 @@ function batchComplete() {
 
 .card-actions__btns { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
 .btn {
-  padding: 8px 18px; border-radius: 999px; border: 1.5px solid transparent;
-  min-width: 64px; box-sizing: border-box;
+  min-height: 34px;
+  padding: 8px 18px;
+  border-radius: 999px;
+  border: 1.5px solid transparent;
+  min-width: 64px;
+  box-sizing: border-box;
   display: flex; align-items: center; justify-content: center;
+  gap: 6px;
   transition: transform 0.12s ease, opacity 0.12s ease;
   &:active { transform: scale(0.94); opacity: 0.85; }
   &--filled.btn--plum { background: var(--plum); border-color: var(--plum); }
   &--ghost { background: transparent; border-color: var(--text-4); }
+  &--ghost-plum { background: linear-gradient(180deg, rgba(147, 102, 201, 0.08), rgba(147, 102, 201, 0.04)); border-color: rgba(132, 94, 194, 0.16); }
 }
-.btn-text { font-family: var(--font-display); font-size: 13px; font-weight: 700; &--white { color: #FFFFFF; } &--ghost { color: var(--text-2); } }
+.btn-icon { font-size: 16px; &--white { color: #FFFFFF; } }
+.btn-text { font-family: var(--font-display); font-size: 13px; font-weight: 700; &--white { color: #FFFFFF; } &--ghost { color: var(--text-2); } &--plum { color: var(--plum); } }
 </style>

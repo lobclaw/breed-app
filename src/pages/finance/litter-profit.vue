@@ -14,24 +14,24 @@
     <view v-if="profitData" class="profit-card">
       <view class="profit-row">
         <text class="profit-label">收入</text>
-        <text class="profit-value income">¥{{ formatMoney(profitData.totalIncome) }}</text>
+        <text class="profit-value income">+¥{{ formatMoney(profitData.totalIncome) }}</text>
       </view>
       <view class="profit-row">
         <text class="profit-label">支出</text>
-        <text class="profit-value expense">¥{{ formatMoney(profitData.totalCost) }}</text>
+        <text class="profit-value expense">-¥{{ formatMoney(profitData.totalCost) }}</text>
       </view>
       <view class="profit-divider" />
       <view class="profit-big">
         <text class="profit-label">净利润</text>
-        <text class="profit-value primary">¥{{ formatMoney(profitData.netProfit) }}</text>
+        <text class="profit-value" :class="netProfitClass">{{ formatSignedMoney(profitData.netProfit) }}</text>
       </view>
       <view class="profit-sub-row">
         <text class="profit-label">每只均摊成本</text>
-        <text class="profit-value">¥{{ formatMoney(profitData.costPerPuppy) }}</text>
+        <text class="profit-value">-¥{{ formatMoney(profitData.costPerPuppy) }}</text>
       </view>
       <view class="profit-sub-row">
         <text class="profit-label">存活幼崽</text>
-        <text class="profit-value">{{ profitData.puppyCount }}只</text>
+        <text class="profit-value">{{ profitData.aliveCount }}只</text>
       </view>
     </view>
 
@@ -66,7 +66,7 @@
         <view class="expense-items">
           <view v-for="item in breedingCosts" :key="item.name" class="expense-item">
             <text class="expense-item-name">{{ item.name }}</text>
-            <text class="expense-item-amount">¥{{ formatMoney(item.amount) }}</text>
+            <text class="expense-item-amount">-¥{{ formatMoney(item.amount) }}</text>
           </view>
         </view>
       </view>
@@ -77,7 +77,7 @@
         <view class="expense-items">
           <view v-for="item in litterCosts" :key="item.name" class="expense-item">
             <text class="expense-item-name">{{ item.name }}</text>
-            <text class="expense-item-amount">¥{{ formatMoney(item.amount) }}</text>
+            <text class="expense-item-amount">-¥{{ formatMoney(item.amount) }}</text>
           </view>
         </view>
       </view>
@@ -88,7 +88,7 @@
         <view class="expense-items">
           <view v-for="item in puppyCosts" :key="item.name" class="expense-item">
             <text class="expense-item-name">{{ item.name }}</text>
-            <text class="expense-item-amount">¥{{ formatMoney(item.amount) }}</text>
+            <text class="expense-item-amount">-¥{{ formatMoney(item.amount) }}</text>
           </view>
         </view>
       </view>
@@ -117,6 +117,7 @@ interface ProfitData {
   netProfit: number
   costPerPuppy: number
   puppyCount: number
+  aliveCount: number
   incomeItems: any[]
   breedingCosts: any[]
   litterCosts: any[]
@@ -127,6 +128,13 @@ const loading = ref(false)
 const selectedLitterId = ref('')
 const selectedLitterName = ref('')
 const profitData = ref<ProfitData | null>(null)
+
+const netProfitClass = computed(() => {
+  const value = profitData.value?.netProfit || 0
+  if (value > 0) return 'primary'
+  if (value < 0) return 'negative'
+  return 'neutral'
+})
 
 const incomeItems = computed(() => {
   if (!profitData.value) return []
@@ -140,12 +148,12 @@ const incomeItems = computed(() => {
       statusClass = 'sold'
       statusText = '已售'
       amountClass = 'income'
-      amountText = `¥${formatMoney(item.amount)}`
+      amountText = `+¥${formatMoney(item.amount)}`
     } else if (item.status === 'pending') {
       statusClass = 'pending'
       statusText = '待售'
       amountClass = 'estimated'
-      amountText = `预计 ¥${formatMoney(item.estimated_amount)}`
+      amountText = `预计 +¥${formatMoney(item.estimated_amount)}`
     }
 
     return {
@@ -168,6 +176,12 @@ function formatMoney(val: number): string {
   return val.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
 }
 
+function formatSignedMoney(val: number): string {
+  if (!val) return '¥0'
+  const sign = val > 0 ? '+' : '-'
+  return `${sign}¥${formatMoney(Math.abs(val))}`
+}
+
 function showLitterPicker() {
   showLitterPickerVisible.value = true
 }
@@ -187,8 +201,8 @@ async function loadProfit(litterId: string) {
   loading.value = true
   try {
     const res = await getLitterProfit({ litter_id: litterId })
-    if (res) {
-      profitData.value = res as ProfitData
+    if (res?.data) {
+      profitData.value = res.data as ProfitData
     }
   } finally {
     loading.value = false
@@ -313,6 +327,9 @@ onLoad((query) => {
   color: var(--primary);
 }
 
+.profit-value.negative { color: var(--red); }
+.profit-value.neutral { color: var(--text-2); }
+
 .profit-sub-row {
   display: flex;
   justify-content: space-between;
@@ -395,7 +412,7 @@ onLoad((query) => {
   font-weight: 600;
 }
 
-.detail-item-status.sold { color: var(--green); }
+.detail-item-status.sold { color: var(--red); }
 .detail-item-status.pending { color: var(--amber); }
 .detail-item-status.kept { color: var(--text-3); }
 
@@ -455,7 +472,7 @@ onLoad((query) => {
   font-family: var(--font-display);
   font-size: 13px;
   font-weight: 800;
-  color: var(--text-2);
+  color: var(--green);
 }
 
 </style>

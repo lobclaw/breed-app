@@ -67,8 +67,16 @@
       <view class="form-row">
         <text class="form-label">关联</text>
         <view class="form-right" @click="pickLink">
-          <text class="material-icons-round" style="font-size:18px;color:var(--text-3);">link</text>
-          <text style="color:var(--text-3);font-size:14px;">点击选择关联</text>
+          <text class="material-icons-round" style="font-size:18px;" :style="{ color: currentLinkText ? 'var(--text-2)' : 'var(--text-3)' }">link</text>
+          <text style="font-size:14px;" :style="{ color: currentLinkText ? 'var(--text-2)' : 'var(--text-3)' }">
+            {{ currentLinkText || '点击选择关联' }}
+          </text>
+          <text
+            v-if="currentLinkText"
+            class="material-icons-round"
+            style="font-size:16px;color:var(--text-4);"
+            @click.stop="clearLink"
+          >close</text>
         </view>
       </view>
 
@@ -112,28 +120,62 @@
       </button>
     </view>
 
+    <BExpenseCategorySheet
+      v-if="mode === 'expense'"
+      v-model:visible="showCategorySheet"
+      v-model="expenseCategory"
+      :categories="expenseCategories"
+      :recent-categories="recentExpenseCategories"
+      @manage="openExpenseCategoryManager"
+    />
+
     <!-- 分类/类型选择面板 -->
-    <BSheet v-model:visible="showCategorySheet" title="选择分类">
-      <view class="picker-pills">
-        <text
-          v-for="item in currentCategories"
-          :key="item"
-          class="picker-pill"
-          :class="{ active: currentCategory === item }"
-          @click="selectCategory(item)"
-        >{{ item }}</text>
-      </view>
-    </BSheet>
+    <BIncomeTypeSheet
+      v-else
+      v-model:visible="showCategorySheet"
+      v-model="incomeType"
+      :types="incomeTypes"
+      :recent-types="recentIncomeTypes"
+    />
+
+    <BFinanceLinkSheet
+      v-model:visible="showLinkSheet"
+      :mode="mode"
+      @select="onLinkKindSelect"
+    />
+
+    <BDogPicker
+      v-model:visible="showDogPicker"
+      :multiple="mode === 'expense'"
+      title="选择犬只"
+      @select="onDogSelected"
+      @selectMultiple="onDogsSelected"
+    />
+
+    <BLitterSelector
+      v-model:visible="showLitterPicker"
+      @select="onLitterSelected"
+    />
+
+    <BCycleSelector
+      v-model:visible="showCyclePicker"
+      @select="onCycleSelected"
+    />
   </view>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import { queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
-import BSheet from '@/components/layout/BSheet.vue'
+import BExpenseCategorySheet from '@/components/form/BExpenseCategorySheet.vue'
+import BIncomeTypeSheet from '@/components/form/BIncomeTypeSheet.vue'
+import BFinanceLinkSheet from '@/components/form/BFinanceLinkSheet.vue'
+import BDogPicker from '@/components/form/BDogPicker.vue'
+import BLitterSelector from '@/components/form/BLitterSelector.vue'
+import BCycleSelector from '@/components/form/BCycleSelector.vue'
 
 // 模式：支出 / 收入
 const mode = ref<'expense' | 'income'>('expense')
@@ -142,11 +184,20 @@ const amountInput = ref('')
 const submitState = ref<'idle' | 'submitting' | 'success'>('idle')
 const photos = ref<string[]>([])
 const showCategorySheet = ref(false)
+const showLinkSheet = ref(false)
+const showDogPicker = ref(false)
+const showLitterPicker = ref(false)
+const showCyclePicker = ref(false)
 const notes = ref('')
+const RECENT_EXPENSE_CATEGORY_KEY = 'finance_recent_expense_categories'
+const RECENT_INCOME_TYPE_KEY = 'finance_recent_income_types'
 
 // 支出分类
 const expenseCategory = ref('食品')
-const expenseCategories = ['食品', '营养品', '消耗品', '日常用品', '固定开销', '交通', '医疗', '配种费', '其他']
+const DEFAULT_EXPENSE_CATEGORIES = ['食品', '营养品', '消耗品', '日常用品', '固定开销', '交通', '医疗', '配种费', '其他']
+const customExpenseCategories = ref<string[]>([])
+const expenseCategories = computed(() => [...DEFAULT_EXPENSE_CATEGORIES, ...customExpenseCategories.value])
+const recentExpenseCategories = ref<string[]>([])
 const expenseCategoryIcons: Record<string, string> = {
   '食品': 'restaurant', '营养品': 'medication', '消耗品': 'shopping_bag',
   '日常用品': 'home', '固定开销': 'pin_drop', '交通': 'directions_car',
@@ -156,22 +207,91 @@ const expenseCategoryIcons: Record<string, string> = {
 // 收入类型
 const incomeType = ref('其他')
 const incomeTypes = ['销售', '定金保留', '领养', '其他']
+const recentIncomeTypes = ref<string[]>([])
 const incomeTypeIcons: Record<string, string> = {
   '销售': 'sell', '定金保留': 'savings', '领养': 'volunteer_activism', '其他': 'more_horiz',
 }
 
+const linkedDogs = ref<any[]>([])
+const linkedLitter = ref<any | null>(null)
+const linkedCycle = ref<any | null>(null)
+const incomeLinkedDog = ref<any | null>(null)
+
 // 动态字段
 const currentCategory = computed(() => mode.value === 'expense' ? expenseCategory.value : incomeType.value)
-const currentCategories = computed(() => mode.value === 'expense' ? expenseCategories : incomeTypes)
 const currentIcon = computed(() => {
   const icons = mode.value === 'expense' ? expenseCategoryIcons : incomeTypeIcons
   return icons[currentCategory.value] || 'more_horiz'
 })
 
-function selectCategory(item: string) {
-  if (mode.value === 'expense') expenseCategory.value = item
-  else incomeType.value = item
-  showCategorySheet.value = false
+const currentLinkText = computed(() => {
+  if (mode.value === 'income') {
+    return incomeLinkedDog.value?.name || ''
+  }
+  if (linkedDogs.value.length) {
+    return linkedDogs.value.length === 1 ? linkedDogs.value[0].name : `${linkedDogs.value.length}只犬`
+  }
+  if (linkedLitter.value) {
+    const damName = linkedLitter.value.damName || linkedLitter.value.dam_name || '未知母犬'
+    const litterNumber = linkedLitter.value.litterNumber || linkedLitter.value.litter_number || '?'
+    return `${damName} · 第${litterNumber}窝`
+  }
+  if (linkedCycle.value) {
+    const damName = linkedCycle.value.damName || linkedCycle.value.dam_name || '未知母犬'
+    const cycleNumber = linkedCycle.value.cycleNumber || linkedCycle.value.cycle_number || '?'
+    return `${damName} · 第${cycleNumber}次繁育`
+  }
+  return ''
+})
+
+function readRecentExpenseCategories() {
+  try {
+    return JSON.parse(uni.getStorageSync(RECENT_EXPENSE_CATEGORY_KEY) || '[]')
+  } catch {
+    return []
+  }
+}
+
+function syncRecentExpenseCategories() {
+  recentExpenseCategories.value = readRecentExpenseCategories().filter((item: string) =>
+    expenseCategories.value.includes(item),
+  )
+}
+
+function readRecentIncomeTypes() {
+  try {
+    return JSON.parse(uni.getStorageSync(RECENT_INCOME_TYPE_KEY) || '[]')
+  } catch {
+    return []
+  }
+}
+
+function syncRecentIncomeTypes() {
+  recentIncomeTypes.value = readRecentIncomeTypes().filter((item: string) => incomeTypes.includes(item))
+}
+
+function saveRecentExpenseCategory(name: string) {
+  const next = [name, ...recentExpenseCategories.value.filter(item => item !== name)].slice(0, 2)
+  recentExpenseCategories.value = next
+  try {
+    uni.setStorageSync(RECENT_EXPENSE_CATEGORY_KEY, JSON.stringify(next))
+  } catch {
+    // ignore
+  }
+}
+
+function saveRecentIncomeType(name: string) {
+  const next = [name, ...recentIncomeTypes.value.filter(item => item !== name)].slice(0, 2)
+  recentIncomeTypes.value = next
+  try {
+    uni.setStorageSync(RECENT_INCOME_TYPE_KEY, JSON.stringify(next))
+  } catch {
+    // ignore
+  }
+}
+
+function openExpenseCategoryManager() {
+  uni.navigateTo({ url: '/pages/profile/expense-categories' })
 }
 
 function switchMode(m: 'expense' | 'income') {
@@ -219,7 +339,60 @@ const submitButtonText = computed(() => {
 })
 
 function pickLink() {
-  uni.showToast({ title: '关联记录功能开发中', icon: 'none' })
+  showLinkSheet.value = true
+}
+
+function clearLink() {
+  linkedDogs.value = []
+  linkedLitter.value = null
+  linkedCycle.value = null
+  incomeLinkedDog.value = null
+}
+
+function onLinkKindSelect(kind: 'dogs' | 'litter' | 'cycle' | 'none') {
+  if (kind === 'none') {
+    clearLink()
+    return
+  }
+  if (kind === 'dogs') {
+    linkedLitter.value = null
+    linkedCycle.value = null
+    showDogPicker.value = true
+    return
+  }
+  if (kind === 'litter') {
+    linkedDogs.value = []
+    linkedCycle.value = null
+    showLitterPicker.value = true
+    return
+  }
+  linkedDogs.value = []
+  linkedLitter.value = null
+  showCyclePicker.value = true
+}
+
+function onDogSelected(dog: any) {
+  if (mode.value === 'income') {
+    incomeLinkedDog.value = dog
+    return
+  }
+  linkedDogs.value = dog ? [dog] : []
+}
+
+function onDogsSelected(dogs: any[]) {
+  if (mode.value === 'income') {
+    incomeLinkedDog.value = dogs?.[0] || null
+    return
+  }
+  linkedDogs.value = dogs || []
+}
+
+function onLitterSelected(litter: any) {
+  linkedLitter.value = litter
+}
+
+function onCycleSelected(cycle: any) {
+  linkedCycle.value = cycle
 }
 
 function addPhoto() {
@@ -245,26 +418,50 @@ const { run: addIncome } = useCloudCall('finance-service', 'addIncome', {
   throwOnError: true,
 })
 
+const { run: fetchCategories } = useCloudCall<{ data: Array<{ name: string; is_default: boolean }> }>('finance-service', 'getExpenseCategories')
+const { run: fetchDogDetail } = useCloudCall<{ data: any }>('dog-service', 'getDogDetail', {
+  showLoading: false,
+})
+
+async function loadCategories() {
+  const res = await fetchCategories()
+  if (res?.data) {
+    customExpenseCategories.value = res.data.filter(item => !item.is_default).map(item => item.name)
+  }
+  syncRecentExpenseCategories()
+  syncRecentIncomeTypes()
+}
+
 async function submit() {
   submitState.value = 'submitting'
   try {
     let res
     if (mode.value === 'expense') {
+      saveRecentExpenseCategory(expenseCategory.value)
       res = await addExpense({
         total_amount: parseFloat(amountInput.value),
         category: expenseCategory.value,
         date: date.value,
         notes: notes.value || null,
         images: photos.value,
+        linked_cycle_id: linkedCycle.value?._id || null,
+        linked_litter_id: linkedLitter.value?._id || null,
+        linked_dog_ids: linkedDogs.value.map((dog: any) => dog._id),
+        dam_name: linkedCycle.value?.damName || linkedCycle.value?.dam_name || linkedLitter.value?.damName || linkedLitter.value?.dam_name || null,
+        litter_number: linkedLitter.value?.litterNumber || linkedLitter.value?.litter_number || null,
+        dog_names: linkedDogs.value.map((dog: any) => dog.name).filter(Boolean),
         source_type: 'manual',
       })
     } else {
+      saveRecentIncomeType(incomeType.value)
       res = await addIncome({
         amount: parseFloat(amountInput.value),
         type: incomeType.value,
         date: date.value,
         notes: notes.value || null,
         images: photos.value,
+        dog_id: incomeLinkedDog.value?._id || null,
+        dog_name: incomeLinkedDog.value?.name || null,
         source_type: 'manual',
       })
     }
@@ -281,8 +478,24 @@ async function submit() {
   }
 }
 
-onLoad((query) => {
+onLoad(async (query) => {
   if (query?.type === 'income') mode.value = 'income'
+  if (!query?.dogId) return
+  const dogId = String(query.dogId)
+  let dogName = query?.dogName ? decodeURIComponent(String(query.dogName)) : ''
+  if (!dogName) {
+    const dogRes = await fetchDogDetail(dogId)
+    dogName = dogRes?.data?.name || ''
+  }
+  if (mode.value === 'income') {
+    incomeLinkedDog.value = { _id: dogId, name: dogName || '未命名' }
+  } else {
+    linkedDogs.value = [{ _id: dogId, name: dogName || '未命名' }]
+  }
+})
+
+onShow(() => {
+  loadCategories()
 })
 </script>
 
@@ -452,34 +665,6 @@ onLoad((query) => {
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-/* ---- Picker pills ---- */
-.picker-pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding: 8px 4px 24px;
-}
-
-.picker-pill {
-  padding: 8px 18px;
-  border-radius: 20px;
-  font-size: 14px;
-  font-weight: 600;
-  background: var(--card-dim);
-  color: var(--text-2);
-  transition: all 0.12s ease;
-
-  &:active {
-    transform: scale(0.92);
-  }
-
-  &.active {
-    background: var(--primary);
-    color: #fff;
-    box-shadow: 0 2px 8px rgba(234, 62, 119, 0.25);
-  }
 }
 
 /* ---- Note section ---- */

@@ -42,6 +42,9 @@ export interface DeriveStatus {
   recordId?: string
   taskId?: string
   label?: string
+  count?: number
+  overflow?: boolean
+  activityTs?: number
   detail?: string
   progress?: { current: number; total: number }
   meta?: Array<{ icon: string; text: string }>

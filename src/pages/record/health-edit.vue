@@ -333,6 +333,7 @@ import BModal from '@/components/layout/BModal.vue'
 const { currentFamily, loadFamily } = useAuth()
 
 let recordId = ''
+const currentRecord = ref<any>(null)
 
 const loading = ref(true)
 const submitting = ref(false)
@@ -584,12 +585,17 @@ const { run: updateRecord } = useCloudCall('health-service', 'updateHealthRecord
   throwOnError: true,
 })
 
+const { run: checkDuplicateIllness } = useCloudCall('health-service', 'checkDuplicateIllness', {
+  showLoading: false,
+})
+
 async function loadRecord(id: string) {
   loading.value = true
   try {
     const res = await getRecord({ id })
     if (res) {
       const data = res as any
+      currentRecord.value = data
       form.type = data.type || ''
       form.date = data.date || null
       form.notes = data.notes || ''
@@ -604,6 +610,41 @@ async function loadRecord(id: string) {
   } finally {
     loading.value = false
   }
+}
+
+async function handleDuplicateIllnessIfNeeded(): Promise<boolean> {
+  if (form.type !== 'illness') return false
+
+  const condition = String(details.condition || '').trim()
+  const treatmentStatus = details.treatment_status || '治疗中'
+  const dogId = currentRecord.value?.dog_id
+  if (!condition || !dogId || treatmentStatus === '已康复') return false
+
+  const res = await checkDuplicateIllness({
+    dog_ids: [dogId],
+    condition,
+    exclude_record_id: recordId,
+  })
+  const duplicate = res?.data?.duplicates?.[0]
+  if (!duplicate?.recordId) return false
+
+  await new Promise<void>((resolve) => {
+    uni.showModal({
+      title: '已有进行中的疾病',
+      content: `${currentRecord.value?.dog_name || '该犬'} 已有未康复的「${condition}」记录，去编辑原记录吗？`,
+      confirmText: '去编辑',
+      cancelText: '知道了',
+      success: (modalRes) => {
+        if (modalRes.confirm) {
+          uni.redirectTo({ url: `/pages/record/health-edit?id=${duplicate.recordId}` })
+        }
+        resolve()
+      },
+      fail: () => resolve(),
+    })
+  })
+
+  return true
 }
 
 function buildDetails() {
@@ -632,6 +673,8 @@ function buildDetails() {
 async function submit() {
   submitting.value = true
   try {
+    if (await handleDuplicateIllnessIfNeeded()) return
+
     const cost = costInput.value ? parseFloat(costInput.value) : null
     const res = await updateRecord({
       id: recordId,

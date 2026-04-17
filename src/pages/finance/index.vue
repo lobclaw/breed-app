@@ -25,17 +25,17 @@
     <view class="summary-card">
       <view class="summary-card__item">
         <text class="summary-card__label">本月收入</text>
-        <text class="summary-card__amount summary-card__amount--income">¥{{ formatNum(summary.totalIncome) }}</text>
+        <text class="summary-card__amount summary-card__amount--income">+¥{{ formatNum(summary.totalIncome) }}</text>
       </view>
       <view class="summary-card__divider" />
       <view class="summary-card__item">
         <text class="summary-card__label">本月支出</text>
-        <text class="summary-card__amount summary-card__amount--expense">¥{{ formatNum(summary.totalExpense) }}</text>
+        <text class="summary-card__amount summary-card__amount--expense">-¥{{ formatNum(summary.totalExpense) }}</text>
       </view>
       <view class="summary-card__divider" />
       <view class="summary-card__item">
         <text class="summary-card__label">净利润</text>
-        <text class="summary-card__amount summary-card__amount--profit">¥{{ formatNum(summary.netProfit) }}</text>
+        <text class="summary-card__amount" :class="profitAmountClass">{{ formatSignedAmount(summary.netProfit) }}</text>
       </view>
     </view>
 
@@ -100,22 +100,22 @@
     <!-- 添加收支 Sheet -->
     <BSheet v-model:visible="showAddSheet" title="添加记录" height="auto">
       <view class="add-sheet">
-        <view class="add-sheet__item" @click="goToExpenseAdd">
+        <view class="add-sheet__item add-sheet__item--expense" @click="goToExpenseAdd">
           <view class="add-sheet__icon add-sheet__icon--expense">
-            <text class="material-icons-round" style="font-size: 20px; color: var(--red);">remove_circle</text>
+            <text class="material-icons-round" style="font-size: 20px; color: var(--green);">remove_circle</text>
           </view>
           <view class="add-sheet__info">
-            <text class="add-sheet__title">记录支出</text>
+            <text class="add-sheet__title add-sheet__title--expense">记录支出</text>
             <text class="add-sheet__desc">食品、医疗、日常开销等</text>
           </view>
           <text class="material-icons-round" style="font-size: 18px; color: var(--text-4);">chevron_right</text>
         </view>
-        <view class="add-sheet__item" @click="goToIncomeAdd">
+        <view class="add-sheet__item add-sheet__item--income" @click="goToIncomeAdd">
           <view class="add-sheet__icon add-sheet__icon--income">
-            <text class="material-icons-round" style="font-size: 20px; color: var(--green);">add_circle</text>
+            <text class="material-icons-round" style="font-size: 20px; color: var(--red);">add_circle</text>
           </view>
           <view class="add-sheet__info">
-            <text class="add-sheet__title">记录收入</text>
+            <text class="add-sheet__title add-sheet__title--income">记录收入</text>
             <text class="add-sheet__desc">幼犬销售、定金等</text>
           </view>
           <text class="material-icons-round" style="font-size: 18px; color: var(--text-4);">chevron_right</text>
@@ -210,6 +210,12 @@ const monthLabel = computed(() => {
   return `${d.getFullYear()}年${d.getMonth() + 1}月`
 })
 
+const profitAmountClass = computed(() => {
+  if (summary.netProfit > 0) return 'summary-card__amount--profit-positive'
+  if (summary.netProfit < 0) return 'summary-card__amount--profit-negative'
+  return 'summary-card__amount--profit-neutral'
+})
+
 function changeMonth(delta: number) {
   const d = new Date(currentMonth.value)
   d.setMonth(d.getMonth() + delta)
@@ -231,6 +237,12 @@ function formatNum(n: number) {
   return n.toLocaleString()
 }
 
+function formatSignedAmount(n: number) {
+  if (!n) return '¥0'
+  const sign = n > 0 ? '+' : '-'
+  return `${sign}¥${formatNum(Math.abs(n))}`
+}
+
 function getFlowIcon(tx: any) {
   if (tx._txType === 'income') {
     if (tx.type === '定金保留') return 'savings'
@@ -246,16 +258,7 @@ function getFlowIcon(tx: any) {
 }
 
 function getFlowIconColor(tx: any): 'red' | 'amber' | 'green' | 'blue' | 'plum' | 'rose' | 'teal' {
-  if (tx._txType === 'income') {
-    if (tx.type === '定金保留') return 'amber'
-    return 'green'
-  }
-  const map: Record<string, any> = {
-    '食品': 'red',
-    '医疗': 'plum',
-    '配种费': 'rose',
-  }
-  return map[tx.category] || 'green'
+  return tx._txType === 'income' ? 'red' : 'green'
 }
 
 
@@ -270,7 +273,7 @@ function goToExpenseAdd() {
 
 function goToIncomeAdd() {
   showAddSheet.value = false
-  uni.navigateTo({ url: '/pages/finance/income-add' })
+  uni.navigateTo({ url: '/pages/finance/expense-add?type=income' })
 }
 
 function goToTxDetail(tx: any) {
@@ -437,7 +440,9 @@ onShow(() => {
 
   &__amount--income { color: var(--red); }
   &__amount--expense { color: var(--green); }
-  &__amount--profit { color: var(--primary); }
+  &__amount--profit-positive { color: var(--primary); }
+  &__amount--profit-negative { color: var(--red); }
+  &__amount--profit-neutral { color: var(--text-2); }
 
   &__divider {
     width: 1px;
@@ -617,22 +622,43 @@ onShow(() => {
     align-items: center;
     gap: 12px;
     padding: 14px 16px;
-    background: var(--card-dim);
     border-radius: var(--radius-card);
-    transition: opacity 0.12s ease;
-    &:active { opacity: 0.75; }
+    border: 1px solid transparent;
+    transition: opacity 0.12s ease, transform 0.12s ease;
+    &:active {
+      opacity: 0.75;
+      transform: scale(0.985);
+    }
+
+    &--expense {
+      background: linear-gradient(135deg, rgba(61, 174, 111, 0.14) 0%, rgba(61, 174, 111, 0.07) 100%);
+      border-color: rgba(61, 174, 111, 0.12);
+    }
+
+    &--income {
+      background: linear-gradient(135deg, rgba(224, 82, 82, 0.14) 0%, rgba(224, 82, 82, 0.07) 100%);
+      border-color: rgba(224, 82, 82, 0.12);
+    }
   }
 
   &__icon {
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
     border-radius: var(--radius-icon);
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    &--expense { background: var(--red-soft); }
-    &--income { background: var(--green-soft); }
+
+    &--expense {
+      background: rgba(61, 174, 111, 0.2);
+      box-shadow: inset 0 0 0 1px rgba(61, 174, 111, 0.08);
+    }
+
+    &--income {
+      background: rgba(224, 82, 82, 0.2);
+      box-shadow: inset 0 0 0 1px rgba(224, 82, 82, 0.08);
+    }
   }
 
   &__info { flex: 1; }
@@ -642,6 +668,9 @@ onShow(() => {
     font-weight: 700;
     color: var(--text-1);
     display: block;
+
+    &--expense { color: var(--green); }
+    &--income { color: var(--red); }
   }
 
   &__desc {

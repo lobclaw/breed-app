@@ -21,6 +21,7 @@ export const useDogStore = defineStore('dogs', {
     /** 从服务端加载最新数据 */
     async fetchFromServer() {
       try {
+        await cloudCall('health-service', 'cleanupDuplicateIllnesses').catch(() => {})
         const res = await cloudCall<{ data: any }>('dog-service', 'getDogListWithStatus')
         const fresh: DogWithStatus[] = res?.data?.dogs || res?.data || []
         this.list = fresh

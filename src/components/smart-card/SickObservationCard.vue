@@ -1,6 +1,6 @@
 <!--
   SickObservationCard — 疾病观察卡
-  展示仅生病未用药的犬只（sick_only），无 checkbox
+  展示未进入用药流程的疾病观察项（sick_only），无 checkbox
   操作：标记康复 / 开始治疗 / 开始用药
 -->
 <template>
@@ -11,14 +11,14 @@
       </view>
       <view class="card-title-area">
         <text class="card-name">{{ card.groupTitle || '疾病观察' }}</text>
-        <text class="card-sub">{{ card.dogs?.length || 0 }}只犬观察中</text>
+        <text class="card-sub">{{ card.dogs?.length || 0 }}项观察中</text>
       </view>
     </view>
 
     <!-- 折叠摘要栏（≥3只且折叠时） -->
     <view v-if="dogs.length >= 3 && collapsed" class="collapse-bar" @click="toggleCollapse">
       <view class="sick-dot" :class="`sick-dot--${summarySeverity}`" />
-      <text class="collapse-text">{{ dogs.length }}只犬观察中</text>
+      <text class="collapse-text">{{ dogs.length }}项观察中</text>
       <text class="material-icons-round collapse-arrow">expand_more</text>
     </view>
 
@@ -26,7 +26,7 @@
     <view v-if="!collapsed || dogs.length < 3" class="sick-list">
       <view
         v-for="dog in dogs"
-        :key="dog.dogId"
+        :key="dog.illnessId || `${dog.dogId}-${dog.illness}-${dog._createdAt || 0}`"
         class="sick-row"
         :class="{ 'sick-row--removing': dog._removing }"
       >
@@ -37,14 +37,26 @@
           <text class="sick-row__badge sick-row__badge--amber">{{ dog.treatmentStatus || '观察中' }}</text>
           <text class="sick-row__days">第{{ dog.daysSick || 1 }}天</text>
         </view>
-        <text class="sick-row__action" @click.stop="onAction(dog)">处理</text>
+        <view class="sick-row__action" @click.stop="onAction(dog)">
+          <text class="sick-row__action-text">处理</text>
+          <text class="material-icons-round sick-row__action-icon">chevron_right</text>
+        </view>
       </view>
     </view>
 
-    <!-- 收起按钮 -->
-    <view v-if="!collapsed && dogs.length >= 3" class="collapse-footer" @click="toggleCollapse">
-      <text class="collapse-footer__text">收起</text>
-      <text class="material-icons-round collapse-footer__icon">expand_less</text>
+    <view v-if="dogs.length > 0" class="card-actions__btns">
+      <view class="sick-batch-btn" @click="onBatchAction">
+        <text class="material-icons-round sick-batch-btn__icon">playlist_add_check_circle</text>
+        <text class="sick-batch-btn__text">批量操作</text>
+      </view>
+      <view
+        v-if="!collapsed && dogs.length >= 3"
+        class="collapse-inline"
+        @click="toggleCollapse"
+      >
+        <text class="collapse-inline__text">收起</text>
+        <text class="material-icons-round collapse-inline__icon">expand_less</text>
+      </view>
     </view>
   </view>
 </template>
@@ -103,6 +115,10 @@ function onAction(dog: any) {
     items.splice(1, 0, { icon: 'medical_services', label: '开始治疗', action: 'update_status' })
   }
   emit('action', { type: 'show_sick_menu', data: { dog, items } })
+}
+
+function onBatchAction() {
+  emit('action', { type: 'show_sick_batch', data: { dogs: dogs.value } })
 }
 </script>
 
@@ -175,11 +191,27 @@ function onAction(dog: any) {
 }
 .sick-row__days { font-size: 11px; color: var(--text-3); }
 .sick-row__action {
-  font-size: 11px; font-weight: 700; color: var(--red);
-  padding: 2px 8px; border-radius: 4px;
-  background: var(--red-soft);
+  min-width: 54px;
+  height: 28px;
+  padding: 0 8px 0 10px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(224, 82, 82, 0.07), rgba(224, 82, 82, 0.04));
+  border: 1px solid rgba(224, 82, 82, 0.10);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
   flex-shrink: 0;
   &:active { transform: scale(0.9); opacity: 0.8; }
+}
+.sick-row__action-icon {
+  font-size: 14px;
+  color: rgba(224, 82, 82, 0.78);
+}
+.sick-row__action-text {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(224, 82, 82, 0.78);
 }
 
 /* 生病状态圆点 */
@@ -192,12 +224,50 @@ function onAction(dog: any) {
   &--red { background: var(--red-soft); &::after { background: var(--red); } }
 }
 
-/* 收起按钮 */
-.collapse-footer {
-  display: flex; align-items: center; justify-content: center; gap: 2px;
-  padding: 8px 0 0;
+.card-actions__btns {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.sick-batch-btn {
+  min-height: 34px;
+  min-width: 64px;
+  padding: 8px 18px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: linear-gradient(135deg, rgba(224, 82, 82, 0.92), rgba(240, 134, 91, 0.92));
+  box-shadow: 0 8px 18px rgba(224, 82, 82, 0.16);
+  transition: transform 0.12s ease, opacity 0.12s ease, box-shadow 0.12s ease;
+  &:active {
+    transform: scale(0.96);
+    opacity: 0.9;
+    box-shadow: 0 5px 12px rgba(224, 82, 82, 0.14);
+  }
+}
+.sick-batch-btn__icon {
+  font-size: 16px;
+  color: #fff;
+}
+.sick-batch-btn__text {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.collapse-inline {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 0 6px 10px;
   &:active { opacity: 0.6; }
 }
-.collapse-footer__text { font-size: 11px; color: var(--text-3); font-weight: 600; }
-.collapse-footer__icon { font-size: 14px; color: var(--text-3); }
+.collapse-inline__text { font-size: 11px; color: var(--text-3); font-weight: 600; }
+.collapse-inline__icon { font-size: 14px; color: var(--text-3); }
 </style>

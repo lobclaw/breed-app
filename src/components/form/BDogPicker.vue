@@ -116,12 +116,6 @@
       </view>
     </view>
 
-    <!-- 多选确认按钮 -->
-    <view v-if="multiple && selectedIds.length > 0" class="b-dog-picker__footer">
-      <view class="b-dog-picker__confirm" @click="confirmMultiple">
-        <text>确定选择 ({{ selectedIds.length }})</text>
-      </view>
-    </view>
   </BSheet>
 </template>
 
@@ -294,11 +288,14 @@ function toggleSelectAll() {
     if (hasModelValue.value && props.multiple) {
       const filteredIds = new Set(filteredDogs.value.map(d => d._id))
       const current = Array.isArray(props.modelValue) ? props.modelValue : []
-      emit('update:modelValue', current.filter(d => !filteredIds.has(d._id)))
+      const next = current.filter(d => !filteredIds.has(d._id))
+      emit('update:modelValue', next)
+      emitSelectedMultiple(next)
     } else {
       selectedIds.value = selectedIds.value.filter(
         id => !filteredDogs.value.some(d => d._id === id)
       )
+      emitSelectedMultiple()
     }
   } else {
     // 全选：将 filteredDogs 中未选中的都加入
@@ -309,11 +306,13 @@ function toggleSelectAll() {
         if (!currentIds.has(dog._id)) current.push(dog)
       }
       emit('update:modelValue', current)
+      emitSelectedMultiple(current)
     } else {
       const currentSet = new Set(selectedIds.value)
       for (const dog of filteredDogs.value) {
         if (!currentSet.has(dog._id)) selectedIds.value.push(dog._id)
       }
+      emitSelectedMultiple()
     }
   }
 }
@@ -344,6 +343,7 @@ function toggleDog(dog: Dog) {
         current.push(dog)
       }
       emit('update:modelValue', current)
+      emit('selectMultiple', current)
     } else {
       // sheet-only 多选：用内部 selectedIds
       const idx = selectedIds.value.indexOf(dog._id)
@@ -352,6 +352,7 @@ function toggleDog(dog: Dog) {
       } else {
         selectedIds.value.push(dog._id)
       }
+      emitSelectedMultiple()
     }
   } else {
     // 单选：选中即关闭
@@ -363,15 +364,15 @@ function toggleDog(dog: Dog) {
   }
 }
 
-function confirmMultiple() {
+function emitSelectedMultiple(override?: Dog[]) {
+  if (!props.multiple) return
   if (hasModelValue.value) {
-    // v-model 模式下已经实时更新了，直接关闭
-    sheetVisible.value = false
-  } else {
-    const selected = dogs.value.filter(d => selectedIds.value.includes(d._id))
+    const selected = override || (Array.isArray(props.modelValue) ? props.modelValue : [])
     emit('selectMultiple', selected)
-    sheetVisible.value = false
+    return
   }
+  const selected = override || dogs.value.filter(d => selectedIds.value.includes(d._id))
+  emit('selectMultiple', selected)
 }
 
 function roleLabel(role: string) {

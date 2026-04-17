@@ -227,68 +227,78 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
   oldMedTasks.forEach(t => consumed.add(t._id))
   const mergedMedItems = [...medItems, ...oldMedTasks.map(toLegacyMedItem)]
 
-  // 1a: 建立三个独立数据结构
-  const dogMap = new Map()
-  const sickObserveMap = new Map()
-  const dogIllnessNames = new Map()
+  // 1a: 先按犬归档疾病记录，后续按“观察/治疗”拆分到不同区块
+  const illnessesByDog = new Map()
 
   for (const ill of activeIllnesses) {
     const status = ill.details?.treatment_status || '观察中'
-
-    if (!dogIllnessNames.has(ill.dog_id)) dogIllnessNames.set(ill.dog_id, [])
+    const dogId = ill.dog_id
     const cond = ill.details?.condition || '生病'
-    const existingNames = dogIllnessNames.get(ill.dog_id)
-    if (!existingNames.includes(cond)) existingNames.push(cond)
-
     const illStart = new Date(ill.date || ill.created_at); illStart.setHours(0, 0, 0, 0)
     const todayMid = new Date(); todayMid.setHours(0, 0, 0, 0)
     const daysSick = Math.max(1, Math.round((todayMid.getTime() - illStart.getTime()) / DAY_MS) + 1)
 
-    if (status !== '治疗中' && !sickObserveMap.has(ill.dog_id)) {
-      sickObserveMap.set(ill.dog_id, {
-        dogId: ill.dog_id,
-        dogName: ill.dog_name || ill._dog_name || '',
-        state: 'sick_only',
-        illness: ill.details?.condition || '生病',
-        severity: ill.details?.severity || '轻微',
-        illnessId: ill._id,
-        daysSick,
-        treatmentStatus: status,
-        _createdAt: ill.date || ill.created_at || 0,
-      })
+    if (!illnessesByDog.has(dogId)) {
+      illnessesByDog.set(dogId, [])
     }
-
-    if (!dogMap.has(ill.dog_id)) {
-      dogMap.set(ill.dog_id, {
-        dogId: ill.dog_id,
-        dogName: ill.dog_name || ill._dog_name || '',
-        state: 'sick_only',
-        illness: ill.details?.condition || '生病',
-        severity: ill.details?.severity || '轻微',
-        illnessId: ill._id,
-        daysSick,
-        treatmentStatus: status,
-        _createdAt: ill.date || ill.created_at || 0,
-      })
-    }
+    illnessesByDog.get(dogId).push({
+      dogId,
+      dogName: ill.dog_name || ill._dog_name || '',
+      illness: cond,
+      severity: ill.details?.severity || '轻微',
+      illnessId: ill._id,
+      daysSick,
+      treatmentStatus: status,
+      _createdAt: ill.date || ill.created_at || 0,
+    })
   }
 
   // 1b: 从 medication_tasks 计算用药卡片数据（新模型）
   const unitMap = { ml: 'ml', mg: 'mg', tablet: '片' }
   const hasPendingMed = mergedMedItems.some(m => !m.isDoneToday)
+  const medByDog = new Map()
+  const medDogIds = new Set()
 
+  for (const m of mergedMedItems) {
+    if (!medByDog.has(m.dog_id)) medByDog.set(m.dog_id, [])
+    medByDog.get(m.dog_id).push(m)
+    medDogIds.add(m.dog_id)
+  }
+
+  // 疾病观察卡按疾病实例输出；同一只犬若还有其他观察中疾病，允许继续留在健康区
+  const sickObserveDogs = activeIllnesses
+    .map((ill) => {
+      const status = ill.details?.treatment_status || '观察中'
+      if (status === '治疗中' && medDogIds.has(ill.dog_id)) return null
+
+      const illStart = new Date(ill.date || ill.created_at); illStart.setHours(0, 0, 0, 0)
+      const todayMid = new Date(); todayMid.setHours(0, 0, 0, 0)
+      const daysSick = Math.max(1, Math.round((todayMid.getTime() - illStart.getTime()) / DAY_MS) + 1)
+
+      return {
+        dogId: ill.dog_id,
+        dogName: ill.dog_name || ill._dog_name || '',
+        state: 'sick_only',
+        illness: ill.details?.condition || '生病',
+        severity: ill.details?.severity || '轻微',
+        illnessId: ill._id,
+        daysSick,
+        treatmentStatus: status,
+        _createdAt: ill.date || ill.created_at || 0,
+      }
+    })
+    .filter(Boolean)
+    .sort((a, b) => (a._createdAt || 0) - (b._createdAt || 0))
+
+  const dogMap = new Map()
   if (mergedMedItems.length > 0) {
-    // 按犬只分组
-    const medByDog = new Map()
-    for (const m of mergedMedItems) {
-      if (!medByDog.has(m.dog_id)) medByDog.set(m.dog_id, [])
-      medByDog.get(m.dog_id).push(m)
-    }
-
     for (const [dogId, meds] of medByDog) {
       const uniqueDrugs = [...new Set(meds.map(m => m.drug_name).filter(Boolean))]
       const isMultiDrug = uniqueDrugs.length > 1
       const primary = meds[0]
+      const dogIllnesses = illnessesByDog.get(dogId) || []
+      const medicatedIllnesses = dogIllnesses.filter(ill => ill.treatmentStatus === '治疗中')
+      const medicatedIllnessNames = [...new Set(medicatedIllnesses.map(ill => ill.illness).filter(Boolean))]
 
       const drugName = isMultiDrug ? `${uniqueDrugs.length}种用药` : (primary.drug_name || '用药')
       const dosageStr = isMultiDrug ? '' : (primary.dosage ? `${primary.dosage}${unitMap[primary.dosage_unit] || primary.dosage_unit || 'mg'}` : '')
@@ -309,36 +319,26 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
       }))
 
       const isCompleted = meds.every(m => m.isDoneToday)
-      const illNames = dogIllnessNames.get(dogId) || []
-      const illnessNames = illNames.join('/')
+      const illnessNames = medicatedIllnessNames.join('/')
+      const isSickWithMed = medicatedIllnessNames.length > 0
+      const primaryIllnessId = medicatedIllnesses.length === 1 ? medicatedIllnesses[0].illnessId : ''
 
-      if (dogMap.has(dogId)) {
-        const existing = dogMap.get(dogId)
-        if (existing.state === 'sick_only') {
-          existing.state = 'sick_with_med'
-          existing.drugName = drugName
-          existing.dosageStr = dosageStr
-          existing.progress = progress
-          existing.methodFreq = methodFreq
-          existing.completed = isCompleted
-          existing.allMedTasks = allMedTasksForDog
-          existing.illnessNames = illnessNames
-        }
-      } else {
-        dogMap.set(dogId, {
-          dogId,
-          dogName: primary.dog_name || '',
-          state: 'med_only',
-          drugName,
-          dosageStr,
-          progress,
-          methodFreq,
-          completed: isCompleted,
-          allMedTasks: allMedTasksForDog,
-          illnessNames,
-          _createdAt: primary.created_at || 0,
-        })
-      }
+      dogMap.set(dogId, {
+        dogId,
+        dogName: primary.dog_name || '',
+        state: isSickWithMed ? 'sick_with_med' : 'med_only',
+        illness: medicatedIllnessNames[0] || '',
+        illnessNames,
+        illnessId: primaryIllnessId,
+        treatmentStatus: isSickWithMed ? '治疗中' : '',
+        drugName,
+        dosageStr,
+        progress,
+        methodFreq,
+        completed: isCompleted,
+        allMedTasks: allMedTasksForDog,
+        _createdAt: primary.created_at || 0,
+      })
     }
   }
 
@@ -352,26 +352,6 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
       if (oa !== ob) return oa - ob
       return (a._createdAt || 0) - (b._createdAt || 0)
     })
-  const sickObserveDogs = Array.from(sickObserveMap.values())
-    .sort((a, b) => (a._createdAt || 0) - (b._createdAt || 0))
-
-  // 收集所有活跃用药的 medication_task IDs（供前端 batchComplete 使用）
-  for (const ill of activeIllnesses) {
-    const status = ill.details?.treatment_status || '观察中'
-    if (status === '治疗中' && !dogMap.has(ill.dog_id) && !sickObserveMap.has(ill.dog_id)) {
-      sickObserveMap.set(ill.dog_id, {
-        dogId: ill.dog_id,
-        dogName: ill.dog_name || ill._dog_name || '',
-        state: 'sick_only',
-        illness: ill.details?.condition || '生病',
-        severity: ill.details?.severity || '轻微',
-        illnessId: ill._id,
-        daysSick: 1,
-        treatmentStatus: status,
-        _createdAt: ill.date || ill.created_at || 0,
-      })
-    }
-  }
 
   const activeMedTaskIds = mergedMedItems.filter(m => !m.isDoneToday).map(m => m._id)
 

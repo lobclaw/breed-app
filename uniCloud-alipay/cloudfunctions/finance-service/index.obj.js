@@ -7,10 +7,168 @@ const { verifyAndGetFamily, requireFamily } = require('breed-auth/auth')
 const db = uniCloud.database()
 const dbCmd = db.command
 
-const DAY_MS = 86400000
-
 // 默认支出分类
 const DEFAULT_EXPENSE_CATEGORIES = ['食品', '营养品', '消耗品', '日常用品', '固定开销', '交通', '医疗', '配种费', '其他']
+
+function getIdArg(input, key) {
+  if (!input) return ''
+  if (typeof input === 'string') return input
+  return input[key] || input.id || ''
+}
+
+function buildExpenseName(expense, fallback = '费用') {
+  return expense.notes || expense.category || fallback
+}
+
+async function fetchDogsByIds(familyId, dogIds = []) {
+  if (!dogIds.length) return []
+  const { data } = await db.collection('dogs')
+    .where({
+      _id: dbCmd.in(dogIds),
+      family_id: familyId,
+      deleted_at: null,
+    })
+    .get()
+  return data || []
+}
+
+async function calculateLitterProfit(familyId, litterId) {
+  const { data: litters } = await db.collection('litters')
+    .where({ _id: litterId, family_id: familyId })
+    .get()
+  if (!litters || litters.length === 0) throw new Error('窝不存在')
+
+  const litter = litters[0]
+  const { data: puppies } = await db.collection('dogs')
+    .where({ origin_litter_id: litterId, family_id: familyId, deleted_at: null })
+    .get()
+
+  const puppyIds = puppies.map(item => item._id)
+  const [incomeResult, saleResult, cycleExpenseResult, litterExpenseResult, allExpenseResult] = await Promise.all([
+    puppyIds.length
+      ? db.collection('incomes').where({ dog_id: dbCmd.in(puppyIds), family_id: familyId, deleted_at: null }).get()
+      : { data: [] },
+    puppyIds.length
+      ? db.collection('sale_records').where({ dog_id: dbCmd.in(puppyIds), family_id: familyId, deleted_at: null }).get()
+      : { data: [] },
+    litter.cycle_id
+      ? db.collection('expenses').where({ linked_cycle_id: litter.cycle_id, family_id: familyId, deleted_at: null }).get()
+      : { data: [] },
+    db.collection('expenses').where({ linked_litter_id: litterId, family_id: familyId, deleted_at: null }).get(),
+    db.collection('expenses').where({ family_id: familyId, deleted_at: null }).limit(1000).get(),
+  ])
+
+  const incomes = incomeResult.data || []
+  const sales = saleResult.data || []
+  const cycleExpenses = cycleExpenseResult.data || []
+  const litterExpenses = litterExpenseResult.data || []
+  const allExpenses = allExpenseResult.data || []
+
+  const incomeByDog = {}
+  for (const income of incomes) {
+    const dogId = income.dog_id
+    incomeByDog[dogId] = (incomeByDog[dogId] || 0) + (income.amount || 0)
+  }
+
+  const saleByDog = {}
+  for (const sale of sales) {
+    const prev = saleByDog[sale.dog_id]
+    if (!prev || (sale.updated_at || 0) > (prev.updated_at || 0)) {
+      saleByDog[sale.dog_id] = sale
+    }
+  }
+
+  const breedingCosts = cycleExpenses.map(expense => ({
+    id: expense._id,
+    name: buildExpenseName(expense, '繁育费用'),
+    amount: expense.total_amount || 0,
+  }))
+
+  const litterCosts = litterExpenses.map(expense => ({
+    id: expense._id,
+    name: buildExpenseName(expense, '窝费用'),
+    amount: expense.total_amount || 0,
+  }))
+
+  const countedExpenseIds = new Set([
+    ...cycleExpenses.map(item => item._id),
+    ...litterExpenses.map(item => item._id),
+  ])
+
+  const puppyCosts = []
+  for (const expense of allExpenses) {
+    if (countedExpenseIds.has(expense._id)) continue
+    if (!Array.isArray(expense.linked_dog_ids) || expense.linked_dog_ids.length === 0) continue
+
+    const matchedCount = expense.linked_dog_ids.filter(id => puppyIds.includes(id)).length
+    if (!matchedCount) continue
+
+    const shareAmount = (expense.total_amount || 0) * matchedCount / expense.linked_dog_ids.length
+    puppyCosts.push({
+      id: expense._id,
+      name: buildExpenseName(expense, '幼崽费用'),
+      amount: Math.round(shareAmount * 100) / 100,
+    })
+  }
+
+  const totalIncome = incomes.reduce((sum, item) => sum + (item.amount || 0), 0)
+  const totalExpense = [...breedingCosts, ...litterCosts, ...puppyCosts]
+    .reduce((sum, item) => sum + (item.amount || 0), 0)
+
+  const alivePuppies = puppies.filter(item => item.disposition !== '已故')
+  const avgCostPerPuppy = alivePuppies.length > 0 ? totalExpense / alivePuppies.length : 0
+
+  const incomeItems = puppies.map((puppy, index) => {
+    const actualIncome = incomeByDog[puppy._id] || 0
+    const sale = saleByDog[puppy._id]
+
+    if (actualIncome !== 0) {
+      return {
+        id: puppy._id,
+        name: puppy.name || `幼崽${index + 1}`,
+        status: 'sold',
+        amount: actualIncome,
+        estimated_amount: 0,
+      }
+    }
+
+    if (sale && ['待售', '已预定'].includes(sale.status)) {
+      return {
+        id: puppy._id,
+        name: puppy.name || `幼崽${index + 1}`,
+        status: 'pending',
+        amount: 0,
+        estimated_amount: sale.agreed_price || sale.floor_price || 0,
+      }
+    }
+
+    return {
+      id: puppy._id,
+      name: puppy.name || `幼崽${index + 1}`,
+      status: 'kept',
+      amount: 0,
+      estimated_amount: 0,
+    }
+  })
+
+  return {
+    litter,
+    puppies,
+    totalIncome,
+    totalExpense,
+    totalCost: totalExpense,
+    netProfit: totalIncome - totalExpense,
+    puppyCount: alivePuppies.length,
+    totalPuppyCount: puppies.length,
+    aliveCount: alivePuppies.length,
+    costPerPuppy: Math.round(avgCostPerPuppy),
+    avgCostPerPuppy: Math.round(avgCostPerPuppy),
+    incomeItems,
+    breedingCosts,
+    litterCosts,
+    puppyCosts,
+  }
+}
 
 module.exports = {
   _before: async function() {
@@ -173,43 +331,78 @@ module.exports = {
    * 获取支出详情
    */
   async getExpenseDetail(id) {
-    if (!id) throw new Error('缺少记录 ID')
+    const expenseId = getIdArg(id, 'id')
+    if (!expenseId) throw new Error('缺少记录 ID')
 
     const { data: expenses } = await db.collection('expenses')
-      .where({ _id: id, family_id: this.familyId, deleted_at: null })
+      .where({ _id: expenseId, family_id: this.familyId, deleted_at: null })
       .get()
     if (!expenses || expenses.length === 0) throw new Error('记录不存在')
 
-    return { data: expenses[0] }
+    const expense = expenses[0]
+    const linkedDogs = await fetchDogsByIds(this.familyId, expense.linked_dog_ids || [])
+
+    let linkedRef = ''
+    if (expense.linked_litter_id) {
+      linkedRef = expense.dam_name
+        ? `${expense.dam_name}${expense.litter_number ? ` · 第${expense.litter_number}窝` : ' · 关联窝'}`
+        : '关联窝'
+    } else if (expense.linked_cycle_id) {
+      linkedRef = expense.dam_name ? `${expense.dam_name} · 繁育周期` : '繁育周期'
+    } else if (linkedDogs.length) {
+      linkedRef = linkedDogs.length === 1 ? '单犬记录' : `${linkedDogs.length}只犬分摊`
+    }
+
+    return {
+      data: {
+        ...expense,
+        amount: expense.total_amount || 0,
+        source: expense.source_type,
+        linked_dogs: linkedDogs,
+        linked_ref: linkedRef,
+      },
+    }
   },
 
   /**
    * 获取收入详情
    */
   async getIncomeDetail(id) {
-    if (!id) throw new Error('缺少记录 ID')
+    const incomeId = getIdArg(id, 'id')
+    if (!incomeId) throw new Error('缺少记录 ID')
 
     const { data: incomes } = await db.collection('incomes')
-      .where({ _id: id, family_id: this.familyId, deleted_at: null })
+      .where({ _id: incomeId, family_id: this.familyId, deleted_at: null })
       .get()
     if (!incomes || incomes.length === 0) throw new Error('记录不存在')
 
-    return { data: incomes[0] }
+    const income = incomes[0]
+
+    return {
+      data: {
+        ...income,
+        type_label: income.type || '其他',
+        linked_dog_name: income.dog_name || '',
+        sale_id: income.source_sale_id || '',
+        source: income.source_sale_id ? 'auto' : 'manual',
+      },
+    }
   },
 
   /**
    * 软删除支出
    */
   async softDeleteExpense(id) {
-    if (!id) throw new Error('缺少记录 ID')
+    const expenseId = getIdArg(id, 'id')
+    if (!expenseId) throw new Error('缺少记录 ID')
 
     const { data: expenses } = await db.collection('expenses')
-      .where({ _id: id, family_id: this.familyId })
+      .where({ _id: expenseId, family_id: this.familyId })
       .get()
     if (!expenses || expenses.length === 0) throw new Error('记录不存在')
     if (expenses[0].source_type === 'auto') throw new Error('自动生成的费用不可删除，请在来源记录中操作')
 
-    await db.collection('expenses').doc(id).update({
+    await db.collection('expenses').doc(expenseId).update({
       deleted_at: Date.now(),
       updated_at: Date.now(),
     })
@@ -221,14 +414,16 @@ module.exports = {
    * 软删除收入
    */
   async softDeleteIncome(id) {
-    if (!id) throw new Error('缺少记录 ID')
+    const incomeId = getIdArg(id, 'id')
+    if (!incomeId) throw new Error('缺少记录 ID')
 
     const { data: incomes } = await db.collection('incomes')
-      .where({ _id: id, family_id: this.familyId })
+      .where({ _id: incomeId, family_id: this.familyId })
       .get()
     if (!incomes || incomes.length === 0) throw new Error('记录不存在')
+    if (incomes[0].source_sale_id) throw new Error('自动生成的收入不可删除，请在销售记录中操作')
 
-    await db.collection('incomes').doc(id).update({
+    await db.collection('incomes').doc(incomeId).update({
       deleted_at: Date.now(),
       updated_at: Date.now(),
     })
@@ -308,91 +503,17 @@ module.exports = {
    * 单窝利润
    */
   async getLitterProfit(litterId) {
-    if (!litterId) throw new Error('缺少窝 ID')
+    const targetLitterId = getIdArg(litterId, 'litter_id') || getIdArg(litterId, 'litterId')
+    if (!targetLitterId) throw new Error('缺少窝 ID')
 
-    const familyId = this.familyId
-
-    // 获取窝信息
-    const { data: litters } = await db.collection('litters')
-      .where({ _id: litterId, family_id: familyId })
-      .get()
-    if (!litters || litters.length === 0) throw new Error('窝不存在')
-    const litter = litters[0]
-
-    // 获取该窝幼崽
-    const { data: puppies } = await db.collection('dogs')
-      .where({ origin_litter_id: litterId, deleted_at: null })
-      .get()
-    const puppyIds = puppies.map(p => p._id)
-
-    // 收入：该窝幼崽的所有收入
-    let totalIncome = 0
-    if (puppyIds.length > 0) {
-      for (const pid of puppyIds) {
-        const { data: incomes } = await db.collection('incomes')
-          .where({ dog_id: pid, family_id: familyId, deleted_at: null })
-          .get()
-        totalIncome += incomes.reduce((sum, i) => sum + (i.amount || 0), 0)
-      }
-    }
-
-    // 支出：周期费用 + 窝级别费用 + 幼崽个体费用
-    let totalExpense = 0
-
-    // 周期费用
-    if (litter.cycle_id) {
-      const { data: cycleExpenses } = await db.collection('expenses')
-        .where({ linked_cycle_id: litter.cycle_id, family_id: familyId, deleted_at: null })
-        .get()
-      totalExpense += cycleExpenses.reduce((sum, e) => sum + (e.total_amount || 0), 0)
-    }
-
-    // 窝级别费用
-    const { data: litterExpenses } = await db.collection('expenses')
-      .where({ linked_litter_id: litterId, family_id: familyId, deleted_at: null })
-      .get()
-    totalExpense += litterExpenses.reduce((sum, e) => sum + (e.total_amount || 0), 0)
-
-    // 幼崽个体费用（通过 linked_dog_ids 关联，排除已通过 cycle/litter 计过的费用）
-    const countedExpenseIds = new Set()
-    if (litter.cycle_id) {
-      const { data: ce } = await db.collection('expenses')
-        .where({ linked_cycle_id: litter.cycle_id, family_id: familyId, deleted_at: null })
-        .get()
-      ce.forEach(e => countedExpenseIds.add(e._id))
-    }
-    litterExpenses.forEach(e => countedExpenseIds.add(e._id))
-
-    const { data: allLinkedExpenses } = await db.collection('expenses')
-      .where({ family_id: familyId, deleted_at: null })
-      .limit(1000)
-      .get()
-
-    for (const e of allLinkedExpenses) {
-      if (countedExpenseIds.has(e._id)) continue // 已计入，跳过避免重复
-      if (e.linked_dog_ids && e.linked_dog_ids.length > 0) {
-        const matchCount = e.linked_dog_ids.filter(id => puppyIds.includes(id)).length
-        if (matchCount > 0) {
-          // 分摊：该笔费用中属于该窝幼崽的部分
-          totalExpense += (e.total_amount || 0) * matchCount / e.linked_dog_ids.length
-        }
-      }
-    }
-
-    const aliveCount = puppies.filter(p => p.disposition !== '已故').length
-    const avgCostPerPuppy = aliveCount > 0 ? totalExpense / aliveCount : 0
+    const result = await calculateLitterProfit(this.familyId, targetLitterId)
 
     return {
       data: {
-        litterId,
-        damName: litter.dam_name,
-        totalIncome,
-        totalExpense,
-        netProfit: totalIncome - totalExpense,
-        puppyCount: puppies.length,
-        aliveCount,
-        avgCostPerPuppy: Math.round(avgCostPerPuppy),
-      }
+        litterId: targetLitterId,
+        damName: result.litter.dam_name,
+        ...result,
+      },
     }
   },
 
@@ -400,105 +521,250 @@ module.exports = {
    * 种母 ROI
    */
   async getDamROI(damId) {
-    if (!damId) throw new Error('缺少犬只 ID')
+    const targetDamId = getIdArg(damId, 'dog_id') || getIdArg(damId, 'damId')
+    if (!targetDamId) throw new Error('缺少犬只 ID')
 
     const familyId = this.familyId
 
     // 获取犬只信息
     const { data: dogs } = await db.collection('dogs')
-      .where({ _id: damId, family_id: familyId })
+      .where({ _id: targetDamId, family_id: familyId })
       .get()
     if (!dogs || dogs.length === 0) throw new Error('犬只不存在')
     const dam = dogs[0]
 
     // 获取该犬所有繁育周期
     const { data: cycles } = await db.collection('breeding_cycles')
-      .where({ dam_id: damId, family_id: familyId })
+      .where({ dam_id: targetDamId, family_id: familyId })
       .get()
     const cycleIds = cycles.map(c => c._id)
 
     // 获取所有窝
     const { data: litters } = await db.collection('litters')
-      .where({ dam_id: damId, family_id: familyId })
+      .where({ dam_id: targetDamId, family_id: familyId })
       .get()
-    const litterIds = litters.map(l => l._id)
+    const litterIds = litters.map(item => item._id)
 
-    // 获取所有幼崽
-    let allPuppyIds = []
-    for (const lid of litterIds) {
-      const { data: puppies } = await db.collection('dogs')
-        .where({ origin_litter_id: lid, deleted_at: null })
-        .get()
-      allPuppyIds.push(...puppies.map(p => p._id))
+    const [allExpenseResult, puppiesResult] = await Promise.all([
+      db.collection('expenses').where({ family_id: familyId, deleted_at: null }).limit(1000).get(),
+      litterIds.length
+        ? db.collection('dogs').where({ origin_litter_id: dbCmd.in(litterIds), family_id: familyId, deleted_at: null }).get()
+        : { data: [] },
+    ])
+
+    const allExpenses = allExpenseResult.data || []
+    const allPuppies = puppiesResult.data || []
+
+    const litterSummaries = []
+    let totalBreedingIncome = 0
+    let totalBreedingCost = 0
+
+    for (let index = 0; index < litters.length; index += 1) {
+      const litter = litters[index]
+      const summary = await calculateLitterProfit(familyId, litter._id)
+      totalBreedingIncome += summary.totalIncome
+      totalBreedingCost += summary.totalExpense
+
+      const hasPending = summary.incomeItems.some(item => item.status === 'pending')
+      let status = 'income'
+      if (hasPending) status = 'in_progress'
+      else if (summary.netProfit < 0) status = 'failed'
+
+      litterSummaries.push({
+        id: litter._id,
+        index: index + 1,
+        title: `${dam.name}第${index + 1}窝`,
+        meta: `${summary.aliveCount}/${summary.totalPuppyCount}只存活`,
+        puppyCount: summary.aliveCount,
+        profit: summary.netProfit,
+        status,
+      })
     }
 
-    // 总收入：所有幼崽收入
-    let totalIncome = 0
-    for (const pid of allPuppyIds) {
-      const { data: incomes } = await db.collection('incomes')
-        .where({ dog_id: pid, family_id: familyId, deleted_at: null })
-        .get()
-      totalIncome += incomes.reduce((sum, i) => sum + (i.amount || 0), 0)
-    }
-
-    // 总支出：买入价 + 周期费用 + 窝费用 + 个体费用
-    let totalExpense = dam.purchase_price || 0
-
-    // 周期费用
-    for (const cid of cycleIds) {
-      const { data: expenses } = await db.collection('expenses')
-        .where({ linked_cycle_id: cid, family_id: familyId, deleted_at: null })
-        .get()
-      totalExpense += expenses.reduce((sum, e) => sum + (e.total_amount || 0), 0)
-    }
-
-    // 窝费用
-    for (const lid of litterIds) {
-      const { data: expenses } = await db.collection('expenses')
-        .where({ linked_litter_id: lid, family_id: familyId, deleted_at: null })
-        .get()
-      totalExpense += expenses.reduce((sum, e) => sum + (e.total_amount || 0), 0)
-    }
-
-    // 种母个体费用（排除已通过 cycle/litter 计入的费用）
     const countedIds = new Set()
-    for (const cid of cycleIds) {
-      const { data: ce } = await db.collection('expenses')
-        .where({ linked_cycle_id: cid, family_id: familyId, deleted_at: null })
-        .get()
-      ce.forEach(e => countedIds.add(e._id))
-    }
-    for (const lid of litterIds) {
-      const { data: le } = await db.collection('expenses')
-        .where({ linked_litter_id: lid, family_id: familyId, deleted_at: null })
-        .get()
-      le.forEach(e => countedIds.add(e._id))
-    }
-
-    const { data: allExpenses } = await db.collection('expenses')
-      .where({ family_id: familyId, deleted_at: null })
-      .limit(1000)
-      .get()
-
-    for (const e of allExpenses) {
-      if (countedIds.has(e._id)) continue // 已通过 cycle/litter 计入，跳过
-      if (e.linked_dog_ids && e.linked_dog_ids.includes(damId)) {
-        totalExpense += (e.total_amount || 0) / e.linked_dog_ids.length
+    for (const expense of allExpenses) {
+      if (
+        (expense.linked_cycle_id && cycleIds.includes(expense.linked_cycle_id))
+        || (expense.linked_litter_id && litterIds.includes(expense.linked_litter_id))
+      ) {
+        countedIds.add(expense._id)
       }
     }
+
+    let healthCost = 0
+    for (const expense of allExpenses) {
+      if (countedIds.has(expense._id)) continue
+      if (expense.category === '购入') continue
+      if (Array.isArray(expense.linked_dog_ids) && expense.linked_dog_ids.includes(targetDamId)) {
+        healthCost += (expense.total_amount || 0) / expense.linked_dog_ids.length
+      }
+    }
+
+    const purchaseCost = dam.purchase_price || 0
+    const totalInvestment = purchaseCost + totalBreedingCost + healthCost
+    const netProfit = totalBreedingIncome - totalInvestment
+    const roiPercent = totalInvestment > 0
+      ? Math.round((netProfit / totalInvestment) * 1000) / 10
+      : 0
 
     return {
       data: {
-        damId,
+        damId: targetDamId,
         damName: dam.name,
-        purchasePrice: dam.purchase_price || 0,
-        totalIncome,
-        totalExpense,
-        netReturn: totalIncome - totalExpense,
+        purchasePrice: purchaseCost,
+        purchaseCost,
+        totalIncome: totalBreedingIncome,
+        totalBreedingIncome,
+        totalBreedingCost,
+        healthCost,
+        totalExpense: totalInvestment,
+        netReturn: netProfit,
+        netProfit,
+        roiPercent,
         cycleCount: cycles.length,
         litterCount: litters.length,
-        puppyCount: allPuppyIds.length,
+        puppyCount: allPuppies.length,
+        litters: litterSummaries,
+      },
+    }
+  },
+
+  async getDamRoi(damId) {
+    return this.getDamROI(damId)
+  },
+
+  async deleteExpense(id) {
+    return this.softDeleteExpense(id)
+  },
+
+  async deleteIncome(id) {
+    return this.softDeleteIncome(id)
+  },
+
+  async updateExpense(payload = {}, maybeData) {
+    const data = typeof payload === 'string'
+      ? { ...(maybeData || {}), id: payload }
+      : payload
+    const expenseId = getIdArg(data, 'id')
+    if (!expenseId) throw new Error('缺少记录 ID')
+    if (!data.total_amount || data.total_amount <= 0) throw new Error('请填写金额')
+    if (!data.category) throw new Error('请选择分类')
+
+    const { data: expenses } = await db.collection('expenses')
+      .where({ _id: expenseId, family_id: this.familyId, deleted_at: null })
+      .get()
+    if (!expenses || expenses.length === 0) throw new Error('记录不存在')
+    if (expenses[0].source_type === 'auto') throw new Error('自动生成的费用不可编辑，请在来源记录中操作')
+
+    await db.collection('expenses').doc(expenseId).update({
+      total_amount: data.total_amount,
+      category: data.category,
+      date: data.date || expenses[0].date,
+      linked_cycle_id: data.linked_cycle_id || null,
+      linked_litter_id: data.linked_litter_id || null,
+      linked_dog_ids: data.linked_dog_ids || [],
+      dam_name: data.dam_name || null,
+      dog_names: data.dog_names || [],
+      litter_number: data.litter_number || null,
+      notes: data.notes || null,
+      images: data.images || [],
+      updated_at: Date.now(),
+    })
+
+    return { message: '已更新' }
+  },
+
+  async updateIncome(payload = {}, maybeData) {
+    const data = typeof payload === 'string'
+      ? { ...(maybeData || {}), id: payload }
+      : payload
+    const incomeId = getIdArg(data, 'id')
+    if (!incomeId) throw new Error('缺少记录 ID')
+    if (!data.amount || data.amount <= 0) throw new Error('请填写有效金额')
+    if (!data.type) throw new Error('请选择收入类型')
+
+    const { data: incomes } = await db.collection('incomes')
+      .where({ _id: incomeId, family_id: this.familyId, deleted_at: null })
+      .get()
+    if (!incomes || incomes.length === 0) throw new Error('记录不存在')
+    if (incomes[0].source_sale_id) throw new Error('自动生成的收入不可编辑，请在销售记录中操作')
+
+    await db.collection('incomes').doc(incomeId).update({
+      amount: data.amount,
+      type: data.type,
+      dog_id: data.dog_id || null,
+      dog_name: data.dog_name || null,
+      date: data.date || incomes[0].date,
+      notes: data.notes || null,
+      updated_at: Date.now(),
+    })
+
+    return { message: '已更新' }
+  },
+
+  async getProjectionParams() {
+    const familyId = this.familyId
+    const now = Date.now()
+    const last180Days = now - 180 * 86400000
+
+    const [damResult, litterResult, expenseResult] = await Promise.all([
+      db.collection('dogs').where({
+        family_id: familyId,
+        role: '种狗',
+        gender: '母',
+        deleted_at: null,
+      }).get(),
+      db.collection('litters').where({ family_id: familyId }).get(),
+      db.collection('expenses').where({
+        family_id: familyId,
+        deleted_at: null,
+        date: dbCmd.gte(last180Days),
+      }).limit(1000).get(),
+    ])
+
+    const activeDams = (damResult.data || []).filter(dog => !['已故', '已领养', '已赠送', '已退休'].includes(dog.disposition)).length
+    const litters = litterResult.data || []
+    const littersByYear = {}
+    for (const litter of litters) {
+      const year = new Date(litter.birth_date || litter.created_at || now).getFullYear()
+      littersByYear[year] = (littersByYear[year] || 0) + 1
+    }
+    const yearlyCounts = Object.values(littersByYear)
+    const littersPerYear = yearlyCounts.length
+      ? Math.round((yearlyCounts.reduce((sum, count) => sum + count, 0) / yearlyCounts.length) * 10) / 10
+      : Math.max(activeDams, 1)
+
+    let avgIncomePerLitter = 0
+    let avgCostPerLitter = 0
+    if (litters.length > 0) {
+      let totalIncome = 0
+      let totalCost = 0
+      for (const litter of litters) {
+        const summary = await calculateLitterProfit(familyId, litter._id)
+        totalIncome += summary.totalIncome
+        totalCost += summary.totalExpense
       }
+      avgIncomePerLitter = Math.round(totalIncome / litters.length)
+      avgCostPerLitter = Math.round(totalCost / litters.length)
+    }
+
+    const sharedExpenses = (expenseResult.data || []).filter(expense => {
+      const hasScopedLink = expense.linked_cycle_id || expense.linked_litter_id
+      const hasDogLink = Array.isArray(expense.linked_dog_ids) && expense.linked_dog_ids.length > 0
+      return !hasScopedLink && !hasDogLink
+    })
+    const monthlySharedCost = sharedExpenses.length
+      ? Math.round(sharedExpenses.reduce((sum, expense) => sum + (expense.total_amount || 0), 0) / 6)
+      : 0
+
+    return {
+      data: {
+        activeDams,
+        littersPerYear,
+        avgIncomePerLitter,
+        avgCostPerLitter,
+        monthlySharedCost,
+      },
     }
   },
 

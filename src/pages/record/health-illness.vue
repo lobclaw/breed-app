@@ -279,11 +279,61 @@ const { run: batchAddRecord } = useCloudCall('health-service', 'batchAddHealthRe
   throwOnError: true,
 })
 
+const { run: checkDuplicateIllness } = useCloudCall('health-service', 'checkDuplicateIllness', {
+  showLoading: false,
+})
+
 const { run: fetchTask } = useCloudCall('task-service', 'getTask')
+
+async function handleDuplicateIllnessIfNeeded(): Promise<boolean> {
+  const condition = String(details.condition || '').trim()
+  const treatmentStatus = details.treatment_status || '观察中'
+  if (!condition || treatmentStatus === '已康复') return false
+
+  const res = await checkDuplicateIllness({
+    dog_ids: selectedDogs.value.map((dog: any) => dog._id),
+    condition,
+  })
+  const duplicates = res?.data?.duplicates || []
+  if (!duplicates.length) return false
+
+  if (duplicates.length === 1 && selectedDogs.value.length === 1) {
+    const duplicate = duplicates[0]
+    await new Promise<void>((resolve) => {
+      uni.showModal({
+        title: '已有进行中的疾病',
+        content: `${selectedDogs.value[0]?.name || '该犬'} 已有未康复的「${condition}」记录，去编辑原记录吗？`,
+        confirmText: '去编辑',
+        cancelText: '知道了',
+        success: (modalRes) => {
+          if (modalRes.confirm && duplicate.recordId) {
+            uni.navigateTo({ url: `/pages/record/health-edit?id=${duplicate.recordId}` })
+          }
+          resolve()
+        },
+        fail: () => resolve(),
+      })
+    })
+  } else {
+    const nameMap = new Map(selectedDogs.value.map((dog: any) => [dog._id, dog.name]))
+    const dogNames = [...new Set(duplicates.map((item: any) => nameMap.get(item.dogId)).filter(Boolean))]
+    uni.showToast({
+      title: `${dogNames.join('、')} 已有进行中的「${condition}」记录`,
+      icon: 'none',
+    })
+  }
+
+  return true
+}
 
 async function submit() {
   submitState.value = 'submitting'
   try {
+    if (await handleDuplicateIllnessIfNeeded()) {
+      submitState.value = 'idle'
+      return
+    }
+
     // 批量录入健康记录（一次云调用）
     const res = await batchAddRecord({
       dog_ids: selectedDogs.value.map((d: any) => d._id),

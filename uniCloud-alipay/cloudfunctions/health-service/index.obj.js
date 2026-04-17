@@ -18,6 +18,104 @@ function validateDetails(type, details) {
   }
 }
 
+function normalizeIllnessCondition(condition) {
+  return typeof condition === 'string' ? condition.trim() : ''
+}
+
+function isActiveIllnessRecord(record) {
+  return record?.type === 'illness' && (record.details?.treatment_status || '观察中') !== '已康复'
+}
+
+function getRecordActivityTs(record) {
+  return record?.updated_at || record?.date || record?.created_at || 0
+}
+
+function sortRecordsByActivityDesc(records = []) {
+  return [...records].sort((a, b) => getRecordActivityTs(b) - getRecordActivityTs(a))
+}
+
+async function findDuplicateActiveIllnesses(familyId, { dogIds = [], condition, excludeRecordId } = {}) {
+  const normalizedCondition = normalizeIllnessCondition(condition)
+  if (!normalizedCondition || !Array.isArray(dogIds) || dogIds.length === 0) return []
+
+  const { data: records } = await db.collection('health_records')
+    .where({
+      family_id: familyId,
+      dog_id: dbCmd.in(dogIds),
+      type: 'illness',
+      'details.condition': normalizedCondition,
+      deleted_at: null,
+    })
+    .get()
+
+  return (records || [])
+    .filter(record => record._id !== excludeRecordId)
+    .filter(isActiveIllnessRecord)
+}
+
+async function assertNoDuplicateActiveIllness(familyId, { dogIds = [], condition, excludeRecordId } = {}) {
+  const duplicates = await findDuplicateActiveIllnesses(familyId, { dogIds, condition, excludeRecordId })
+  if (duplicates.length > 0) {
+    const label = normalizeIllnessCondition(condition) || '疾病'
+    throw new Error(`已有进行中的「${label}」记录，请先更新原记录`)
+  }
+  return duplicates
+}
+
+async function cleanupDuplicateIllnessesForFamily(familyId, { dogId } = {}) {
+  const where = {
+    family_id: familyId,
+    type: 'illness',
+    deleted_at: null,
+  }
+  if (dogId) where.dog_id = dogId
+
+  const { data: records } = await db.collection('health_records').where(where).get()
+  const activeRecords = (records || []).filter(isActiveIllnessRecord)
+  const groups = new Map()
+
+  for (const record of activeRecords) {
+    const condition = normalizeIllnessCondition(record.details?.condition || '生病中')
+    const key = `${record.dog_id}:${condition}`
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key).push(record)
+  }
+
+  let cleanedRecords = 0
+  let cleanedGroups = 0
+  const now = Date.now()
+
+  for (const groupRecords of groups.values()) {
+    if (groupRecords.length <= 1) continue
+    cleanedGroups += 1
+    const sorted = sortRecordsByActivityDesc(groupRecords)
+    const keeper = sorted[0]
+    const duplicates = sorted.slice(1)
+
+    for (const duplicate of duplicates) {
+      await db.collection('tasks').where({
+        family_id: familyId,
+        type: 'illness',
+        source_record_id: duplicate._id,
+      }).update({
+        source_record_id: keeper._id,
+        updated_at: now,
+      })
+
+      await db.collection('health_records').doc(duplicate._id).update({
+        'details.treatment_status': '已康复',
+        'details.merged_into_record_id': keeper._id,
+        'details.merge_reason': 'duplicate_active_condition',
+        updated_at: now,
+      })
+
+      cleanedRecords += 1
+    }
+  }
+
+  return { cleanedGroups, cleanedRecords }
+}
+
 async function getFamilySettings(familyId) {
   const { data } = await db.collection('families')
     .doc(familyId)
@@ -331,6 +429,31 @@ module.exports = {
     return { data: { success: true } }
   },
 
+  async checkDuplicateIllness({ dog_ids, condition, exclude_record_id } = {}) {
+    const duplicates = await findDuplicateActiveIllnesses(this.familyId, {
+      dogIds: Array.isArray(dog_ids) ? dog_ids : [],
+      condition,
+      excludeRecordId: exclude_record_id || null,
+    })
+
+    return {
+      data: {
+        duplicates: duplicates.map(record => ({
+          recordId: record._id,
+          dogId: record.dog_id,
+          condition: normalizeIllnessCondition(record.details?.condition || '生病中'),
+        })),
+      },
+    }
+  },
+
+  async cleanupDuplicateIllnesses({ dog_id } = {}) {
+    const result = await cleanupDuplicateIllnessesForFamily(this.familyId, {
+      dogId: dog_id || null,
+    })
+    return { data: result }
+  },
+
   async addHealthRecord(data) {
     if (!data.type) throw new Error('请选择记录类型')
     if (!data.dog_id) throw new Error('请选择犬只')
@@ -351,6 +474,13 @@ module.exports = {
 
     // 类型特有字段校验
     validateDetails(data.type, data.details || {})
+
+    if (data.type === 'illness' && (data.details?.treatment_status || '观察中') !== '已康复') {
+      await assertNoDuplicateActiveIllness(familyId, {
+        dogIds: [data.dog_id],
+        condition: data.details?.condition,
+      })
+    }
 
     // 创建健康记录
     const recordData = {
@@ -398,11 +528,18 @@ module.exports = {
     const validTypes = ['vaccination', 'deworming', 'illness']
     if (!validTypes.includes(data.type)) throw new Error('无效的记录类型')
 
-    validateDetails(data.type, data.details || {})
-
     const now = Date.now()
     const familyId = this.familyId
     const uid = this.uid
+
+    validateDetails(data.type, data.details || {})
+
+    if (data.type === 'illness' && (data.details?.treatment_status || '观察中') !== '已康复') {
+      await assertNoDuplicateActiveIllness(familyId, {
+        dogIds: data.dog_ids,
+        condition: data.details?.condition,
+      })
+    }
 
     // ① 一次查询校验所有犬只
     const { data: dogs } = await db.collection('dogs')
@@ -1092,6 +1229,19 @@ module.exports = {
       .where({ _id: id, family_id: this.familyId })
       .get()
     if (!records || records.length === 0) throw new Error('记录不存在')
+    const record = records[0]
+
+    if (record.type === 'illness' && details !== undefined) {
+      const nextCondition = normalizeIllnessCondition(details?.condition || record.details?.condition)
+      const nextTreatmentStatus = details?.treatment_status || record.details?.treatment_status || '观察中'
+      if (nextCondition && nextTreatmentStatus !== '已康复') {
+        await assertNoDuplicateActiveIllness(this.familyId, {
+          dogIds: [record.dog_id],
+          condition: nextCondition,
+          excludeRecordId: id,
+        })
+      }
+    }
 
     const updateData = { updated_at: Date.now() }
     if (date !== undefined) updateData.date = date

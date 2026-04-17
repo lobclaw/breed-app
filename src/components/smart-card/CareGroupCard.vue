@@ -25,7 +25,8 @@
 
     <!-- 批量完成按钮 -->
     <view v-if="!acting" class="card-actions">
-      <view class="btn btn--filled btn--amber" @click="batchComplete">
+      <view class="btn btn--primary btn--primary-amber" @click="batchComplete">
+        <text class="material-icons-round btn-icon btn-icon--white">check_circle</text>
         <text class="btn-text btn-text--white">批量标记今日已完成</text>
       </view>
     </view>
@@ -101,10 +102,20 @@ function statusClass(dog: any) {
 
 .card-actions { display: flex; gap: 8px; margin-top: 14px; }
 .btn {
-  padding: 8px 18px; border-radius: 999px; border: none;
+  min-height: 34px;
+  padding: 8px 18px;
+  min-width: 64px;
+  border-radius: 999px;
+  border: none;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   transition: transform 0.12s ease, opacity 0.12s ease;
   &:active { transform: scale(0.94); opacity: 0.85; }
-  &--filled.btn--amber { background: var(--amber); }
+  &--primary-amber { background: linear-gradient(135deg, rgba(242, 167, 62, 0.92), rgba(255, 192, 108, 0.92)); }
 }
+.btn-icon { font-size: 16px; flex-shrink: 0; &--white { color: #FFFFFF; } }
 .btn-text { font-family: var(--font-display); font-size: 13px; font-weight: 700; &--white { color: #FFFFFF; } }
 </style>

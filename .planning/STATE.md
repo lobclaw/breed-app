@@ -81,7 +81,7 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-None yet.
+- Next version UX seed: add `Undo` / short-lived reversible actions for high-frequency reversible flows, prioritizing home complete/skip, sale cancel, recycle restore, and similar operations. Keep current weak-success-feedback baseline, and treat `Undo` as the next-layer upgrade rather than bringing back strong success toasts.
 
 ### Blockers/Concerns
 

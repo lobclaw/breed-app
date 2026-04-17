@@ -77,15 +77,15 @@
         <text class="projection-year">{{ year.year }}年</text>
         <view class="projection-row">
           <text class="p-label">收入</text>
-          <text class="p-value income">¥{{ formatMoney(year.income) }}</text>
+          <text class="p-value income">+¥{{ formatMoney(year.income) }}</text>
         </view>
         <view class="projection-row">
           <text class="p-label">支出</text>
-          <text class="p-value expense">¥{{ formatMoney(year.cost) }}</text>
+          <text class="p-value expense">-¥{{ formatMoney(year.cost) }}</text>
         </view>
         <view class="projection-row">
           <text class="p-label">利润</text>
-          <text class="p-value primary">¥{{ formatMoney(year.profit) }}</text>
+          <text class="p-value" :class="getProfitClass(year.profit)">{{ formatSignedMoney(year.profit) }}</text>
         </view>
         <view class="projection-bars">
           <view
@@ -161,6 +161,18 @@ function formatMoney(val: number): string {
   return val.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
 }
 
+function formatSignedMoney(val: number): string {
+  if (!val) return '¥0'
+  const sign = val > 0 ? '+' : '-'
+  return `${sign}¥${formatMoney(Math.abs(val))}`
+}
+
+function getProfitClass(val: number) {
+  if (val > 0) return 'primary'
+  if (val < 0) return 'negative'
+  return 'neutral'
+}
+
 const { run: getProjectionParams } = useCloudCall('finance-service', 'getProjectionParams', {
   showLoading: false,
 })
@@ -168,8 +180,8 @@ const { run: getProjectionParams } = useCloudCall('finance-service', 'getProject
 async function loadParams() {
   try {
     const res = await getProjectionParams()
-    if (res) {
-      const data = res as any
+    if (res?.data) {
+      const data = res.data as any
       if (data.activeDams) params.activeDams = String(data.activeDams)
       if (data.littersPerYear) params.littersPerYear = String(data.littersPerYear)
       if (data.avgIncomePerLitter) params.avgIncomePerLitter = String(data.avgIncomePerLitter)
@@ -308,6 +320,8 @@ onLoad(() => {
 .p-value.income { color: var(--red); }
 .p-value.expense { color: var(--green); }
 .p-value.primary { color: var(--primary); }
+.p-value.negative { color: var(--red); }
+.p-value.neutral { color: var(--text-2); }
 
 .projection-bars {
   display: flex;

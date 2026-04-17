@@ -36,14 +36,15 @@
       <!-- 健康类与额外安排显示"完成"按钮 -->
       <view
         v-if="isHealthType || isExtraArrangementType"
-        class="btn"
-        :class="cardVariant === 'illness' ? 'btn--ghost-illness' : `btn--ghost-${barColor}`"
+        class="btn btn--primary"
+        :class="cardVariant === 'illness' ? 'btn--primary-illness' : `btn--primary-${barColor}`"
         @click.stop="onComplete(visibleTasks[0]?._id, completeMode)"
       >
-        <text class="btn-text" :class="cardVariant === 'illness' ? 'btn-text--illness' : `btn-text--${barColor}`">完成</text>
+        <text class="material-icons-round btn-icon btn-icon--white">check_circle</text>
+        <text class="btn-text btn-text--white">完成</text>
       </view>
-      <view class="btn btn--ghost" @click.stop="$emit('postpone', visibleTasks[0]?._id)">
-        <text class="btn-text btn-text--ghost">推迟</text>
+      <view class="btn btn--secondary" :class="cardVariant === 'illness' ? 'btn--secondary-illness' : `btn--secondary-${barColor}`" @click.stop="$emit('postpone', visibleTasks[0]?._id)">
+        <text class="btn-text" :class="cardVariant === 'illness' ? 'btn-text--illness' : `btn-text--${barColor}`">推迟</text>
       </view>
       <view class="btn-skip" @click.stop="onComplete(visibleTasks[0]?._id, 'skip')">
         <text class="btn-skip-text">跳过</text>
@@ -251,20 +252,41 @@ function taskColor(task: any) {
 
 .card-actions { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
 .btn {
-  padding: 8px 18px; border-radius: 999px; border: none;
+  min-height: 34px;
+  padding: 8px 18px;
+  min-width: 64px;
+  border-radius: 999px;
+  border: none;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   transition: transform 0.12s ease, opacity 0.12s ease;
   &:active { transform: scale(0.94); opacity: 0.85; }
-  &--ghost { background: transparent; border: 1.5px solid var(--text-4); }
-  &--ghost-red { background: transparent; border: 1.5px solid var(--red); }
-  &--ghost-illness { background: transparent; border: 1.5px solid rgba(224, 82, 82, 0.68); }
-  &--ghost-blue { background: transparent; border: 1.5px solid var(--blue); }
-  &--ghost-amber { background: transparent; border: 1.5px solid var(--amber); }
-  &--ghost-plum { background: transparent; border: 1.5px solid var(--plum); }
-  &--ghost-teal { background: transparent; border: 1.5px solid var(--teal); }
+  &--primary-red { background: linear-gradient(135deg, rgba(224, 82, 82, 0.92), rgba(240, 134, 91, 0.92)); }
+  &--primary-amber { background: linear-gradient(135deg, rgba(242, 167, 62, 0.92), rgba(255, 192, 108, 0.92)); }
+  &--primary-blue { background: linear-gradient(135deg, rgba(71, 144, 255, 0.92), rgba(101, 177, 255, 0.92)); }
+  &--primary-plum { background: linear-gradient(135deg, rgba(145, 116, 219, 0.94), rgba(178, 149, 242, 0.94)); }
+  &--primary-teal { background: linear-gradient(135deg, rgba(39, 171, 171, 0.92), rgba(90, 194, 194, 0.92)); }
+  &--primary-illness { background: linear-gradient(135deg, rgba(224, 82, 82, 0.92), rgba(240, 134, 91, 0.92)); }
+  &--secondary {
+    background: rgba(255, 255, 255, 0.72);
+    border: 1.5px solid transparent;
+  }
+  &--secondary-red { border-color: rgba(224, 82, 82, 0.18); background: linear-gradient(180deg, rgba(224, 82, 82, 0.06), rgba(224, 82, 82, 0.03)); }
+  &--secondary-amber { border-color: rgba(242, 167, 62, 0.18); background: linear-gradient(180deg, rgba(242, 167, 62, 0.06), rgba(242, 167, 62, 0.03)); }
+  &--secondary-blue { border-color: rgba(71, 144, 255, 0.18); background: linear-gradient(180deg, rgba(71, 144, 255, 0.06), rgba(71, 144, 255, 0.03)); }
+  &--secondary-plum { border-color: rgba(145, 116, 219, 0.18); background: linear-gradient(180deg, rgba(145, 116, 219, 0.06), rgba(145, 116, 219, 0.03)); }
+  &--secondary-teal { border-color: rgba(39, 171, 171, 0.18); background: linear-gradient(180deg, rgba(39, 171, 171, 0.06), rgba(39, 171, 171, 0.03)); }
+  &--secondary-illness { border-color: rgba(224, 82, 82, 0.18); background: linear-gradient(180deg, rgba(224, 82, 82, 0.06), rgba(224, 82, 82, 0.03)); }
 }
+.btn-icon { font-size: 16px; flex-shrink: 0; &--white { color: #FFFFFF; } }
 .btn-text {
-  font-family: var(--font-display); font-size: 13px; font-weight: 700;
-  &--ghost { color: var(--text-2); }
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  &--white { color: #FFFFFF; }
   &--red { color: var(--red); }
   &--illness { color: var(--red); }
   &--blue { color: var(--blue); }
@@ -273,7 +295,10 @@ function taskColor(task: any) {
   &--teal { color: var(--teal); }
 }
 .btn-skip {
+  min-height: 34px;
   padding: 8px 12px;
+  display: inline-flex;
+  align-items: center;
   &:active { opacity: 0.5; }
 }
 .btn-skip-text {

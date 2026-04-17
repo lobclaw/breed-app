@@ -11,28 +11,28 @@
     <view v-if="roiData" class="roi-card">
       <view class="roi-row">
         <text class="roi-label">购入成本</text>
-        <text class="roi-value expense">¥{{ formatMoney(roiData.purchaseCost) }}</text>
+        <text class="roi-value expense">-¥{{ formatMoney(roiData.purchaseCost) }}</text>
       </view>
       <view class="roi-row">
         <text class="roi-label">总繁育支出</text>
-        <text class="roi-value expense">¥{{ formatMoney(roiData.totalBreedingCost) }}</text>
+        <text class="roi-value expense">-¥{{ formatMoney(roiData.totalBreedingCost) }}</text>
       </view>
       <view class="roi-row">
         <text class="roi-label">总繁育收入</text>
-        <text class="roi-value income">¥{{ formatMoney(roiData.totalBreedingIncome) }}</text>
+        <text class="roi-value income">+¥{{ formatMoney(roiData.totalBreedingIncome) }}</text>
       </view>
       <view class="roi-row">
         <text class="roi-label">个体健康支出</text>
-        <text class="roi-value expense">¥{{ formatMoney(roiData.healthCost) }}</text>
+        <text class="roi-value expense">-¥{{ formatMoney(roiData.healthCost) }}</text>
       </view>
       <view class="roi-divider" />
       <view class="roi-big">
         <text class="roi-label">净收益</text>
-        <text class="roi-value primary">¥{{ formatMoney(roiData.netProfit) }}</text>
+        <text class="roi-value" :class="netProfitClass">{{ formatSignedMoney(roiData.netProfit) }}</text>
       </view>
       <view class="roi-rate">
         <text class="roi-label">投资回报率</text>
-        <text class="roi-value roi-pct">{{ roiData.roiPercent }}%</text>
+        <text class="roi-value" :class="roiPercentClass">{{ formatPercent(roiData.roiPercent) }}</text>
       </view>
     </view>
 
@@ -93,6 +93,20 @@ interface RoiData {
 const loading = ref(false)
 const roiData = ref<RoiData | null>(null)
 
+const netProfitClass = computed(() => {
+  const value = roiData.value?.netProfit || 0
+  if (value > 0) return 'primary'
+  if (value < 0) return 'negative'
+  return 'neutral'
+})
+
+const roiPercentClass = computed(() => {
+  const value = roiData.value?.roiPercent || 0
+  if (value > 0) return 'primary'
+  if (value < 0) return 'negative'
+  return 'neutral'
+})
+
 // 当选择犬只变化时自动加载 ROI
 watch(selectedDam, (dog) => {
   if (dog?._id) loadRoi(dog._id)
@@ -105,7 +119,7 @@ const litterList = computed(() => {
 
   return roiData.value.litters.map((litter: any) => {
     let profitClass = 'income'
-    let profitText = `净利润 ¥${formatMoney(litter.profit)}`
+    let profitText = `净利润 +¥${formatMoney(litter.profit)}`
     let barClass = 'income'
 
     if (litter.status === 'failed') {
@@ -114,7 +128,7 @@ const litterList = computed(() => {
       barClass = 'expense'
     } else if (litter.status === 'in_progress') {
       profitClass = 'gray'
-      profitText = `暂估 ¥${formatMoney(litter.profit)}`
+      profitText = `${litter.profit >= 0 ? '暂估 +¥' : '暂估 -¥'}${formatMoney(Math.abs(litter.profit))}`
       barClass = 'gray'
     }
 
@@ -135,6 +149,18 @@ function formatMoney(val: number): string {
   return val.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
 }
 
+function formatSignedMoney(val: number): string {
+  if (!val) return '¥0'
+  const sign = val > 0 ? '+' : '-'
+  return `${sign}¥${formatMoney(Math.abs(val))}`
+}
+
+function formatPercent(val: number): string {
+  if (!val) return '0%'
+  const sign = val > 0 ? '+' : '-'
+  return `${sign}${Math.abs(val)}%`
+}
+
 const { run: getDamRoi } = useCloudCall('finance-service', 'getDamRoi', {
   showLoading: true,
   loadingText: '计算中...',
@@ -144,8 +170,8 @@ async function loadRoi(damId: string) {
   loading.value = true
   try {
     const res = await getDamRoi({ dog_id: damId })
-    if (res) {
-      roiData.value = res as RoiData
+    if (res?.data) {
+      roiData.value = res.data as RoiData
     }
   } finally {
     loading.value = false
@@ -254,6 +280,14 @@ onLoad((query) => {
   color: var(--primary);
 }
 
+.roi-value.negative {
+  color: var(--red);
+}
+
+.roi-value.neutral {
+  color: var(--text-2);
+}
+
 .roi-rate {
   display: flex;
   justify-content: space-between;
@@ -264,13 +298,6 @@ onLoad((query) => {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-2);
-}
-
-.roi-pct {
-  font-family: var(--font-display);
-  font-size: 18px;
-  font-weight: 800;
-  color: var(--green);
 }
 
 /* ---- Section Label ---- */
@@ -341,7 +368,7 @@ onLoad((query) => {
 }
 
 .litter-item-profit.income { color: var(--red); }
-.litter-item-profit.expense { color: var(--green); }
+.litter-item-profit.expense { color: var(--red); }
 .litter-item-profit.gray { color: var(--text-3); }
 
 .litter-bar-track {
@@ -357,7 +384,7 @@ onLoad((query) => {
 }
 
 .litter-bar-fill.income { background: var(--red); }
-.litter-bar-fill.expense { background: var(--green); }
+.litter-bar-fill.expense { background: var(--red); }
 .litter-bar-fill.gray {
   background: var(--text-3);
   background-image: repeating-linear-gradient(

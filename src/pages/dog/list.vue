@@ -98,13 +98,17 @@
         </view>
 
         <!-- 底部状态标签 -->
-        <view v-if="dog.statuses?.length" class="dog-list__status-labels">
-          <BTag
-            v-for="(status, idx) in dog.statuses"
-            :key="idx"
-            :label="status.label || status.type"
-            :color="statusColor(status.type)"
-          />
+        <view v-if="visibleStatuses(dog).length" class="dog-list__status-labels">
+          <template v-for="(status, idx) in visibleStatuses(dog)" :key="`${status.type}-${status.label || status.type}-${idx}`">
+            <view v-if="status.overflow" class="dog-list__status-overflow">
+              <text class="dog-list__status-overflow-text">{{ status.label }}</text>
+            </view>
+            <BTag
+              v-else
+              :label="status.label || status.type"
+              :color="statusColor(status.type)"
+            />
+          </template>
         </view>
       </view>
 
@@ -214,6 +218,8 @@ import BSheet from '@/components/layout/BSheet.vue'
 import { useCloudCall } from '@/composables/useCloudCall'
 import type { DogWithStatus, DeriveStatusType } from '@/types/dog'
 import { getDogStatusTone } from '@/utils/themeSemantics'
+
+const MAX_STATUS_TAGS = 4
 
 const dogs = ref<DogWithStatus[]>([])
 const loading = ref(true)
@@ -353,10 +359,15 @@ function statusColor(type: DeriveStatusType): 'red' | 'amber' | 'green' | 'rose'
   return tone.color === 'blue' ? 'green' : tone.color
 }
 
+function isIllnessStatus(type: DeriveStatusType): boolean {
+  return getDogStatusTone(type).variant === 'illness'
+}
+
 /** 卡片左侧色条 class */
 function cardBarClass(dog: DogWithStatus) {
   if (dog.statuses?.length) {
     const mainStatus = dog.statuses[0].type
+    if (isIllnessStatus(mainStatus)) return 'dog-list__card--bar-illness'
     return `dog-list__card--bar-${statusColor(mainStatus)}`
   }
   if (dog.role === '外部种公') return 'dog-list__card--bar-blue'
@@ -367,7 +378,9 @@ function cardBarClass(dog: DogWithStatus) {
 /** 图标背景色 class */
 function cardIconBgClass(dog: DogWithStatus) {
   if (dog.statuses?.length) {
-    return `dog-list__card-icon--${statusColor(dog.statuses[0].type)}`
+    const mainStatus = dog.statuses[0].type
+    if (isIllnessStatus(mainStatus)) return 'dog-list__card-icon--illness'
+    return `dog-list__card-icon--${statusColor(mainStatus)}`
   }
   if (dog.role === '外部种公') return 'dog-list__card-icon--blue'
   if (dog.role === '幼崽') return 'dog-list__card-icon--amber'
@@ -377,7 +390,9 @@ function cardIconBgClass(dog: DogWithStatus) {
 /** 图标状态环 class */
 function cardRingClass(dog: DogWithStatus) {
   if (dog.statuses?.length) {
-    return `dog-list__card-icon--ring-${statusColor(dog.statuses[0].type)}`
+    const mainStatus = dog.statuses[0].type
+    if (isIllnessStatus(mainStatus)) return 'dog-list__card-icon--ring-illness'
+    return `dog-list__card-icon--ring-${statusColor(mainStatus)}`
   }
   if (dog.role === '外部种公') return 'dog-list__card-icon--ring-blue'
   if (dog.role === '幼崽') return 'dog-list__card-icon--ring-amber'
@@ -408,6 +423,19 @@ function roleLabel(dog: DogWithStatus) {
 function roleTagClass(dog: DogWithStatus) {
   if (dog.role === '种狗') return 'dog-list__role-tag--primary'
   return 'dog-list__role-tag--gray'
+}
+
+function visibleStatuses(dog: DogWithStatus) {
+  const statuses = (dog.statuses || []).filter(status => status.type !== '正常')
+  if (statuses.length <= MAX_STATUS_TAGS) return statuses
+
+  const visible = statuses.slice(0, MAX_STATUS_TAGS - 1)
+  visible.push({
+    type: '正常',
+    label: `+${statuses.length - (MAX_STATUS_TAGS - 1)}`,
+    overflow: true,
+  })
+  return visible
 }
 
 function formatAge(birthTs: number) {
@@ -638,6 +666,7 @@ onShow(() => {
 
 /* 卡片左色条颜色 */
 .dog-list__card--bar-red { border-left-color: var(--red); }
+.dog-list__card--bar-illness { border-left-color: rgba(224, 82, 82, 0.72); }
 .dog-list__card--bar-rose { border-left-color: var(--rose); }
 .dog-list__card--bar-green { border-left-color: var(--green); }
 .dog-list__card--bar-blue { border-left-color: var(--blue); }
@@ -647,6 +676,7 @@ onShow(() => {
 
 /* 渐变背景 */
 .dog-list__card--bar-red::before { background: linear-gradient(135deg, var(--red-soft) 0%, transparent 40%); }
+.dog-list__card--bar-illness::before { background: linear-gradient(135deg, rgba(255, 241, 239, 0.96) 0%, transparent 42%); }
 .dog-list__card--bar-rose::before { background: linear-gradient(135deg, var(--rose-soft) 0%, transparent 40%); }
 .dog-list__card--bar-green::before { background: linear-gradient(135deg, var(--green-soft) 0%, transparent 40%); }
 .dog-list__card--bar-blue::before { background: linear-gradient(135deg, var(--blue-soft) 0%, transparent 40%); }
@@ -684,6 +714,7 @@ onShow(() => {
 
 /* 图标背景色 */
 .dog-list__card-icon--red { background: var(--icon-red); }
+.dog-list__card-icon--illness { background: rgba(255, 217, 212, 0.78); }
 .dog-list__card-icon--rose { background: var(--icon-rose); }
 .dog-list__card-icon--green { background: var(--icon-green); }
 .dog-list__card-icon--blue { background: var(--icon-blue); }
@@ -693,6 +724,7 @@ onShow(() => {
 
 /* 图标状态环 */
 .dog-list__card-icon--ring-red { border-color: var(--red); }
+.dog-list__card-icon--ring-illness { border-color: rgba(224, 82, 82, 0.68); }
 .dog-list__card-icon--ring-rose { border-color: var(--rose); }
 .dog-list__card-icon--ring-green { border-color: var(--green); }
 .dog-list__card-icon--ring-blue { border-color: var(--blue); }
@@ -758,6 +790,20 @@ onShow(() => {
   gap: var(--space-tag-gap);
   margin-top: 8px;
   flex-wrap: wrap;
+}
+.dog-list__status-overflow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--card-dim);
+}
+.dog-list__status-overflow-text {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-3);
 }
 
 

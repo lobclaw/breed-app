@@ -13,7 +13,7 @@
     <template v-if="!loading && record">
       <!-- 金额展示 -->
       <view class="amount-card">
-        <text class="amount-value income">¥{{ formatAmount(record.amount) }}</text>
+        <text class="amount-value income">+¥{{ formatAmount(record.amount) }}</text>
         <view class="amount-meta">
           <BTag :label="record.type_label || '销售'" color="red" />
           <text class="amount-date">{{ formatDate(record.date) }}</text>
@@ -106,6 +106,7 @@ const record = ref<any>(null)
 const loading = ref(true)
 const submitBannerMessage = ref('')
 let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
+let hasLoadedOnce = false
 
 let recordId = ''
 
@@ -139,6 +140,7 @@ async function loadRecord() {
     record.value = result.data
   }
   loading.value = false
+  hasLoadedOnce = true
 }
 
 function goEdit() {
@@ -190,6 +192,9 @@ onShow(() => {
   const feedback = consumeSubmitFeedback('/pages/finance/income-detail')
   if (feedback?.message) {
     showSubmitBanner(feedback.message)
+  }
+  if (recordId && hasLoadedOnce) {
+    loadRecord()
   }
 })
 </script>

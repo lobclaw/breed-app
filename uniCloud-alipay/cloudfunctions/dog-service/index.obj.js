@@ -7,6 +7,121 @@ const { verifyAndGetFamily, requireFamily, requireAdmin } = require('breed-auth/
 const db = uniCloud.database()
 const dbCmd = db.command
 
+const LIST_STATUS_PRIORITY = {
+  '生病中': 0,
+  '用药中': 1,
+  '怀孕中': 2,
+  '哺乳中': 3,
+  '发情中': 4,
+  '正常': 5,
+}
+
+const DETAIL_STATUS_PRIORITY = {
+  '生病中': 0,
+  '用药中': 1,
+  '怀孕中': 2,
+  '哺乳中': 3,
+  '发情中': 4,
+}
+
+function sortListStatuses(statuses = []) {
+  return [...statuses].sort((a, b) => {
+    const aPriority = LIST_STATUS_PRIORITY[a.type] ?? 99
+    const bPriority = LIST_STATUS_PRIORITY[b.type] ?? 99
+    return aPriority - bPriority
+  })
+}
+
+function getStatusActivityTs(status) {
+  return status?.activityTs || 0
+}
+
+function sortDetailStatuses(statuses = []) {
+  return [...statuses].sort((a, b) => {
+    const aPriority = DETAIL_STATUS_PRIORITY[a.type] ?? 99
+    const bPriority = DETAIL_STATUS_PRIORITY[b.type] ?? 99
+    if (aPriority !== bPriority) return aPriority - bPriority
+    return getStatusActivityTs(b) - getStatusActivityTs(a)
+  })
+}
+
+function normalizeIllnessLabel(label) {
+  return typeof label === 'string' ? label.trim() : '生病中'
+}
+
+function buildDetailIllnessStatuses(illnesses = []) {
+  const grouped = new Map()
+
+  for (const illness of illnesses) {
+    const label = normalizeIllnessLabel(illness.details?.condition || '生病中')
+    if (!grouped.has(label)) grouped.set(label, [])
+    grouped.get(label).push(illness)
+  }
+
+  return Array.from(grouped.entries()).map(([label, records]) => {
+    const sorted = [...records].sort((a, b) => (b.updated_at || b.date || b.created_at || 0) - (a.updated_at || a.date || a.created_at || 0))
+    const latest = sorted[0]
+    return {
+      type: '生病中',
+      label,
+      recordId: latest._id,
+      activityTs: latest.updated_at || latest.date || latest.created_at || 0,
+    }
+  })
+}
+
+function buildListIllnessStatuses(illnesses = []) {
+  const labels = []
+  const seen = new Set()
+  let firstRecordId = null
+
+  for (const illness of illnesses) {
+    const label = (illness.details?.condition || '生病中').trim()
+    const dedupeKey = label
+    if (seen.has(dedupeKey)) continue
+    seen.add(dedupeKey)
+    labels.push(label)
+    if (!firstRecordId) firstRecordId = illness._id
+  }
+
+  if (labels.length === 0) return []
+
+  if (labels.length === 1) {
+    return [{
+      type: '生病中',
+      label: labels[0],
+      count: 1,
+      recordId: firstRecordId,
+    }]
+  }
+
+  if (labels.length === 2) {
+    return [{
+      type: '生病中',
+      label: `${labels[0]}/${labels[1]}`,
+      count: 2,
+      recordId: firstRecordId,
+    }]
+  }
+
+  return [{
+    type: '生病中',
+    label: `${labels[0]}/${labels[1]}等${labels.length}项`,
+    count: labels.length,
+    recordId: firstRecordId,
+  }]
+}
+
+function buildListMedicationStatus(tasks = []) {
+  if (!tasks.length) return []
+  return [{
+    type: '用药中',
+    label: tasks.length === 1 ? '用药中' : `用药中·${tasks.length}项`,
+    count: tasks.length,
+    taskId: tasks[0]?._id,
+  }]
+}
+
 module.exports = {
   _before: async function() {
     const { uid, familyId, role } = await verifyAndGetFamily(this.getUniIdToken(), this.getClientInfo())
@@ -72,50 +187,47 @@ module.exports = {
     const medTasks = medTasksRes.data
     const activeLitters = littersRes.data
 
-    // 构建状态映射
-    const dogStatuses = {}
-
-    // 繁育状态（互斥）
+    const breedingStatusMap = {}
     for (const cycle of cycles) {
       const damId = cycle.dam_id
-      if (!dogStatuses[damId]) dogStatuses[damId] = []
-
       if (cycle.status === '发情中') {
-        dogStatuses[damId].push({ type: '发情中', cycleId: cycle._id })
+        breedingStatusMap[damId] = [{ type: '发情中', cycleId: cycle._id }]
       } else if (cycle.status === '怀孕中') {
-        dogStatuses[damId].push({ type: '怀孕中', cycleId: cycle._id })
+        breedingStatusMap[damId] = [{ type: '怀孕中', cycleId: cycle._id }]
       } else if (cycle.status === '已生产') {
-        // 检查是否还在哺乳
         const hasActiveLitter = activeLitters.some(l => l.dam_id === damId)
         if (hasActiveLitter) {
-          dogStatuses[damId].push({ type: '哺乳中', cycleId: cycle._id })
+          breedingStatusMap[damId] = [{ type: '哺乳中', cycleId: cycle._id }]
         }
       }
     }
 
-    // 疾病状态（可叠加）
+    const illnessMap = {}
     for (const illness of illnesses) {
       const dogId = illness.dog_id
-      if (!dogStatuses[dogId]) dogStatuses[dogId] = []
-      dogStatuses[dogId].push({
-        type: '生病中',
-        label: illness.details?.condition || '生病中',
-        severity: illness.details?.severity || '轻微',
-        recordId: illness._id,
-      })
+      if (!illnessMap[dogId]) illnessMap[dogId] = []
+      illnessMap[dogId].push(illness)
     }
 
-    // 用药状态（可叠加）
+    const medicationMap = {}
     for (const task of medTasks) {
       const dogId = task.dog_id
-      if (!dogStatuses[dogId]) dogStatuses[dogId] = []
-      dogStatuses[dogId].push({ type: '用药中', taskId: task._id })
+      if (!medicationMap[dogId]) medicationMap[dogId] = []
+      medicationMap[dogId].push(task)
     }
 
     // 组装结果
     const result = dogs.map(dog => ({
       ...dog,
-      statuses: dogStatuses[dog._id] || [{ type: '正常' }],
+      statuses: (() => {
+        const statuses = [
+          ...(buildListIllnessStatuses(illnessMap[dog._id] || [])),
+          ...((breedingStatusMap[dog._id]) || []),
+          ...(buildListMedicationStatus(medicationMap[dog._id] || [])),
+        ]
+        const sorted = sortListStatuses(statuses)
+        return sorted.length > 0 ? sorted : [{ type: '正常' }]
+      })(),
     }))
 
     return { data: result }
@@ -148,7 +260,11 @@ module.exports = {
     const activeCycle = (cyclesRes.data || []).find(c => c.status === '发情中' || c.status === '怀孕中')
     if (activeCycle) {
       if (activeCycle.status === '发情中') {
-        statuses.push({ type: '发情中', cycleId: activeCycle._id })
+        statuses.push({
+          type: '发情中',
+          cycleId: activeCycle._id,
+          activityTs: activeCycle.updated_at || activeCycle.created_at || 0,
+        })
       } else if (activeCycle.status === '怀孕中') {
         const startTs = activeCycle.mated_at || activeCycle.updated_at || activeCycle.created_at
         const daysPassed = Math.max(1, Math.floor((now - startTs) / 86400000))
@@ -161,6 +277,7 @@ module.exports = {
           cycleId: activeCycle._id,
           detail: activeCycle.sire_name ? `种公: ${activeCycle.sire_name}` : '',
           progress: { current: Math.min(daysPassed, totalDays), total: totalDays },
+          activityTs: activeCycle.updated_at || activeCycle.created_at || 0,
           meta: [
             { icon: 'event', text: `预产期 ${dueMd}` },
             { icon: 'schedule', text: `还有${Math.max(0, totalDays - daysPassed)}天` },
@@ -171,18 +288,16 @@ module.exports = {
 
     // 哺乳中（有未断奶的窝且无活跃繁育周期）
     if ((littersRes.data || []).length > 0 && !activeCycle) {
-      statuses.push({ type: '哺乳中' })
+      const latestLitter = [...(littersRes.data || [])].sort((a, b) => (b.updated_at || b.created_at || 0) - (a.updated_at || a.created_at || 0))[0]
+      statuses.push({
+        type: '哺乳中',
+        activityTs: latestLitter?.updated_at || latestLitter?.created_at || 0,
+      })
     }
 
     // 疾病状态（未康复的）
     const activeIllnesses = (illnessRes.data || []).filter(r => r.details?.treatment_status !== '已康复')
-    for (const illness of activeIllnesses) {
-      statuses.push({
-        type: '生病中',
-        label: illness.details?.condition || '生病中',
-        recordId: illness._id,
-      })
-    }
+    statuses.push(...buildDetailIllnessStatuses(activeIllnesses))
 
     // 用药状态（按药名去重，取进度最新的）
     const medTasks = medTasksRes.data || []
@@ -209,10 +324,11 @@ module.exports = {
         taskId: task._id,
         detail: parts.join(' · '),
         progress: task.duration_days ? { current: Math.min(currentDay, task.duration_days), total: task.duration_days } : null,
+        activityTs: task.updated_at || task.created_at || 0,
       })
     }
 
-    return { data: { ...dog, statuses } }
+    return { data: { ...dog, statuses: sortDetailStatuses(statuses) } }
   },
 
   /**

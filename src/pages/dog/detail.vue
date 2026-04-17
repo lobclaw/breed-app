@@ -1011,6 +1011,9 @@ const { run: fetchCycles } = useCloudCall<{ data: any[] }>('breeding-service', '
 const { run: fetchHealth } = useCloudCall<{ data: any[] }>('health-service', 'getHealthHistory')
 const { run: fetchLitters } = useCloudCall<{ data: any[] }>('breeding-service', 'getLittersByDam')
 const { run: fetchDogFinance } = useCloudCall<{ data: any }>('finance-service', 'getDogFinanceSummary')
+const { run: cleanupDuplicateIllnesses } = useCloudCall('health-service', 'cleanupDuplicateIllnesses', {
+  showLoading: false,
+})
 const { run: updateDisposition } = useCloudCall('dog-service', 'updateDisposition', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 const { run: updateStatus } = useCloudCall('dog-service', 'updateStatus', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 const { run: deleteDog } = useCloudCall('dog-service', 'deleteDog', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
@@ -1469,6 +1472,7 @@ async function doDelete() {
 async function loadData() {
   loading.value = true
   try {
+    await cleanupDuplicateIllnesses({ dog_id: dogId }).catch(() => {})
     const [detailRes, cyclesRes, healthRes, littersRes, financeRes] = await Promise.all([
       fetchDetail(dogId),
       fetchCycles(dogId),

@@ -38,16 +38,16 @@
       <view class="summary-grid">
         <view class="summary-card summary-card--profit">
           <text class="summary-card__label">净利润</text>
-          <text class="summary-card__value summary-card__value--primary">¥{{ formatNum(data.netProfit) }}</text>
+          <text class="summary-card__value" :class="netProfitClass">{{ formatSignedAmount(data.netProfit) }}</text>
           <text class="summary-card__rate">利润率 {{ profitRate }}</text>
         </view>
         <view class="summary-card summary-card--income">
           <text class="summary-card__label">总收入</text>
-          <text class="summary-card__value summary-card__value--income">¥{{ formatNum(data.totalIncome) }}</text>
+          <text class="summary-card__value summary-card__value--income">+¥{{ formatNum(data.totalIncome) }}</text>
         </view>
         <view class="summary-card summary-card--expense">
           <text class="summary-card__label">总支出</text>
-          <text class="summary-card__value summary-card__value--expense">¥{{ formatNum(data.totalExpense) }}</text>
+          <text class="summary-card__value summary-card__value--expense">-¥{{ formatNum(data.totalExpense) }}</text>
         </view>
       </view>
 
@@ -142,6 +142,12 @@ const profitRate = computed(() => {
   return ((data.netProfit / data.totalIncome) * 100).toFixed(1) + '%'
 })
 
+const netProfitClass = computed(() => {
+  if (data.netProfit > 0) return 'summary-card__value--profit-positive'
+  if (data.netProfit < 0) return 'summary-card__value--profit-negative'
+  return 'summary-card__value--profit-neutral'
+})
+
 function toSortedItems(obj: Record<string, number>) {
   const entries = Object.entries(obj).sort((a, b) => b[1] - a[1])
   const max = entries.length > 0 ? entries[0][1] : 1
@@ -169,6 +175,12 @@ function changeMonth(delta: number) {
 function formatNum(n: number) {
   if (n == null) return '0'
   return n.toLocaleString()
+}
+
+function formatSignedAmount(n: number) {
+  if (!n) return '¥0'
+  const sign = n > 0 ? '+' : '-'
+  return `${sign}¥${formatNum(Math.abs(n))}`
 }
 
 function goTo(url: string) {
@@ -303,7 +315,9 @@ onShow(() => load())
 
     &--income { color: var(--red); font-size: 20px; }
     &--expense { color: var(--green); font-size: 20px; }
-    &--primary { color: var(--primary); font-size: 26px; }
+    &--profit-positive { color: var(--primary); font-size: 26px; }
+    &--profit-negative { color: var(--red); font-size: 26px; }
+    &--profit-neutral { color: var(--text-2); font-size: 26px; }
   }
 
   &__rate {
