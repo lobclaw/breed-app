@@ -55,7 +55,8 @@
                     <text class="subsection-text">{{ group.title }}</text>
                     <view class="subsection-badge"><text class="subsection-badge-text">{{ group.cards.length }}</text></view>
                   </view>
-                  <view class="card-feed">
+                  <BreedingProcessGroupCard v-if="isBreedingMilestoneGroup(group)" :group="group" />
+                  <view v-else class="card-feed">
                     <SmartCard
                       v-for="card in group.cards" :key="card.id" :card="card"
                       :completing="completingCards.has(card.id)"
@@ -111,7 +112,8 @@
                     <text class="subsection-text">{{ group.title }}</text>
                     <view class="subsection-badge"><text class="subsection-badge-text">{{ group.cards.length }}</text></view>
                   </view>
-                  <view class="card-feed">
+                  <BreedingProcessGroupCard v-if="isBreedingMilestoneGroup(group)" :group="group" />
+                  <view v-else class="card-feed">
                     <SmartCard
                       v-for="card in group.cards" :key="card.id" :card="card"
                       :completing="completingCards.has(card.id)"
@@ -431,6 +433,7 @@ import { onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import { useAuth } from '@/composables/useAuth'
 import WeekStrip from '@/components/week-strip/WeekStrip.vue'
+import BreedingProcessGroupCard from '@/components/smart-card/BreedingProcessGroupCard.vue'
 import SmartCard from '@/components/smart-card/SmartCard.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
@@ -568,6 +571,12 @@ function uniqueSourceCards(rows: Array<{ sourceCard?: any }> = []) {
     cardMap.set(card.id, card)
   }
   return Array.from(cardMap.values())
+}
+
+function isBreedingMilestoneGroup(group: { cards?: any[] } = {}) {
+  const cardsInGroup = group.cards || []
+  if (!cardsInGroup.length) return false
+  return cardsInGroup.every((card: any) => card?.tasks?.[0]?.type === 'breeding_milestone')
 }
 
 // H-3: 快速完成
@@ -1482,6 +1491,9 @@ onShow(async () => {
   letter-spacing: 0.5px;
 }
 .section-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: var(--card-dim);
   border-radius: 999px;
   padding: 2px 8px;
@@ -1490,26 +1502,27 @@ onShow(async () => {
   font-family: var(--font-display);
   font-size: 12px;
   font-weight: 800;
+  line-height: 1;
   color: var(--text-2);
 }
 
 .section-groups {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .section-group {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .subsection-label {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 20px 6px;
+  padding: 2px 20px 8px;
 }
 
 .subsection-text {
@@ -1519,15 +1532,20 @@ onShow(async () => {
 }
 
 .subsection-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: var(--card-dim);
   border-radius: 999px;
-  padding: 1px 7px;
+  padding: 2px 7px;
 }
 
 .subsection-badge-text {
+  font-family: var(--font-display);
   font-size: 11px;
-  font-weight: 700;
-  color: var(--text-3);
+  font-weight: 800;
+  line-height: 1;
+  color: var(--text-2);
 }
 
 /* ==================== CARD FEED ==================== */
@@ -1539,7 +1557,15 @@ onShow(async () => {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
+}
+
+.home-section + .home-section {
+  margin-top: 4px;
+}
+
+.section-group > :deep(.group-card) {
+  margin: 0 16px 10px;
 }
 
 /* ==================== TASK SHEETS (H-3, H-4, H-5) ==================== */

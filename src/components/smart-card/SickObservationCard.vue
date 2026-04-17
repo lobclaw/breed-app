@@ -156,7 +156,12 @@ function onBatchAction() {
 .card-name { display: block; font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--text-1); }
 .card-sub { display: block; font-size: 12px; color: var(--text-2); margin-top: 1px; }
 .fraction-badge {
-  padding: 3px 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 24px;
+  padding: 0 10px;
   border-radius: 999px;
   &--illness { background: rgba(224, 82, 82, 0.10); }
 }
@@ -164,6 +169,7 @@ function onBatchAction() {
   font-family: var(--font-display);
   font-size: 13px;
   font-weight: 800;
+  line-height: 1;
   &--illness { color: rgba(224, 82, 82, 0.84); }
 }
 

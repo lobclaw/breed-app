@@ -1,0 +1,1350 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>H-1A 繁育步骤卡片压缩对比</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'PingFang SC',sans-serif;
+  background:linear-gradient(180deg,#f7f0f2 0%,#fdf8f9 42%,#f6efee 100%);
+  color:#1a1a2e;
+  min-height:100vh;
+}
+
+:root{
+  --bg:#fdf8f9;
+  --card:#fff;
+  --card-dim:#FFF0E8;
+  --text-1:#1a1a2e;
+  --text-2:#8B7355;
+  --text-3:#B8A08A;
+  --text-4:#D8CBBD;
+  --amber:#e89b3e;
+  --amber-soft:#fff9f0;
+  --rose:#ea3e77;
+  --rose-soft:#fff0f2;
+  --red:#e05252;
+  --red-soft:#fff0f0;
+  --shadow:0 2px 12px rgba(234,62,119,.06);
+  --shadow-lg:0 10px 30px rgba(234,62,119,.1);
+}
+
+.board{
+  max-width:1560px;
+  margin:0 auto;
+  padding:32px 24px 44px;
+}
+
+.hero{
+  display:flex;
+  justify-content:space-between;
+  gap:20px;
+  align-items:flex-start;
+  margin-bottom:24px;
+}
+
+.hero-copy{
+  max-width:860px;
+}
+
+.eyebrow{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:6px 12px;
+  border-radius:999px;
+  background:var(--rose-soft);
+  color:var(--rose);
+  font-size:12px;
+  font-weight:800;
+  letter-spacing:.2px;
+}
+
+.hero h1{
+  margin-top:12px;
+  font-size:30px;
+  line-height:1.14;
+  font-weight:800;
+}
+
+.hero p{
+  margin-top:10px;
+  font-size:14px;
+  line-height:1.7;
+  color:var(--text-2);
+}
+
+.rules{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  margin-top:16px;
+}
+
+.rule-chip{
+  padding:8px 12px;
+  border-radius:999px;
+  background:rgba(255,255,255,.78);
+  border:1px solid rgba(216,203,189,.45);
+  color:var(--text-2);
+  font-size:12px;
+  font-weight:700;
+}
+
+.legend{
+  width:300px;
+  flex-shrink:0;
+  background:rgba(255,255,255,.82);
+  border:1px solid rgba(216,203,189,.42);
+  border-radius:20px;
+  padding:18px 18px 16px;
+  box-shadow:var(--shadow);
+  backdrop-filter:blur(8px);
+}
+
+.legend-title{
+  font-size:13px;
+  font-weight:800;
+  color:var(--text-1);
+}
+
+.legend-list{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  margin-top:12px;
+}
+
+.legend-item{
+  display:flex;
+  gap:10px;
+  align-items:flex-start;
+}
+
+.legend-dot{
+  width:9px;
+  height:9px;
+  border-radius:50%;
+  margin-top:5px;
+  flex-shrink:0;
+}
+
+.legend-item strong{
+  display:block;
+  font-size:12px;
+  font-weight:800;
+  color:var(--text-1);
+}
+
+.legend-item span{
+  display:block;
+  margin-top:2px;
+  font-size:12px;
+  line-height:1.55;
+  color:var(--text-2);
+}
+
+.compare-grid{
+  display:grid;
+  grid-template-columns:repeat(5,minmax(252px,1fr));
+  gap:18px;
+  align-items:start;
+}
+
+.option-card{
+  background:rgba(255,255,255,.72);
+  border:1px solid rgba(216,203,189,.42);
+  border-radius:26px;
+  padding:16px;
+  box-shadow:var(--shadow);
+}
+
+.option-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:10px;
+}
+
+.option-title{
+  font-size:17px;
+  font-weight:800;
+  line-height:1.2;
+}
+
+.option-sub{
+  margin-top:4px;
+  font-size:12px;
+  line-height:1.5;
+  color:var(--text-2);
+}
+
+.option-badge{
+  display:inline-flex;
+  align-items:center;
+  padding:5px 10px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:800;
+  white-space:nowrap;
+}
+
+.badge-neutral{background:#f3eef0;color:#8d7280}
+.badge-amber{background:var(--amber-soft);color:var(--amber)}
+.badge-rose{background:var(--rose-soft);color:var(--rose)}
+
+.metrics{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-top:12px;
+}
+
+.metric{
+  padding:7px 10px;
+  border-radius:14px;
+  background:#fff;
+  border:1px solid rgba(216,203,189,.36);
+}
+
+.metric strong{
+  display:block;
+  font-size:10px;
+  font-weight:800;
+  letter-spacing:.2px;
+  color:var(--text-3);
+}
+
+.metric span{
+  display:block;
+  margin-top:2px;
+  font-size:12px;
+  font-weight:800;
+  color:var(--text-1);
+}
+
+.phone{
+  margin-top:14px;
+  background:#1d1716;
+  padding:12px;
+  border-radius:34px;
+  box-shadow:0 20px 50px rgba(0,0,0,.13);
+}
+
+.screen{
+  height:640px;
+  border-radius:24px;
+  overflow:hidden;
+  background:var(--bg);
+  display:flex;
+  flex-direction:column;
+}
+
+.status-bar{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:14px 22px 0;
+  color:var(--text-1);
+  font-size:14px;
+  font-weight:700;
+}
+
+.status-icons{
+  display:flex;
+  gap:6px;
+  align-items:center;
+}
+
+.status-icons .material-icons-round{font-size:15px}
+
+.home-head{
+  padding:8px 18px 0;
+}
+
+.home-title{
+  font-size:22px;
+  font-weight:800;
+  letter-spacing:-.2px;
+}
+
+.home-sub{
+  margin-top:4px;
+  font-size:12px;
+  color:var(--text-2);
+}
+
+.summary-row{
+  display:flex;
+  gap:8px;
+  padding:14px 18px 0;
+}
+
+.summary-pill{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:7px 10px;
+  border-radius:999px;
+  background:#fff;
+  box-shadow:var(--shadow);
+}
+
+.summary-pill .dot{
+  width:7px;
+  height:7px;
+  border-radius:50%;
+}
+
+.summary-pill .label{
+  font-size:12px;
+  font-weight:700;
+  color:var(--text-2);
+}
+
+.summary-pill .count{
+  min-width:18px;
+  height:18px;
+  padding:0 6px;
+  border-radius:999px;
+  background:var(--card-dim);
+  color:var(--text-2);
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  font-size:11px;
+  font-weight:800;
+}
+
+.section-wrap{
+  padding:14px 16px 18px;
+  overflow:hidden;
+}
+
+.section-label,
+.group-label{
+  display:flex;
+  align-items:center;
+  gap:7px;
+}
+
+.section-label::before,
+.group-label::before{
+  content:'';
+  width:7px;
+  height:7px;
+  border-radius:50%;
+  background:var(--amber);
+  flex-shrink:0;
+}
+
+.section-label{
+  color:var(--text-2);
+  font-size:13px;
+  font-weight:800;
+}
+
+.group-label{
+  margin-top:14px;
+  color:var(--text-3);
+  font-size:12px;
+  font-weight:800;
+}
+
+.section-count,
+.group-count{
+  min-width:18px;
+  height:18px;
+  padding:0 6px;
+  border-radius:999px;
+  background:var(--card-dim);
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  font-size:11px;
+  font-weight:800;
+  color:var(--text-2);
+}
+
+.stack{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  margin-top:12px;
+}
+
+.current-card,
+.compact-card,
+.mini-item,
+.list-item{
+  background:var(--card);
+  box-shadow:var(--shadow);
+}
+
+.current-card,
+.compact-card{
+  border-left:3.5px solid var(--amber);
+  border-radius:16px;
+  padding:14px 14px 14px 16px;
+  position:relative;
+  overflow:hidden;
+}
+
+.current-card::before,
+.compact-card::before,
+.mini-item::before{
+  content:'';
+  position:absolute;
+  inset:0;
+  background:linear-gradient(135deg,var(--amber-soft) 0%,transparent 38%);
+  pointer-events:none;
+}
+
+.current-card.passed,
+.compact-card.passed{
+  border-left-color:rgba(224,82,82,.8);
+}
+
+.current-card.passed::before,
+.compact-card.passed::before,
+.mini-item.passed::before{
+  background:linear-gradient(135deg,rgba(224,82,82,.1) 0%,transparent 36%);
+}
+
+.card-inner,
+.mini-item-inner{
+  position:relative;
+  z-index:1;
+}
+
+.dog-head{
+  display:flex;
+  gap:10px;
+  align-items:flex-start;
+}
+
+.dog-icon{
+  width:34px;
+  height:34px;
+  border-radius:10px;
+  background:#ffe9cf;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-shrink:0;
+  font-size:18px;
+}
+
+.dog-main{
+  min-width:0;
+  flex:1;
+}
+
+.dog-name{
+  font-size:16px;
+  font-weight:800;
+  line-height:1.2;
+}
+
+.weak-tag{
+  display:inline-flex;
+  align-items:center;
+  padding:4px 8px;
+  border-radius:999px;
+  background:var(--amber-soft);
+  color:var(--amber);
+  font-size:10px;
+  font-weight:800;
+  margin-top:6px;
+}
+
+.weak-tag.passed{
+  background:var(--red-soft);
+  color:var(--red);
+}
+
+.process-line{
+  margin-top:10px;
+  font-size:13px;
+  font-weight:700;
+  color:var(--text-1);
+}
+
+.sub-line{
+  margin-top:5px;
+  font-size:12px;
+  color:var(--text-3);
+}
+
+.info-chip{
+  display:inline-flex;
+  margin-top:10px;
+  padding:6px 10px;
+  border-radius:999px;
+  background:var(--amber-soft);
+  color:var(--amber);
+  font-size:11px;
+  font-weight:800;
+}
+
+.info-chip.passed{
+  background:var(--red-soft);
+  color:var(--red);
+}
+
+.cta-row{
+  display:flex;
+  justify-content:flex-start;
+  margin-top:12px;
+}
+
+.btn-main,
+.btn-mini,
+.btn-list{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:5px;
+  border:none;
+  border-radius:999px;
+  font-family:inherit;
+  font-weight:800;
+}
+
+.btn-main{
+  min-height:34px;
+  padding:8px 16px;
+  background:linear-gradient(135deg,#f2b45b 0%,#f8c56f 100%);
+  color:#fff;
+  box-shadow:0 4px 14px rgba(232,155,62,.24);
+  font-size:13px;
+}
+
+.btn-mini{
+  min-height:28px;
+  padding:0 12px;
+  background:var(--amber-soft);
+  color:var(--amber);
+  font-size:12px;
+}
+
+.btn-mini.passed,
+.btn-list.passed{
+  background:var(--red-soft);
+  color:var(--red);
+}
+
+.compact-card .row-top{
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  align-items:flex-start;
+}
+
+.compact-card .meta-pack{
+  min-width:0;
+  flex:1;
+}
+
+.compact-card .dog-name{
+  font-size:15px;
+}
+
+.compact-card .meta-line{
+  margin-top:8px;
+  font-size:13px;
+  line-height:1.55;
+  color:var(--text-2);
+}
+
+.compact-card .meta-line strong{
+  color:var(--text-1);
+}
+
+.group-shell{
+  margin-top:12px;
+  background:rgba(255,255,255,.75);
+  border-radius:18px;
+  padding:10px;
+  border:1px solid rgba(216,203,189,.3);
+}
+
+.cluster-card{
+  margin-top:12px;
+  background:var(--card);
+  border-left:3.5px solid var(--amber);
+  border-radius:18px;
+  box-shadow:var(--shadow);
+  overflow:hidden;
+  position:relative;
+}
+
+.cluster-card::before{
+  content:'';
+  position:absolute;
+  inset:0;
+  background:linear-gradient(135deg,var(--amber-soft) 0%,transparent 34%);
+  pointer-events:none;
+}
+
+.cluster-card.passed::before{
+  background:linear-gradient(135deg,rgba(224,82,82,.08) 0%,transparent 34%);
+}
+
+.cluster-inner{
+  position:relative;
+  z-index:1;
+}
+
+.cluster-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:10px;
+  padding:12px 14px 10px 14px;
+}
+
+.cluster-title{
+  font-size:14px;
+  font-weight:800;
+  color:var(--text-1);
+}
+
+.cluster-sub{
+  margin-top:4px;
+  font-size:11px;
+  color:var(--text-3);
+  line-height:1.45;
+}
+
+.cluster-count{
+  min-width:24px;
+  height:24px;
+  padding:0 8px;
+  border-radius:999px;
+  background:var(--amber-soft);
+  color:var(--amber);
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  font-size:11px;
+  font-weight:800;
+  flex-shrink:0;
+}
+
+.cluster-row{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  min-height:62px;
+  padding:10px 14px;
+}
+
+.cluster-row + .cluster-row{
+  border-top:1px solid rgba(216,203,189,.24);
+}
+
+.cluster-main{
+  min-width:0;
+  flex:1;
+}
+
+.cluster-name-row{
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+
+.cluster-name{
+  font-size:13px;
+  font-weight:800;
+  color:var(--text-1);
+}
+
+.cluster-copy{
+  margin-top:4px;
+  font-size:12px;
+  color:var(--text-2);
+  line-height:1.45;
+}
+
+.mini-list{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+.mini-item{
+  border-radius:14px;
+  padding:10px 12px;
+  position:relative;
+  overflow:hidden;
+}
+
+.mini-top{
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  align-items:flex-start;
+}
+
+.mini-left{
+  display:flex;
+  gap:10px;
+  min-width:0;
+  flex:1;
+}
+
+.mini-name{
+  font-size:14px;
+  font-weight:800;
+  line-height:1.2;
+}
+
+.mini-icon{
+  width:30px;
+  height:30px;
+  border-radius:9px;
+  background:#ffe9cf;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:16px;
+  flex-shrink:0;
+}
+
+.mini-info{
+  margin-top:7px;
+  font-size:12px;
+  line-height:1.5;
+  color:var(--text-2);
+}
+
+.mini-info strong{
+  color:var(--text-1);
+}
+
+.flat-group{
+  margin-top:12px;
+  border-top:1px solid rgba(216,203,189,.35);
+  border-bottom:1px solid rgba(216,203,189,.35);
+  background:rgba(255,255,255,.5);
+}
+
+.list-item{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  min-height:58px;
+  padding:10px 0;
+  box-shadow:none;
+  background:transparent;
+}
+
+.list-item + .list-item{
+  border-top:1px solid rgba(216,203,189,.28);
+}
+
+.list-avatar{
+  width:28px;
+  height:28px;
+  border-radius:50%;
+  background:#ffe9cf;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:15px;
+  flex-shrink:0;
+}
+
+.list-main{
+  min-width:0;
+  flex:1;
+}
+
+.list-name-row{
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+
+.list-name{
+  font-size:13px;
+  font-weight:800;
+  color:var(--text-1);
+}
+
+.list-weak{
+  padding:2px 6px;
+  border-radius:999px;
+  background:var(--amber-soft);
+  color:var(--amber);
+  font-size:9px;
+  font-weight:800;
+}
+
+.list-weak.passed{
+  background:var(--red-soft);
+  color:var(--red);
+}
+
+.list-copy{
+  margin-top:4px;
+  font-size:12px;
+  color:var(--text-2);
+  line-height:1.45;
+}
+
+.btn-list{
+  min-width:42px;
+  min-height:26px;
+  padding:0 10px;
+  background:var(--amber-soft);
+  color:var(--amber);
+  font-size:11px;
+  flex-shrink:0;
+}
+
+.option-foot{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  margin-top:14px;
+}
+
+.foot-line{
+  background:#fff;
+  border:1px solid rgba(216,203,189,.36);
+  border-radius:14px;
+  padding:10px 12px;
+}
+
+.foot-line strong{
+  display:block;
+  font-size:11px;
+  font-weight:800;
+  color:var(--text-3);
+}
+
+.foot-line span{
+  display:block;
+  margin-top:4px;
+  font-size:12px;
+  line-height:1.55;
+  color:var(--text-2);
+}
+
+@media (max-width:1680px){
+  .compare-grid{
+    grid-template-columns:repeat(3,minmax(280px,1fr));
+  }
+}
+
+@media (max-width:1280px){
+  .compare-grid{
+    grid-template-columns:repeat(2,minmax(280px,1fr));
+  }
+}
+
+@media (max-width:920px){
+  .hero{
+    flex-direction:column;
+  }
+
+  .legend{
+    width:100%;
+  }
+
+  .compare-grid{
+    grid-template-columns:1fr;
+  }
+}
+</style>
+</head>
+<body>
+  <main class="board">
+    <section class="hero">
+      <div class="hero-copy">
+        <div class="eyebrow">H-1A · 首页繁育密度对比</div>
+        <h1>繁育步骤卡片压缩对比板</h1>
+        <p>
+          同一组数据下对比当前方案、A 大卡压缩版、B 圆角小行块、C 纯列表行。
+          重点只看单犬项在“建议卵泡检查”分组中的信息密度、可读性与整体风格贴合度。
+        </p>
+        <div class="rules">
+          <div class="rule-chip">统一示例：2只犬</div>
+          <div class="rule-chip">普通态：距发情第1天 · 建议4月26日</div>
+          <div class="rule-chip">超窗态：距发情第12天 · 已过2天</div>
+          <div class="rule-chip">统一保留：犬名 / 时间主线 / 处理入口</div>
+          <div class="rule-chip">新增探索：步骤组单卡 + 内部列表行</div>
+        </div>
+      </div>
+      <aside class="legend">
+        <div class="legend-title">这版对比看什么</div>
+        <div class="legend-list">
+          <div class="legend-item">
+            <div class="legend-dot" style="background: var(--amber);"></div>
+            <div>
+              <strong>重复信息是否被砍掉</strong>
+              <span>重点观察步骤标题、建议日期、次级 chip 是否仍在卡内反复表达。</span>
+            </div>
+          </div>
+          <div class="legend-item">
+            <div class="legend-dot" style="background: var(--rose);"></div>
+            <div>
+              <strong>风格有没有变冷</strong>
+              <span>密度升高后，仍要保留首页柔和、宠物向的圆角卡片语言。</span>
+            </div>
+          </div>
+          <div class="legend-item">
+            <div class="legend-dot" style="background: var(--red);"></div>
+            <div>
+              <strong>超窗状态只弱增强</strong>
+              <span>已过建议日期只加强文案和局部颜色，不进入逾期任务视觉。</span>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="compare-grid">
+      <article class="option-card">
+        <div class="option-head">
+          <div>
+            <div class="option-title">基线 · 当前方案</div>
+            <div class="option-sub">完整卡片表达，信息最全，但重复层级和纵向占用都偏大。</div>
+          </div>
+          <div class="option-badge badge-neutral">现状</div>
+        </div>
+        <div class="metrics">
+          <div class="metric"><strong>单犬项高</strong><span>176px</span></div>
+          <div class="metric"><strong>同屏容纳</strong><span>2 条</span></div>
+          <div class="metric"><strong>重复强度</strong><span>高</span></div>
+        </div>
+
+        <div class="phone">
+          <div class="screen">
+            <div class="status-bar">
+              <span>9:41</span>
+              <div class="status-icons">
+                <span class="material-icons-round">signal_cellular_alt</span>
+                <span class="material-icons-round">wifi</span>
+                <span class="material-icons-round">battery_full</span>
+              </div>
+            </div>
+            <div class="home-head">
+              <div class="home-title">今天重点</div>
+              <div class="home-sub">先看最该处理的，再继续日常记录</div>
+            </div>
+            <div class="summary-row">
+              <div class="summary-pill">
+                <span class="dot" style="background:var(--amber)"></span>
+                <span class="label">繁育</span>
+                <span class="count">2</span>
+              </div>
+            </div>
+            <div class="section-wrap">
+              <div class="section-label">繁育流程 <span class="section-count">2</span></div>
+              <div class="group-label">建议卵泡检查 <span class="group-count">2</span></div>
+              <div class="stack">
+                <div class="current-card">
+                  <div class="card-inner">
+                    <div class="dog-head">
+                      <div class="dog-icon">🐩</div>
+                      <div class="dog-main">
+                        <div class="dog-name">大桥</div>
+                      </div>
+                    </div>
+                    <div class="process-line" style="color:var(--amber)">建议卵泡检查</div>
+                    <div class="process-line">距发情第 1 天</div>
+                    <div class="sub-line">建议日期 · 4月26日</div>
+                    <div class="info-chip">建议日期 4月26日</div>
+                    <div class="cta-row">
+                      <button class="btn-main"><span class="material-icons-round" style="font-size:15px">arrow_forward</span>处理</button>
+                    </div>
+                  </div>
+                </div>
+                <div class="current-card passed">
+                  <div class="card-inner">
+                    <div class="dog-head">
+                      <div class="dog-icon">🐩</div>
+                      <div class="dog-main">
+                        <div class="dog-name">2号</div>
+                      </div>
+                    </div>
+                    <div class="process-line" style="color:var(--red)">建议卵泡检查</div>
+                    <div class="process-line">距发情第 12 天</div>
+                    <div class="sub-line">建议日期 · 4月14日</div>
+                    <div class="info-chip passed">建议日期已过 2 天</div>
+                    <div class="cta-row">
+                      <button class="btn-main"><span class="material-icons-round" style="font-size:15px">arrow_forward</span>处理</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="option-foot">
+          <div class="foot-line">
+            <strong>优点</strong>
+            <span>自解释性强，脱离分组单独看也容易理解。</span>
+          </div>
+          <div class="foot-line">
+            <strong>风险</strong>
+            <span>步骤名、建议日期和按钮都在重复拉高单项，工作台感最弱。</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="option-card">
+        <div class="option-head">
+          <div>
+            <div class="option-title">A · 大卡压缩版</div>
+            <div class="option-sub">保留大卡外形，只压缩内容层级，是风险最低的过渡方案。</div>
+          </div>
+          <div class="option-badge badge-amber">低风险</div>
+        </div>
+        <div class="metrics">
+          <div class="metric"><strong>单犬项高</strong><span>112px</span></div>
+          <div class="metric"><strong>同屏容纳</strong><span>3 条</span></div>
+          <div class="metric"><strong>风格偏移</strong><span>低</span></div>
+        </div>
+
+        <div class="phone">
+          <div class="screen">
+            <div class="status-bar">
+              <span>9:41</span>
+              <div class="status-icons">
+                <span class="material-icons-round">signal_cellular_alt</span>
+                <span class="material-icons-round">wifi</span>
+                <span class="material-icons-round">battery_full</span>
+              </div>
+            </div>
+            <div class="home-head">
+              <div class="home-title">今天重点</div>
+              <div class="home-sub">先看最该处理的，再继续日常记录</div>
+            </div>
+            <div class="summary-row">
+              <div class="summary-pill">
+                <span class="dot" style="background:var(--amber)"></span>
+                <span class="label">繁育</span>
+                <span class="count">2</span>
+              </div>
+            </div>
+            <div class="section-wrap">
+              <div class="section-label">繁育流程 <span class="section-count">2</span></div>
+              <div class="group-label">建议卵泡检查 <span class="group-count">2</span></div>
+              <div class="stack">
+                <div class="compact-card">
+                  <div class="card-inner">
+                    <div class="row-top">
+                      <div class="meta-pack">
+                        <div class="dog-head">
+                          <div class="dog-icon">🐩</div>
+                          <div class="dog-main">
+                            <div class="dog-name">大桥</div>
+                            <div class="weak-tag">卵泡检查</div>
+                          </div>
+                        </div>
+                      </div>
+                      <button class="btn-mini">处理</button>
+                    </div>
+                    <div class="meta-line"><strong>距发情第 1 天</strong> · 建议 4月26日</div>
+                  </div>
+                </div>
+                <div class="compact-card passed">
+                  <div class="card-inner">
+                    <div class="row-top">
+                      <div class="meta-pack">
+                        <div class="dog-head">
+                          <div class="dog-icon">🐩</div>
+                          <div class="dog-main">
+                            <div class="dog-name">2号</div>
+                            <div class="weak-tag passed">卵泡检查</div>
+                          </div>
+                        </div>
+                      </div>
+                      <button class="btn-mini passed">处理</button>
+                    </div>
+                    <div class="meta-line"><strong>距发情第 12 天</strong> · <span style="color:var(--red);font-weight:800">已过 2 天</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="option-foot">
+          <div class="foot-line">
+            <strong>优点</strong>
+            <span>保留现有卡片语气，代码改造成本也最可控。</span>
+          </div>
+          <div class="foot-line">
+            <strong>风险</strong>
+            <span>虽然变薄了，但“每犬一张大卡”的工作台密度提升仍有限。</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="option-card">
+        <div class="option-head">
+          <div>
+            <div class="option-title">B · 圆角小行块</div>
+            <div class="option-sub">在步骤组里收成紧凑小条目，保留柔和卡片语言，是推荐方向。</div>
+          </div>
+          <div class="option-badge badge-rose">推荐</div>
+        </div>
+        <div class="metrics">
+          <div class="metric"><strong>单犬项高</strong><span>72px</span></div>
+          <div class="metric"><strong>同屏容纳</strong><span>5 条</span></div>
+          <div class="metric"><strong>平衡度</strong><span>高</span></div>
+        </div>
+
+        <div class="phone">
+          <div class="screen">
+            <div class="status-bar">
+              <span>9:41</span>
+              <div class="status-icons">
+                <span class="material-icons-round">signal_cellular_alt</span>
+                <span class="material-icons-round">wifi</span>
+                <span class="material-icons-round">battery_full</span>
+              </div>
+            </div>
+            <div class="home-head">
+              <div class="home-title">今天重点</div>
+              <div class="home-sub">先看最该处理的，再继续日常记录</div>
+            </div>
+            <div class="summary-row">
+              <div class="summary-pill">
+                <span class="dot" style="background:var(--amber)"></span>
+                <span class="label">繁育</span>
+                <span class="count">2</span>
+              </div>
+            </div>
+            <div class="section-wrap">
+              <div class="section-label">繁育流程 <span class="section-count">2</span></div>
+              <div class="group-label">建议卵泡检查 <span class="group-count">2</span></div>
+              <div class="group-shell">
+                <div class="mini-list">
+                  <div class="mini-item">
+                    <div class="mini-item-inner">
+                      <div class="mini-top">
+                        <div class="mini-left">
+                          <div class="mini-icon">🐩</div>
+                          <div style="min-width:0;flex:1">
+                            <div class="mini-name">大桥</div>
+                            <div class="weak-tag">卵泡检查</div>
+                          </div>
+                        </div>
+                        <button class="btn-mini">处理</button>
+                      </div>
+                      <div class="mini-info"><strong>距发情第 1 天</strong> · 建议 4月26日</div>
+                    </div>
+                  </div>
+                  <div class="mini-item passed">
+                    <div class="mini-item-inner">
+                      <div class="mini-top">
+                        <div class="mini-left">
+                          <div class="mini-icon">🐩</div>
+                          <div style="min-width:0;flex:1">
+                            <div class="mini-name">2号</div>
+                            <div class="weak-tag passed">卵泡检查</div>
+                          </div>
+                        </div>
+                        <button class="btn-mini passed">处理</button>
+                      </div>
+                      <div class="mini-info"><strong>距发情第 12 天</strong> · <span style="color:var(--red);font-weight:800">已过 2 天</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="option-foot">
+          <div class="foot-line">
+            <strong>优点</strong>
+            <span>密度提升明显，同时还保留首页该有的圆角、浅底和模块色氛围。</span>
+          </div>
+          <div class="foot-line">
+            <strong>风险</strong>
+            <span>需要把“单犬大卡”重构成“步骤组内条目”，实现改动比 A 稍大。</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="option-card">
+        <div class="option-head">
+          <div>
+            <div class="option-title">C · 纯列表行</div>
+            <div class="option-sub">压到最薄，像工作台清单，但最容易把首页气质拉冷。</div>
+          </div>
+          <div class="option-badge badge-neutral">极限压缩</div>
+        </div>
+        <div class="metrics">
+          <div class="metric"><strong>单犬项高</strong><span>54px</span></div>
+          <div class="metric"><strong>同屏容纳</strong><span>6-7 条</span></div>
+          <div class="metric"><strong>风格偏移</strong><span>高</span></div>
+        </div>
+
+        <div class="phone">
+          <div class="screen">
+            <div class="status-bar">
+              <span>9:41</span>
+              <div class="status-icons">
+                <span class="material-icons-round">signal_cellular_alt</span>
+                <span class="material-icons-round">wifi</span>
+                <span class="material-icons-round">battery_full</span>
+              </div>
+            </div>
+            <div class="home-head">
+              <div class="home-title">今天重点</div>
+              <div class="home-sub">先看最该处理的，再继续日常记录</div>
+            </div>
+            <div class="summary-row">
+              <div class="summary-pill">
+                <span class="dot" style="background:var(--amber)"></span>
+                <span class="label">繁育</span>
+                <span class="count">2</span>
+              </div>
+            </div>
+            <div class="section-wrap">
+              <div class="section-label">繁育流程 <span class="section-count">2</span></div>
+              <div class="group-label">建议卵泡检查 <span class="group-count">2</span></div>
+              <div class="flat-group">
+                <div class="list-item">
+                  <div class="list-avatar">🐩</div>
+                  <div class="list-main">
+                    <div class="list-name-row">
+                      <div class="list-name">大桥</div>
+                      <div class="list-weak">卵泡检查</div>
+                    </div>
+                    <div class="list-copy">距发情第 1 天 · 建议 4月26日</div>
+                  </div>
+                  <button class="btn-list">处理</button>
+                </div>
+                <div class="list-item">
+                  <div class="list-avatar">🐩</div>
+                  <div class="list-main">
+                    <div class="list-name-row">
+                      <div class="list-name">2号</div>
+                      <div class="list-weak passed">卵泡检查</div>
+                    </div>
+                    <div class="list-copy">距发情第 12 天 · <span style="color:var(--red);font-weight:800">已过 2 天</span></div>
+                  </div>
+                  <button class="btn-list passed">处理</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="option-foot">
+          <div class="foot-line">
+            <strong>优点</strong>
+            <span>纵向利用率最高，最接近真正的高密度工作台。</span>
+          </div>
+          <div class="foot-line">
+            <strong>风险</strong>
+            <span>卡片感最弱，更像后台列表，和当前首页的柔和情绪会有明显距离。</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="option-card">
+        <div class="option-head">
+          <div>
+            <div class="option-title">D · 单卡分组列表</div>
+            <div class="option-sub">整个步骤组收进一张卡，内部再用列表行承载多犬，兼顾工作台感和首页氛围。</div>
+          </div>
+          <div class="option-badge badge-rose">新方向</div>
+        </div>
+        <div class="metrics">
+          <div class="metric"><strong>单犬项高</strong><span>58px</span></div>
+          <div class="metric"><strong>同屏容纳</strong><span>1组 6条</span></div>
+          <div class="metric"><strong>结构平衡</strong><span>高</span></div>
+        </div>
+
+        <div class="phone">
+          <div class="screen">
+            <div class="status-bar">
+              <span>9:41</span>
+              <div class="status-icons">
+                <span class="material-icons-round">signal_cellular_alt</span>
+                <span class="material-icons-round">wifi</span>
+                <span class="material-icons-round">battery_full</span>
+              </div>
+            </div>
+            <div class="home-head">
+              <div class="home-title">今天重点</div>
+              <div class="home-sub">先看最该处理的，再继续日常记录</div>
+            </div>
+            <div class="summary-row">
+              <div class="summary-pill">
+                <span class="dot" style="background:var(--amber)"></span>
+                <span class="label">繁育</span>
+                <span class="count">2</span>
+              </div>
+            </div>
+            <div class="section-wrap">
+              <div class="section-label">繁育流程 <span class="section-count">2</span></div>
+              <div class="group-label">建议卵泡检查 <span class="group-count">2</span></div>
+              <div class="cluster-card">
+                <div class="cluster-inner">
+                  <div class="cluster-head">
+                    <div>
+                      <div class="cluster-title">建议卵泡检查</div>
+                      <div class="cluster-sub">一个步骤一张卡，内部按犬只列表处理，减少重复卡壳。</div>
+                    </div>
+                    <div class="cluster-count">2</div>
+                  </div>
+                  <div class="cluster-row">
+                    <div class="list-avatar">🐩</div>
+                    <div class="cluster-main">
+                      <div class="cluster-name-row">
+                        <div class="cluster-name">大桥</div>
+                        <div class="list-weak">卵泡检查</div>
+                      </div>
+                      <div class="cluster-copy">距发情第 1 天 · 建议 4月26日</div>
+                    </div>
+                    <button class="btn-list">处理</button>
+                  </div>
+                  <div class="cluster-row">
+                    <div class="list-avatar">🐩</div>
+                    <div class="cluster-main">
+                      <div class="cluster-name-row">
+                        <div class="cluster-name">2号</div>
+                        <div class="list-weak passed">卵泡检查</div>
+                      </div>
+                      <div class="cluster-copy">距发情第 12 天 · <span style="color:var(--red);font-weight:800">已过 2 天</span></div>
+                    </div>
+                    <button class="btn-list passed">处理</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="option-foot">
+          <div class="foot-line">
+            <strong>优点</strong>
+            <span>把“步骤分组”本身做实成卡片，内部再列表化，信息组织会比 B 更完整，比 C 更有首页气质。</span>
+          </div>
+          <div class="foot-line">
+            <strong>风险</strong>
+            <span>如果组头再写太多文案，容易把节省下来的空间又吃回去，需要严格控制卡头信息量。</span>
+          </div>
+        </div>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

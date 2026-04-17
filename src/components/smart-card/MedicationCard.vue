@@ -328,8 +328,17 @@ function showBatchActions() {
 .card-name { display: block; font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--text-1); }
 .card-sub { display: block; font-size: 12px; color: var(--text-2); margin-top: 1px; }
 
-.fraction-badge { background: var(--plum-soft); padding: 3px 10px; border-radius: 999px; }
-.fraction-badge-text { font-family: var(--font-display); font-size: 13px; font-weight: 800; color: var(--plum); }
+.fraction-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--plum-soft);
+  min-width: 44px;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+}
+.fraction-badge-text { font-family: var(--font-display); font-size: 13px; font-weight: 800; line-height: 1; color: var(--plum); }
 
 /* 健康列表 */
 .health-list { display: flex; flex-direction: column; gap: 0; margin-top: 10px; }

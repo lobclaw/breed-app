@@ -219,7 +219,8 @@ function batchSkip() {
 
 /* 分数角标 */
 .fraction-badge {
-  padding: 3px 10px; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 44px; min-height: 26px; padding: 0 10px; border-radius: 999px;
   &--red { background: var(--red-soft); }
   &--blue { background: var(--blue-soft); }
   &--amber { background: var(--amber-soft); }
@@ -227,7 +228,7 @@ function batchSkip() {
   &--teal { background: var(--teal-soft); }
 }
 .fraction-badge-text {
-  font-family: var(--font-display); font-size: 13px; font-weight: 800;
+  font-family: var(--font-display); font-size: 13px; font-weight: 800; line-height: 1;
   &--red { color: var(--red); }
   &--blue { color: var(--blue); }
   &--amber { color: var(--amber); }
