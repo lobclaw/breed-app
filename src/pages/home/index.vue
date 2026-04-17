@@ -466,31 +466,11 @@ const suppressedTaskMap = ref<Record<string, number>>({})
 // 选中日期（0点 timestamp）
 const selectedDate = ref(startOfDay(Date.now()))
 const isSelectedToday = computed(() => selectedDate.value === startOfDay(Date.now()))
-const breedingGroups = computed(() => [
-  {
-    key: 'workflow-main',
-    title: '当前流程',
-    cards: cards.value.filter(card => card.sectionType === 'workflow' && card.priority !== 'overdue'),
-  },
-  {
-    key: 'workflow-extra',
-    title: '额外安排',
-    cards: cards.value.filter(card => card.sectionType === 'workflow_extra' && card.priority !== 'overdue'),
-  },
-])
+const todayWorkbench = computed(() => buildHomeWorkbench(cards.value, { visibleRowLimit: 4 }))
+const dayWorkbench = computed(() => buildHomeWorkbench(dayCards.value, { visibleRowLimit: 4 }))
+const breedingGroups = computed(() => mapWorkbenchGroupsToCards(todayWorkbench.value.sections.breeding.groups))
 const breedingCardsCount = computed(() => breedingGroups.value.reduce((sum, group) => sum + group.cards.length, 0))
-const dayBreedingGroups = computed(() => [
-  {
-    key: 'workflow-main',
-    title: '当前流程',
-    cards: dayCards.value.filter(card => card.sectionType === 'workflow' && card.priority !== 'overdue'),
-  },
-  {
-    key: 'workflow-extra',
-    title: '额外安排',
-    cards: dayCards.value.filter(card => card.sectionType === 'workflow_extra' && card.priority !== 'overdue'),
-  },
-])
+const dayBreedingGroups = computed(() => mapWorkbenchGroupsToCards(dayWorkbench.value.sections.breeding.groups))
 const daySections = computed(() => [
   {
     key: 'breeding',
@@ -539,8 +519,6 @@ const todaySections = computed(() => [
     cards: cards.value.filter(card => card.sectionType === 'therapy' && card.priority !== 'overdue'),
   },
 ])
-const todayWorkbench = computed(() => buildHomeWorkbench(cards.value, { visibleRowLimit: 4 }))
-const dayWorkbench = computed(() => buildHomeWorkbench(dayCards.value, { visibleRowLimit: 4 }))
 const summaryPills = computed(() => [
   {
     key: 'overdue',
@@ -571,6 +549,26 @@ const summaryPills = computed(() => [
     pillClass: 'pill-plum',
   },
 ])
+
+function mapWorkbenchGroupsToCards(groups: Array<{ key: string; title: string; rows: Array<{ sourceCard?: any }> }> = []) {
+  return groups
+    .map(group => ({
+      key: group.key,
+      title: group.title,
+      cards: uniqueSourceCards(group.rows || []),
+    }))
+    .filter(group => group.cards.length > 0)
+}
+
+function uniqueSourceCards(rows: Array<{ sourceCard?: any }> = []) {
+  const cardMap = new Map<string, any>()
+  for (const row of rows) {
+    const card = row?.sourceCard
+    if (!card?.id || cardMap.has(card.id)) continue
+    cardMap.set(card.id, card)
+  }
+  return Array.from(cardMap.values())
+}
 
 // H-3: 快速完成
 const showQuickComplete = ref(false)

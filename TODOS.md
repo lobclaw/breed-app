@@ -26,7 +26,7 @@
 已完成。在 03 文档 Layer 3 审计范围中补充了 care_rules 独立审计逻辑：通过 `dog_id + type=care_group + title 匹配` 判断任务是否存在。
 
 ### ~~TODO-6: 显式标注 V1 单家庭限制~~ ✅
-已确认。CLAUDE.md 和 04 文档 section 8.4 均已标注。
+已确认。AGENTS.md 和 04 文档 section 8.4 均已标注。
 
 ## 工程审查确认的架构决策
 

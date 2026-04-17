@@ -1,5 +1,7 @@
 # UniCloud 技术验证报告
 
+> **归档说明：** 本文档仅保留为历史技术验证证据，不再作为日常实现入口。当前有效的技术规则、架构边界与实现约束以 `docs/design/03-tech-stack.md` 和 `docs/design/04-implementation.md` 为准。
+
 > 本报告对照 UniCloud 官方文档，逐项验证设计文档（01-05）中的技术假设。每个发现标注为：
 > - **MISMATCH** = 设计与 UniCloud 实际能力不符，必须修正
 > - **WARNING** = 设计可行但有风险或非最佳实践，建议调整

@@ -4,7 +4,7 @@
 
 这套文档只保留三层：
 
-- `AGENTS.md`：协作约束、开发口径、当前非代码规则
+- `AGENTS.md`：唯一协作入口，包含协作约束、开发口径、当前阶段与任务执行 checklist
 - `docs/design/`：产品与工程的长期事实源
 - `docs/ROADMAP.md`：当前路线、阶段目标与验收重点
 
@@ -44,9 +44,8 @@
 ## 归档文档
 
 - `docs/design/archive/06-unicloud-validation.md`
-- `docs/design/archive/07-design-audit.md`
 
-归档文档只保留决策证据，不再作为日常修改入口。
+归档文档只保留决策证据，不再作为日常修改入口。其中 `06-unicloud-validation.md` 仅作为历史技术验证记录，现行规则以 `docs/design/03-tech-stack.md` 与 `docs/design/04-implementation.md` 为准。
 
 ## 维护规则
 
@@ -55,4 +54,5 @@
 - 技术与架构边界变化先改 `03-tech-stack.md`
 - 实现阶段与测试口径变化先改 `04-implementation.md`
 - 页面或字段责任变化先改 `05-field-page-mapping.md`
-- `AGENTS.md` 只保留摘要和协作约束，不重复长篇设计内容
+- `AGENTS.md` 是唯一协作入口；其他同类协作文件不再维护
+- `AGENTS.md` 只保留协作约束、当前阶段、关键红线与任务执行 checklist，不重复长篇设计内容

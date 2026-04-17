@@ -783,6 +783,38 @@ describe('task-service', () => {
       expect(res.data.cards.some((card: any) => card.tasks?.[0]?.title?.includes('卵泡'))).toBe(true)
     })
 
+    it('超过建议日期的繁育节点仍应留在繁育区，不进入逾期区', async () => {
+      const now = Date.now()
+      const todayStart = new Date(now)
+      todayStart.setHours(0, 0, 0, 0)
+
+      seedCollection('tasks', [
+        {
+          _id: 'past_flow_home_1',
+          family_id: familyId,
+          dog_id: 'dog_1',
+          dog_name: '花花',
+          cycle_id: 'cycle_1',
+          type: 'breeding_milestone',
+          title: '花花 · 建议卵泡检查',
+          details: { step_type: 'follicle_check' },
+          status: 'pending',
+          due_date: todayStart.getTime() - DAY_MS,
+        },
+      ])
+      seedCollection('health_records', [])
+      seedCollection('medication_tasks', [])
+
+      const ctx = createCloudObjectContext({ familyId })
+      const res = await taskService.getHomeCards.call(ctx)
+
+      expect(res.data.sections.workflow).toHaveLength(1)
+      expect(res.data.sections.workflow[0].priority).toBe('today')
+      expect(res.data.sections.workflow[0].domain).toBe('breeding')
+      expect(res.data.cards.some((card: any) => card.priority === 'overdue')).toBe(false)
+      expect(res.data.counts.hasOverdue).toBe(false)
+    })
+
     it('昨天的逾期任务应显示为逾期 1 天，而不是 2 天', async () => {
       const now = Date.now()
       const todayStart = new Date(now)

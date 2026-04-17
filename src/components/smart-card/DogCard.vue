@@ -1,7 +1,7 @@
 <!--
   DogCard — 个体犬只卡片
   健康类：完成(自动创建记录) + 推迟 + 跳过。点卡片→跳转表单
-  繁育类：推迟 + 跳过。点卡片→跳转表单（唯一处理入口）
+  繁育额外安排：完成 + 推迟 + 跳过。点卡片→跳转详情或记录页
 -->
 <template>
   <view class="card" :class="[`card--${barColor}`, { 'card--illness': cardVariant === 'illness' }]" @click="goRecordTask(visibleTasks[0])">

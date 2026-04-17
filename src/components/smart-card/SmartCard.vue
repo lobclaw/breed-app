@@ -6,7 +6,8 @@
     <text class="material-icons-round overdue-badge-icon">schedule</text>
     <text class="overdue-badge-text">逾期{{ card.overdueDays }}天</text>
   </view>
-  <DogCard v-if="card.cardType === 'dog'" :card="card" @complete="onComplete" @postpone="onPostpone" @action="onAction" />
+  <BreedingProcessCard v-if="isBreedingProcessCard" :card="card" />
+  <DogCard v-else-if="card.cardType === 'dog'" :card="card" @complete="onComplete" @postpone="onPostpone" @action="onAction" />
   <CareGroupCard v-else-if="card.cardType === 'care_group'" :card="card" @complete="onComplete" @batch-complete="onBatchComplete" />
   <BatchCard v-else-if="card.cardType === 'batch'" :card="card" @complete="onComplete" @postpone="onPostpone" @batch-complete="onBatchComplete" @batch-skip="onBatchSkip" />
   <MedicationCard v-else-if="card.cardType === 'health_attention' || card.cardType === 'medication'" :card="card" @complete="onComplete" @batch-complete-med="onBatchCompleteMed" @action="onAction" @record-dose="onRecordDose" />
@@ -15,6 +16,9 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
+
+import BreedingProcessCard from './BreedingProcessCard.vue'
 import DogCard from './DogCard.vue'
 import CareGroupCard from './CareGroupCard.vue'
 import BatchCard from './BatchCard.vue'
@@ -37,7 +41,7 @@ export interface SmartCardData {
   [key: string]: any
 }
 
-defineProps<{
+const props = defineProps<{
   card: SmartCardData
   completing?: boolean
   completed?: boolean
@@ -60,6 +64,13 @@ function onBatchSkip(taskIds: string[]) { emit('batch-skip', taskIds) }
 function onBatchCompleteMed(medIds: string[]) { emit('batch-complete-med', medIds) }
 function onAction(payload: { type: string; data: any }) { emit('action', payload) }
 function onRecordDose(payload: { medicationTaskId: string }) { emit('record-dose', payload) }
+
+const isBreedingProcessCard = computed(() => {
+  const firstTask = props.card.tasks?.[0]
+  return props.card.cardType === 'dog'
+    && firstTask?.type === 'breeding_milestone'
+    && props.card.domain === 'breeding'
+})
 </script>
 
 <style lang="scss" scoped>

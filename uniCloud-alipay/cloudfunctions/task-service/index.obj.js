@@ -97,6 +97,18 @@ function getTaskDisplayTitle(task) {
   return task.title || task.type || ''
 }
 
+function getTaskPriority(task, todayStartMs, todayEndMs) {
+  if (!task) return 'upcoming'
+
+  if (task.type === 'breeding_milestone') {
+    return task.due_date <= todayEndMs ? 'today' : 'upcoming'
+  }
+
+  if (task.due_date < todayStartMs) return 'overdue'
+  if (task.due_date <= todayEndMs) return 'today'
+  return 'upcoming'
+}
+
 function buildSectionedCards(pendingTasks, todayCompletedTasks, activeIllnesses, medItems) {
   const workflowPendingTasks = pendingTasks.filter(task => task.type === 'breeding_milestone')
   const workflowCompletedTasks = todayCompletedTasks.filter(task => task.type === 'breeding_milestone')
@@ -604,13 +616,7 @@ module.exports = {
     }
 
     for (const task of pendingTasks) {
-      if (task.due_date < todayStart.getTime()) {
-        task.priority = 'overdue'
-      } else if (task.due_date <= todayEnd.getTime()) {
-        task.priority = 'today'
-      } else {
-        task.priority = 'upcoming'
-      }
+      task.priority = getTaskPriority(task, todayStart.getTime(), todayEnd.getTime())
       task._completed = false
     }
     for (const task of todayCompletedTasks) {
@@ -750,7 +756,7 @@ module.exports = {
       d.setHours(0, 0, 0, 0)
       const key = d.getTime()
       if (!dayGroups.has(key)) dayGroups.set(key, [])
-      task.priority = task.due_date < realTodayStart.getTime() ? 'overdue' : 'today'
+      task.priority = getTaskPriority(task, realTodayStart.getTime(), realTodayStart.getTime() + DAY_MS - 1)
       task._completed = false
       dayGroups.get(key).push(task)
     }
@@ -1313,11 +1319,13 @@ module.exports = {
         db.collection('tasks').where({
           family_id: familyId,
           status: 'pending',
+          type: dbCmd.neq('breeding_milestone'),
           due_date: dbCmd.lt(todayStart.getTime()),
         }).count(),
         db.collection('tasks').where({
           family_id: familyId,
           status: 'pending',
+          type: dbCmd.neq('breeding_milestone'),
           due_date: dbCmd.gte(todayStart.getTime()).and(dbCmd.lte(todayEnd.getTime())),
         }).count(),
       ])
