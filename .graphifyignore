@@ -10,7 +10,6 @@ coverage/
 # Local tooling / IDE state
 .hbuilderx/
 .claude/
-.gstack/
 .lingma/
 .DS_Store
 
