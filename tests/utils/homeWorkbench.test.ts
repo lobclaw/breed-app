@@ -173,16 +173,19 @@ describe('buildHomeWorkbench', () => {
     const workbench = buildHomeWorkbench([
       makeBreedingMilestoneCard('follicle-a', 'follicle_check'),
       makeBreedingMilestoneCard('follicle-b', 'follicle_check'),
+      makeBreedingMilestoneCard('mating-a', 'mating', '花花 · 配种'),
       makeBreedingMilestoneCard('unknown-a', 'custom_step', '自定义繁育'),
     ])
     const groups = workbench.sections.breeding.groups
     const follicleGroup = groups.find(group => group.key === 'breeding-step:follicle_check')
+    const matingGroup = groups.find(group => group.key === 'breeding-step:mating')
     const unknownGroup = groups.find(group => group.key === 'breeding-step:custom_step')
 
     expect(follicleGroup?.title).toBe('建议卵泡检查')
     expect(follicleGroup?.rows).toHaveLength(2)
     expect(follicleGroup?.rows[0].taskId).toBe('follicle-a-task')
     expect(follicleGroup?.rows[0].sourceCard.id).toBe('follicle-a')
+    expect(matingGroup?.title).toBe('配种')
     expect(unknownGroup?.title).toBe('自定义繁育')
   })
 

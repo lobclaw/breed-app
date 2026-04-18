@@ -6,8 +6,91 @@ const { verifyAndGetFamily, requireFamily } = require('breed-auth/auth')
 
 const db = uniCloud.database()
 const dbCmd = db.command
+const DAY_MS = 86400000
 
 // ── 内部辅助函数（不能放在 module.exports 内，否则 _ 前缀会被当作生命周期钩子） ──
+
+function getIdArg(input, ...keys) {
+  if (typeof input === 'string') return input.trim()
+  if (!input || typeof input !== 'object') return ''
+
+  for (const key of keys) {
+    const value = input[key]
+    if (typeof value === 'string' && value.trim()) return value.trim()
+  }
+
+  return ''
+}
+
+function startOfDay(ts) {
+  const date = new Date(ts)
+  date.setHours(0, 0, 0, 0)
+  return date.getTime()
+}
+
+function mapMedicationStatus(status) {
+  if (status === '已完成' || status === 'completed') return 'completed'
+  if (status === '已取消' || status === 'cancelled') return 'cancelled'
+  return 'active'
+}
+
+function formatTimeHM(ts) {
+  if (!ts) return ''
+  const date = new Date(ts)
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
+function normalizeMedicationTaskDetail(task, protocolName) {
+  const durationDays = Number(task?.duration_days) || 1
+  const startDate = startOfDay(task?.actual_start_date || task?.start_date || task?.created_at || Date.now())
+  const endDate = task?.end_date || (startDate + ((durationDays - 1) * DAY_MS))
+  const frequency = Number(task?.frequency) || 1
+  const completedDateSet = new Set()
+  const completedMap = {}
+
+  if (Array.isArray(task?.completed_dates)) {
+    task.completed_dates.forEach((item) => {
+      if (typeof item !== 'number') return
+      const dayTs = startOfDay(item)
+      completedDateSet.add(dayTs)
+    })
+  }
+
+  const dailyDoses = task?.daily_doses || {}
+  Object.entries(dailyDoses).forEach(([dayKey, rawValue]) => {
+    const dayNum = Number(dayKey)
+    const dosesGiven = Number(rawValue) || 0
+    if (!dayNum || dosesGiven < frequency) return
+
+    const dayTs = startDate + ((dayNum - 1) * DAY_MS)
+    completedDateSet.add(dayTs)
+    completedMap[dayTs] = {
+      name: `已完成${Math.min(dosesGiven, frequency)}/${frequency}次`,
+      time: '',
+    }
+  })
+
+  if (task?.completed_map && typeof task.completed_map === 'object') {
+    Object.entries(task.completed_map).forEach(([key, value]) => {
+      const dayTs = Number(key)
+      if (!dayTs || !value || typeof value !== 'object') return
+      completedMap[dayTs] = {
+        name: value.name || value.label || '',
+        time: value.time || (value.completed_at ? formatTimeHM(value.completed_at) : ''),
+      }
+    })
+  }
+
+  return {
+    ...task,
+    start_date: startDate,
+    end_date: endDate,
+    status: mapMedicationStatus(task?.status),
+    completed_dates: Array.from(completedDateSet).sort((a, b) => a - b),
+    completed_map: completedMap,
+    protocol_name: protocolName || task?.protocol_name || null,
+  }
+}
 
 function validateDetails(type, details) {
   if (type === 'vaccination' && !details.vaccine_type) {
@@ -1107,6 +1190,34 @@ module.exports = {
     }
 
     return { message: `已停止 ${cancelled} 个用药方案` }
+  },
+
+  /**
+   * 获取单个用药任务详情
+   */
+  async getMedicationTaskDetail(input) {
+    const medicationTaskId = getIdArg(input, 'id', 'taskId', 'task_id', 'medicationTaskId', 'medication_task_id')
+    if (!medicationTaskId) throw new Error('缺少用药任务 ID')
+
+    const { data: meds } = await db.collection('medication_tasks')
+      .where({ _id: medicationTaskId, family_id: this.familyId })
+      .get()
+    if (!meds || meds.length === 0) throw new Error('用药任务不存在')
+
+    const task = meds[0]
+    let protocolName = null
+
+    if (task.protocol_id) {
+      const { data: protocols } = await db.collection('medication_protocols')
+        .where({ _id: task.protocol_id, family_id: this.familyId, deleted_at: null })
+        .limit(1)
+        .get()
+      protocolName = protocols?.[0]?.name || null
+    }
+
+    return {
+      data: normalizeMedicationTaskDetail(task, protocolName),
+    }
   },
 
   /**

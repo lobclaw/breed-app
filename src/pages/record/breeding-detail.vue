@@ -3,7 +3,7 @@
     <BPageHeader title="繁育记录详情">
       <template #right>
         <view class="header-actions">
-          <view class="header-action" @click="goEdit">
+          <view v-if="canEdit" class="header-action" @click="goEdit">
             <text class="material-icons-round" style="font-size: 22px; color: var(--text-2);">edit</text>
           </view>
           <view class="header-action" @click="showMore = true">
@@ -22,6 +22,26 @@
 
     <!-- 详情内容 -->
     <template v-if="!loading && record">
+      <view class="card-feed">
+        <view class="detail-summary" :class="`detail-summary--${cardColor}`">
+          <view class="detail-summary__main">
+            <view class="detail-summary__tag">
+              <text class="detail-summary__tag-text">{{ typeLabel }}</text>
+            </view>
+            <text class="detail-summary__title">{{ summaryTitle }}</text>
+            <text class="detail-summary__sub">{{ record.dog_name || '未知犬只' }} · {{ summaryDateText }}</text>
+          </view>
+          <view class="detail-summary__meta">
+            <text class="detail-summary__meta-value">{{ summaryMeta }}</text>
+            <text class="detail-summary__meta-label">当前记录</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="section-label">
+        <view class="section-dot" :class="`section-dot--${cardColor}`" />
+        <text class="section-text">核心信息</text>
+      </view>
       <!-- 记录信息卡片 -->
       <view class="card-feed">
         <BCard :color="cardColor" :pressable="false">
@@ -96,6 +116,35 @@
               </view>
             </template>
 
+            <!-- 发情观察 -->
+            <template v-if="record.type === 'heat_observation'">
+              <view class="info-row">
+                <text class="info-row-label">种母</text>
+                <view class="info-row-value">
+                  <view class="mini-avatar">
+                    <text class="material-icons-round" style="color: #fff; font-size: 14px;">pets</text>
+                  </view>
+                  <text>{{ record.dog_name || '未知' }}</text>
+                </view>
+              </view>
+              <view class="info-row">
+                <text class="info-row-label">观察时间</text>
+                <text class="info-row-value">{{ formatDateTime(record.date) }}</text>
+              </view>
+              <view class="info-row" v-if="record.details?.vulva_status">
+                <text class="info-row-label">外阴状态</text>
+                <text class="info-row-value">{{ record.details.vulva_status }}</text>
+              </view>
+              <view class="info-row" v-if="record.details?.discharge_status">
+                <text class="info-row-label">分泌物状态</text>
+                <text class="info-row-value">{{ record.details.discharge_status }}</text>
+              </view>
+              <view class="info-row" v-if="record.details?.symptoms?.length">
+                <text class="info-row-label">观察征兆</text>
+                <text class="info-row-value">{{ record.details.symptoms.join(' / ') }}</text>
+              </view>
+            </template>
+
             <!-- 孕检 -->
             <template v-if="record.type === 'pregnancy_check'">
               <view class="info-row">
@@ -135,8 +184,8 @@
       </view>
 
       <!-- 关联信息 -->
-      <view v-if="record.cycle_id" class="section-label" style="margin-top: 8px;">
-        <view class="section-dot" style="background: var(--blue);" />
+      <view v-if="record.cycle_id || record.created_by_name" class="section-label" style="margin-top: 8px;">
+        <view class="section-dot section-dot--blue" />
         <text class="section-text">关联信息</text>
       </view>
       <view v-if="record.cycle_id" class="card-feed">
@@ -165,10 +214,14 @@
       </view>
 
       <!-- 操作按钮 -->
+      <view class="section-label">
+        <view class="section-dot section-dot--red" />
+        <text class="section-text">操作</text>
+      </view>
       <view class="action-area">
         <view class="btn-row">
-          <BButton variant="ghost" @click="goEdit">编辑</BButton>
-          <BButton variant="ghost" color="red" @click="confirmDelete">删除</BButton>
+          <BButton v-if="canEdit" variant="ghost" @click="goEdit">编辑</BButton>
+          <BButton v-if="canDelete" variant="ghost" color="red" @click="confirmDelete">删除</BButton>
         </view>
       </view>
     </template>
@@ -183,12 +236,12 @@
 
     <!-- 更多操作 Sheet -->
     <BSheet v-model:visible="showMore" title="更多操作">
-      <view class="more-actions">
-        <view class="more-action-item" @click="handleEditFromMore">
+        <view class="more-actions">
+        <view v-if="canEdit" class="more-action-item" @click="handleEditFromMore">
           <text class="material-icons-round" style="font-size: 20px; color: var(--text-2);">edit</text>
           <text class="more-action-label">编辑记录</text>
         </view>
-        <view class="more-action-item" @click="handleDeleteFromMore">
+        <view v-if="canDelete" class="more-action-item" @click="handleDeleteFromMore">
           <text class="material-icons-round" style="font-size: 20px; color: var(--red);">delete</text>
           <text class="more-action-label" style="color: var(--red);">删除记录</text>
         </view>
@@ -216,11 +269,13 @@ const loading = ref(true)
 const showMore = ref(false)
 
 let recordId = ''
+let hasShownOnce = false
 const submitBannerMessage = ref('')
 let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
 
 const typeMap: Record<string, { label: string; tagColor: any; cardColor: any }> = {
   heat: { label: '发情', tagColor: 'amber', cardColor: 'amber' },
+  heat_observation: { label: '发情观察', tagColor: 'amber', cardColor: 'amber' },
   mating: { label: '配种', tagColor: 'rose', cardColor: 'rose' },
   pregnancy_check: { label: '孕检', tagColor: 'blue', cardColor: 'blue' },
   birth: { label: '生产', tagColor: 'green', cardColor: 'green' },
@@ -229,6 +284,22 @@ const typeMap: Record<string, { label: string; tagColor: any; cardColor: any }> 
 const typeLabel = computed(() => typeMap[record.value?.type]?.label || record.value?.type || '未知')
 const tagColor = computed(() => typeMap[record.value?.type]?.tagColor || 'green')
 const cardColor = computed(() => typeMap[record.value?.type]?.cardColor || 'green')
+const canEdit = computed(() => record.value?.type !== 'heat_observation')
+const canDelete = computed(() => record.value?.type === 'heat_observation')
+const summaryTitle = computed(() => {
+  if (record.value?.type === 'heat') return '发情开始'
+  if (record.value?.type === 'mating') return record.value?.details?.male_name ? `与 ${record.value.details.male_name} 配种` : '配种记录'
+  if (record.value?.type === 'heat_observation') return '发情周期观察'
+  if (record.value?.type === 'pregnancy_check') return record.value?.details?.result || '孕检记录'
+  return typeLabel.value
+})
+const summaryMeta = computed(() => {
+  if (record.value?.type === 'mating' && record.value?.details?.mating_count) return `第${record.value.details.mating_count}次`
+  if (record.value?.type === 'pregnancy_check' && record.value?.details?.fetus_count) return `${record.value.details.fetus_count}只`
+  if (record.value?.type === 'heat_observation') return '观察日志'
+  return typeLabel.value
+})
+const summaryDateText = computed(() => record.value?.type === 'heat_observation' ? formatDateTime(record.value?.date) : formatDate(record.value?.date))
 
 function formatDate(ts: number | undefined): string {
   if (!ts) return '—'
@@ -246,7 +317,7 @@ function formatAmount(n: number): string {
   return n.toLocaleString('zh-CN')
 }
 
-const { run: fetchRecord } = useCloudCall('breeding-service', 'getBreedingRecord')
+const { run: fetchRecord } = useCloudCall('breeding-service', 'getBreedingRecordDetail')
 const { run: deleteRecord } = useCloudCall('breeding-service', 'deleteBreedingRecord', {
   successMode: 'silent',
   loadingMode: 'local',
@@ -255,9 +326,9 @@ const { run: deleteRecord } = useCloudCall('breeding-service', 'deleteBreedingRe
 
 async function loadRecord() {
   loading.value = true
-  const result = await fetchRecord(recordId)
-  if (result?.data) {
-    record.value = result.data
+  const result = await fetchRecord({ id: recordId })
+  if (result) {
+    record.value = result.data || result
   }
   loading.value = false
 }
@@ -322,6 +393,11 @@ onShow(() => {
   if (feedback?.message) {
     showSubmitBanner(feedback.message)
   }
+  if (!hasShownOnce) {
+    hasShownOnce = true
+    return
+  }
+  if (recordId) loadRecord()
 })
 </script>
 
@@ -329,6 +405,65 @@ onShow(() => {
 
 .page {
   padding-bottom: 40px;
+}
+
+.detail-summary {
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  box-shadow: var(--shadow);
+}
+.detail-summary--amber { background: linear-gradient(135deg, var(--amber-soft), rgba(255, 255, 255, 0.98)); }
+.detail-summary--rose { background: linear-gradient(135deg, var(--rose-soft), rgba(255, 255, 255, 0.98)); }
+.detail-summary--blue { background: linear-gradient(135deg, var(--blue-soft), rgba(255, 255, 255, 0.98)); }
+.detail-summary--green { background: linear-gradient(135deg, var(--green-soft), rgba(255, 255, 255, 0.98)); }
+.detail-summary__main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.detail-summary__tag {
+  width: fit-content;
+  padding: 4px 10px;
+  border-radius: var(--radius-tag);
+  background: rgba(255, 255, 255, 0.76);
+}
+.detail-summary__tag-text {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-2);
+}
+.detail-summary__title {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-1);
+}
+.detail-summary__sub {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+.detail-summary__meta {
+  min-width: 68px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.76);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.detail-summary__meta-value {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-1);
+}
+.detail-summary__meta-label {
+  font-size: 11px;
+  color: var(--text-3);
 }
 
 /* ==================== HEADER ACTIONS ==================== */
@@ -396,6 +531,11 @@ onShow(() => {
   border-radius: 50%;
   flex-shrink: 0;
 }
+.section-dot--amber { background: var(--amber); }
+.section-dot--rose { background: var(--rose); }
+.section-dot--blue { background: var(--blue); }
+.section-dot--green { background: var(--green); }
+.section-dot--red { background: var(--red); }
 .section-text {
   font-size: 12px;
   font-weight: 700;

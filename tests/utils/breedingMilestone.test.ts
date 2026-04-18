@@ -40,6 +40,22 @@ describe('deriveBreedingMilestoneViewModel', () => {
     expect(viewModel.dayLabel).toBe('距配种第 25 天')
   })
 
+  it('配种节点应显示为卵泡检查后的当日推进', () => {
+    const dueDate = new Date('2026-04-17T00:00:00+08:00').getTime()
+    const viewModel = deriveBreedingMilestoneViewModel({
+      title: '花花 · 配种',
+      due_date: dueDate,
+      details: { step_type: 'mating' },
+    }, now)
+
+    expect(viewModel.stageTitle).toBe('配种')
+    expect(viewModel.anchorLabel).toBe('卵泡检查')
+    expect(viewModel.daysFromAnchor).toBe(1)
+    expect(viewModel.dayLabel).toBe('距卵泡检查第 1 天')
+    expect(viewModel.suggestionStatus).toBe('window_due')
+    expect(viewModel.suggestionLabel).toBe('建议今日处理')
+  })
+
   it('超过建议日期后应只增强文案，不变成逾期态', () => {
     const dueDate = new Date('2026-04-15T00:00:00+08:00').getTime()
     const viewModel = deriveBreedingMilestoneViewModel({

@@ -27,12 +27,30 @@
           >{{ item.secondaryLabel }}</text>
         </text>
       </view>
-      <view
-        class="group-action"
-        :class="{ 'group-action--passed': item.milestone.suggestionStatus === 'window_passed' }"
-        @click.stop="goProcess(item.card)"
-      >
-        <text class="group-action__text">处理</text>
+      <view class="group-actions">
+        <view v-if="item.canObserve || item.canDirectMating" class="group-secondary-actions">
+          <view
+            v-if="item.canObserve"
+            class="group-secondary-action"
+            @click.stop="goObserve(item.card)"
+          >
+            <text class="group-secondary-action__text">观察</text>
+          </view>
+          <view
+            v-if="item.canDirectMating"
+            class="group-secondary-action"
+            @click.stop="goDirectMating(item.card)"
+          >
+            <text class="group-secondary-action__text">直接配种</text>
+          </view>
+        </view>
+        <view
+          class="group-action"
+          :class="{ 'group-action--passed': item.milestone.suggestionStatus === 'window_passed' }"
+          @click.stop="goProcess(item.card)"
+        >
+          <text class="group-action__text">处理</text>
+        </view>
       </view>
     </view>
   </view>
@@ -42,6 +60,12 @@
 import { computed } from 'vue'
 
 import { deriveBreedingMilestoneViewModel } from '@/utils/breedingMilestone'
+import {
+  buildHomeDirectMatingUrl,
+  buildHomeHeatObservationUrl,
+  canOpenHomeDirectMating,
+  canOpenHomeHeatObservation,
+} from '@/utils/homeHeatObservation'
 
 const props = defineProps<{ group: any }>()
 
@@ -55,6 +79,8 @@ const items = computed(() => {
       milestone,
       stageTag: buildStageTag(milestone.stageTitle),
       secondaryLabel: buildSecondaryLabel(milestone),
+      canObserve: canOpenHomeHeatObservation(card),
+      canDirectMating: canOpenHomeDirectMating(card),
     }
   })
 })
@@ -104,6 +130,8 @@ function goProcess(card: any) {
     const stepType = task.details?.step_type
     if (stepType === 'follicle_check') {
       url = '/pages/record/breeding-follicle'
+    } else if (stepType === 'mating') {
+      url = '/pages/record/breeding-mating'
     } else if (stepType === 'pregnancy_check') {
       url = '/pages/record/breeding-pregnancy'
     } else if (stepType === 'weaning_confirm' && task.litter_id) {
@@ -117,6 +145,16 @@ function goProcess(card: any) {
   }
 
   uni.navigateTo({ url: `${url}?${params.join('&')}` })
+}
+
+function goObserve(card: any) {
+  if (!canOpenHomeHeatObservation(card)) return
+  uni.navigateTo({ url: buildHomeHeatObservationUrl(card) })
+}
+
+function goDirectMating(card: any) {
+  if (!canOpenHomeDirectMating(card)) return
+  uni.navigateTo({ url: buildHomeDirectMatingUrl(card) })
 }
 </script>
 
@@ -258,5 +296,33 @@ function goProcess(card: any) {
 
 .group-action--passed .group-action__text {
   color: var(--red);
+}
+
+.group-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.group-secondary-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.group-secondary-action {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 2px;
+  flex-shrink: 0;
+}
+
+.group-secondary-action__text {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-3);
 }
 </style>

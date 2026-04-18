@@ -45,7 +45,7 @@
             :key="'status-' + idx"
             class="dog-detail__hero-tag"
             :class="statusToneClass(s.type, 'hero')"
-            @click="openStatusSheet"
+            @click="handleStatusTap(s)"
           >
             <text class="dog-detail__hero-tag-text">{{ s.label || s.type }}</text>
             <text class="material-icons-round dog-detail__hero-tag-arrow">chevron_right</text>
@@ -108,6 +108,7 @@
               :key="'st-' + idx"
               class="dog-detail__status-row"
               :class="statusToneClass(s.type, 'row')"
+              @click="handleStatusTap(s)"
             >
               <view class="dog-detail__st-header">
                 <view class="dog-detail__st-left">
@@ -153,9 +154,9 @@
           <view v-if="healthRecords.length > 0" class="dog-detail__rec-list">
             <view
               v-for="record in healthRecords.slice(0, 3)"
-              :key="record._id"
+              :key="record._id || record.id"
               class="dog-detail__rec-item"
-              @click="goToHealthDetail(record._id)"
+              @click="goToHealthDetail(record._id || record.id)"
             >
               <view class="dog-detail__rec-icon" :class="`dog-detail__rec-icon--${healthIconColor(record.type)}`">
                 <text class="material-icons-round">{{ healthIcon(record.type) }}</text>
@@ -245,10 +246,13 @@
             </view>
           </view>
           <view class="breeding-estrus-banner__actions">
-            <view class="breeding-estrus-banner__btn" @click="navigateToRecord('breeding-follicle')">
+            <view class="breeding-estrus-banner__btn" @click="navigateToRecordByPage('heat-observation')">
+              <text>发情观察</text>
+            </view>
+            <view class="breeding-estrus-banner__btn" @click="navigateToRecordByPage('breeding-follicle')">
               <text>卵泡检查</text>
             </view>
-            <view class="breeding-estrus-banner__btn breeding-estrus-banner__btn--primary" @click="navigateToRecord('breeding-mating')">
+            <view class="breeding-estrus-banner__btn breeding-estrus-banner__btn--primary" @click="navigateToRecordByPage('breeding-mating')">
               <text>配种记录</text>
             </view>
           </view>
@@ -323,33 +327,36 @@
             </view>
           </view>
 
-          <!-- 产仔记录 -->
+          <!-- 窝列表 -->
           <view v-if="litters.length > 0">
             <view class="dog-detail__sec dog-detail__sec--green">
-              <text class="dog-detail__sec-text">产仔记录</text>
+              <text class="dog-detail__sec-text">窝列表</text>
               <view class="dog-detail__sec-badge">
                 <text class="dog-detail__sec-badge-text">{{ litters.length }}窝</text>
               </view>
             </view>
             <view class="dog-detail__rec-list">
-              <view v-for="litter in litters" :key="litter._id" class="dog-detail__litter-item">
+              <view v-for="litter in litters" :key="litter._id" class="dog-detail__litter-item" @click="goToOriginLitter(litter._id)">
                 <view class="dog-detail__litter-meta">
                   <text class="dog-detail__litter-date">{{ formatDate(litter.birth_date) }}</text>
                   <text v-if="litter.sire_name" class="dog-detail__litter-sire">种公: {{ litter.sire_name }}</text>
                 </view>
-                <view v-if="litter.pupStats" class="dog-detail__pup-chips">
-                  <view class="dog-detail__pup-chip dog-detail__pup-chip--total">
-                    <text class="dog-detail__pup-chip-text">共{{ litter.pupStats.total }}只</text>
+                <view class="dog-detail__litter-content">
+                  <view v-if="litter.pupStats" class="dog-detail__pup-chips">
+                    <view class="dog-detail__pup-chip dog-detail__pup-chip--total">
+                      <text class="dog-detail__pup-chip-text">共{{ litter.pupStats.total }}只</text>
+                    </view>
+                    <view v-if="litter.pupStats.alive > 0" class="dog-detail__pup-chip dog-detail__pup-chip--alive">
+                      <text class="dog-detail__pup-chip-text">在养{{ litter.pupStats.alive }}</text>
+                    </view>
+                    <view v-if="litter.pupStats.sold > 0" class="dog-detail__pup-chip dog-detail__pup-chip--sold">
+                      <text class="dog-detail__pup-chip-text">已售{{ litter.pupStats.sold }}</text>
+                    </view>
+                    <view v-if="litter.pupStats.available > 0" class="dog-detail__pup-chip dog-detail__pup-chip--avail">
+                      <text class="dog-detail__pup-chip-text">可售{{ litter.pupStats.available }}</text>
+                    </view>
                   </view>
-                  <view v-if="litter.pupStats.alive > 0" class="dog-detail__pup-chip dog-detail__pup-chip--alive">
-                    <text class="dog-detail__pup-chip-text">在养{{ litter.pupStats.alive }}</text>
-                  </view>
-                  <view v-if="litter.pupStats.sold > 0" class="dog-detail__pup-chip dog-detail__pup-chip--sold">
-                    <text class="dog-detail__pup-chip-text">已售{{ litter.pupStats.sold }}</text>
-                  </view>
-                  <view v-if="litter.pupStats.available > 0" class="dog-detail__pup-chip dog-detail__pup-chip--avail">
-                    <text class="dog-detail__pup-chip-text">可售{{ litter.pupStats.available }}</text>
-                  </view>
+                  <text class="material-icons-round dog-detail__rec-chevron">chevron_right</text>
                 </view>
               </view>
             </view>
@@ -387,7 +394,7 @@
               </view>
             </view>
             <view class="dog-detail__rec-list">
-              <view v-for="s in medStatuses" :key="s.taskId || s.detail" class="dog-detail__rec-item">
+              <view v-for="s in medStatuses" :key="s.taskId || s.detail" class="dog-detail__rec-item" @click="handleStatusTap(s)">
                 <view class="dog-detail__rec-icon dog-detail__rec-icon--plum">
                   <text class="material-icons-round">medication</text>
                 </view>
@@ -395,6 +402,7 @@
                   <text class="dog-detail__rec-title">{{ s.detail || '用药' }}</text>
                   <text v-if="s.progress" class="dog-detail__rec-sub">第{{ s.progress.current }}天 / 共{{ s.progress.total }}天</text>
                 </view>
+                <text class="material-icons-round dog-detail__rec-chevron">chevron_right</text>
               </view>
             </view>
           </view>
@@ -409,9 +417,9 @@
             <view class="dog-detail__rec-list">
               <view
                 v-for="record in vaccineRecords"
-                :key="record._id"
+                :key="record._id || record.id"
                 class="dog-detail__rec-item"
-                @click="goToHealthDetail(record._id)"
+                @click="goToHealthDetail(record._id || record.id)"
               >
                 <view class="dog-detail__rec-icon dog-detail__rec-icon--blue">
                   <text class="material-icons-round">vaccines</text>
@@ -435,9 +443,9 @@
             <view class="dog-detail__rec-list">
               <view
                 v-for="record in dewormingRecords"
-                :key="record._id"
+                :key="record._id || record.id"
                 class="dog-detail__rec-item"
-                @click="goToHealthDetail(record._id)"
+                @click="goToHealthDetail(record._id || record.id)"
               >
                 <view class="dog-detail__rec-icon dog-detail__rec-icon--teal">
                   <text class="material-icons-round">bug_report</text>
@@ -461,9 +469,9 @@
             <view class="dog-detail__rec-list">
               <view
                 v-for="record in illnessRecords"
-                :key="record._id"
+                :key="record._id || record.id"
                 class="dog-detail__rec-item"
-                @click="goToHealthDetail(record._id)"
+                @click="goToHealthDetail(record._id || record.id)"
               >
                 <view class="dog-detail__rec-icon dog-detail__rec-icon--red">
                   <text class="material-icons-round">healing</text>
@@ -903,19 +911,30 @@
     </BSheet>
 
     <!-- ==================== 添加记录 Sheet ==================== -->
-    <BSheet v-model:visible="showAddRecordSheet" title="添加繁育记录">
+    <BSheet v-model:visible="showAddRecordSheet" title="添加记录">
       <view class="add-record-list">
         <view
-          v-for="item in addRecordItems"
-          :key="item.page"
-          class="add-record-item"
-          @click="navigateToRecord(item.page)"
+          v-for="group in addRecordGroups"
+          :key="group.key"
+          class="add-record-group"
         >
-          <view class="add-record-item__icon" :style="{ background: 'color-mix(in srgb, ' + item.color + ' 15%, transparent)' }">
-            <text class="material-icons-round" :style="{ color: item.color, fontSize: '20px' }">{{ item.icon }}</text>
+          <view class="add-record-group__head">
+            <text class="add-record-group__title">{{ group.title }}</text>
           </view>
-          <text class="add-record-item__label">{{ item.label }}</text>
-          <text class="material-icons-round add-record-item__arrow">chevron_right</text>
+          <view class="add-record-group__body">
+            <view
+              v-for="item in group.items"
+              :key="item.page"
+              class="add-record-item"
+              @click="navigateToRecord(item)"
+            >
+              <view class="add-record-item__icon" :style="{ background: 'color-mix(in srgb, ' + item.color + ' 15%, transparent)' }">
+                <text class="material-icons-round" :style="{ color: item.color, fontSize: '20px' }">{{ item.icon }}</text>
+              </view>
+              <text class="add-record-item__label">{{ item.label }}</text>
+              <text class="material-icons-round add-record-item__arrow">chevron_right</text>
+            </view>
+          </view>
         </view>
       </view>
     </BSheet>
@@ -935,6 +954,7 @@ import { useCloudCall } from '@/composables/useCloudCall'
 import { consumeSubmitFeedback } from '@/composables/useSubmitFeedback'
 import { useDogStore } from '@/stores/dogStore'
 import type { Dog, DeriveStatus } from '@/types/dog'
+import { resolveDogDetailStatusRoute } from '@/utils/dogDetailNavigation'
 import { getDogStatusTone, getHealthTypeTone } from '@/utils/themeSemantics'
 
 const dog = ref<Dog | null>(null)
@@ -949,6 +969,8 @@ const infoExpanded = ref(false)
 const submitBannerMessage = ref('')
 let dogId = ''
 let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
+let hasLoadedOnce = false
+let latestLoadToken = 0
 
 const tabs = [
   { key: 'overview', label: '概览' },
@@ -956,6 +978,14 @@ const tabs = [
   { key: 'health', label: '健康' },
   { key: 'finance', label: '财务' },
 ]
+
+type AddRecordItem = {
+  icon: string
+  color: string
+  label: string
+  page: string
+  kind: 'breeding' | 'health' | 'medication'
+}
 
 // 状态 → 功能色映射
 const statusColorMap: Record<string, 'amber' | 'rose' | 'green' | 'red' | 'plum'> = {
@@ -1120,7 +1150,16 @@ function showSubmitBanner(message: string) {
 }
 
 function goToCycle(cycleId: string) {
-  uni.navigateTo({ url: `/pages/breeding/cycle?id=${cycleId}` })
+  if (!cycleId) {
+    uni.showToast({ title: '周期信息缺失', icon: 'none' })
+    return
+  }
+  uni.navigateTo({
+    url: `/pages/breeding/cycle?id=${cycleId}`,
+    fail() {
+      uni.showToast({ title: '周期页打开失败', icon: 'none' })
+    },
+  })
 }
 
 function editDog() {
@@ -1128,32 +1167,85 @@ function editDog() {
   uni.navigateTo({ url: `/pages/dog/add?id=${dogId}` })
 }
 
-const addRecordItems = [
-  { icon: 'favorite', color: 'var(--red)', label: '发情记录', page: 'breeding-heat' },
-  { icon: 'biotech', color: 'var(--blue)', label: '卵泡检查', page: 'breeding-follicle' },
-  { icon: 'pets', color: 'var(--plum)', label: '配种记录', page: 'breeding-mating' },
-  { icon: 'pregnant_woman', color: 'var(--green)', label: '孕检记录', page: 'breeding-pregnancy' },
-  { icon: 'medical_services', color: 'var(--blue)', label: '产检记录', page: 'breeding-prenatal' },
-  { icon: 'schedule', color: 'var(--amber)', label: '临产监测', page: 'breeding-prelabor' },
-  { icon: 'cancel', color: 'var(--red)', label: '异常终止', page: 'breeding-termination' },
+const addRecordGroups = [
+  {
+    key: 'breeding',
+    title: '繁育',
+    items: [
+      { icon: 'favorite', color: 'var(--red)', label: '发情记录', page: 'breeding-heat', kind: 'breeding' },
+      { icon: 'monitor_heart', color: 'var(--amber)', label: '发情观察', page: 'heat-observation', kind: 'breeding' },
+      { icon: 'biotech', color: 'var(--blue)', label: '卵泡检查', page: 'breeding-follicle', kind: 'breeding' },
+      { icon: 'pets', color: 'var(--plum)', label: '配种记录', page: 'breeding-mating', kind: 'breeding' },
+      { icon: 'pregnant_woman', color: 'var(--green)', label: '孕检记录', page: 'breeding-pregnancy', kind: 'breeding' },
+      { icon: 'medical_services', color: 'var(--blue)', label: '产检记录', page: 'breeding-prenatal', kind: 'breeding' },
+      { icon: 'schedule', color: 'var(--amber)', label: '临产监测', page: 'breeding-prelabor', kind: 'breeding' },
+      { icon: 'cancel', color: 'var(--red)', label: '异常终止', page: 'breeding-termination', kind: 'breeding' },
+    ] as AddRecordItem[],
+  },
+  {
+    key: 'health',
+    title: '健康',
+    items: [
+      { icon: 'vaccines', color: 'var(--blue)', label: '疫苗记录', page: 'health-vaccination', kind: 'health' },
+      { icon: 'shield', color: 'var(--teal)', label: '驱虫记录', page: 'health-deworming', kind: 'health' },
+      { icon: 'sick', color: 'var(--red)', label: '疾病记录', page: 'health-illness', kind: 'health' },
+    ] as AddRecordItem[],
+  },
+  {
+    key: 'medication',
+    title: '用药',
+    items: [
+      { icon: 'medication', color: 'var(--plum)', label: '开始用药', page: 'health-medication', kind: 'medication' },
+    ] as AddRecordItem[],
+  },
 ]
 
 function addRecord() {
   showAddRecordSheet.value = true
 }
 
-function navigateToRecord(page: string) {
+function navigateToRecord(item: AddRecordItem) {
   showAddRecordSheet.value = false
   const dogName = encodeURIComponent(dog.value?.name || '')
-  uni.navigateTo({ url: `/pages/record/${page}?dogId=${dogId}&dogName=${dogName}&locked=true` })
+  const cycleQuery = item.kind === 'breeding' && activeCycle.value?._id ? `&cycleId=${activeCycle.value._id}` : ''
+  uni.navigateTo({
+    url: `/pages/record/${item.page}?dogId=${dogId}&dogName=${dogName}&locked=true${cycleQuery}`,
+    fail() {
+      uni.showToast({ title: '页面打开失败', icon: 'none' })
+    },
+  })
 }
 
-function goToHealthDetail(recordId: string) {
-  uni.navigateTo({ url: `/pages/record/health-detail?id=${recordId}` })
+function navigateToRecordByPage(page: string) {
+  const target = addRecordGroups.flatMap(group => group.items).find(item => item.page === page)
+  if (!target) {
+    uni.showToast({ title: '入口暂不可用', icon: 'none' })
+    return
+  }
+  navigateToRecord(target)
+}
+
+function goToHealthDetail(recordId?: string) {
+  const normalizedId = typeof recordId === 'string' ? recordId.trim() : ''
+  if (!normalizedId) {
+    uni.showToast({ title: '记录信息缺失', icon: 'none' })
+    return
+  }
+  uni.navigateTo({
+    url: `/pages/record/health-detail?id=${normalizedId}`,
+    fail() {
+      uni.showToast({ title: '详情打开失败', icon: 'none' })
+    },
+  })
 }
 
 function goToOriginLitter(litterId: string) {
-  uni.navigateTo({ url: `/pages/breeding/litter?id=${litterId}` })
+  uni.navigateTo({
+    url: `/pages/breeding/litter?id=${litterId}`,
+    fail() {
+      uni.showToast({ title: '窝详情打开失败', icon: 'none' })
+    },
+  })
 }
 
 function goToExpenseAdd() {
@@ -1166,6 +1258,20 @@ function goToIncomeAdd() {
 
 function goToDamRoi() {
   uni.navigateTo({ url: `/pages/finance/dam-roi?damId=${dogId}` })
+}
+
+function handleStatusTap(status: DeriveStatus) {
+  const url = resolveDogDetailStatusRoute(status)
+  if (url) {
+    uni.navigateTo({
+      url,
+      fail() {
+        uni.showToast({ title: '详情打开失败', icon: 'none' })
+      },
+    })
+    return
+  }
+  openStatusSheet()
 }
 
 // ==================== D-6: 快速标记状态 ====================
@@ -1469,10 +1575,19 @@ async function doDelete() {
 
 // ==================== 数据加载 ====================
 
-async function loadData() {
-  loading.value = true
+async function loadData({ silent = false, shouldCleanup = false }: { silent?: boolean; shouldCleanup?: boolean } = {}) {
+  const loadToken = ++latestLoadToken
+  const showSkeleton = !silent && !hasLoadedOnce
+
+  if (showSkeleton) {
+    loading.value = true
+  }
+
   try {
-    await cleanupDuplicateIllnesses({ dog_id: dogId }).catch(() => {})
+    if (shouldCleanup) {
+      await cleanupDuplicateIllnesses({ dog_id: dogId }).catch(() => {})
+    }
+
     const [detailRes, cyclesRes, healthRes, littersRes, financeRes] = await Promise.all([
       fetchDetail(dogId),
       fetchCycles(dogId),
@@ -1480,6 +1595,8 @@ async function loadData() {
       fetchLitters(dogId),
       fetchDogFinance(dogId),
     ])
+
+    if (loadToken !== latestLoadToken) return
 
     if (detailRes?.data) {
       dog.value = detailRes.data
@@ -1497,13 +1614,21 @@ async function loadData() {
     if (financeRes?.data) {
       dogFinance.value = financeRes.data
     }
+    hasLoadedOnce = true
   } finally {
-    loading.value = false
+    if (showSkeleton && loadToken === latestLoadToken) {
+      loading.value = false
+    }
   }
 }
 
 onLoad((query) => {
   dogId = query?.id || ''
+  if (dogId) {
+    loadData({ shouldCleanup: true })
+  } else {
+    loading.value = false
+  }
 })
 
 onShow(() => {
@@ -1511,7 +1636,9 @@ onShow(() => {
   if (feedback?.message) {
     showSubmitBanner(feedback.message)
   }
-  if (dogId) loadData()
+  if (feedback && dogId) {
+    loadData({ silent: true, shouldCleanup: true })
+  }
 })
 </script>
 
@@ -1732,10 +1859,7 @@ onShow(() => {
   display: flex;
   padding: 0 var(--space-page);
   border-bottom: 1px solid rgba(216, 203, 189, 0.2);
-  position: sticky;
-  top: 0;
   background: var(--bg);
-  z-index: 5;
   flex-shrink: 0;
 }
 .dog-detail__tab-item {
@@ -1773,10 +1897,15 @@ onShow(() => {
   overflow-y: auto;
 }
 .dog-detail__pane {
-  padding: 16px var(--space-page) 32px;
+  padding: 12px var(--space-page) 28px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
+}
+.dog-detail__section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 /* ==================== Section 标签 ==================== */
@@ -1784,7 +1913,6 @@ onShow(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: -4px;
   &::before {
     content: '';
     width: 7px;
@@ -2885,14 +3013,18 @@ onShow(() => {
 /* ==================== D: 产仔记录 ==================== */
 .dog-detail__litter-item {
   padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   & + & { border-top: 1px solid rgba(216, 203, 189, 0.12); }
+  &:active { background: rgba(234, 62, 119, 0.03); }
 }
 .dog-detail__litter-meta {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
 }
+.dog-detail__litter-content { display: flex; align-items: center; gap: 12px; }
 .dog-detail__litter-date {
   font-size: 13px;
   font-weight: 600;
@@ -2976,7 +3108,25 @@ onShow(() => {
 .dog-detail__rec-amount--red { color: var(--red); }
 
 /* ==================== 添加记录 Sheet ==================== */
-.add-record-list { padding-bottom: 16px; }
+.add-record-list { padding-bottom: 16px; display: flex; flex-direction: column; gap: 14px; }
+.add-record-group {
+  background: var(--card);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.add-record-group__head {
+  padding: 12px 14px 8px;
+}
+.add-record-group__title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-3);
+  letter-spacing: 0.3px;
+}
+.add-record-group__body {
+  padding: 0 12px 6px;
+}
 .add-record-item {
   display: flex; align-items: center; gap: 14px;
   padding: 13px 4px;

@@ -150,7 +150,7 @@ const form = reactive({
 const date = ref<number | null>(null)
 const costInput = ref('')
 const details = reactive<Record<string, any>>({
-  method: '自然交配',
+  method: '人工授精',
   mating_number: 1,
 })
 const submitState = ref<'idle' | 'submitting' | 'success'>('idle')
@@ -161,7 +161,7 @@ const extraArrangementDate = ref<number | null>(getDefaultExtraArrangementDate()
 const extraArrangementNotes = ref('')
 const dateChipActive = ref<'today' | 'yesterday' | 'dayBefore' | ''>('today')
 
-const matingMethods = ['自然交配', '人工授精']
+const matingMethods = ['人工授精', '自然交配']
 
 const canSubmit = computed(() => {
   return !!date.value && !!selectedSire.value && !!selectedDog.value

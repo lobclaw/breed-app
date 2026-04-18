@@ -33,6 +33,12 @@ const STEP_META: Record<string, StepMeta> = {
     actionLabel: '检查',
     getAnchorDate: (task) => (typeof task.due_date === 'number' ? task.due_date - 10 * DAY_MS : null),
   },
+  mating: {
+    stageTitle: '配种',
+    anchorLabel: '卵泡检查',
+    actionLabel: '处理',
+    getAnchorDate: (task) => (typeof task.due_date === 'number' ? task.due_date : null),
+  },
   pregnancy_check: {
     stageTitle: '建议孕检',
     anchorLabel: '配种',

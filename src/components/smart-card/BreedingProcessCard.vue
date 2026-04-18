@@ -71,6 +71,8 @@ function goProcess() {
     const stepType = task.details?.step_type
     if (stepType === 'follicle_check') {
       url = '/pages/record/breeding-follicle'
+    } else if (stepType === 'mating') {
+      url = '/pages/record/breeding-mating'
     } else if (stepType === 'pregnancy_check') {
       url = '/pages/record/breeding-pregnancy'
     } else if (stepType === 'weaning_confirm' && task.litter_id) {

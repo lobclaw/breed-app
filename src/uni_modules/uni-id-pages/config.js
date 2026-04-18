@@ -1,5 +1,5 @@
 export default {
-  debug: true, // 开发阶段开启调试
+  debug: false, // 本地云函数调试时避免启动阶段额外 check-function 探测
   isAdmin: false,
   loginTypes: [
     'username', // 用户名 + 密码登录（开发阶段）

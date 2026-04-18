@@ -70,6 +70,9 @@
               <text v-if="record.type === 'mating' && record.details" class="timeline-detail">
                 {{ record.details.method || '自然交配' }} · {{ record.details.sire_name || '未知' }}
               </text>
+              <text v-if="record.type === 'heat_observation' && record.details" class="timeline-detail">
+                {{ record.details.vulva_status || '外阴状态待补充' }}<text v-if="record.details.discharge_status"> · {{ record.details.discharge_status }}</text><text v-if="record.details.symptoms?.length"> · {{ record.details.symptoms.join(' / ') }}</text>
+              </text>
               <text v-if="record.type === 'follicle_check' && record.details" class="timeline-detail">
                 左{{ record.details.left_count }}右{{ record.details.right_count }} · 发育良好
               </text>
@@ -194,13 +197,13 @@ const costItems = computed(() => {
 const totalCost = computed(() => costItems.value.reduce((s, i) => s + i.amount, 0))
 
 const TYPE_LABELS: Record<string, string> = {
-  heat: '发情', follicle_check: '卵泡检查', mating: '配种',
+  heat: '发情', heat_observation: '发情观察', follicle_check: '卵泡检查', mating: '配种',
   pregnancy_check: '孕检', prenatal_check: '产检',
   pre_labor: '临产监测', birth: '生产', abnormal_termination: '异常终止',
 }
 
 const DOT_COLORS: Record<string, string> = {
-  heat: 'text-3', follicle_check: 'teal', mating: 'rose',
+  heat: 'text-3', heat_observation: 'amber', follicle_check: 'teal', mating: 'rose',
   pregnancy_check: 'green', prenatal_check: 'blue',
   pre_labor: 'amber', birth: 'green', abnormal_termination: 'red',
 }
@@ -245,20 +248,17 @@ function onRecordTap(record: any) {
 
 function addRecord() {
   // 显示操作菜单选择记录类型
+  const itemList = cycle.value?.status === '发情中'
+    ? ['发情记录', '发情观察', '卵泡检查', '配种记录', '孕检记录', '产检记录', '临产监测', '异常终止']
+    : ['发情记录', '卵泡检查', '配种记录', '孕检记录', '产检记录', '临产监测', '异常终止']
+  const pages = cycle.value?.status === '发情中'
+    ? ['breeding-heat', 'heat-observation', 'breeding-follicle', 'breeding-mating', 'breeding-pregnancy', 'breeding-prenatal', 'breeding-prelabor', 'breeding-termination']
+    : ['breeding-heat', 'breeding-follicle', 'breeding-mating', 'breeding-pregnancy', 'breeding-prenatal', 'breeding-prelabor', 'breeding-termination']
   uni.showActionSheet({
-    itemList: ['发情记录', '卵泡检查', '配种记录', '孕检记录', '产检记录', '临产监测', '异常终止'],
+    itemList,
     success: (res) => {
-      const pages = [
-        'breeding-heat',
-        'breeding-follicle',
-        'breeding-mating',
-        'breeding-pregnancy',
-        'breeding-prenatal',
-        'breeding-prelabor',
-        'breeding-termination',
-      ]
       const page = pages[res.tapIndex]
-      uni.navigateTo({ url: `/pages/record/${page}?cycleId=${cycleId}&dogId=${cycle.value.dam_id}` })
+      uni.navigateTo({ url: `/pages/record/${page}?cycleId=${cycleId}&dogId=${cycle.value.dam_id}&dogName=${encodeURIComponent(cycle.value.dam_name)}&locked=true` })
     },
   })
 }

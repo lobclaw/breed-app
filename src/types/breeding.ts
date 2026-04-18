@@ -9,6 +9,7 @@ export type CycleStatus = '发情中' | '怀孕中' | '已生产' | '失败' | '
 // 繁育记录类型
 export type BreedingRecordType =
   | 'heat'                // 发情
+  | 'heat_observation'    // 发情观察
   | 'follicle_check'      // 卵泡检测
   | 'mating'              // 配种
   | 'pregnancy_check'     // 孕检

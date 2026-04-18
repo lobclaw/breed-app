@@ -25,6 +25,7 @@ const DEFAULT_VISIBLE_ROW_LIMIT = 4
 
 const BREEDING_STEP_TITLES: Record<string, string> = {
   follicle_check: '建议卵泡检查',
+  mating: '配种',
   pregnancy_check: '建议孕检',
   weaning_confirm: '确认断奶',
 }

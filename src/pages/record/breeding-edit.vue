@@ -375,7 +375,7 @@ const typeLabels: Record<string, string> = {
 
 const typeLabel = computed(() => typeLabels[form.type] || form.type)
 
-const matingMethods = ['自然交配', '人工授精']
+const matingMethods = ['人工授精', '自然交配']
 const follicleResults = ['发育中', '已成熟', '发育不良', '其他']
 const terminationTypes = ['流产', '死胎', '医疗终止', '确认未怀孕']
 
@@ -420,6 +420,9 @@ async function loadRecord(id: string) {
           details[k] = data.details[k]
         })
       }
+      if (form.type === 'mating' && !details.method) {
+        details.method = '人工授精'
+      }
     }
   } finally {
     loading.value = false
@@ -444,7 +447,7 @@ function buildDetails() {
   if (form.type === 'mating') {
     if (details.sire_id) d.sire_id = details.sire_id
     if (details.sire_name) d.sire_name = details.sire_name
-    d.method = details.method || '自然交配'
+    d.method = details.method || '人工授精'
     d.mating_number = parseInt(details.mating_number) || 1
   }
 

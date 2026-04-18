@@ -14,11 +14,6 @@ onLaunch(async () => {
   // 初始化认证状态（恢复登录、监听事件）
   const { init } = useAuth();
   await init();
-  // 预热常用云函数（消除首次冷启动）
-  try {
-    const svc = uniCloud.importObject('health-service', { customUI: true });
-    svc.ping().catch(() => {});
-  } catch {}
 });
 onShow(() => {
   console.log("App Show");

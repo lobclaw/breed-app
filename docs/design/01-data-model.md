@@ -158,6 +158,7 @@
 记录类型：
 
 - `heat`
+- `heat_observation`
 - `follicle_check`
 - `mating`
 - `pregnancy_check`
@@ -170,6 +171,8 @@
 
 - 公共字段在顶层，类型特有字段收口到 `details`
 - 繁育记录负责推进主流程状态
+- `heat_observation` 属于发情周期内补充观察日志，不推进主链、不生成任务、不修改周期状态、不联动费用
+- `heat_observation.details` 结构化记录 `vulva_status`、`discharge_status`、`symptoms`
 - 繁育表单已移除旧的“下次提醒”模型
 - 额外安排不是 `breeding_record`，而是独立任务语义
 

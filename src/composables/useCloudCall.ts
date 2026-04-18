@@ -3,6 +3,7 @@
  * 统一处理 loading / error / retry / toast 提示
  */
 import { ref } from 'vue'
+import { createCloudBusinessError, isCloudConnectTimeout } from '@/utils/cloudError'
 
 interface CloudCallOptions {
   /** 成功后的提示文字（不设置则不提示） */
@@ -62,6 +63,17 @@ export function useCloudCall<T = any>(
     ? loadingMode === 'global'
     : showLoading
 
+  async function invokeCloudMethod(args: any[]): Promise<T> {
+    const service = uniCloud.importObject(serviceName, { customUI: true })
+    const result = await (service as any)[methodName](...args)
+
+    if (result && result.errCode) {
+      throw createCloudBusinessError(result)
+    }
+
+    return result as T
+  }
+
   async function run(...args: any[]): Promise<T | null> {
     loading.value = true
     error.value = null
@@ -71,12 +83,14 @@ export function useCloudCall<T = any>(
     }
 
     try {
-      const service = uniCloud.importObject(serviceName, { customUI: true })
-      const result = await (service as any)[methodName](...args)
-
-      // 云对象返回 errCode 时表示业务错误
-      if (result && result.errCode) {
-        throw new Error(result.errMsg || result.message || '操作失败')
+      let result: T
+      try {
+        result = await invokeCloudMethod(args)
+      } catch (e) {
+        if (!isCloudConnectTimeout(e)) throw e
+        // 本地云函数刚启动时首个连接可能超时，短暂等待后重试一次
+        await new Promise(resolve => setTimeout(resolve, 250))
+        result = await invokeCloudMethod(args)
       }
 
       if (successMessage && successMode === 'toast') {
@@ -120,12 +134,22 @@ export async function cloudCall<T = any>(
   methodName: string,
   ...args: any[]
 ): Promise<T> {
-  const service = uniCloud.importObject(serviceName, { customUI: true })
-  const result = await (service as any)[methodName](...args)
+  const invoke = async () => {
+    const service = uniCloud.importObject(serviceName, { customUI: true })
+    const result = await (service as any)[methodName](...args)
 
-  if (result && result.errCode) {
-    throw new Error(result.errMsg || result.message || '操作失败')
+    if (result && result.errCode) {
+      throw createCloudBusinessError(result)
+    }
+
+    return result as T
   }
 
-  return result as T
+  try {
+    return await invoke()
+  } catch (e) {
+    if (!isCloudConnectTimeout(e)) throw e
+    await new Promise(resolve => setTimeout(resolve, 250))
+    return invoke()
+  }
 }

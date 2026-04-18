@@ -10,6 +10,7 @@ const dbCmd = db.command
 // 繁育记录类型 → 状态转换
 const STATUS_TRANSITIONS = {
   heat: '发情中',
+  heat_observation: null,   // 补充观察，不触发状态变更
   follicle_check: null,       // 不触发状态变更
   mating: '怀孕中',
   pregnancy_check: null,
@@ -36,6 +37,12 @@ const EXTRA_ARRANGEMENT_TITLE_MAP = {
 function validateDetails(type, details) {
   if (type === 'mating' && !details.sire_id) {
     throw new Error('配种记录必须选择种公')
+  }
+  if (type === 'heat_observation' && !details.vulva_status) {
+    throw new Error('发情观察必须填写外阴状态')
+  }
+  if (type === 'heat_observation' && !details.discharge_status) {
+    throw new Error('发情观察必须填写分泌物状态')
   }
   if (type === 'follicle_check' && details.left_count === undefined) {
     throw new Error('卵泡检查必须填写左侧数量')
@@ -166,6 +173,19 @@ async function generateTasks(familyId, type, data, cycleId, dog, recordId) {
     })
   }
 
+  if (type === 'follicle_check') {
+    await clearPendingBreedingMilestones(familyId, { cycleId })
+    await createBreedingMilestoneTask(familyId, dog, {
+      cycleId,
+      title: `${dog.name} · 配种`,
+      dueDate: data.date,
+      sourceRecordId: recordId,
+      details: {
+        step_type: 'mating',
+      },
+    })
+  }
+
   if (type === 'heat') {
     await clearPendingBreedingMilestones(familyId, { cycleId })
     await createBreedingMilestoneTask(familyId, dog, {
@@ -186,7 +206,7 @@ async function generateTasks(familyId, type, data, cycleId, dog, recordId) {
 async function createExpense(familyId, uid, data, dog, cycleId, sourceRecordId) {
   const now = Date.now()
   const typeLabels = {
-    heat: '发情', follicle_check: '卵泡检查', mating: '配种',
+    heat: '发情', heat_observation: '发情观察', follicle_check: '卵泡检查', mating: '配种',
     pregnancy_check: '孕检', prenatal_check: '产检',
     pre_labor: '临产监测', birth: '生产', abnormal_termination: '异常终止',
   }
@@ -323,12 +343,16 @@ module.exports = {
     if (!dogs || dogs.length === 0) throw new Error('犬只不存在')
     const dog = dogs[0]
 
+    const activeCycleStatuses = data.type === 'heat_observation'
+      ? ['发情中']
+      : ['发情中', '怀孕中']
+
     // 查找或创建繁育周期
     let cycleId = data.cycle_id
     if (!cycleId) {
       // 查找进行中的周期
       const { data: activeCycles } = await db.collection('breeding_cycles')
-        .where({ dam_id: data.dog_id, status: dbCmd.in(['发情中', '怀孕中']), family_id: familyId })
+        .where({ dam_id: data.dog_id, status: dbCmd.in(activeCycleStatuses), family_id: familyId })
         .orderBy('created_at', 'desc')
         .limit(1)
         .get()
@@ -351,6 +375,17 @@ module.exports = {
         cycleId = id
       } else {
         throw new Error('没有进行中的繁育周期，请先录入发情或配种记录')
+      }
+    }
+
+    if (data.type === 'heat_observation') {
+      const { data: cycles } = await db.collection('breeding_cycles')
+        .where({ _id: cycleId, family_id: familyId })
+        .limit(1)
+        .get()
+      if (!cycles || cycles.length === 0) throw new Error('繁育周期不存在')
+      if (cycles[0].status !== '发情中') {
+        throw new Error('当前不在发情中，无法记录发情观察')
       }
     }
 
@@ -419,13 +454,15 @@ module.exports = {
       )
     }
 
-    // 如有费用 → 创建 expense
-    if (data.cost && data.cost > 0) {
+    // 如有费用 → 创建 expense（发情观察不联动费用）
+    if (data.type !== 'heat_observation' && data.cost && data.cost > 0) {
       await createExpense(familyId, this.uid, data, dog, cycleId, recordId)
     }
 
-    // 写入后校验（三层保障第二层）
-    await postWriteVerify(recordId, 'breeding_records')
+    // 写入后校验（三层保障第二层），补充观察不要求关联任务
+    if (data.type !== 'heat_observation') {
+      await postWriteVerify(recordId, 'breeding_records')
+    }
 
     return { data: { recordId, cycleId } }
   },
@@ -924,6 +961,51 @@ module.exports = {
     await db.collection('breeding_records').doc(id).update(updateData)
 
     return { message: '已更新' }
+  },
+
+  /**
+   * 删除繁育记录
+   * 当前仅开放补充日志类记录删除，避免误删主链节点导致周期状态失真
+   */
+  async deleteBreedingRecord(id) {
+    if (!id) throw new Error('缺少记录 ID')
+
+    const { data: records } = await db.collection('breeding_records')
+      .where({ _id: id, family_id: this.familyId })
+      .get()
+    if (!records || records.length === 0) throw new Error('记录不存在')
+
+    const record = records[0]
+    if (record.type !== 'heat_observation') {
+      throw new Error('当前仅支持删除发情观察记录')
+    }
+
+    const { data: tasks } = await db.collection('tasks')
+      .where({
+        family_id: this.familyId,
+        source_record_id: id,
+        source_collection: 'breeding_records',
+      })
+      .get()
+
+    for (const task of tasks || []) {
+      await db.collection('tasks').doc(task._id).remove()
+    }
+
+    const { data: expenses } = await db.collection('expenses')
+      .where({
+        family_id: this.familyId,
+        source_record_id: id,
+      })
+      .get()
+
+    for (const expense of expenses || []) {
+      await db.collection('expenses').doc(expense._id).remove()
+    }
+
+    await db.collection('breeding_records').doc(id).remove()
+
+    return { message: '已删除' }
   },
 
   /**

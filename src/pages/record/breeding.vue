@@ -499,7 +499,7 @@ const typeOptions = [
   { label: '异常', value: 'abnormal_termination' },
 ]
 
-const matingMethods = ['自然交配', '人工授精']
+const matingMethods = ['人工授精', '自然交配']
 const follicleResults = ['发育中', '已成熟', '发育不良', '其他']
 const terminationTypes = ['流产', '死胎', '医疗终止', '确认未怀孕']
 
@@ -507,7 +507,7 @@ const terminationTypes = ['流产', '死胎', '医疗终止', '确认未怀孕']
 watch(() => form.type, () => {
   Object.keys(details).forEach(k => delete details[k])
   if (form.type === 'mating') {
-    details.method = '自然交配'
+    details.method = '人工授精'
     details.mating_number = 1
   }
   if (form.type === 'pre_labor') {
@@ -585,7 +585,7 @@ function buildDetails() {
   if (form.type === 'mating') {
     d.sire_id = selectedSire.value?._id || ''
     d.sire_name = selectedSire.value?.name || ''
-    d.method = details.method || '自然交配'
+    d.method = details.method || '人工授精'
     d.mating_number = parseInt(details.mating_number) || 1
   }
 

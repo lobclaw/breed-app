@@ -22,6 +22,26 @@
 
     <!-- 详情内容 -->
     <template v-if="!loading && record">
+      <view class="card-feed">
+        <view class="detail-summary" :class="`detail-summary--${cardColor}`">
+          <view class="detail-summary__main">
+            <view class="detail-summary__tag">
+              <text class="detail-summary__tag-text">{{ typeLabel }}</text>
+            </view>
+            <text class="detail-summary__title">{{ summaryTitle }}</text>
+            <text class="detail-summary__sub">{{ record.dog_name || '未知犬只' }} · {{ formatDate(record.date) }}</text>
+          </view>
+          <view class="detail-summary__meta">
+            <text class="detail-summary__meta-value">{{ summaryMeta }}</text>
+            <text class="detail-summary__meta-label">当前记录</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="section-label">
+        <view class="section-dot" :class="`section-dot--${cardColor}`" />
+        <text class="section-text">核心信息</text>
+      </view>
       <!-- 记录信息卡片 -->
       <view class="card-feed">
         <BCard :color="cardColor" :pressable="false">
@@ -119,11 +139,19 @@
       </view>
 
       <!-- 创建信息 -->
+      <view v-if="record.created_by_name" class="section-label">
+        <view class="section-dot section-dot--blue" />
+        <text class="section-text">关联信息</text>
+      </view>
       <view v-if="record.created_by_name" class="created-info">
         <text>创建人: {{ record.created_by_name }} · {{ formatDateTime(record.created_at) }}</text>
       </view>
 
       <!-- 操作按钮 -->
+      <view class="section-label">
+        <view class="section-dot section-dot--red" />
+        <text class="section-text">操作</text>
+      </view>
       <view class="action-area">
         <view class="btn-row">
           <BButton variant="ghost" @click="goEdit">编辑</BButton>
@@ -175,6 +203,7 @@ const loading = ref(true)
 const showMore = ref(false)
 
 let recordId = ''
+let hasShownOnce = false
 const submitBannerMessage = ref('')
 let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -212,6 +241,17 @@ const treatmentStatusColor = computed(() => {
   if (s === '已康复') return 'green'
   return 'plum'
 })
+const summaryTitle = computed(() => {
+  if (record.value?.type === 'vaccination') return record.value?.details?.vaccine_type || record.value?.details?.vaccine_name || '疫苗记录'
+  if (record.value?.type === 'deworming') return record.value?.details?.drug_name || dewormingTypeLabel.value || '驱虫记录'
+  if (record.value?.type === 'illness') return record.value?.details?.condition || '疾病记录'
+  return '健康记录'
+})
+const summaryMeta = computed(() => {
+  if (record.value?.type === 'illness') return record.value?.details?.treatment_status || '观察中'
+  if (record.value?.type === 'deworming') return dewormingTypeLabel.value
+  return typeLabel.value
+})
 
 const nextReminderText = computed(() => {
   const ts = record.value?.details?.next_reminder_date
@@ -238,7 +278,7 @@ function formatAmount(n: number): string {
   return n.toLocaleString('zh-CN')
 }
 
-const { run: fetchRecord } = useCloudCall('health-service', 'getHealthRecord')
+const { run: fetchRecord } = useCloudCall('health-service', 'getHealthRecordDetail')
 const { run: deleteRecord } = useCloudCall('health-service', 'deleteHealthRecord', {
   successMode: 'silent',
   loadingMode: 'local',
@@ -247,11 +287,19 @@ const { run: deleteRecord } = useCloudCall('health-service', 'deleteHealthRecord
 
 async function loadRecord() {
   loading.value = true
-  const result = await fetchRecord(recordId)
-  if (result?.data) {
-    record.value = result.data
+  const result = await fetchRecord({ id: recordId })
+  if (result) {
+    record.value = result.data || result
   }
   loading.value = false
+}
+
+function resolveHealthRecordId(query?: Record<string, unknown> | null) {
+  const id = typeof query?.id === 'string' ? query.id.trim() : ''
+  if (id) return id
+  const recordId = typeof query?.recordId === 'string' ? query.recordId.trim() : ''
+  if (recordId) return recordId
+  return typeof query?.record_id === 'string' ? query.record_id.trim() : ''
 }
 
 function goEdit() {
@@ -295,7 +343,7 @@ function showSubmitBanner(message: string) {
 }
 
 onLoad((query) => {
-  recordId = query?.id || ''
+  recordId = resolveHealthRecordId(query as Record<string, unknown>)
   if (recordId) {
     loadRecord()
   } else {
@@ -308,6 +356,11 @@ onShow(() => {
   if (feedback?.message) {
     showSubmitBanner(feedback.message)
   }
+  if (!hasShownOnce) {
+    hasShownOnce = true
+    return
+  }
+  if (recordId) loadRecord()
 })
 </script>
 
@@ -315,6 +368,64 @@ onShow(() => {
 
 .page {
   padding-bottom: 40px;
+}
+
+.detail-summary {
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  box-shadow: var(--shadow);
+}
+.detail-summary--blue { background: linear-gradient(135deg, var(--blue-soft), rgba(255, 255, 255, 0.98)); }
+.detail-summary--teal { background: linear-gradient(135deg, rgba(61, 168, 160, 0.12), rgba(255, 255, 255, 0.98)); }
+.detail-summary--red { background: linear-gradient(135deg, var(--red-soft), rgba(255, 255, 255, 0.98)); }
+.detail-summary__main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.detail-summary__tag {
+  width: fit-content;
+  padding: 4px 10px;
+  border-radius: var(--radius-tag);
+  background: rgba(255, 255, 255, 0.72);
+}
+.detail-summary__tag-text {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-2);
+}
+.detail-summary__title {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-1);
+}
+.detail-summary__sub {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+.detail-summary__meta {
+  min-width: 68px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.76);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.detail-summary__meta-value {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-1);
+}
+.detail-summary__meta-label {
+  font-size: 11px;
+  color: var(--text-3);
 }
 
 /* ==================== HEADER ACTIONS ==================== */
@@ -381,6 +492,28 @@ onShow(() => {
   gap: 8px;
   &.amber { background: var(--amber-soft); color: var(--amber); }
   &.blue { background: var(--blue-soft); color: var(--blue); }
+}
+
+.section-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px 10px;
+}
+.section-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.section-dot--blue { background: var(--blue); }
+.section-dot--teal { background: var(--teal); }
+.section-dot--red { background: var(--red); }
+.section-text {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-3);
+  letter-spacing: 0.5px;
 }
 
 /* ==================== CREATED INFO ==================== */

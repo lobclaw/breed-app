@@ -13,7 +13,7 @@
     },
     "type": {
       "bsonType": "string",
-      "enum": ["heat", "follicle_check", "mating", "pregnancy_check", "prenatal_check", "pre_labor", "birth", "abnormal_termination"],
+      "enum": ["heat", "heat_observation", "follicle_check", "mating", "pregnancy_check", "prenatal_check", "pre_labor", "birth", "abnormal_termination"],
       "description": "记录类型"
     },
     "cycle_id": {

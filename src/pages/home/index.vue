@@ -1357,7 +1357,10 @@ onShow(async () => {
 
   // 确保家庭信息已加载
   if (!hasFamily.value) {
-    await loadFamily()
+    const loadResult = await loadFamily()
+    if (loadResult === 'error' && !hasFamily.value) {
+      return
+    }
   }
   // 没有家庭则跳转创建页
   if (!hasFamily.value) {

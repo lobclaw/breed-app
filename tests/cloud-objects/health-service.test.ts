@@ -7,10 +7,13 @@ import {
   resetDB,
   seedCollection,
   createMockUniCloud,
+  createCloudObjectContext,
 } from '../helpers/mock-unicloud'
 
 const mockUniCloud = createMockUniCloud()
 ;(globalThis as any).uniCloud = mockUniCloud
+process.env.NODE_ENV = 'test'
+const healthService = require('../../uniCloud-alipay/cloudfunctions/health-service/index.obj.js')
 
 describe('health-service', () => {
   const db = mockUniCloud.database()
@@ -310,6 +313,53 @@ describe('health-service', () => {
       expect(pending).toHaveLength(0)
       expect(cancelled).toHaveLength(2)
       expect(completed).toHaveLength(1)
+    })
+
+    it('应返回兼容详情页的用药任务详情字段', async () => {
+      const startDate = new Date('2026-04-18T09:30:00+08:00').getTime()
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+      seedCollection('medication_tasks', [{
+        _id: 'med_detail_1',
+        dog_id: 'dog_1',
+        dog_name: '花花',
+        family_id: familyId,
+        protocol_id: 'protocol_1',
+        drug_name: '阿莫西林',
+        dosage: '1片',
+        method: '口服',
+        frequency: 2,
+        duration_days: 3,
+        actual_start_date: startDate,
+        status: '进行中',
+        daily_doses: {
+          1: 2,
+          2: 1,
+        },
+        notes: '饭后服用',
+        created_at: startDate,
+        updated_at: startDate,
+      }])
+      seedCollection('medication_protocols', [{
+        _id: 'protocol_1',
+        family_id: familyId,
+        name: '感冒方案',
+        deleted_at: null,
+      }])
+
+      const result = await healthService.getMedicationTaskDetail.call(ctx, { medication_task_id: 'med_detail_1' })
+      const normalizedStartDate = new Date(startDate)
+      normalizedStartDate.setHours(0, 0, 0, 0)
+      const expectedStartDate = normalizedStartDate.getTime()
+
+      expect(result.data.protocol_name).toBe('感冒方案')
+      expect(result.data.status).toBe('active')
+      expect(result.data.start_date).toBe(expectedStartDate)
+      expect(result.data.end_date).toBe(expectedStartDate + 2 * 86400000)
+      expect(result.data.completed_dates).toEqual([expectedStartDate])
+      expect(result.data.completed_map[expectedStartDate]).toMatchObject({
+        name: '已完成2/2次',
+      })
     })
   })
 

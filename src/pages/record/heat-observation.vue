@@ -1,19 +1,15 @@
 <!--
   R-19 发情观察 — 快速监测日志模式
-  录入发情期观察数据：外阴状态 + 征兆勾选 + 补充说明
+  录入发情期观察数据：外阴状态 + 分泌物状态 + 行为征兆 + 补充说明
 -->
 <template>
-  <view class="heat-observation">
+  <view class="page heat-observation">
     <!-- 页面标题栏 -->
     <BPageHeader title="录入发情观察" :subtitle="headerSubtitle" />
 
     <!-- 犬只选择 -->
-    <view class="heat-observation__dog-picker">
-      <BDogPicker v-model="selectedDog" roleFilter="种狗" genderFilter="母" title="选择种母" />
-    </view>
-
-    <!-- 主要内容 -->
-    <view class="heat-observation__content">
+    <view class="form-body heat-observation__content">
+      <BDogPicker v-model="selectedDog" roleFilter="种狗" genderFilter="母" title="选择种母" :readonly="dogLocked" />
 
       <!-- 外阴状态分段选择 -->
       <view class="heat-observation__section">
@@ -34,11 +30,30 @@
         </view>
       </view>
 
+      <!-- 分泌物状态分段选择 -->
+      <view class="heat-observation__section">
+        <view class="heat-observation__label">
+          <view class="heat-observation__label-dot" />
+          <text class="heat-observation__label-text">分泌物状态</text>
+        </view>
+        <view class="heat-observation__segments heat-observation__segments--grid">
+          <view
+            v-for="opt in dischargeOptions"
+            :key="opt"
+            class="heat-observation__segment"
+            :class="{ 'heat-observation__segment--active': dischargeStatus === opt }"
+            @click="dischargeStatus = opt"
+          >
+            <text class="heat-observation__segment-text">{{ opt }}</text>
+          </view>
+        </view>
+      </view>
+
       <!-- 征兆勾选 -->
       <view class="heat-observation__section">
         <view class="heat-observation__label">
           <view class="heat-observation__label-dot" />
-          <text class="heat-observation__label-text">观察到的征兆</text>
+          <text class="heat-observation__label-text">行为征兆</text>
         </view>
         <view class="heat-observation__symptom-grid">
           <view
@@ -72,16 +87,20 @@
           :maxlength="500"
         />
       </view>
+    </view>
 
-      <!-- 时间 + 保存 -->
-      <view class="heat-observation__bottom">
-        <view class="heat-observation__save-btn" @click="handleSave">
-          <text class="heat-observation__save-text">{{ submitting ? '提交中...' : '保存记录' }}</text>
-        </view>
-        <view class="heat-observation__time" @click="pickTime">
-          <text class="material-icons-round" style="font-size: 14px; color: var(--text-3);">schedule</text>
-          <text class="heat-observation__time-text">{{ displayTime }}</text>
-        </view>
+    <view class="fixed-bottom">
+      <button
+        class="submit-btn"
+        :class="{ 'submit-btn--success': submitState === 'success' }"
+        :disabled="!canSubmit || submitState === 'submitting'"
+        @click="handleSave"
+      >
+        {{ submitButtonText }}
+      </button>
+      <view class="heat-observation__time" @click="pickTime">
+        <text class="material-icons-round" style="font-size: 14px; color: var(--text-3);">schedule</text>
+        <text class="heat-observation__time-text">{{ displayTime }}</text>
       </view>
     </view>
   </view>
@@ -97,13 +116,23 @@ import BDogPicker from '@/components/form/BDogPicker.vue'
 
 // 犬只选择
 const selectedDog = ref<any>(null)
+const dogLocked = ref(false)
+const cycleId = ref('')
 
 // 外阴状态选项
-const vulvaOptions = ['硬/肿胀', '开始软化', '完全松软']
+const vulvaOptions = ['硬/肿胀', '开始软化', '明显松软']
 const vulvaStatus = ref('')
+const dischargeOptions = ['鲜红较多', '暗红减少', '淡粉/草黄色', '接近透明']
+const dischargeStatus = ref('')
 
 // 征兆列表
-const symptoms = ['桃子硬', '桃子软', '接受爬跨', '出血量变化', '行为异常', '外阴肿胀', '频繁排尿', '食欲变化']
+const symptoms = [
+  '主动靠近公犬',
+  '接受爬跨',
+  '翘尾侧偏',
+  '频繁排尿',
+  '舔舐外阴增多',
+]
 const selectedSymptoms = ref<string[]>([])
 
 // 备注
@@ -111,11 +140,19 @@ const notes = ref('')
 
 // 时间
 const recordTime = ref(new Date())
-const submitting = ref(false)
+const submitState = ref<'idle' | 'submitting' | 'success'>('idle')
 const displayTime = computed(() => {
   const h = String(recordTime.value.getHours()).padStart(2, '0')
   const m = String(recordTime.value.getMinutes()).padStart(2, '0')
   return `${h}:${m}`
+})
+const canSubmit = computed(() => {
+  return !!selectedDog.value && !!vulvaStatus.value && !!dischargeStatus.value && submitState.value !== 'submitting'
+})
+const submitButtonText = computed(() => {
+  if (submitState.value === 'submitting') return '提交中...'
+  if (submitState.value === 'success') return '已保存'
+  return '保存记录'
 })
 
 const headerSubtitle = computed(() => {
@@ -124,13 +161,15 @@ const headerSubtitle = computed(() => {
 })
 
 onLoad((query: any) => {
+  cycleId.value = query?.cycleId || ''
   if (query?.dogId) {
     selectedDog.value = {
       _id: query.dogId,
-      name: query?.dogName || '',
+      name: query?.dogName ? decodeURIComponent(query.dogName) : '',
       gender: '母',
       role: '种狗',
     }
+    if (query?.locked === 'true' || query?.dogName) dogLocked.value = true
   }
 })
 
@@ -154,14 +193,14 @@ function pickTime() {
   // #endif
 }
 
-const { run: addHealthRecord } = useCloudCall('health-service', 'addHealthRecord', {
+const { run: addBreedingRecord } = useCloudCall('breeding-service', 'addBreedingRecord', {
   successMode: 'silent',
   loadingMode: 'local',
   throwOnError: true,
 })
 
 async function handleSave() {
-  if (submitting.value) return
+  if (submitState.value === 'submitting') return
   if (!selectedDog.value) {
     uni.showToast({ title: '请选择犬只', icon: 'none' })
     return
@@ -170,26 +209,35 @@ async function handleSave() {
     uni.showToast({ title: '请选择外阴状态', icon: 'none' })
     return
   }
+  if (!dischargeStatus.value) {
+    uni.showToast({ title: '请选择分泌物状态', icon: 'none' })
+    return
+  }
 
-  submitting.value = true
+  submitState.value = 'submitting'
   try {
-    const res = await addHealthRecord({
+    const res = await addBreedingRecord({
       type: 'heat_observation',
       dog_id: selectedDog.value._id,
+      cycle_id: cycleId.value || undefined,
       date: recordTime.value.getTime(),
       details: {
         vulva_status: vulvaStatus.value,
+        discharge_status: dischargeStatus.value,
         symptoms: selectedSymptoms.value,
       },
       notes: notes.value || null,
     })
     if (res) {
+      submitState.value = 'success'
       queueSubmitFeedback({ message: '已保存观察记录' })
       await wait(140)
       uni.navigateBack({ delta: 1 })
     }
+  } catch {
+    submitState.value = 'idle'
   } finally {
-    submitting.value = false
+    if (submitState.value !== 'success') submitState.value = 'idle'
   }
 }
 </script>
@@ -199,16 +247,8 @@ async function handleSave() {
   min-height: 100vh;
   background: var(--bg);
 
-  /* 犬只选择器区域 */
-  &__dog-picker {
-    padding: 0 var(--space-page) 12px;
-  }
-
   /* 内容 */
   &__content {
-    padding: 0 var(--space-page) 32px;
-    display: flex;
-    flex-direction: column;
     gap: 20px;
   }
 
@@ -246,6 +286,11 @@ async function handleSave() {
   &__segments {
     display: flex;
     gap: 8px;
+  }
+
+  &__segments--grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   &__segment {
@@ -324,38 +369,12 @@ async function handleSave() {
     transition: border-color 0.15s ease;
   }
 
-  /* 底部 */
-  &__bottom {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    margin-top: 4px;
-  }
-
-  &__save-btn {
-    width: 100%;
-    height: 48px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--radius-btn);
-    background: var(--rose);
-    box-shadow: 0 4px 16px rgba(234, 62, 119, 0.25);
-    transition: all 0.12s ease;
-    &:active { transform: scale(0.94); opacity: 0.85; }
-  }
-
-  &__save-text {
-    font-size: 15px;
-    font-weight: 700;
-    color: #FFFFFF;
-  }
-
   &__time {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 4px;
+    margin-top: 10px;
   }
 
   &__time-text {

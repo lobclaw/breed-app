@@ -240,6 +240,243 @@ describe('breeding-service', () => {
       expect(extraTask.details?.anchor_id).toBe(res.data.cycleId)
     })
 
+    it('录入卵泡检查后应推进到配种节点', async () => {
+      const now = Date.now()
+      seedCollection('breeding_cycles', [{
+        _id: 'cycle_follicle',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        status: '发情中',
+        created_at: now,
+        updated_at: now,
+      }])
+      seedCollection('tasks', [{
+        _id: 'milestone_heat',
+        family_id: familyId,
+        dog_id: 'dam_1',
+        dog_name: '花花',
+        cycle_id: 'cycle_follicle',
+        type: 'breeding_milestone',
+        title: '花花 · 建议卵泡检查',
+        due_date: now,
+        status: 'pending',
+        details: { step_type: 'follicle_check' },
+        created_at: now,
+        updated_at: now,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      await breedingService.addBreedingRecord.call(ctx, {
+        type: 'follicle_check',
+        dog_id: 'dam_1',
+        cycle_id: 'cycle_follicle',
+        date: now,
+        details: {
+          left_count: 3,
+          right_count: 2,
+          result: '已成熟',
+        },
+      })
+
+      const { data: tasks } = await db.collection('tasks')
+        .where({ cycle_id: 'cycle_follicle' })
+        .get()
+
+      const oldMilestone = tasks.find(t => t._id === 'milestone_heat')
+      const nextMilestone = tasks.find(t => t.type === 'breeding_milestone' && t.details?.step_type === 'mating')
+
+      expect(oldMilestone?.status).toBe('cancelled')
+      expect(nextMilestone).toBeTruthy()
+      expect(nextMilestone?.title).toBe('花花 · 配种')
+      expect(nextMilestone?.due_date).toBe(now)
+      expect(nextMilestone?.status).toBe('pending')
+    })
+
+    it('录入发情观察时应写入繁育记录但不推进主链', async () => {
+      const now = Date.now()
+      seedCollection('breeding_cycles', [{
+        _id: 'cycle_heat_observation',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        status: '发情中',
+        created_at: now,
+        updated_at: now,
+      }])
+      seedCollection('tasks', [{
+        _id: 'milestone_existing',
+        family_id: familyId,
+        dog_id: 'dam_1',
+        dog_name: '花花',
+        cycle_id: 'cycle_heat_observation',
+        type: 'breeding_milestone',
+        title: '花花 · 建议卵泡检查',
+        due_date: now + 86400000,
+        status: 'pending',
+        details: { step_type: 'follicle_check' },
+        created_at: now,
+        updated_at: now,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      const res = await breedingService.addBreedingRecord.call(ctx, {
+        type: 'heat_observation',
+        dog_id: 'dam_1',
+        cycle_id: 'cycle_heat_observation',
+        date: now,
+        notes: '观察到接受爬跨',
+        details: {
+          vulva_status: '开始软化',
+          discharge_status: '淡粉/草黄色',
+          symptoms: ['接受爬跨', '频繁排尿'],
+        },
+      })
+
+      expect(res.data.recordId).toBeTruthy()
+
+      const { data: records } = await db.collection('breeding_records')
+        .where({ cycle_id: 'cycle_heat_observation', type: 'heat_observation' })
+        .get()
+      const { data: tasks } = await db.collection('tasks')
+        .where({ cycle_id: 'cycle_heat_observation' })
+        .get()
+      const { data: cycles } = await db.collection('breeding_cycles')
+        .where({ _id: 'cycle_heat_observation' })
+        .get()
+      const { data: expenses } = await db.collection('expenses')
+        .where({ linked_cycle_id: 'cycle_heat_observation' })
+        .get()
+
+      expect(records).toHaveLength(1)
+      expect(records[0].details?.vulva_status).toBe('开始软化')
+      expect(records[0].details?.discharge_status).toBe('淡粉/草黄色')
+      expect(records[0].details?.symptoms).toEqual(['接受爬跨', '频繁排尿'])
+      expect(records[0].notes).toBe('观察到接受爬跨')
+      expect(tasks).toHaveLength(1)
+      expect(tasks[0]._id).toBe('milestone_existing')
+      expect(tasks[0].status).toBe('pending')
+      expect(cycles[0].status).toBe('发情中')
+      expect(expenses).toHaveLength(0)
+    })
+
+    it('没有进行中周期时录入发情观察应拒绝', async () => {
+      const now = Date.now()
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+      await expect(breedingService.addBreedingRecord.call(ctx, {
+        type: 'heat_observation',
+        dog_id: 'dam_1',
+        date: now,
+        details: {
+          vulva_status: '硬/肿胀',
+          discharge_status: '鲜红较多',
+          symptoms: [],
+        },
+      })).rejects.toThrow('没有进行中的繁育周期，请先录入发情或配种记录')
+    })
+
+    it('发情观察不应挂到怀孕中的周期', async () => {
+      const now = Date.now()
+      seedCollection('breeding_cycles', [{
+        _id: 'cycle_pregnant',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        status: '怀孕中',
+        created_at: now,
+        updated_at: now,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      await expect(breedingService.addBreedingRecord.call(ctx, {
+        type: 'heat_observation',
+        dog_id: 'dam_1',
+        cycle_id: 'cycle_pregnant',
+        date: now,
+        details: {
+          vulva_status: '开始软化',
+          discharge_status: '暗红减少',
+          symptoms: ['接受爬跨'],
+        },
+      })).rejects.toThrow('当前不在发情中，无法记录发情观察')
+    })
+
+    it('应支持删除发情观察记录', async () => {
+      const now = Date.now()
+      seedCollection('breeding_records', [{
+        _id: 'record_heat_observation',
+        type: 'heat_observation',
+        cycle_id: 'cycle_1',
+        dog_id: 'dam_1',
+        family_id: familyId,
+        date: now,
+        notes: '补充观察',
+        details: {
+          vulva_status: '开始软化',
+          discharge_status: '接近透明',
+          symptoms: ['接受爬跨'],
+        },
+        created_by: 'user_1',
+        created_at: now,
+        updated_at: now,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      const res = await breedingService.deleteBreedingRecord.call(ctx, 'record_heat_observation')
+
+      expect(res.message).toBe('已删除')
+
+      const { data: records } = await db.collection('breeding_records')
+        .where({ _id: 'record_heat_observation' })
+        .get()
+      expect(records).toHaveLength(0)
+    })
+
+    it('发情观察缺少分泌物状态时应拒绝', async () => {
+      const now = Date.now()
+      seedCollection('breeding_cycles', [{
+        _id: 'cycle_heat_missing_discharge',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        status: '发情中',
+        created_at: now,
+        updated_at: now,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      await expect(breedingService.addBreedingRecord.call(ctx, {
+        type: 'heat_observation',
+        dog_id: 'dam_1',
+        cycle_id: 'cycle_heat_missing_discharge',
+        date: now,
+        details: {
+          vulva_status: '开始软化',
+          symptoms: ['接受爬跨'],
+        },
+      })).rejects.toThrow('发情观察必须填写分泌物状态')
+    })
+
+    it('不应删除主链繁育记录', async () => {
+      const now = Date.now()
+      seedCollection('breeding_records', [{
+        _id: 'record_heat',
+        type: 'heat',
+        cycle_id: 'cycle_1',
+        dog_id: 'dam_1',
+        family_id: familyId,
+        date: now,
+        details: {},
+        created_by: 'user_1',
+        created_at: now,
+        updated_at: now,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      await expect(breedingService.deleteBreedingRecord.call(ctx, 'record_heat')).rejects.toThrow('当前仅支持删除发情观察记录')
+    })
+
     it('不同来源记录的同日同类额外安排不应被误判为重复', async () => {
       const now = Date.now()
       seedCollection('breeding_cycles', [{

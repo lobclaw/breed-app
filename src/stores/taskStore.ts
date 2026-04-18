@@ -5,6 +5,7 @@
  */
 import { defineStore } from 'pinia'
 import { cloudCall } from '@/composables/useCloudCall'
+import { buildMedicationDetailUrl } from '@/utils/dogDetailNavigation'
 import { getHealthTypeTone } from '@/utils/themeSemantics'
 
 interface TaskCard {
@@ -184,7 +185,10 @@ export const useTaskStore = defineStore('tasks', {
         case 'vaccination': return '/pages/record/health-vaccination' + dogParam
         case 'deworming': return '/pages/record/health-deworming' + dogParam
         case 'breeding_milestone': return `/pages/breeding/cycle${t.cycle_id ? '?id=' + t.cycle_id : ''}`
-        case 'medication': return `/pages/record/medication-detail${t.source_record_id ? '?taskId=' + t.source_record_id : ''}`
+        case 'medication': {
+          const medicationTaskId = t.medication_task_id || t.medicationTaskId || t._id || t.id || t.task_id || t.source_record_id
+          return medicationTaskId ? buildMedicationDetailUrl(medicationTaskId) : '/pages/record/medication-detail'
+        }
         default: return '/pages/record/health-vaccination' + dogParam
       }
     },
