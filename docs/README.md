@@ -41,6 +41,10 @@
 
 - `docs/ROADMAP.md`：当前里程碑路线、阶段目标、验收重点、非目标
 
+## 验收文档
+
+- `docs/record-form-acceptance.md`：记录表单统一重构后的手工验收清单
+
 ## 归档文档
 
 - `docs/design/archive/06-unicloud-validation.md`

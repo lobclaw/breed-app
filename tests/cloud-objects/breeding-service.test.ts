@@ -716,4 +716,120 @@ describe('breeding-service', () => {
       expect(expenses[0].category).toBe('配种')
     })
   })
+
+  describe('记录详情与编辑', () => {
+    it('获取繁育记录详情时附带当前额外安排', async () => {
+      const now = Date.now()
+      seedCollection('breeding_records', [{
+        _id: 'record_extra_1',
+        type: 'heat',
+        cycle_id: 'cycle_extra_1',
+        dog_id: 'dam_1',
+        dog_name: '花花',
+        family_id: familyId,
+        date: now,
+        details: { start_date: now },
+        created_at: now,
+        updated_at: now,
+      }])
+      seedCollection('tasks', [{
+        _id: 'task_extra_1',
+        family_id: familyId,
+        dog_id: 'dam_1',
+        dog_name: '花花',
+        cycle_id: 'cycle_extra_1',
+        type: 'breeding_extra_arrangement',
+        title: '联系医生',
+        due_date: now + 86400000,
+        status: 'pending',
+        source_record_id: 'record_extra_1',
+        source_collection: 'breeding_records',
+        details: {
+          kind: 'contact_doctor',
+          notes: '明天复查',
+          anchor_type: 'cycle',
+        },
+        created_at: now,
+        updated_at: now,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      const record = await breedingService.getBreedingRecordDetail.call(ctx, { id: 'record_extra_1' })
+
+      expect(record.extra_arrangement).toEqual({
+        task_id: 'task_extra_1',
+        kind: 'contact_doctor',
+        due_date: now + 86400000,
+        notes: '明天复查',
+        anchor_type: 'cycle',
+      })
+    })
+
+    it('编辑繁育记录时可同步更新关联额外安排任务', async () => {
+      const now = Date.now()
+      seedCollection('breeding_cycles', [{
+        _id: 'cycle_extra_2',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        status: '发情中',
+        created_at: now,
+        updated_at: now,
+      }])
+      seedCollection('breeding_records', [{
+        _id: 'record_extra_2',
+        type: 'heat',
+        cycle_id: 'cycle_extra_2',
+        dog_id: 'dam_1',
+        dog_name: '花花',
+        family_id: familyId,
+        date: now,
+        details: { start_date: now },
+        created_at: now,
+        updated_at: now,
+      }])
+      seedCollection('tasks', [{
+        _id: 'task_extra_2',
+        family_id: familyId,
+        dog_id: 'dam_1',
+        dog_name: '花花',
+        cycle_id: 'cycle_extra_2',
+        type: 'breeding_extra_arrangement',
+        title: '联系医生',
+        due_date: now + 86400000,
+        status: 'pending',
+        source_record_id: 'record_extra_2',
+        source_collection: 'breeding_records',
+        details: {
+          kind: 'contact_doctor',
+          notes: '原备注',
+          anchor_type: 'cycle',
+        },
+        created_at: now,
+        updated_at: now,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      await breedingService.updateBreedingRecord.call(ctx, {
+        id: 'record_extra_2',
+        notes: '更新后备注',
+        details: { start_date: now },
+        extra_arrangement: {
+          kind: 'recheck_observe',
+          due_date: now + 2 * 86400000,
+          notes: '后天复查',
+        },
+      })
+
+      const { data: tasks } = await db.collection('tasks').where({
+        _id: 'task_extra_2',
+        family_id: familyId,
+      }).get()
+
+      expect(tasks[0].title).toBe('复测观察')
+      expect(tasks[0].due_date).toBe(now + 2 * 86400000)
+      expect(tasks[0].details.kind).toBe('recheck_observe')
+      expect(tasks[0].details.notes).toBe('后天复查')
+    })
+  })
 })

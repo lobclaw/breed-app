@@ -2,7 +2,7 @@
  * health-service 云对象测试
  * 测试健康记录、用药任务、提醒生成
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import {
   resetDB,
   seedCollection,
@@ -40,6 +40,10 @@ describe('health-service', () => {
       family_id: familyId,
       deleted_at: null,
     }])
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
   describe('健康记录创建', () => {
@@ -196,6 +200,145 @@ describe('health-service', () => {
   })
 
   describe('用药任务', () => {
+    it('超期未全量完成的旧疗程不应再算重复，并自动收口为已完成', async () => {
+      const now = new Date('2026-04-15T10:00:00+08:00').getTime()
+      vi.spyOn(Date, 'now').mockReturnValue(now)
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+      seedCollection('medication_tasks', [{
+        _id: 'med_overdue_partial',
+        dog_id: 'dog_1',
+        dog_name: '花花',
+        family_id: familyId,
+        drug_name: '阿莫西林',
+        frequency: 1,
+        duration_days: 3,
+        actual_start_date: new Date('2026-04-10T09:00:00+08:00').getTime(),
+        status: '进行中',
+        daily_doses: {
+          1: 1,
+          2: 0,
+          3: 0,
+        },
+        created_at: now,
+        updated_at: now,
+      }])
+
+      const result = await healthService.batchCheckDuplicateMedication.call(ctx, ['dog_1'], '阿莫西林')
+      expect(result.data).toEqual([])
+
+      const { data: meds } = await db.collection('medication_tasks').doc('med_overdue_partial').get()
+      expect(meds[0].status).toBe('已完成')
+    })
+
+    it('超期且已全量完成的旧疗程不应再算重复，并保持已完成', async () => {
+      const now = new Date('2026-04-15T10:00:00+08:00').getTime()
+      vi.spyOn(Date, 'now').mockReturnValue(now)
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+      seedCollection('medication_tasks', [{
+        _id: 'med_overdue_done',
+        dog_id: 'dog_1',
+        dog_name: '花花',
+        family_id: familyId,
+        drug_name: '阿莫西林',
+        frequency: 2,
+        duration_days: 3,
+        actual_start_date: new Date('2026-04-10T09:00:00+08:00').getTime(),
+        status: '进行中',
+        daily_doses: {
+          1: 2,
+          2: 2,
+          3: 2,
+        },
+        created_at: now,
+        updated_at: now,
+      }])
+
+      const result = await healthService.batchCheckDuplicateMedication.call(ctx, ['dog_1'], '阿莫西林')
+      expect(result.data).toEqual([])
+
+      const { data: meds } = await db.collection('medication_tasks').doc('med_overdue_done').get()
+      expect(meds[0].status).toBe('已完成')
+    })
+
+    it('未超期且进行中的同名任务仍应返回重复项', async () => {
+      const now = new Date('2026-04-12T10:00:00+08:00').getTime()
+      vi.spyOn(Date, 'now').mockReturnValue(now)
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+      seedCollection('medication_tasks', [{
+        _id: 'med_active_dup',
+        dog_id: 'dog_1',
+        dog_name: '花花',
+        family_id: familyId,
+        drug_name: '阿莫西林',
+        frequency: 1,
+        duration_days: 3,
+        actual_start_date: new Date('2026-04-10T09:00:00+08:00').getTime(),
+        status: '进行中',
+        daily_doses: {
+          1: 1,
+        },
+        created_at: now,
+        updated_at: now,
+      }])
+
+      const result = await healthService.batchCheckDuplicateMedication.call(ctx, ['dog_1'], '阿莫西林')
+      expect(result.data).toHaveLength(1)
+      expect(result.data[0]).toMatchObject({
+        dog_id: 'dog_1',
+        dogName: '花花',
+        drugName: '阿莫西林',
+        day: 3,
+        totalDays: 3,
+      })
+    })
+
+    it('批量创建遇到超期旧疗程时，应自动收口后正常创建新任务', async () => {
+      const now = new Date('2026-04-15T10:00:00+08:00').getTime()
+      vi.spyOn(Date, 'now').mockReturnValue(now)
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+      seedCollection('medication_tasks', [{
+        _id: 'med_expired_before_create',
+        dog_id: 'dog_1',
+        dog_name: '花花',
+        family_id: familyId,
+        drug_name: '阿莫西林',
+        frequency: 1,
+        duration_days: 3,
+        actual_start_date: new Date('2026-04-10T09:00:00+08:00').getTime(),
+        status: '进行中',
+        daily_doses: {
+          1: 1,
+        },
+        created_at: now,
+        updated_at: now,
+      }])
+
+      const result = await healthService.batchStartMedication.call(ctx, {
+        dog_ids: ['dog_1'],
+        drug_name: '阿莫西林',
+        dosage: '1',
+        dosage_unit: 'tablet',
+        method: '口服',
+        frequency: 1,
+        duration_days: 5,
+        actual_start_date: now,
+      })
+
+      expect(result.data.count).toBe(1)
+
+      const { data: meds } = await db.collection('medication_tasks')
+        .where({ dog_id: 'dog_1', family_id: familyId, drug_name: '阿莫西林' })
+        .get()
+
+      expect(meds).toHaveLength(2)
+      const statuses = meds.map(item => item.status).sort()
+      expect(statuses).toEqual(['已完成', '进行中'])
+    })
+
     it('应创建用药任务和每日提醒', async () => {
       const now = Date.now()
       const durationDays = 7
@@ -357,6 +500,9 @@ describe('health-service', () => {
       expect(result.data.start_date).toBe(expectedStartDate)
       expect(result.data.end_date).toBe(expectedStartDate + 2 * 86400000)
       expect(result.data.completed_dates).toEqual([expectedStartDate])
+      expect(result.data.completed_dose_count).toBe(3)
+      expect(result.data.total_dose_count).toBe(6)
+      expect(result.data.is_fully_completed).toBe(false)
       expect(result.data.completed_map[expectedStartDate]).toMatchObject({
         name: '已完成2/2次',
       })

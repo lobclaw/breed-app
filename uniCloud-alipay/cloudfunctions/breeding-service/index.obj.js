@@ -152,6 +152,52 @@ async function createExtraArrangementTask(familyId, dog, cycleId, sourceRecordId
   return id
 }
 
+async function syncExtraArrangementTask(familyId, dog, cycleId, sourceRecordId, extraArrangement) {
+  const now = Date.now()
+  const { data: existingTasks } = await db.collection('tasks').where({
+    family_id: familyId,
+    type: 'breeding_extra_arrangement',
+    source_record_id: sourceRecordId,
+    status: 'pending',
+  }).get()
+
+  const activeTask = existingTasks && existingTasks.length > 0 ? existingTasks[0] : null
+
+  if (!extraArrangement?.kind || !extraArrangement?.due_date || !cycleId) {
+    if (activeTask?._id) {
+      await db.collection('tasks').doc(activeTask._id).remove()
+    }
+    return null
+  }
+
+  const title = EXTRA_ARRANGEMENT_TITLE_MAP[extraArrangement.kind] || EXTRA_ARRANGEMENT_TITLE_MAP.other
+  const updateData = {
+    dog_id: dog._id,
+    dog_name: dog.name,
+    cycle_id: cycleId,
+    title,
+    due_date: extraArrangement.due_date,
+    priority: extraArrangement.due_date <= now ? 'overdue' : 'upcoming',
+    updated_at: now,
+    details: {
+      kind: extraArrangement.kind,
+      notes: extraArrangement.notes || null,
+      anchor_type: 'cycle',
+      anchor_id: cycleId,
+      dog_id: dog._id,
+      source_record_id: sourceRecordId,
+      manual: true,
+    },
+  }
+
+  if (activeTask?._id) {
+    await db.collection('tasks').doc(activeTask._id).update(updateData)
+    return activeTask._id
+  }
+
+  return createExtraArrangementTask(familyId, dog, cycleId, sourceRecordId, extraArrangement)
+}
+
 /**
  * 根据记录类型生成任务
  */
@@ -938,13 +984,37 @@ module.exports = {
       .get()
     if (!records || records.length === 0) throw new Error('记录不存在')
 
-    return records[0]
+    const record = records[0]
+    const { data: extraTasks } = await db.collection('tasks')
+      .where({
+        family_id: this.familyId,
+        type: 'breeding_extra_arrangement',
+        source_record_id: id,
+        status: 'pending',
+      })
+      .orderBy('created_at', 'desc')
+      .limit(1)
+      .get()
+
+    const extraTask = extraTasks && extraTasks.length > 0 ? extraTasks[0] : null
+    return {
+      ...record,
+      extra_arrangement: extraTask
+        ? {
+          task_id: extraTask._id,
+          kind: extraTask.details?.kind || null,
+          due_date: extraTask.due_date || null,
+          notes: extraTask.details?.notes || null,
+          anchor_type: extraTask.details?.anchor_type || 'cycle',
+        }
+        : null,
+    }
   },
 
   /**
    * 更新繁育记录
    */
-  async updateBreedingRecord({ id, date, cost, notes, details }) {
+  async updateBreedingRecord({ id, date, cost, notes, details, extra_arrangement }) {
     if (!id) throw new Error('缺少记录 ID')
 
     const { data: records } = await db.collection('breeding_records')
@@ -952,13 +1022,31 @@ module.exports = {
       .get()
     if (!records || records.length === 0) throw new Error('记录不存在')
 
-    const updateData = { updated_at: Date.now() }
+    const record = records[0]
+    const now = Date.now()
+    const updateData = { updated_at: now }
     if (date !== undefined) updateData.date = date
     if (cost !== undefined) updateData.cost = cost
     if (notes !== undefined) updateData.notes = notes
     if (details !== undefined) updateData.details = details
 
     await db.collection('breeding_records').doc(id).update(updateData)
+
+    if (record.type !== 'heat_observation' && extra_arrangement !== undefined) {
+      const { data: dogs } = await db.collection('dogs')
+        .where({ _id: record.dog_id, family_id: this.familyId, deleted_at: null })
+        .limit(1)
+        .get()
+      if (dogs && dogs.length > 0) {
+        await syncExtraArrangementTask(
+          this.familyId,
+          dogs[0],
+          record.cycle_id,
+          id,
+          extra_arrangement
+        )
+      }
+    }
 
     return { message: '已更新' }
   },

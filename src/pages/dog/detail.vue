@@ -34,7 +34,7 @@
         <text class="material-icons-round dog-detail__hero-avatar-icon">pets</text>
       </view>
       <view class="dog-detail__hero-info">
-        <text class="dog-detail__hero-name">{{ dog.name || '未命名' }}</text>
+        <text class="dog-detail__hero-name">{{ dog.name || '未命名' }} </text>
         <text class="dog-detail__hero-sub">
           {{ dog.breed || '马尔济斯' }} · {{ dog.gender }}<text v-if="dog.birth_date"> · {{ formatAge(dog.birth_date) }}</text>
         </text>
@@ -115,9 +115,9 @@
                   <view class="dog-detail__st-icon" :class="statusToneClass(s.type, 'icon')">
                     <text class="material-icons-round">{{ statusIconMap[s.type] || 'info' }}</text>
                   </view>
-                  <view>
+                  <view class="dog-detail__st-body">
                     <text class="dog-detail__st-title">{{ statusTitle(s) }}</text>
-                    <text v-if="s.detail" class="dog-detail__st-sub">{{ s.detail }}</text>
+                    <text v-if="statusSub(s)" class="dog-detail__st-sub">{{ statusSub(s) }}</text>
                   </view>
                 </view>
                 <text class="material-icons-round dog-detail__st-chevron">chevron_right</text>
@@ -131,11 +131,11 @@
                     :style="{ width: Math.min(100, Math.round(s.progress.current / s.progress.total * 100)) + '%' }"
                   />
                 </view>
-                <text class="dog-detail__st-progress-text">第{{ s.progress.current }}天 / 共{{ s.progress.total }}天</text>
+                <text class="dog-detail__st-progress-text" :class="statusToneClass(s.type, 'progressText')">{{ statusProgressText(s) }}</text>
               </view>
               <!-- 元信息 -->
-              <view v-if="s.meta && s.meta.length > 0" class="dog-detail__st-meta">
-                <view v-for="(m, mi) in s.meta" :key="mi" class="dog-detail__st-meta-item">
+              <view v-if="statusMeta(s).length > 0" class="dog-detail__st-meta">
+                <view v-for="(m, mi) in statusMeta(s)" :key="mi" class="dog-detail__st-meta-item">
                   <text class="material-icons-round dog-detail__st-meta-icon">{{ m.icon }}</text>
                   <text class="dog-detail__st-meta-text">{{ m.text }}</text>
                 </view>
@@ -911,28 +911,53 @@
     </BSheet>
 
     <!-- ==================== 添加记录 Sheet ==================== -->
-    <BSheet v-model:visible="showAddRecordSheet" title="添加记录">
+    <BSheet v-model:visible="showAddRecordSheet" title="添加记录" height="78vh">
       <view class="add-record-list">
+        <view class="add-record-context">
+          <view class="add-record-context__badge">
+            <text class="material-icons-round add-record-context__badge-icon">pets</text>
+          </view>
+          <view class="add-record-context__body">
+            <view class="add-record-context__title-row">
+              <text class="add-record-context__title">{{ dog?.name || '当前犬只' }}</text>
+              <text v-if="activeCycle?._id" class="add-record-context__status">{{ activeCycle.status || '进行中' }}</text>
+            </view>
+            <text class="add-record-context__sub">{{ activeCycle?._id ? '繁育记录将自动带入当前周期' : '按业务分组快速记录' }}</text>
+          </view>
+        </view>
         <view
           v-for="group in addRecordGroups"
           :key="group.key"
           class="add-record-group"
         >
           <view class="add-record-group__head">
-            <text class="add-record-group__title">{{ group.title }}</text>
+            <view class="add-record-group__meta">
+              <text class="add-record-group__title">{{ group.title }}</text>
+              <text class="add-record-group__count">{{ group.items.length }}项</text>
+            </view>
+            <text
+              v-if="group.key === 'breeding' && activeCycle?._id"
+              class="add-record-group__hint"
+            >将自动带入当前周期</text>
           </view>
           <view class="add-record-group__body">
             <view
               v-for="item in group.items"
               :key="item.page"
               class="add-record-item"
+              :class="{ 'add-record-item--full': item.layout === 'full' }"
               @click="navigateToRecord(item)"
             >
-              <view class="add-record-item__icon" :style="{ background: 'color-mix(in srgb, ' + item.color + ' 15%, transparent)' }">
+              <view class="add-record-item__icon" :style="{ background: item.iconBg }">
                 <text class="material-icons-round" :style="{ color: item.color, fontSize: '20px' }">{{ item.icon }}</text>
               </view>
-              <text class="add-record-item__label">{{ item.label }}</text>
-              <text class="material-icons-round add-record-item__arrow">chevron_right</text>
+              <view class="add-record-item__content">
+                <text class="add-record-item__label">{{ item.label }}</text>
+                <text class="add-record-item__desc">{{ item.desc }}</text>
+              </view>
+              <view class="add-record-item__action">
+                <text class="material-icons-round add-record-item__arrow">chevron_right</text>
+              </view>
             </view>
           </view>
         </view>
@@ -981,10 +1006,14 @@ const tabs = [
 
 type AddRecordItem = {
   icon: string
+  iconBg: string
   color: string
   label: string
+  desc: string
   page: string
+  url?: string
   kind: 'breeding' | 'health' | 'medication'
+  layout?: 'default' | 'full'
 }
 
 // 状态 → 功能色映射
@@ -1026,6 +1055,7 @@ const medStatuses = computed(() => statuses.value.filter((s: DeriveStatus) => s.
 const vaccineRecords = computed(() => healthRecords.value.filter((r: any) => r.type === 'vaccination'))
 const dewormingRecords = computed(() => healthRecords.value.filter((r: any) => r.type === 'deworming'))
 const illnessRecords = computed(() => healthRecords.value.filter((r: any) => r.type === 'illness'))
+const latestIllnessRecord = computed(() => illnessRecords.value[0] || null)
 const activeCycleProgress = computed(() => {
   const pregStatus = statuses.value.find((s: DeriveStatus) => s.type === '怀孕中')
   if (!pregStatus?.progress) return null
@@ -1106,19 +1136,112 @@ function healthIconColor(type: string) {
   return getHealthTypeTone(type).color
 }
 
-function statusTitle(s: DeriveStatus): string {
-  if (s.type === '怀孕中' && s.progress) return `孕期第${s.progress.current}天`
-  if (s.type === '用药中' && s.detail) return s.detail.split(' ')[0]
-  if (s.type === '生病中' && s.label) return s.label
-  return s.type
+function splitStatusDetail(detail?: string | null) {
+  const raw = `${detail || ''}`.trim()
+  if (!raw) return { primary: '', secondary: '' }
+
+  const dotParts = raw.split('·').map(part => part.trim()).filter(Boolean)
+  if (dotParts.length > 1) {
+    return {
+      primary: dotParts[0],
+      secondary: dotParts.slice(1).join(' · '),
+    }
+  }
+
+  const spaceParts = raw.split(/\s+/).filter(Boolean)
+  if (spaceParts.length > 1) {
+    return {
+      primary: spaceParts[0],
+      secondary: spaceParts.slice(1).join(' '),
+    }
+  }
+
+  return { primary: raw, secondary: '' }
 }
 
-function statusToneClass(type: string, prefix: 'hero' | 'row' | 'icon' | 'progress') {
+function getIllnessStartTs() {
+  const startTs = latestIllnessRecord.value?.details?.start_date
+  if (typeof startTs === 'number') return startTs
+  return typeof latestIllnessRecord.value?.date === 'number' ? latestIllnessRecord.value.date : null
+}
+
+function getElapsedDaysFromTs(startTs?: number | null) {
+  if (typeof startTs !== 'number') return null
+  return Math.max(1, Math.floor((Date.now() - startTs) / 86400000) + 1)
+}
+
+function statusTitle(s: DeriveStatus): string {
+  if (s.type === '怀孕中' && s.progress) return `${s.type} · 第${s.progress.current}天`
+  if (s.type === '发情中') {
+    const day = s.progress?.current || activeCycle.value?.day_count
+    return day ? `${s.type} · 第${day}天` : s.type
+  }
+  if (s.type === '哺乳中' && s.progress) return `${s.type} · 第${s.progress.current}天`
+  if (s.type === '用药中') {
+    const med = splitStatusDetail(s.detail).primary || s.label || s.type
+    return s.progress ? `${med} · 第${s.progress.current}天` : med
+  }
+  if (s.type === '生病中') {
+    const illnessName = s.label || latestIllnessRecord.value?.details?.condition || s.type
+    const day = getElapsedDaysFromTs(getIllnessStartTs())
+    return day ? `${illnessName} · 第${day}天` : illnessName
+  }
+  return s.label || s.type
+}
+
+function statusSub(s: DeriveStatus): string {
+  if (s.type === '用药中') {
+    return splitStatusDetail(s.detail).secondary
+  }
+  if (s.type === '生病中') {
+    const treatmentStatus = latestIllnessRecord.value?.details?.treatment_status
+    return treatmentStatus || s.detail || latestIllnessRecord.value?.notes || '查看症状与治疗状态'
+  }
+  if (s.type === '发情中') {
+    const startTs = activeCycle.value?.start_date || activeCycle.value?.created_at
+    return startTs ? `当前周期开始于 ${formatDate(startTs)}` : '当前繁育周期进行中'
+  }
+  return s.detail || ''
+}
+
+function statusProgressText(s: DeriveStatus): string {
+  if (!s.progress) return ''
+  return `${s.progress.current}/${s.progress.total}天`
+}
+
+function statusMeta(s: DeriveStatus): Array<{ icon: string; text: string }> {
+  if (Array.isArray(s.meta) && s.meta.length > 0) return s.meta
+
+  if (s.type === '生病中') {
+    const items: Array<{ icon: string; text: string }> = []
+    const treatmentStatus = latestIllnessRecord.value?.details?.treatment_status
+    const dateTs = getIllnessStartTs()
+    const day = getElapsedDaysFromTs(dateTs)
+    if (treatmentStatus) items.push({ icon: 'healing', text: treatmentStatus })
+    if (day) items.push({ icon: 'schedule', text: `第${day}天` })
+    if (typeof dateTs === 'number') items.push({ icon: 'event', text: `开始于 ${formatDate(dateTs)}` })
+    return items
+  }
+
+  if (s.type === '发情中') {
+    const items: Array<{ icon: string; text: string }> = []
+    const startTs = activeCycle.value?.start_date || activeCycle.value?.created_at
+    const day = s.progress?.current || activeCycle.value?.day_count
+    if (typeof startTs === 'number') items.push({ icon: 'event', text: `开始于 ${formatDate(startTs)}` })
+    if (day) items.push({ icon: 'schedule', text: `第${day}天` })
+    return items
+  }
+
+  return []
+}
+
+function statusToneClass(type: string, prefix: 'hero' | 'row' | 'icon' | 'progress' | 'progressText') {
   if (type === '生病中') return `dog-detail__st-${prefix}--illness`
   const tone = statusColorMap[type] || 'rose'
   if (prefix === 'hero') return `dog-detail__hero-tag--${tone}`
   if (prefix === 'row') return `dog-detail__status-row--${tone}`
   if (prefix === 'icon') return `dog-detail__st-icon--${tone}`
+  if (prefix === 'progressText') return `dog-detail__st-progress-text--${tone}`
   return `dog-detail__st-progress-fill--${tone}`
 }
 
@@ -1172,30 +1295,31 @@ const addRecordGroups = [
     key: 'breeding',
     title: '繁育',
     items: [
-      { icon: 'favorite', color: 'var(--red)', label: '发情记录', page: 'breeding-heat', kind: 'breeding' },
-      { icon: 'monitor_heart', color: 'var(--amber)', label: '发情观察', page: 'heat-observation', kind: 'breeding' },
-      { icon: 'biotech', color: 'var(--blue)', label: '卵泡检查', page: 'breeding-follicle', kind: 'breeding' },
-      { icon: 'pets', color: 'var(--plum)', label: '配种记录', page: 'breeding-mating', kind: 'breeding' },
-      { icon: 'pregnant_woman', color: 'var(--green)', label: '孕检记录', page: 'breeding-pregnancy', kind: 'breeding' },
-      { icon: 'medical_services', color: 'var(--blue)', label: '产检记录', page: 'breeding-prenatal', kind: 'breeding' },
-      { icon: 'schedule', color: 'var(--amber)', label: '临产监测', page: 'breeding-prelabor', kind: 'breeding' },
-      { icon: 'cancel', color: 'var(--red)', label: '异常终止', page: 'breeding-termination', kind: 'breeding' },
+      { icon: 'whatshot', iconBg: 'var(--icon-rose)', color: 'var(--rose)', label: '发情记录', desc: '记录发情开始', page: 'breeding-heat', kind: 'breeding' },
+      { icon: 'monitor_heart', iconBg: 'var(--icon-amber)', color: 'var(--amber)', label: '发情观察', desc: '补充观察日志', page: 'heat-observation', kind: 'breeding' },
+      { icon: 'biotech', iconBg: 'var(--icon-teal)', color: 'var(--teal)', label: '卵泡检查', desc: '记录发育情况', page: 'breeding-follicle', kind: 'breeding' },
+      { icon: 'favorite', iconBg: 'var(--icon-rose)', color: 'var(--rose)', label: '配种记录', desc: '进入配种节点', page: 'breeding-mating', kind: 'breeding' },
+      { icon: 'pregnant_woman', iconBg: 'var(--icon-green)', color: 'var(--green)', label: '孕检记录', desc: '确认怀孕结果', page: 'breeding-pregnancy', kind: 'breeding' },
+      { icon: 'medical_services', iconBg: 'var(--icon-blue)', color: 'var(--blue)', label: '产检记录', desc: '补录产检结果', page: 'breeding-prenatal', kind: 'breeding' },
+      { icon: 'schedule', iconBg: 'var(--icon-amber)', color: 'var(--amber)', label: '临产监测', desc: '观察临产信号', page: 'breeding-prelabor', kind: 'breeding' },
+      { icon: 'child_friendly', iconBg: 'var(--icon-rose)', color: 'var(--rose)', label: '生产记录', desc: '记录分娩结果', page: 'birth-wizard', url: '/pages/breeding/birth-wizard', kind: 'breeding' },
+      { icon: 'warning', iconBg: 'var(--icon-red)', color: 'var(--red)', label: '异常终止', desc: '记录终止结果', page: 'breeding-termination', kind: 'breeding' },
     ] as AddRecordItem[],
   },
   {
     key: 'health',
     title: '健康',
     items: [
-      { icon: 'vaccines', color: 'var(--blue)', label: '疫苗记录', page: 'health-vaccination', kind: 'health' },
-      { icon: 'shield', color: 'var(--teal)', label: '驱虫记录', page: 'health-deworming', kind: 'health' },
-      { icon: 'sick', color: 'var(--red)', label: '疾病记录', page: 'health-illness', kind: 'health' },
+      { icon: 'vaccines', iconBg: 'var(--icon-blue)', color: 'var(--blue)', label: '疫苗记录', desc: '接种与提醒', page: 'health-vaccination', kind: 'health' },
+      { icon: 'shield', iconBg: 'var(--icon-teal)', color: 'var(--teal)', label: '驱虫记录', desc: '内驱外驱补录', page: 'health-deworming', kind: 'health' },
+      { icon: 'sick', iconBg: 'var(--icon-red)', color: 'var(--red)', label: '疾病记录', desc: '症状与治疗状态', page: 'health-illness', kind: 'health', layout: 'full' },
     ] as AddRecordItem[],
   },
   {
     key: 'medication',
     title: '用药',
     items: [
-      { icon: 'medication', color: 'var(--plum)', label: '开始用药', page: 'health-medication', kind: 'medication' },
+      { icon: 'medication', iconBg: 'var(--icon-plum)', color: 'var(--plum)', label: '开始用药', desc: '创建连续用药任务', page: 'health-medication', kind: 'medication', layout: 'full' },
     ] as AddRecordItem[],
   },
 ]
@@ -1205,11 +1329,20 @@ function addRecord() {
 }
 
 function navigateToRecord(item: AddRecordItem) {
+  if (item.url === '/pages/breeding/birth-wizard' && !activeCycle.value?._id) {
+    uni.showToast({ title: '当前无可记录的繁育周期', icon: 'none' })
+    return
+  }
+
   showAddRecordSheet.value = false
   const dogName = encodeURIComponent(dog.value?.name || '')
   const cycleQuery = item.kind === 'breeding' && activeCycle.value?._id ? `&cycleId=${activeCycle.value._id}` : ''
+  const damNameQuery = item.url === '/pages/breeding/birth-wizard'
+    ? `&damName=${dogName}`
+    : ''
+  const baseUrl = item.url || `/pages/record/${item.page}`
   uni.navigateTo({
-    url: `/pages/record/${item.page}?dogId=${dogId}&dogName=${dogName}&locked=true${cycleQuery}`,
+    url: `${baseUrl}?dogId=${dogId}&dogName=${dogName}&locked=true${cycleQuery}${damNameQuery}`,
     fail() {
       uni.showToast({ title: '页面打开失败', icon: 'none' })
     },
@@ -1747,17 +1880,21 @@ onShow(() => {
   min-width: 0;
 }
 .dog-detail__hero-name {
+  display: block;
   font-family: var(--font-display);
   font-size: 20px;
   font-weight: 800;
   color: var(--text-1);
   line-height: 1.2;
+  margin-right: 6px;
 }
 .dog-detail__hero-sub {
+  display: block;
   font-size: 13px;
   font-weight: 500;
   color: var(--text-2);
   margin-top: 2px;
+  line-height: 1.35;
 }
 .dog-detail__hero-tags {
   display: flex;
@@ -1972,10 +2109,10 @@ onShow(() => {
   & > * { position: relative; z-index: 1; }
 }
 .dog-detail__status-row {
-  padding: 14px 16px 14px 18px;
+  padding: 14px 16px 13px 18px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 9px;
   cursor: pointer;
   transition: background 0.12s ease;
   border-left: 3.5px solid transparent;
@@ -1994,13 +2131,15 @@ onShow(() => {
 
 .dog-detail__st-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
+  gap: 10px;
 }
 .dog-detail__st-left {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
+  min-width: 0;
 }
 .dog-detail__st-icon {
   width: 34px;
@@ -2018,16 +2157,25 @@ onShow(() => {
 .dog-detail__st-icon--illness { background: rgba(255, 217, 212, 0.8); .material-icons-round { color: var(--red); } }
 .dog-detail__st-icon--amber { background: var(--icon-amber); .material-icons-round { color: var(--amber); } }
 .dog-detail__st-icon--green { background: var(--icon-green); .material-icons-round { color: var(--green); } }
+.dog-detail__st-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
 .dog-detail__st-title {
+  display: block;
   font-size: 14px;
   font-weight: 700;
   color: var(--text-1);
+  line-height: 1.25;
 }
 .dog-detail__st-sub {
+  display: block;
   font-size: 12px;
   font-weight: 500;
   color: var(--text-2);
-  margin-top: 1px;
+  line-height: 1.35;
 }
 .dog-detail__st-chevron {
   font-family: 'Material Icons Round';
@@ -2905,20 +3053,26 @@ onShow(() => {
   &--green { background: var(--green); }
 }
 .dog-detail__st-progress-text {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 800;
   flex-shrink: 0;
 }
+.dog-detail__st-progress-text--rose { color: var(--rose); }
+.dog-detail__st-progress-text--plum { color: var(--plum); }
+.dog-detail__st-progress-text--red { color: var(--red); }
+.dog-detail__st-progress-text--illness { color: rgba(224, 82, 82, 0.8); }
+.dog-detail__st-progress-text--amber { color: var(--amber); }
+.dog-detail__st-progress-text--green { color: var(--green); }
 .dog-detail__st-meta {
   display: flex;
-  gap: 14px;
+  gap: 8px 10px;
   flex-wrap: wrap;
 }
 .dog-detail__st-meta-item {
   display: flex;
   align-items: center;
   gap: 4px;
+  min-height: 20px;
 }
 .dog-detail__st-meta-icon {
   font-family: 'Material Icons Round';
@@ -3108,15 +3262,94 @@ onShow(() => {
 .dog-detail__rec-amount--red { color: var(--red); }
 
 /* ==================== 添加记录 Sheet ==================== */
-.add-record-list { padding-bottom: 16px; display: flex; flex-direction: column; gap: 14px; }
+.add-record-list {
+  padding-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.add-record-context {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 2px 0;
+}
+
+.add-record-context__badge {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--primary-soft), rgba(255, 240, 232, 0.9));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.add-record-context__badge-icon {
+  font-size: 18px;
+  color: var(--primary);
+}
+
+.add-record-context__body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.add-record-context__title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.add-record-context__title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-1);
+  line-height: 1.2;
+}
+
+.add-record-context__status {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--amber-soft);
+  color: var(--amber);
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.add-record-context__sub {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-3);
+}
+
 .add-record-group {
   background: var(--card);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow);
   overflow: hidden;
+  border: 1px solid rgba(184, 160, 138, 0.08);
 }
 .add-record-group__head {
-  padding: 12px 14px 8px;
+  padding: 10px 12px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.add-record-group__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .add-record-group__title {
   font-size: 12px;
@@ -3124,20 +3357,107 @@ onShow(() => {
   color: var(--text-3);
   letter-spacing: 0.3px;
 }
+.add-record-group__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 18px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--card-dim);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-3);
+}
+.add-record-group__hint {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--primary);
+  background: var(--primary-soft);
+  padding: 3px 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
 .add-record-group__body {
-  padding: 0 12px 6px;
+  padding: 0 10px 10px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 .add-record-item {
-  display: flex; align-items: center; gap: 14px;
-  padding: 13px 4px;
-  border-bottom: 0.5px solid var(--card-dim);
-  &:last-child { border-bottom: none; }
-  &:active { opacity: 0.6; }
+  min-height: 76px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 11px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(250, 246, 243, 0.96));
+  border: 1px solid rgba(184, 160, 138, 0.10);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
+
+  &:active {
+    transform: scale(0.98);
+    opacity: 0.86;
+  }
+}
+.add-record-item--full {
+  grid-column: 1 / -1;
 }
 .add-record-item__icon {
-  width: 38px; height: 38px; border-radius: 10px;
-  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
-.add-record-item__label { flex: 1; font-size: 15px; font-weight: 600; color: var(--text-1); }
-.add-record-item__arrow { font-size: 18px; color: var(--text-4); }
+.add-record-item__content {
+  flex: 1;
+  min-width: 0;
+}
+.add-record-item__label {
+  display: block;
+  font-size: 14px;
+  line-height: 1.2;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.add-record-item__desc {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.25;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.add-record-item__action {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.add-record-item__arrow {
+  font-size: 16px;
+  color: var(--text-4);
+}
+
+@media (max-width: 380px) {
+  .add-record-group__body {
+    grid-template-columns: 1fr;
+  }
+
+  .add-record-item--full {
+    grid-column: auto;
+  }
+
+  .add-record-context {
+    align-items: flex-start;
+  }
+}
 </style>

@@ -97,9 +97,9 @@ const breedingTypes: RecordType[] = [
   { icon: 'whatshot', iconBg: 'var(--icon-rose)', iconColor: 'var(--rose)', label: '发情', url: '/pages/record/breeding-heat' },
   { icon: 'biotech', iconBg: 'var(--icon-teal)', iconColor: 'var(--teal)', label: '卵泡', url: '/pages/record/breeding-follicle' },
   { icon: 'favorite', iconBg: 'var(--icon-rose)', iconColor: 'var(--rose)', label: '配种', url: '/pages/record/breeding-mating' },
-  { icon: 'stethoscope', iconBg: 'var(--icon-green)', iconColor: 'var(--green)', label: '孕检', url: '/pages/record/breeding-pregnancy' },
-  { icon: 'assignment', iconBg: 'var(--icon-blue)', iconColor: 'var(--blue)', label: '产检', url: '/pages/record/breeding-prenatal' },
-  { icon: 'thermostat', iconBg: 'var(--icon-plum)', iconColor: 'var(--plum)', label: '临产', url: '/pages/record/breeding-prelabor' },
+  { icon: 'pregnant_woman', iconBg: 'var(--icon-green)', iconColor: 'var(--green)', label: '孕检', url: '/pages/record/breeding-pregnancy' },
+  { icon: 'medical_services', iconBg: 'var(--icon-blue)', iconColor: 'var(--blue)', label: '产检', url: '/pages/record/breeding-prenatal' },
+  { icon: 'schedule', iconBg: 'var(--icon-amber)', iconColor: 'var(--amber)', label: '临产', url: '/pages/record/breeding-prelabor' },
   { icon: 'child_friendly', iconBg: 'var(--icon-rose)', iconColor: 'var(--rose)', label: '生产', url: '/pages/breeding/birth-wizard' },
   { icon: 'warning', iconBg: 'var(--icon-red)', iconColor: 'var(--red)', label: '异常终止', url: '/pages/record/breeding-termination' },
 ]

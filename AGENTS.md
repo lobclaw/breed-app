@@ -12,6 +12,7 @@
 - 产品事实源：`docs/design/01-data-model.md`、`docs/design/02-features.md`
 - 工程事实源：`docs/design/03-tech-stack.md`、`docs/design/04-implementation.md`
 - 低频映射与审计：`docs/design/05-field-page-mapping.md`
+- 记录表单重构后的手工验收入口：`docs/record-form-acceptance.md`
 
 ## 当前状态
 
@@ -59,6 +60,8 @@
 - 全局设置 `box-sizing: border-box`
 - 详情页首屏信息区优先保证“可见和可点”；不要为了视觉压缩使用会遮挡内容的 sticky/负 margin 组合
 - `BSheet`、`BModal`、`BDeleteConfirm` 打开时锁定页面滚动
+- 犬只详情的「添加记录」弹窗与首页 FAB 统一设计语言，但保持对象上下文变体：保留一步直达，不复用首页的推荐/常用/全部类型两层结构
+- 犬只详情的「添加记录」弹窗优先展示当前犬只/当前周期上下文，内容使用高密分组宫格，不回退成长列表 Sheet
 - 表单中的互斥选项使用 pill-select；Segmented Control 仅用于视图/标签切换
 - 记录表单提交反馈统一为“局部 loading + 弱成功反馈 + 来源页承接”，不要退回强 success toast 驱动
 - 提交按钮统一支持 `默认 / 提交中 / 成功瞬态` 三态
@@ -69,6 +72,9 @@
 - `BFormOptions` 仅用于健康记录表单，封装“标记为待办 + 日期 chips + 提醒开关”
 - 疫苗/驱虫页使用显式文案「创建下次待办」，默认关闭
 - 繁育表单不再复用 `BFormOptions`，统一使用 `BExtraArrangementSection`
+- 记录表单按业务域统一，不做跨健康/繁育/用药的万能表单：健康统一到 `HealthRecordForm`，繁育统一到 `BreedingRecordForm`，用药创建统一到 `MedicationTaskForm`
+- `/pages/record/*` 现有路由继续保留，对外是稳定 contract；页面本身只允许退化为薄壳，不要再把新增/编辑逻辑重新散回各自页面
+- 记录表单的提交三态、旧 query 兼容和来源页反馈优先走共享逻辑（`useRecordSubmitState`、`recordFormRoutes` 一类工具），不要在单页里再复制一套
 - `BDogPicker` 多选模式不保留确认按钮；点选、全选、取消全选都要实时回传
 - `BDogPicker` 的全选只作用于当前 `filteredDogs`
 
@@ -146,6 +152,7 @@
 - 配种方式选项顺序统一为 `人工授精` 在前、`自然交配` 在后；新建与编辑配种记录默认选中 `人工授精`
 - 额外安排字段只包含 `kind + due_date + notes`
 - 额外安排由 `breeding-service.addBreedingRecord` 同次提交创建 `breeding_extra_arrangement`
+- 繁育记录编辑页与新增页共用同一套 `BExtraArrangementSection` 口径；编辑时只同步当前记录关联的 `breeding_extra_arrangement` 任务，不扩散影响同周期其他任务
 - 完成、推迟、跳过额外安排只作用于任务本身，不生成 `breeding_record`
 - `breeding_milestone` 必须按 `details.step_type` 路由
 - 首页进入繁育流程页时必须传 `dogId + dogName + cycleId + taskId + locked=true`
@@ -156,8 +163,11 @@
 - 健康提醒默认是建议型；只有显式 `create_task=true` 或勾选「创建下次待办」才生成任务
 - 首页批量完成疫苗/驱虫必须同时创建真实 `health_record`
 - 同一犬只同一药名只允许一个进行中的用药任务
+- 已超过疗程天数的旧用药任务，在同狗同药名重复检测/创建链路中先自动收口为 `已完成`，不再继续阻塞新疗程创建
 - 重复用药弹窗分为“将创建”和“已有同名任务”两段；重复犬默认不勾选覆盖
 - 覆盖的语义是“取消旧任务 + 创建新任务”
+- 用药任务主状态表达疗程是否结束；未全量完成时通过详情页或副文案表达 `部分完成`
+- 用药详情页的主实体是 `medication_task`；跳转和详情查询优先使用用药任务 ID，不回退依赖 `source_record_id`
 
 ## 犬只状态与疾病唯一性
 
@@ -165,6 +175,7 @@
 - 状态优先级统一：`疾病` → `用药` → `怀孕/哺乳` → `发情`
 - 犬只详情状态点击口径：优先进入对应业务详情/流程；`生病中 → 健康记录详情`、`用药中 → 用药任务详情`、`怀孕/哺乳/发情 → 繁育周期详情`，只有缺少稳定标识时才回退到状态操作入口
 - 犬只详情状态跳转和健康/用药列表跳转必须兼容 camelCase 与 snake_case 标识字段；至少兼容 `recordId/record_id`、`taskId/task_id/medication_task_id`、`cycleId/cycle_id`
+- 犬只详情“用药中”状态按药名聚合时，必须优先展示最新疗程：先比 `actual_start_date`，再比 `updated_at/created_at`，不要按 `duration_days` 选旧任务
 - 犬只列表疾病只占一个 tag；多个疾病做摘要聚合
 - 同一只狗在 `details.treatment_status !== 已康复` 时，不允许存在同病名重复疾病记录
 - 前端可预检查，但 `health-service` 必须做服务端兜底校验
@@ -184,7 +195,10 @@
 - 云函数内禁止使用未定义常量
 - 毫秒常量直接写字面量 `86400000`，不要定义全局 `DAY_MS`
 - 详情页如果既要首屏加载又要子页返回刷新，必须避免 `onLoad` 和紧随其后的 `onShow` 双请求
-- 详情页路由参数改口径时要保留旧入口兼容；例如详情页主口径改为 `id` 后，仍需兼容历史 `taskId` 等旧查询参数
+- 犬只详情页从子页返回时默认保留现有内容并静默后台刷新；只有首屏加载才进入整页骨架，普通返回不要闪回 skeleton
+- 犬只详情页的静默刷新只在来源页有提交反馈时触发；实现时要保留 latest token / 请求令牌保护，避免旧请求覆盖新结果
+- 详情页路由参数改口径时要保留旧入口兼容；例如详情页主口径改为 `id` 后，仍需兼容历史 `taskId`、`recordId/record_id`、`medicationTaskId/medication_task_id` 等旧查询参数
+- 当前记录域重构后的回归验证优先按 `docs/record-form-acceptance.md` 执行，特别关注：新增/编辑同型一致、旧路由参数兼容、来源页承接、繁育额外安排同步
 
 ## 已知限制
 

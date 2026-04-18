@@ -45,6 +45,7 @@ function normalizeMedicationTaskDetail(task, protocolName) {
   const startDate = startOfDay(task?.actual_start_date || task?.start_date || task?.created_at || Date.now())
   const endDate = task?.end_date || (startDate + ((durationDays - 1) * DAY_MS))
   const frequency = Number(task?.frequency) || 1
+  const completion = calculateMedicationCompletion(task)
   const completedDateSet = new Set()
   const completedMap = {}
 
@@ -88,8 +89,71 @@ function normalizeMedicationTaskDetail(task, protocolName) {
     status: mapMedicationStatus(task?.status),
     completed_dates: Array.from(completedDateSet).sort((a, b) => a - b),
     completed_map: completedMap,
+    completed_dose_count: completion.completedDoseCount,
+    total_dose_count: completion.totalDoseCount,
+    is_fully_completed: completion.isFullyCompleted,
     protocol_name: protocolName || task?.protocol_name || null,
   }
+}
+
+function calculateMedicationCompletion(task) {
+  const durationDays = Math.max(1, Number(task?.duration_days) || 1)
+  const frequency = Math.max(1, Number(task?.frequency) || 1)
+  const dailyDoses = task?.daily_doses || {}
+
+  let completedDoseCount = 0
+  for (let day = 1; day <= durationDays; day += 1) {
+    completedDoseCount += Math.min(Number(dailyDoses[String(day)]) || 0, frequency)
+  }
+
+  const totalDoseCount = durationDays * frequency
+
+  return {
+    completedDoseCount,
+    totalDoseCount,
+    isFullyCompleted: completedDoseCount >= totalDoseCount,
+  }
+}
+
+function getMedicationProgressInfo(task) {
+  const startDate = startOfDay(task?.actual_start_date || task?.start_date || task?.created_at || Date.now())
+  const targetDay = startOfDay(Date.now())
+  const currentDay = Math.max(1, Math.floor((targetDay - startDate) / DAY_MS) + 1)
+
+  return {
+    day: currentDay,
+    totalDays: Math.max(1, Number(task?.duration_days) || 1),
+  }
+}
+
+function isMedicationTaskExpired(task) {
+  const { day, totalDays } = getMedicationProgressInfo(task)
+  return day > totalDays
+}
+
+async function normalizeExpiredMedicationTasks(tasks = []) {
+  const normalizedTasks = []
+  const now = Date.now()
+
+  for (const task of tasks) {
+    if (task?.status !== '进行中' || !isMedicationTaskExpired(task)) {
+      normalizedTasks.push(task)
+      continue
+    }
+
+    await db.collection('medication_tasks').doc(task._id).update({
+      status: '已完成',
+      updated_at: now,
+    })
+
+    normalizedTasks.push({
+      ...task,
+      status: '已完成',
+      updated_at: now,
+    })
+  }
+
+  return normalizedTasks
 }
 
 function validateDetails(type, details) {
@@ -718,18 +782,18 @@ module.exports = {
         drug_name: drugName,
         status: '进行中',
       })
-      .limit(1)
       .get()
-    if (existing && existing.length > 0) {
-      const task = existing[0]
-      const daysPassed = Math.max(1, Math.ceil((Date.now() - task.actual_start_date) / 86400000))
+    const normalizedExisting = await normalizeExpiredMedicationTasks(existing || [])
+    const activeTask = normalizedExisting.find(task => task.status === '进行中')
+    if (activeTask) {
+      const progress = getMedicationProgressInfo(activeTask)
       return {
         data: {
           exists: true,
-          dogName: task.dog_name || '',
-          drugName: task.drug_name,
-          day: daysPassed,
-          totalDays: task.duration_days,
+          dogName: activeTask.dog_name || '',
+          drugName: activeTask.drug_name,
+          day: progress.day,
+          totalDays: progress.totalDays,
         }
       }
     }
@@ -751,16 +815,19 @@ module.exports = {
       })
       .get()
 
-    const results = (existing || []).map(task => {
-      const daysPassed = Math.max(1, Math.ceil((Date.now() - task.actual_start_date) / 86400000))
-      return {
-        dog_id: task.dog_id,
-        dogName: task.dog_name || '',
-        drugName: task.drug_name,
-        day: daysPassed,
-        totalDays: task.duration_days,
-      }
-    })
+    const normalizedExisting = await normalizeExpiredMedicationTasks(existing || [])
+    const results = normalizedExisting
+      .filter(task => task.status === '进行中')
+      .map(task => {
+        const progress = getMedicationProgressInfo(task)
+        return {
+          dog_id: task.dog_id,
+          dogName: task.dog_name || '',
+          drugName: task.drug_name,
+          day: progress.day,
+          totalDays: progress.totalDays,
+        }
+      })
 
     return { data: results }
   },
@@ -784,6 +851,16 @@ module.exports = {
       .where({ _id: dbCmd.in(data.dog_ids), family_id: familyId, deleted_at: null })
       .get()
     if (dogs.length !== data.dog_ids.length) throw new Error('部分犬只不存在或不属于当前家庭')
+
+    const { data: duplicateTasks } = await db.collection('medication_tasks')
+      .where({
+        family_id: familyId,
+        dog_id: dbCmd.in(data.dog_ids),
+        drug_name: data.drug_name,
+        status: '进行中',
+      })
+      .get()
+    await normalizeExpiredMedicationTasks(duplicateTasks || [])
 
     // ② 费用分摊
     const totalCost = data.cost || null

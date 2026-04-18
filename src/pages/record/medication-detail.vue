@@ -16,6 +16,7 @@
             </view>
             <text class="detail-summary__title">{{ task.drug_name || '用药任务' }}</text>
             <text class="detail-summary__sub">{{ task.dog_name || '未知犬只' }} · {{ formatDate(task.start_date) }} 开始</text>
+            <text v-if="completionSummaryText" class="detail-summary__completion">{{ completionSummaryText }}</text>
           </view>
           <view class="detail-summary__meta">
             <text class="detail-summary__meta-value">{{ currentDay }}/{{ task.duration_days }}</text>
@@ -76,6 +77,10 @@
             <view class="info-row">
               <text class="info-row-label">预计结束</text>
               <text class="info-row-value">{{ formatDate(task.end_date) }}</text>
+            </view>
+            <view class="info-row" v-if="completionDetailText">
+              <text class="info-row-label">完成情况</text>
+              <text class="info-row-value">{{ completionDetailText }}</text>
             </view>
             <view class="info-row" v-if="task.protocol_name">
               <text class="info-row-label">来源方案</text>
@@ -228,6 +233,38 @@ const canMarkToday = computed(() => {
   if (!task.value || task.value.status !== 'active') return false
   const completedDates = task.value.completed_dates || []
   return !completedDates.includes(todayTs.value)
+})
+
+const completionCounts = computed(() => {
+  if (!task.value) return { completed: 0, total: 0 }
+  return {
+    completed: Number(task.value.completed_dose_count) || 0,
+    total: Number(task.value.total_dose_count) || 0,
+  }
+})
+
+const completionSummaryText = computed(() => {
+  if (!task.value || completionCounts.value.total === 0) return ''
+
+  const { completed, total } = completionCounts.value
+  if (task.value.status === 'completed') {
+    return completed >= total ? `已完成 · ${completed}/${total} 次` : `部分完成 · ${completed}/${total} 次`
+  }
+
+  if (task.value.status === 'cancelled') {
+    return `已执行 ${completed}/${total} 次`
+  }
+
+  return completed > 0 ? `已执行 ${completed}/${total} 次` : ''
+})
+
+const completionDetailText = computed(() => {
+  if (!task.value || completionCounts.value.total === 0) return ''
+  const { completed, total } = completionCounts.value
+  if (task.value.status === 'completed' && completed < total) return `部分完成 · ${completed}/${total} 次`
+  if (task.value.status === 'completed') return `已完成 · ${completed}/${total} 次`
+  if (task.value.status === 'cancelled') return `已执行 ${completed}/${total} 次`
+  return `${completed}/${total} 次`
 })
 
 interface ExecutionDay {
@@ -402,6 +439,11 @@ onShow(() => {
 .detail-summary__sub {
   font-size: 12px;
   font-weight: 500;
+  color: var(--text-2);
+}
+.detail-summary__completion {
+  font-size: 12px;
+  font-weight: 600;
   color: var(--text-2);
 }
 .detail-summary__meta {

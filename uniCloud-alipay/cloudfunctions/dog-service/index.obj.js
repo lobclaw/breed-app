@@ -122,6 +122,24 @@ function buildListMedicationStatus(tasks = []) {
   }]
 }
 
+function getMedicationTaskStartTs(task) {
+  return task?.actual_start_date || task?.updated_at || task?.created_at || 0
+}
+
+function pickPreferredMedicationTask(currentTask, nextTask) {
+  if (!currentTask) return nextTask
+
+  const currentStartTs = getMedicationTaskStartTs(currentTask)
+  const nextStartTs = getMedicationTaskStartTs(nextTask)
+  if (nextStartTs !== currentStartTs) {
+    return nextStartTs > currentStartTs ? nextTask : currentTask
+  }
+
+  const currentUpdatedTs = currentTask?.updated_at || currentTask?.created_at || 0
+  const nextUpdatedTs = nextTask?.updated_at || nextTask?.created_at || 0
+  return nextUpdatedTs > currentUpdatedTs ? nextTask : currentTask
+}
+
 module.exports = {
   _before: async function() {
     const { uid, familyId, role } = await verifyAndGetFamily(this.getUniIdToken(), this.getClientInfo())
@@ -303,10 +321,8 @@ module.exports = {
     const medTasks = medTasksRes.data || []
     const medDrugMap = {}
     for (const task of medTasks) {
-      const drug = task.details?.drug_name || '用药'
-      if (!medDrugMap[drug] || (task.duration_days || 0) > (medDrugMap[drug].duration_days || 0)) {
-        medDrugMap[drug] = task
-      }
+      const drug = task.drug_name || task.details?.drug_name || '用药'
+      medDrugMap[drug] = pickPreferredMedicationTask(medDrugMap[drug], task)
     }
     for (const task of Object.values(medDrugMap)) {
       const parts = [
