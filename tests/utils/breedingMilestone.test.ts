@@ -68,4 +68,58 @@ describe('deriveBreedingMilestoneViewModel', () => {
     expect(viewModel.suggestionLabel).toBe('建议日期已过 2 天')
     expect(viewModel.referenceDateLabel).toBe('建议日期 · 4月15日')
   })
+
+  it('待产节点应显示待产与预产期文案', () => {
+    const dueDate = new Date('2026-06-18T00:00:00+08:00').getTime()
+    const viewModel = deriveBreedingMilestoneViewModel({
+      title: '花花 · 生产',
+      due_date: dueDate,
+      details: {
+        step_type: 'birth',
+        mating_date: new Date('2026-04-20T00:00:00+08:00').getTime(),
+        mating_number: 2,
+      },
+    }, now)
+
+    expect(viewModel.stageTitle).toBe('待产')
+    expect(viewModel.anchorLabel).toBe('配种')
+    expect(viewModel.suggestionLabel).toBe('预产期 6月18日')
+    expect(viewModel.referenceDateLabel).toBe('预产期 · 6月18日')
+    expect(viewModel.stageDayLabel).toBe('距第2脚配种第 1 天')
+  })
+
+  it('断奶节点应显示待断奶、哺乳天数与预计断奶日', () => {
+    const birthDate = new Date('2026-04-17T00:00:00+08:00').getTime()
+    const dueDate = new Date('2026-06-04T00:00:00+08:00').getTime()
+    const viewModel = deriveBreedingMilestoneViewModel({
+      title: '花花窝 · 确认断奶',
+      due_date: dueDate,
+      details: {
+        step_type: 'weaning_confirm',
+        birth_date: birthDate,
+      },
+    }, now)
+
+    expect(viewModel.stageTitle).toBe('待断奶')
+    expect(viewModel.anchorLabel).toBe('出生')
+    expect(viewModel.daysFromAnchor).toBe(1)
+    expect(viewModel.dayLabel).toBe('距出生第 1 天')
+    expect(viewModel.stageDayLabel).toBe('哺乳第 1 天')
+    expect(viewModel.referenceDateLabel).toBe('预计 6月4日断奶')
+    expect(viewModel.suggestionStatus).toBe('normal')
+  })
+
+  it('断奶节点缺少出生日期时应降级为待确认文案', () => {
+    const viewModel = deriveBreedingMilestoneViewModel({
+      title: '花花窝 · 确认断奶',
+      details: {
+        step_type: 'weaning_confirm',
+      },
+    }, now)
+
+    expect(viewModel.stageTitle).toBe('待断奶')
+    expect(viewModel.stageDayLabel).toBe('哺乳天数待确认')
+    expect(viewModel.referenceDateLabel).toBe('预计断奶时间待确认')
+    expect(viewModel.suggestionLabel).toBe('预计断奶时间待确认')
+  })
 })

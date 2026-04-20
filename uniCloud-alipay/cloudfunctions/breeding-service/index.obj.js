@@ -198,6 +198,37 @@ async function createExtraArrangementTask(familyId, dog, cycleId, sourceRecordId
   return id
 }
 
+async function createHealthReminderTask(familyId, {
+  dogId,
+  dogName,
+  cycleId = null,
+  litterId = null,
+  type,
+  title,
+  dueDate,
+}) {
+  const now = Date.now()
+  await db.collection('tasks').add({
+    card_type: 'individual',
+    dog_id: dogId,
+    dog_name: dogName,
+    cycle_id: cycleId,
+    litter_id: litterId,
+    type,
+    title,
+    due_date: dueDate,
+    status: 'pending',
+    priority: dueDate <= now ? 'overdue' : 'upcoming',
+    source_record_id: litterId,
+    source_collection: 'litters',
+    family_id: familyId,
+    postpone_count: 0,
+    details: {},
+    created_at: now,
+    updated_at: now,
+  })
+}
+
 async function getCycleHeatDate(cycleId, familyId) {
   if (!cycleId) return null
 
@@ -831,11 +862,16 @@ module.exports = {
 
     // 逐只创建幼崽（注意事务 10 文档限制，此处不用事务，用写入后校验）
     const puppyIds = []
-    for (const puppy of data.puppies) {
+    const alivePuppies = []
+    const damDisplayName = cycle.dam_name || '母犬'
+    for (let idx = 0; idx < data.puppies.length; idx += 1) {
+      const puppy = data.puppies[idx]
       if (puppy.alive === false) continue // 死胎不建档
 
+      const puppyName = (puppy.name || '').trim() || `${damDisplayName}窝-${idx + 1}号`
+
       const puppyData = {
-        name: puppy.name || '',
+        name: puppyName,
         gender: puppy.gender || '母',
         role: '幼崽',
         disposition: '在养',
@@ -856,6 +892,10 @@ module.exports = {
       }
       const { id } = await db.collection('dogs').add(puppyData)
       puppyIds.push(id)
+      alivePuppies.push({
+        dog_id: id,
+        dog_name: puppyName,
+      })
 
       // 如果有初始体重，创建体重记录
       if (puppy.weight) {
@@ -881,6 +921,7 @@ module.exports = {
     // 生成窝级别流程终点任务
     const settings = await getFamilySettings(familyId)
     const birthTs = data.birth_date
+    let taskCount = 1
 
     await createBreedingMilestoneTask(familyId, { _id: cycle.dam_id, name: cycle.dam_name }, {
       cycleId: data.cycle_id,
@@ -894,6 +935,38 @@ module.exports = {
         birth_date: birthTs,
       },
     })
+
+    if (data.create_first_deworming_task === true) {
+      const dewormDueDate = birthTs + ((settings.default_deworming_interval_puppy || 14) * 86400000)
+      for (const puppy of alivePuppies) {
+        await createHealthReminderTask(familyId, {
+          dogId: puppy.dog_id,
+          dogName: puppy.dog_name,
+          cycleId: data.cycle_id,
+          litterId,
+          type: 'deworming',
+          title: '首次驱虫',
+          dueDate: dewormDueDate,
+        })
+        taskCount += 1
+      }
+    }
+
+    if (data.create_first_vaccination_task === true) {
+      const vaccineDueDate = birthTs + ((settings.default_vaccine_interval_puppy || 21) * 86400000)
+      for (const puppy of alivePuppies) {
+        await createHealthReminderTask(familyId, {
+          dogId: puppy.dog_id,
+          dogName: puppy.dog_name,
+          cycleId: data.cycle_id,
+          litterId,
+          type: 'vaccination',
+          title: '首次疫苗',
+          dueDate: vaccineDueDate,
+        })
+        taskCount += 1
+      }
+    }
 
     // 如有费用
     if (data.cost && data.cost > 0) {
@@ -921,7 +994,7 @@ module.exports = {
       data: {
         litterId,
         puppyIds,
-        taskCount: 1,
+        taskCount,
       }
     }
   },

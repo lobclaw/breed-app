@@ -174,18 +174,24 @@ describe('buildHomeWorkbench', () => {
       makeBreedingMilestoneCard('follicle-a', 'follicle_check'),
       makeBreedingMilestoneCard('follicle-b', 'follicle_check'),
       makeBreedingMilestoneCard('mating-a', 'mating', '花花 · 配种'),
+      makeBreedingMilestoneCard('birth-a', 'birth', '花花 · 生产'),
+      makeBreedingMilestoneCard('weaning-a', 'weaning_confirm', '花花窝 · 确认断奶'),
       makeBreedingMilestoneCard('unknown-a', 'custom_step', '自定义繁育'),
     ])
     const groups = workbench.sections.breeding.groups
     const follicleGroup = groups.find(group => group.key === 'breeding-step:follicle_check')
     const matingGroup = groups.find(group => group.key === 'breeding-step:mating')
+    const birthGroup = groups.find(group => group.key === 'breeding-step:birth')
+    const weaningGroup = groups.find(group => group.key === 'breeding-step:weaning_confirm')
     const unknownGroup = groups.find(group => group.key === 'breeding-step:custom_step')
 
     expect(follicleGroup?.title).toBe('建议卵泡检查')
     expect(follicleGroup?.rows).toHaveLength(2)
     expect(follicleGroup?.rows[0].taskId).toBe('follicle-a-task')
     expect(follicleGroup?.rows[0].sourceCard.id).toBe('follicle-a')
-    expect(matingGroup?.title).toBe('配种')
+    expect(matingGroup?.title).toBe('建议配种')
+    expect(birthGroup?.title).toBe('待产')
+    expect(weaningGroup?.title).toBe('待断奶')
     expect(unknownGroup?.title).toBe('自定义繁育')
   })
 

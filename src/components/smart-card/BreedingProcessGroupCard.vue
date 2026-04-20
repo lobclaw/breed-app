@@ -34,7 +34,10 @@
         </text>
       </view>
       <view class="group-actions">
-        <view v-if="item.canObserve || item.canDirectMating || item.canContinueMating" class="group-secondary-actions">
+        <view
+          v-if="item.canObserve || item.canDirectMating || item.canContinueMating || item.canPrenatal || item.canPreLabor"
+          class="group-secondary-actions"
+        >
           <view
             v-if="item.canObserve"
             class="group-secondary-action"
@@ -55,6 +58,20 @@
             @click.stop="goContinueMating(item.card)"
           >
             <text class="group-secondary-action__text">继续配种</text>
+          </view>
+          <view
+            v-if="item.canPrenatal"
+            class="group-secondary-action"
+            @click.stop="goPrenatal(item.card)"
+          >
+            <text class="group-secondary-action__text">产检</text>
+          </view>
+          <view
+            v-if="item.canPreLabor"
+            class="group-secondary-action"
+            @click.stop="goPreLabor(item.card)"
+          >
+            <text class="group-secondary-action__text">临产</text>
           </view>
         </view>
         <view
@@ -77,9 +94,13 @@ import {
   buildHomeContinueMatingUrl,
   buildHomeDirectMatingUrl,
   buildHomeHeatObservationUrl,
+  buildHomePreLaborUrl,
+  buildHomePrenatalUrl,
   canOpenHomeContinueMating,
   canOpenHomeDirectMating,
   canOpenHomeHeatObservation,
+  canOpenHomePreLabor,
+  canOpenHomePrenatal,
 } from '@/utils/homeHeatObservation'
 
 const props = defineProps<{ group: any }>()
@@ -99,6 +120,8 @@ const items = computed(() => {
       canObserve: canOpenHomeHeatObservation(card),
       canDirectMating: canOpenHomeDirectMating(card),
       canContinueMating: canOpenHomeContinueMating(card),
+      canPrenatal: canOpenHomePrenatal(card),
+      canPreLabor: canOpenHomePreLabor(card),
     }
   })
 })
@@ -117,6 +140,7 @@ const typeMap: Record<string, string> = {
 }
 
 function buildStageTag(stageTitle: string) {
+  if (stageTitle === '待断奶') return '哺乳中'
   return stageTitle
     .replace(/^建议/, '')
     .replace(/^确认/, '')
@@ -127,12 +151,18 @@ function buildPrimaryLabel(milestone: ReturnType<typeof deriveBreedingMilestoneV
   if (milestone.stepType === 'mating' && milestone.heatDayLabel) {
     return milestone.heatDayLabel
   }
+  if (milestone.stepType === 'weaning_confirm') {
+    return milestone.stageDayLabel
+  }
   return milestone.dayLabel
 }
 
 function buildSecondaryLabel(milestone: ReturnType<typeof deriveBreedingMilestoneViewModel>) {
   if (milestone.stepType === 'mating') {
     return milestone.stageDayLabel
+  }
+  if (milestone.stepType === 'weaning_confirm') {
+    return milestone.referenceDateLabel
   }
   if (milestone.suggestionStatus === 'window_due') {
     return milestone.suggestionLabel
@@ -202,6 +232,16 @@ function goDirectMating(card: any) {
 function goContinueMating(card: any) {
   if (!canOpenHomeContinueMating(card)) return
   uni.navigateTo({ url: buildHomeContinueMatingUrl(card) })
+}
+
+function goPrenatal(card: any) {
+  if (!canOpenHomePrenatal(card)) return
+  uni.navigateTo({ url: buildHomePrenatalUrl(card) })
+}
+
+function goPreLabor(card: any) {
+  if (!canOpenHomePreLabor(card)) return
+  uni.navigateTo({ url: buildHomePreLaborUrl(card) })
 }
 </script>
 

@@ -38,6 +38,20 @@
       >
         <text class="btn-text btn-text--muted">继续配种</text>
       </view>
+      <view
+        v-if="canPrenatal"
+        class="btn btn--text"
+        @click.stop="goPrenatal"
+      >
+        <text class="btn-text btn-text--muted">产检</text>
+      </view>
+      <view
+        v-if="canPreLabor"
+        class="btn btn--text"
+        @click.stop="goPreLabor"
+      >
+        <text class="btn-text btn-text--muted">临产</text>
+      </view>
       <view class="btn btn--primary btn--primary-amber" @click.stop="goProcess">
         <text class="material-icons-round btn-icon btn-icon--white">arrow_forward</text>
         <text class="btn-text btn-text--white">处理</text>
@@ -50,16 +64,25 @@
 import { computed } from 'vue'
 
 import { deriveBreedingMilestoneViewModel } from '@/utils/breedingMilestone'
-import { buildHomeContinueMatingUrl, canOpenHomeContinueMating } from '@/utils/homeHeatObservation'
+import {
+  buildHomeContinueMatingUrl,
+  buildHomePreLaborUrl,
+  buildHomePrenatalUrl,
+  canOpenHomeContinueMating,
+  canOpenHomePreLabor,
+  canOpenHomePrenatal,
+} from '@/utils/homeHeatObservation'
 
 const props = defineProps<{ card: any }>()
 
 const milestone = computed(() => deriveBreedingMilestoneViewModel(props.card?.tasks?.[0] || {}))
 const primaryLabel = computed(() => {
   if (milestone.value.stepType === 'mating' && milestone.value.heatDayLabel) return milestone.value.heatDayLabel
+  if (milestone.value.stepType === 'weaning_confirm') return milestone.value.stageDayLabel
   return milestone.value.dayLabel
 })
 const secondaryLabel = computed(() => {
+  if (milestone.value.stepType === 'weaning_confirm') return milestone.value.referenceDateLabel
   if (milestone.value.stepType === 'mating') return milestone.value.stageDayLabel
   return milestone.value.referenceDateLabel
 })
@@ -71,6 +94,8 @@ const showSuggestionChip = computed(() => {
   return !(milestone.value.stepType === 'mating' && milestone.value.suggestionStatus === 'window_passed')
 })
 const canContinueMating = computed(() => canOpenHomeContinueMating(props.card))
+const canPrenatal = computed(() => canOpenHomePrenatal(props.card))
+const canPreLabor = computed(() => canOpenHomePreLabor(props.card))
 
 const typeMap: Record<string, string> = {
   vaccination: '/pages/record/health-vaccination',
@@ -127,6 +152,16 @@ function goProcess() {
 function goContinueMating() {
   if (!canOpenHomeContinueMating(props.card)) return
   uni.navigateTo({ url: buildHomeContinueMatingUrl(props.card) })
+}
+
+function goPrenatal() {
+  if (!canOpenHomePrenatal(props.card)) return
+  uni.navigateTo({ url: buildHomePrenatalUrl(props.card) })
+}
+
+function goPreLabor() {
+  if (!canOpenHomePreLabor(props.card)) return
+  uni.navigateTo({ url: buildHomePreLaborUrl(props.card) })
 }
 </script>
 

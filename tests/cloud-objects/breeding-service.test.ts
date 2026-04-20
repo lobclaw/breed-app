@@ -28,6 +28,7 @@ describe('breeding-service', () => {
       settings: {
         default_weaning_days: 45,
         default_vaccine_interval: 21,
+        default_vaccine_interval_puppy: 21,
         default_deworming_interval_puppy: 14,
         default_deworming_interval_adult: 90,
       },
@@ -776,11 +777,8 @@ describe('breeding-service', () => {
   })
 
   describe('生产记录', () => {
-    it('应创建窝 + 幼崽 + 任务', async () => {
+    async function seedPregnantCycle() {
       const now = Date.now()
-      const birthDate = now
-
-      // 创建周期
       const { id: cycleId } = await db.collection('breeding_cycles').add({
         dam_id: 'dam_1',
         dam_name: '花花',
@@ -789,75 +787,176 @@ describe('breeding-service', () => {
         family_id: familyId,
         status: '怀孕中',
         created_at: now,
+        updated_at: now,
       })
+      return cycleId
+    }
 
-      // 创建窝
-      const { id: litterId } = await db.collection('litters').add({
+    it('默认只创建确认断奶，并写入经验心得与自动命名', async () => {
+      const birthDate = Date.now()
+      const cycleId = await seedPregnantCycle()
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+      const res = await breedingService.addBirthRecord.call(ctx, {
         cycle_id: cycleId,
-        dam_id: 'dam_1',
-        dam_name: '花花',
-        sire_id: 'sire_1',
-        sire_name: '大白',
-        family_id: familyId,
         birth_date: birthDate,
         birth_type: '顺产',
-        total_born: 4,
-        born_alive: 3,
-        born_dead: 1,
-        weaned_at: null,
-        created_at: now,
+        birth_notes: '注意保暖和观察奶量',
+        puppies: [
+          { name: '', gender: '母', weight: 101, alive: true },
+          { name: '奶球', gender: '公', weight: 99, alive: true },
+          { name: '', gender: '母', weight: 88, alive: false },
+        ],
       })
 
-      expect(litterId).toBeDefined()
+      expect(res.data.taskCount).toBe(1)
 
-      // 创建 3 只存活幼崽
-      const puppyIds = []
-      for (let i = 0; i < 3; i++) {
-        const { id } = await db.collection('dogs').add({
-          name: `幼崽${i + 1}`,
-          gender: i % 2 === 0 ? '母' : '公',
-          role: '幼崽',
-          disposition: '在养',
-          family_id: familyId,
-          origin_litter_id: litterId,
-          birth_date: birthDate,
-          deleted_at: null,
-          created_at: now,
-        })
-        puppyIds.push(id)
-      }
+      const { data: litters } = await db.collection('litters')
+        .where({ cycle_id: cycleId })
+        .get()
+      expect(litters).toHaveLength(1)
+      expect(litters[0].birth_notes).toBe('注意保暖和观察奶量')
 
-      expect(puppyIds).toHaveLength(3)
+      const { data: birthRecords } = await db.collection('breeding_records')
+        .where({ cycle_id: cycleId, type: 'birth' })
+        .get()
+      expect(birthRecords).toHaveLength(1)
+      expect(birthRecords[0].notes).toBe('注意保暖和观察奶量')
 
-      // 创建窝级别任务（驱虫、疫苗、断奶）
-      const taskTypes = [
-        { title: '花花窝 · 首次驱虫', due: birthDate + 14 * 86400000 },
-        { title: '花花窝 · 首次疫苗', due: birthDate + 42 * 86400000 },
-        { title: '花花窝 · 确认断奶', due: birthDate + 45 * 86400000 },
-      ]
-
-      for (const t of taskTypes) {
-        await db.collection('tasks').add({
-          litter_id: litterId,
-          title: t.title,
-          due_date: t.due,
-          status: 'pending',
-          family_id: familyId,
-        })
-      }
+      const { data: puppies } = await db.collection('dogs')
+        .where({ origin_litter_id: litters[0]._id })
+        .get()
+      expect(puppies).toHaveLength(2)
+      expect(puppies.map(item => item.name)).toEqual(expect.arrayContaining(['花花窝-1号', '奶球']))
 
       const { data: tasks } = await db.collection('tasks')
-        .where({ litter_id: litterId })
+        .where({ litter_id: litters[0]._id, status: 'pending' })
+        .get()
+      expect(tasks).toHaveLength(1)
+      expect(tasks[0].type).toBe('breeding_milestone')
+      expect(tasks[0].title).toBe('花花窝 · 确认断奶')
+      expect(tasks[0].due_date).toBe(birthDate + 45 * 86400000)
+      expect(tasks.some(item => item.type === 'deworming' || item.type === 'vaccination')).toBe(false)
+    })
+
+    it('仅勾选首次驱虫时只为存活幼崽创建驱虫提醒', async () => {
+      const birthDate = Date.now()
+      const cycleId = await seedPregnantCycle()
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+      const res = await breedingService.addBirthRecord.call(ctx, {
+        cycle_id: cycleId,
+        birth_date: birthDate,
+        birth_type: '顺产',
+        create_first_deworming_task: true,
+        puppies: [
+          { name: '', gender: '母', weight: 101, alive: true },
+          { name: '', gender: '公', weight: 99, alive: false },
+        ],
+      })
+
+      expect(res.data.taskCount).toBe(2)
+
+      const { data: litters } = await db.collection('litters')
+        .where({ cycle_id: cycleId })
+        .get()
+      const litterId = litters[0]._id
+
+      const { data: tasks } = await db.collection('tasks')
+        .where({ litter_id: litterId, status: 'pending' })
         .get()
 
-      expect(tasks).toHaveLength(3)
-      expect(tasks.some(t => t.title.includes('驱虫'))).toBe(true)
-      expect(tasks.some(t => t.title.includes('疫苗'))).toBe(true)
-      expect(tasks.some(t => t.title.includes('断奶'))).toBe(true)
+      const dewormingTasks = tasks.filter(item => item.type === 'deworming')
+      const vaccinationTasks = tasks.filter(item => item.type === 'vaccination')
+      const weaningTasks = tasks.filter(item => item.type === 'breeding_milestone')
 
-      // 验证首次驱虫是出生后 14 天
-      const dewormTask = tasks.find(t => t.title.includes('驱虫'))!
-      expect(dewormTask.due_date).toBe(birthDate + 14 * 86400000)
+      expect(dewormingTasks).toHaveLength(1)
+      expect(vaccinationTasks).toHaveLength(0)
+      expect(weaningTasks).toHaveLength(1)
+      expect(dewormingTasks[0].title).toBe('首次驱虫')
+      expect(dewormingTasks[0].due_date).toBe(birthDate + 14 * 86400000)
+      expect(dewormingTasks[0].dog_name).toBe('花花窝-1号')
+    })
+
+    it('仅勾选首次疫苗时只为存活幼崽创建疫苗提醒', async () => {
+      const birthDate = Date.now()
+      const cycleId = await seedPregnantCycle()
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+      const res = await breedingService.addBirthRecord.call(ctx, {
+        cycle_id: cycleId,
+        birth_date: birthDate,
+        birth_type: '顺产',
+        create_first_vaccination_task: true,
+        puppies: [
+          { name: '星星', gender: '母', weight: 101, alive: true },
+          { name: '', gender: '公', weight: 99, alive: false },
+        ],
+      })
+
+      expect(res.data.taskCount).toBe(2)
+
+      const { data: litters } = await db.collection('litters')
+        .where({ cycle_id: cycleId })
+        .get()
+      const litterId = litters[0]._id
+
+      const { data: tasks } = await db.collection('tasks')
+        .where({ litter_id: litterId, status: 'pending' })
+        .get()
+
+      const vaccinationTasks = tasks.filter(item => item.type === 'vaccination')
+      const dewormingTasks = tasks.filter(item => item.type === 'deworming')
+
+      expect(vaccinationTasks).toHaveLength(1)
+      expect(dewormingTasks).toHaveLength(0)
+      expect(vaccinationTasks[0].title).toBe('首次疫苗')
+      expect(vaccinationTasks[0].due_date).toBe(birthDate + 21 * 86400000)
+      expect(vaccinationTasks[0].dog_name).toBe('星星')
+    })
+
+    it('同时勾选首次驱虫和首次疫苗时应按存活幼崽创建全部提醒', async () => {
+      const birthDate = Date.now()
+      const cycleId = await seedPregnantCycle()
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+      const res = await breedingService.addBirthRecord.call(ctx, {
+        cycle_id: cycleId,
+        birth_date: birthDate,
+        birth_type: '顺产',
+        create_first_deworming_task: true,
+        create_first_vaccination_task: true,
+        puppies: [
+          { name: '', gender: '母', weight: 101, alive: true },
+          { name: '奶球', gender: '公', weight: 99, alive: true },
+          { name: '', gender: '母', weight: 88, alive: false },
+        ],
+      })
+
+      expect(res.data.taskCount).toBe(5)
+
+      const { data: litters } = await db.collection('litters')
+        .where({ cycle_id: cycleId })
+        .get()
+      const litterId = litters[0]._id
+
+      const { data: tasks } = await db.collection('tasks')
+        .where({ litter_id: litterId, status: 'pending' })
+        .get()
+
+      const dewormingTasks = tasks.filter(item => item.type === 'deworming')
+      const vaccinationTasks = tasks.filter(item => item.type === 'vaccination')
+      const weaningTasks = tasks.filter(item => item.type === 'breeding_milestone')
+
+      expect(dewormingTasks).toHaveLength(2)
+      expect(vaccinationTasks).toHaveLength(2)
+      expect(weaningTasks).toHaveLength(1)
+      expect(dewormingTasks.every(item => item.title === '首次驱虫')).toBe(true)
+      expect(vaccinationTasks.every(item => item.title === '首次疫苗')).toBe(true)
+      expect(dewormingTasks.every(item => item.due_date === birthDate + 14 * 86400000)).toBe(true)
+      expect(vaccinationTasks.every(item => item.due_date === birthDate + 21 * 86400000)).toBe(true)
+      expect(dewormingTasks.map(item => item.dog_name)).toEqual(expect.arrayContaining(['花花窝-1号', '奶球']))
+      expect(vaccinationTasks.map(item => item.dog_name)).toEqual(expect.arrayContaining(['花花窝-1号', '奶球']))
     })
   })
 

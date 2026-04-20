@@ -27,8 +27,8 @@ const BREEDING_STEP_TITLES: Record<string, string> = {
   follicle_check: '建议卵泡检查',
   mating: '建议配种',
   pregnancy_check: '建议孕检',
-  birth: '生产',
-  weaning_confirm: '确认断奶',
+  birth: '待产',
+  weaning_confirm: '待断奶',
 }
 
 const MEDICATION_STATE_TITLES: Record<MedicationRowState, string> = {

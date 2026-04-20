@@ -57,7 +57,7 @@ const STEP_META: Record<string, StepMeta> = {
     },
   },
   birth: {
-    stageTitle: '生产',
+    stageTitle: '待产',
     anchorLabel: '配种',
     actionLabel: '记录',
     getAnchorDate: (task) => {
@@ -71,7 +71,7 @@ const STEP_META: Record<string, StepMeta> = {
     },
   },
   weaning_confirm: {
-    stageTitle: '确认断奶',
+    stageTitle: '待断奶',
     anchorLabel: '出生',
     actionLabel: '确认',
     getAnchorDate: (task) => {
@@ -103,8 +103,8 @@ export function deriveBreedingMilestoneViewModel(
     daysFromAnchor,
     dayLabel: buildDayLabel(meta?.anchorLabel || '流程', daysFromAnchor),
     suggestionStatus,
-    suggestionLabel: buildSuggestionLabel(suggestionStatus, dueDate, actionLabel, now),
-    referenceDateLabel: dueDate ? `建议日期 · ${formatMonthDay(dueDate)}` : '建议日期待确认',
+    suggestionLabel: buildSuggestionLabel(stepType, suggestionStatus, dueDate, actionLabel, now),
+    referenceDateLabel: buildReferenceDateLabel(stepType, dueDate),
     heatDayLabel: buildHeatDayLabel(task, now),
     stageDayLabel: buildStageDayLabel(stepType, task, daysFromAnchor, now),
     passedWindowLabel: buildPassedWindowLabel(stepType, suggestionStatus, dueDate, now),
@@ -125,12 +125,27 @@ function getSuggestionStatus(dueDate: number | null, now: number): BreedingMiles
 }
 
 function buildSuggestionLabel(
+  stepType: string,
   status: BreedingMilestoneSuggestionStatus,
   dueDate: number | null,
   actionLabel: string,
   now: number,
 ): string {
-  if (!dueDate) return `建议尽快${actionLabel}`
+  if (!dueDate) {
+    if (stepType === 'birth') return '预产期待确认'
+    if (stepType === 'weaning_confirm') return '预计断奶时间待确认'
+    return `建议尽快${actionLabel}`
+  }
+
+  if (stepType === 'birth') {
+    if (status === 'window_due') return '预产期就在今天'
+    if (status === 'window_passed') {
+      const passedDays = Math.max(1, Math.floor((startOfDay(now) - startOfDay(dueDate)) / DAY_MS))
+      return `预产期已过 ${passedDays} 天`
+    }
+
+    return `预产期 ${formatMonthDay(dueDate)}`
+  }
 
   if (status === 'window_due') return `建议今日${actionLabel}`
   if (status === 'window_passed') {
@@ -139,6 +154,17 @@ function buildSuggestionLabel(
   }
 
   return `建议日期 ${formatMonthDay(dueDate)}`
+}
+
+function buildReferenceDateLabel(stepType: string, dueDate: number | null): string {
+  if (!dueDate) {
+    if (stepType === 'birth') return '预产期待确认'
+    if (stepType === 'weaning_confirm') return '预计断奶时间待确认'
+    return '建议日期待确认'
+  }
+  if (stepType === 'birth') return `预产期 · ${formatMonthDay(dueDate)}`
+  if (stepType === 'weaning_confirm') return `预计 ${formatMonthDay(dueDate)}断奶`
+  return `建议日期 · ${formatMonthDay(dueDate)}`
 }
 
 function buildDayLabel(anchorLabel: string, daysFromAnchor: number | null): string {
@@ -176,6 +202,11 @@ function buildStageDayLabel(
     }
   }
 
+  if (stepType === 'weaning_confirm') {
+    if (!daysFromAnchor) return '哺乳天数待确认'
+    return `哺乳第 ${daysFromAnchor} 天`
+  }
+
   return buildDayLabel(STEP_META[stepType]?.anchorLabel || '流程', daysFromAnchor)
 }
 
@@ -189,6 +220,8 @@ function buildPassedWindowLabel(
 
   const passedDays = Math.max(1, Math.floor((startOfDay(now) - startOfDay(dueDate)) / DAY_MS))
   if (stepType === 'mating') return `建议配种窗已过 ${passedDays} 天`
+  if (stepType === 'birth') return `预产期已过 ${passedDays} 天`
+  if (stepType === 'weaning_confirm') return `预计断奶日已过 ${passedDays} 天`
   return `建议日期已过 ${passedDays} 天`
 }
 

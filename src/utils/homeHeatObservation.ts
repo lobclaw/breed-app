@@ -5,12 +5,38 @@ interface HomeBreedingCardLike {
     _id?: string
     type?: string
     cycle_id?: string
+    due_date?: number
     details?: Record<string, any> | null
   }>
 }
 
+const DAY_MS = 86400000
+const BEIJING_OFFSET_MS = 8 * 60 * 60 * 1000
+
 function encodeQueryValue(value: string) {
   return encodeURIComponent(value)
+}
+
+function startOfBeijingDay(ts: number) {
+  return Math.floor((ts + BEIJING_OFFSET_MS) / DAY_MS) * DAY_MS - BEIJING_OFFSET_MS
+}
+
+function getBirthMilestoneDueDate(task: NonNullable<HomeBreedingCardLike['tasks']>[number] | undefined): number | null {
+  const expectedDueDate = task?.details?.expected_due_date
+  if (typeof expectedDueDate === 'number' && Number.isFinite(expectedDueDate)) return expectedDueDate
+  return typeof task?.due_date === 'number' && Number.isFinite(task.due_date) ? task.due_date : null
+}
+
+function buildLockedCycleUrl(baseUrl: string, card: HomeBreedingCardLike): string {
+  const task = card?.tasks?.[0]
+  const params: string[] = []
+
+  if (card.dogId) params.push(`dogId=${encodeQueryValue(card.dogId)}`)
+  if (card.dogName) params.push(`dogName=${encodeQueryValue(card.dogName)}`)
+  if (task?.cycle_id) params.push(`cycleId=${encodeQueryValue(task.cycle_id)}`)
+  params.push('locked=true')
+
+  return `${baseUrl}?${params.join('&')}`
 }
 
 export function canOpenHomeHeatObservation(card: HomeBreedingCardLike | null | undefined): boolean {
@@ -35,15 +61,7 @@ export function canOpenHomeDirectMating(card: HomeBreedingCardLike | null | unde
 }
 
 export function buildHomeHeatObservationUrl(card: HomeBreedingCardLike): string {
-  const task = card?.tasks?.[0]
-  const params: string[] = []
-
-  if (card.dogId) params.push(`dogId=${encodeQueryValue(card.dogId)}`)
-  if (card.dogName) params.push(`dogName=${encodeQueryValue(card.dogName)}`)
-  if (task?.cycle_id) params.push(`cycleId=${encodeQueryValue(task.cycle_id)}`)
-  params.push('locked=true')
-
-  return `/pages/record/heat-observation?${params.join('&')}`
+  return buildLockedCycleUrl('/pages/record/heat-observation', card)
 }
 
 export function buildHomeDirectMatingUrl(card: HomeBreedingCardLike): string {
@@ -70,13 +88,36 @@ export function canOpenHomeContinueMating(card: HomeBreedingCardLike | null | un
 }
 
 export function buildHomeContinueMatingUrl(card: HomeBreedingCardLike): string {
+  return buildLockedCycleUrl('/pages/record/breeding-mating', card)
+}
+
+export function canOpenHomePrenatal(card: HomeBreedingCardLike | null | undefined): boolean {
   const task = card?.tasks?.[0]
-  const params: string[] = []
+  return Boolean(
+    card?.dogId
+    && task?.type === 'breeding_milestone'
+    && task?.details?.step_type === 'birth'
+    && task?.cycle_id,
+  )
+}
 
-  if (card.dogId) params.push(`dogId=${encodeQueryValue(card.dogId)}`)
-  if (card.dogName) params.push(`dogName=${encodeQueryValue(card.dogName)}`)
-  if (task?.cycle_id) params.push(`cycleId=${encodeQueryValue(task.cycle_id)}`)
-  params.push('locked=true')
+export function buildHomePrenatalUrl(card: HomeBreedingCardLike): string {
+  return buildLockedCycleUrl('/pages/record/breeding-prenatal', card)
+}
 
-  return `/pages/record/breeding-mating?${params.join('&')}`
+export function canOpenHomePreLabor(card: HomeBreedingCardLike | null | undefined, now = Date.now()): boolean {
+  const task = card?.tasks?.[0]
+  if (!card?.dogId || task?.type !== 'breeding_milestone' || task?.details?.step_type !== 'birth' || !task?.cycle_id) {
+    return false
+  }
+
+  const dueDate = getBirthMilestoneDueDate(task)
+  if (!dueDate) return false
+
+  const diffDays = Math.floor((startOfBeijingDay(dueDate) - startOfBeijingDay(now)) / DAY_MS)
+  return diffDays <= 5
+}
+
+export function buildHomePreLaborUrl(card: HomeBreedingCardLike): string {
+  return buildLockedCycleUrl('/pages/record/breeding-prelabor', card)
 }

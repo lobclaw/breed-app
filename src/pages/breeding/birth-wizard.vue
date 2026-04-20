@@ -146,6 +146,7 @@
             <view class="form-field full-width">
               <text class="field-label">标识/昵称 <text class="optional">（选填）</text></text>
               <input v-model="puppy.name" class="field-input" :placeholder="`${damName}窝-${idx + 1}号`" />
+              <text class="field-help">未填写时将自动生成默认名称</text>
             </view>
           </view>
         </view>
@@ -201,10 +202,53 @@
             <text style="font-size: 14px;">{{ puppy.alive === false ? '💀' : puppy.gender === '公' ? '♂' : '♀' }}</text>
           </view>
           <text class="puppy-summary-text">
-            {{ puppy.name || `幼崽${idx + 1}` }}
+            {{ puppy.name || `${damName}窝-${idx + 1}号` }}
             <text style="color: var(--text-3);"> · {{ puppy.gender }}{{ puppy.weight ? ` · ${puppy.weight}g` : '' }}{{ puppy.alive === false ? ' · 死胎' : '' }}</text>
           </text>
           <text class="material-icons-round" style="font-size: 16px; color: var(--primary);">check_circle</text>
+        </view>
+      </view>
+
+      <view class="form-section">
+        <view class="section-title">
+          <view class="section-dot" style="background: var(--primary);" />
+          <text>后续安排</text>
+        </view>
+
+        <view class="followup-card">
+          <view class="form-field">
+            <text class="field-label">经验心得 <text class="optional">（选填）</text></text>
+            <textarea
+              v-model="form.birth_notes"
+              class="field-textarea"
+              maxlength="300"
+              placeholder="记录生产过程、照护要点或后续观察重点"
+            />
+          </view>
+
+          <view class="form-field" style="margin-bottom: 0;">
+            <view class="check-row" @click="form.create_first_deworming_task = !form.create_first_deworming_task">
+              <view class="check-row__box" :class="{ 'check-row__box--checked': form.create_first_deworming_task }">
+                <text v-if="form.create_first_deworming_task" class="check-row__icon material-icons-round">check</text>
+              </view>
+              <view class="check-row__content">
+                <text class="check-row__label">首次驱虫提醒</text>
+                <text class="check-row__desc">仅创建待办，后续补录时再选择具体驱虫类型</text>
+              </view>
+            </view>
+
+            <view class="check-row" @click="form.create_first_vaccination_task = !form.create_first_vaccination_task">
+              <view class="check-row__box" :class="{ 'check-row__box--checked': form.create_first_vaccination_task }">
+                <text v-if="form.create_first_vaccination_task" class="check-row__icon material-icons-round">check</text>
+              </view>
+              <view class="check-row__content">
+                <text class="check-row__label">首次疫苗提醒</text>
+                <text class="check-row__desc">仅创建待办，后续补录时再选择具体疫苗类型</text>
+              </view>
+            </view>
+
+            <text class="field-help field-help--tight">幼崽昵称未填写时将自动生成默认名称</text>
+          </view>
         </view>
       </view>
     </view>
@@ -225,7 +269,7 @@
       </button>
       <button
         v-if="step === 3"
-        class="btn-next btn-next--submit"
+        class="btn-next"
         :disabled="submitState === 'submitting'"
         @click="submit"
       >
@@ -253,6 +297,8 @@ const form = reactive({
   birth_date: null as number | null,
   birth_type: '顺产',
   birth_notes: '',
+  create_first_deworming_task: false,
+  create_first_vaccination_task: false,
 })
 
 const birthTypes = ['顺产', '助产', '剖腹产']
@@ -337,6 +383,8 @@ async function submit() {
       birth_date: form.birth_date,
       birth_type: form.birth_type,
       birth_notes: form.birth_notes || null,
+      create_first_deworming_task: form.create_first_deworming_task,
+      create_first_vaccination_task: form.create_first_vaccination_task,
       cost: cost && cost > 0 ? cost : null,
       puppies: puppies.map(p => ({
         name: p.name.trim() || '',
@@ -571,6 +619,33 @@ onLoad((query) => {
   &:focus {
     border-color: var(--primary);
   }
+}
+
+.field-help {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-3);
+
+  &--tight {
+    margin-top: 10px;
+  }
+}
+
+.field-textarea {
+  width: 100%;
+  min-height: 92px;
+  border-radius: 12px;
+  border: 1.5px solid var(--text-4);
+  background: var(--card);
+  padding: 12px 14px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+  line-height: 1.5;
+  box-sizing: border-box;
 }
 
 .field-wrapper {
@@ -823,6 +898,65 @@ onLoad((query) => {
   color: var(--text-1);
 }
 
+.followup-card {
+  background: var(--card-dim);
+  border-radius: var(--radius-row);
+  padding: 16px;
+}
+
+.check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 0;
+
+  &:not(:last-of-type) {
+    border-bottom: 1px solid rgba(216, 203, 189, 0.28);
+  }
+}
+
+.check-row__box {
+  width: 20px;
+  height: 20px;
+  border-radius: 7px;
+  border: 1.5px solid var(--text-4);
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+
+  &--checked {
+    background: var(--primary);
+    border-color: var(--primary);
+  }
+}
+
+.check-row__icon {
+  font-size: 13px;
+  color: #fff;
+}
+
+.check-row__content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.check-row__label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.check-row__desc {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+
 /* 底部按钮 */
 .btn-footer {
   position: fixed;
@@ -874,11 +1008,6 @@ onLoad((query) => {
 
   &[disabled] {
     opacity: 0.5;
-  }
-
-  &--submit {
-    background: var(--green);
-    box-shadow: 0 4px 16px rgba(61, 174, 111, 0.25);
   }
 }
 </style>
