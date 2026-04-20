@@ -58,17 +58,17 @@
               <text class="info-row-label">药品</text>
               <text class="info-row-value">{{ task.drug_name || '—' }}</text>
             </view>
-            <view class="info-row" v-if="task.dosage">
+            <view class="info-row" v-if="dosageText">
               <text class="info-row-label">剂量</text>
-              <text class="info-row-value">{{ task.dosage }}</text>
+              <text class="info-row-value">{{ dosageText }}</text>
             </view>
             <view class="info-row" v-if="task.method">
               <text class="info-row-label">方式</text>
               <text class="info-row-value">{{ task.method }}</text>
             </view>
-            <view class="info-row" v-if="task.frequency">
+            <view class="info-row" v-if="frequencyText">
               <text class="info-row-label">频率</text>
-              <text class="info-row-value">{{ task.frequency }}</text>
+              <text class="info-row-value">{{ frequencyText }}</text>
             </view>
             <view class="info-row">
               <text class="info-row-label">开始日期</text>
@@ -141,20 +141,35 @@
         <text class="section-text">操作</text>
       </view>
       <view class="action-area">
-        <BButton
-          v-if="canMarkToday"
-          variant="filled"
-          color="plum"
-          size="large"
-          @click="markTodayComplete"
-          style="width: 100%;"
-        >
-          标记今日完成
-        </BButton>
-        <view v-if="task.status === 'active'" class="btn-row">
-          <BButton variant="ghost" color="red" @click="confirmEndEarly">取消用药</BButton>
+        <view class="medication-action-card">
+          <view class="medication-action-card__glow" />
+          <view class="medication-action-card__body">
+            <view class="medication-action__row">
+              <view v-if="task.status === 'active'" class="medication-action__secondary-wrap">
+                <BButton class="medication-action__secondary" variant="ghost" color="red" @click="confirmEndEarly">
+                  <view class="medication-action__secondary-inner">
+                    <text class="material-icons-round medication-action__secondary-icon">block</text>
+                    <text>取消用药</text>
+                  </view>
+                </BButton>
+              </view>
+              <BButton
+                v-if="canMarkToday"
+                class="medication-action__primary"
+                variant="filled"
+                color="plum"
+                size="large"
+                @click="markTodayComplete"
+              >
+                <view class="medication-action__primary-inner">
+                  <text class="material-icons-round medication-action__primary-icon">check_circle</text>
+                  <text>标记今日完成</text>
+                </view>
+              </BButton>
+            </view>
+            <text class="action-note medication-action__note">当前不支持直接编辑历史用药任务；如需调整，请取消后重新创建。</text>
+          </view>
         </view>
-        <text class="action-note">当前不支持直接编辑历史用药任务；如需调整，请取消后重新创建。</text>
       </view>
     </template>
 
@@ -180,6 +195,8 @@ import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import { resolveMedicationDetailId } from '@/utils/dogDetailNavigation'
+import { formatMedicationDosage, formatMedicationFrequency } from '@/utils/medicationDisplay'
+import { getMedicationDayState, getMedicationTodayProgress, getMedicationFrequency } from '@/utils/medicationState'
 
 const task = ref<any>(null)
 const loading = ref(true)
@@ -216,6 +233,9 @@ const statusText = computed(() => {
   if (task.value.status === 'cancelled') return '已取消'
   return '进行中'
 })
+
+const dosageText = computed(() => formatMedicationDosage(task.value?.dosage, task.value?.dosage_unit))
+const frequencyText = computed(() => formatMedicationFrequency(task.value?.frequency))
 
 const statusBannerBg = computed(() => {
   if (task.value?.status === 'completed') return 'var(--green-soft)'
@@ -270,7 +290,7 @@ const completionDetailText = computed(() => {
 interface ExecutionDay {
   dayNum: number
   dateStr: string
-  status: 'done' | 'pending' | 'future'
+  status: 'done' | 'pending' | 'partial' | 'missed' | 'future'
   statusLabel: string
   detail: string
   isToday: boolean
@@ -289,21 +309,36 @@ const executionDays = computed<ExecutionDay[]>(() => {
     const dateStr = `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
     const isToday = dayTs === todayTs.value
     const isDone = completedDates.includes(dayTs)
-    const isFuture = dayTs > todayTs.value
+    const baseState = getMedicationDayState(task.value, dayTs, { todayTs: todayTs.value })
+    const todayProgress = isToday ? getMedicationTodayProgress(task.value, { todayTs: todayTs.value }) : 'empty'
+    const frequency = getMedicationFrequency(task.value)
+    const dayDoseCount = Number(task.value.daily_doses?.[String(i + 1)]) || 0
 
-    let status: 'done' | 'pending' | 'future' = 'future'
-    if (isDone) status = 'done'
-    else if (!isFuture) status = 'pending'
+    let status: ExecutionDay['status'] = baseState
+    if (isToday && todayProgress === 'partial') {
+      status = 'partial'
+    }
 
     let detail = '—'
     if (isDone && completedMap[dayTs]) {
       const info = completedMap[dayTs]
       detail = `${info.name || ''} ${info.time || ''}`.trim()
+    } else if (status === 'partial') {
+      detail = `已执行 ${dayDoseCount}/${frequency} 次`
     } else if (isToday && status === 'pending') {
-      detail = '待完成'
+      detail = '待执行'
+    } else if (status === 'missed') {
+      detail = '当日未执行'
     }
 
-    const statusLabel = status === 'done' ? '已完成' : status === 'pending' ? '待执行' : '未开始'
+    const statusLabelMap: Record<ExecutionDay['status'], string> = {
+      done: '已执行',
+      pending: '待执行',
+      partial: '执行中',
+      missed: '未执行',
+      future: '未开始',
+    }
+    const statusLabel = statusLabelMap[status]
     days.push({ dayNum: i + 1, dateStr, status, statusLabel, detail, isToday })
   }
 
@@ -602,6 +637,8 @@ onShow(() => {
   flex-shrink: 0;
   &--done { background: var(--green); }
   &--pending { background: var(--plum); }
+  &--partial { background: var(--plum); }
+  &--missed { background: var(--red); }
   &--future { background: var(--text-4); }
 }
 .exec-log-item__body {
@@ -630,6 +667,8 @@ onShow(() => {
   font-weight: 700;
   &--done { background: var(--green-soft); color: var(--green); }
   &--pending { background: var(--plum-soft); color: var(--plum); }
+  &--partial { background: rgba(134, 104, 176, 0.14); color: var(--plum); }
+  &--missed { background: rgba(224, 82, 82, 0.1); color: var(--red); }
   &--future { background: var(--card-dim); color: var(--text-3); }
 }
 .exec-detail {
@@ -644,10 +683,104 @@ onShow(() => {
   }
 }
 
+.action-area {
+  padding: 0 16px 8px;
+}
+
+.medication-action-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 20px;
+  border: 1px solid rgba(134, 104, 176, 0.12);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 242, 251, 0.96));
+  box-shadow: 0 10px 30px rgba(101, 74, 145, 0.08);
+}
+
+.medication-action-card__glow {
+  position: absolute;
+  top: -42px;
+  right: -18px;
+  width: 132px;
+  height: 132px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(171, 133, 219, 0.18), rgba(171, 133, 219, 0));
+  pointer-events: none;
+}
+
+.medication-action-card__body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+}
+
+.medication-action__row {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.medication-action__primary {
+  flex: 1;
+  min-width: 0;
+  min-height: 52px;
+  border-radius: 18px;
+  box-shadow: 0 10px 24px rgba(124, 89, 181, 0.24);
+}
+
+.medication-action__primary-inner,
+.medication-action__secondary-inner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.medication-action__primary-icon {
+  font-size: 18px;
+  color: #fff;
+}
+
+.medication-action__secondary-wrap {
+  flex: 0 0 auto;
+  display: flex;
+}
+
+.medication-action__secondary {
+  min-width: 114px;
+  min-height: 52px;
+  padding: 0 10px;
+  border-radius: 18px;
+  border-color: rgba(224, 82, 82, 0.18);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 244, 244, 0.88));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  color: var(--red);
+}
+
+.medication-action__secondary-icon {
+  font-size: 16px;
+  color: var(--red);
+}
+
 .action-note {
   margin-top: 10px;
   font-size: 12px;
   line-height: 1.5;
   color: var(--text-3);
+}
+
+.medication-action__note {
+  margin-top: 2px;
+}
+
+@media (max-width: 360px) {
+  .medication-action__row {
+    flex-direction: column;
+  }
+
+  .medication-action__secondary {
+    width: 100%;
+  }
 }
 </style>

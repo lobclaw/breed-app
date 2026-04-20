@@ -158,7 +158,7 @@
             <view class="protocol-picker__item-body">
               <text class="protocol-picker__item-name">{{ protocol.name }}</text>
               <text class="protocol-picker__item-detail">
-                {{ protocol.drug_name }}{{ protocol.dosage ? ' · ' + protocol.dosage + (protocol.dosage_unit || 'mg') : '' }}{{ protocol.duration_days ? ' · ' + protocol.duration_days + '天' : '' }}
+                {{ protocolDetailText(protocol) }}
               </text>
             </view>
             <text class="material-icons-round" style="font-size: 18px; color: var(--text-4);">chevron_right</text>
@@ -262,6 +262,7 @@ import { useCloudCall } from '@/composables/useCloudCall'
 import { useRecordSubmitState } from '@/composables/useRecordSubmitState'
 import { buildTaskFeedbackMessage, queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
 import { resolveMedicationRouteQuery } from '@/utils/recordFormRoutes'
+import { formatMedicationDosage } from '@/utils/medicationDisplay'
 import { useProtocolStore, type MedicationProtocol } from '@/stores/protocolStore'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
@@ -437,6 +438,15 @@ const protocolStore = useProtocolStore()
 const showProtocolPicker = ref(false)
 const protocolLoading = ref(false)
 const protocols = computed(() => protocolStore.list)
+
+function protocolDetailText(protocol: MedicationProtocol) {
+  const parts = [
+    protocol.drug_name,
+    formatMedicationDosage(protocol.dosage, protocol.dosage_unit, '毫克'),
+    protocol.duration_days ? `${protocol.duration_days}天` : '',
+  ].filter(Boolean)
+  return parts.join(' · ')
+}
 
 async function openProtocolPicker() {
   showProtocolPicker.value = true

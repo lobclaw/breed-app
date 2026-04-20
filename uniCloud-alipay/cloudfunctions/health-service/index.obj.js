@@ -1404,7 +1404,20 @@ module.exports = {
       .get()
     if (!records || records.length === 0) throw new Error('记录不存在')
 
-    return records[0]
+    const record = records[0]
+
+    // 兼容历史疾病记录未冗余 dog_name 的情况，详情页按 dog_id 补犬名
+    if (!record.dog_name && record.dog_id) {
+      const { data: dogs } = await db.collection('dogs')
+        .where({ _id: record.dog_id, family_id: this.familyId })
+        .field({ name: true })
+        .get()
+      if (dogs && dogs.length > 0) {
+        record.dog_name = dogs[0].name || ''
+      }
+    }
+
+    return record
   },
 
   /**
@@ -1475,6 +1488,7 @@ module.exports = {
     const { data: latest } = await db.collection('dog_weights')
       .where({ dog_id, family_id: familyId })
       .orderBy('date', 'desc')
+      .orderBy('created_at', 'desc')
       .limit(1)
       .get()
     if (latest?.[0]?.weight) {
@@ -1489,7 +1503,8 @@ module.exports = {
 
     const { data: records } = await db.collection('dog_weights')
       .where({ dog_id: dogId, family_id: this.familyId })
-      .orderBy('date', 'asc')
+      .orderBy('date', 'desc')
+      .orderBy('created_at', 'desc')
       .get()
 
     return { data: records }

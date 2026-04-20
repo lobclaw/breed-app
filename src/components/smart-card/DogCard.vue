@@ -125,6 +125,7 @@ const typeMap: Record<string, string> = {
   follicle_check: '/pages/record/breeding-follicle',
   mating: '/pages/record/breeding-mating',
   pregnancy_check: '/pages/record/breeding-pregnancy',
+  birth: '/pages/breeding/birth-wizard',
   prenatal_check: '/pages/record/breeding-prenatal',
   pre_labor: '/pages/record/breeding-prelabor',
 }
@@ -152,6 +153,12 @@ function goRecordTask(task: any) {
       url = '/pages/record/breeding-mating'
     } else if (stepType === 'pregnancy_check') {
       url = '/pages/record/breeding-pregnancy'
+    } else if (stepType === 'birth') {
+      const birthParams: string[] = []
+      if (task.cycle_id) birthParams.push(`cycleId=${task.cycle_id}`)
+      if (props.card.dogName) birthParams.push(`damName=${encodeURIComponent(props.card.dogName)}`)
+      uni.navigateTo({ url: `/pages/breeding/birth-wizard?${birthParams.join('&')}` })
+      return
     } else if (stepType === 'weaning_confirm' && task.litter_id) {
       const litterParams = [`id=${task.litter_id}`]
       if (task._id) litterParams.push(`taskId=${task._id}`)

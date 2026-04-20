@@ -189,9 +189,9 @@
         </view>
 
         <view class="field-group">
-          <view class="field-label"><text>第几次配种</text></view>
+          <view class="field-label"><text>第几脚</text></view>
           <view class="display-field">
-            <text>第 {{ details.mating_number || 1 }} 次（本周期）</text>
+            <text>{{ matingNumberPreviewText }}</text>
           </view>
         </view>
 
@@ -473,9 +473,10 @@ import { buildRecordFeedbackMessage, queueSubmitFeedback, wait } from '@/composa
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 
-let cycleId = ''
+const cycleId = ref('')
 const selectedDog = ref<any>(null)
 const selectedSire = ref<any>(null)
+const matingPreviewRequestToken = ref(0)
 
 const form = reactive({
   type: 'heat' as string,
@@ -553,6 +554,8 @@ const estimatedDueDate = computed(() => {
   return `${d.getMonth() + 1}月${d.getDate()}日`
 })
 
+const matingNumberPreviewText = computed(() => `第 ${details.mating_number || 1} 脚（本周期自动计算）`)
+
 function setDateChip(chip: string) {
   dateChipActive.value = chip
   const now = new Date()
@@ -617,6 +620,37 @@ const { run: addRecord } = useCloudCall('breeding-service', 'addBreedingRecord',
   loadingMode: 'local',
   throwOnError: true,
 })
+const { run: getNextMatingNumber } = useCloudCall('breeding-service', 'getNextMatingNumber', {
+  showLoading: false,
+})
+
+async function refreshMatingNumberPreview() {
+  if (form.type !== 'mating') return
+
+  const dogId = selectedDog.value?._id
+  if (!dogId) {
+    details.mating_number = 1
+    return
+  }
+
+  const requestToken = ++matingPreviewRequestToken.value
+  try {
+    const result = await getNextMatingNumber({
+      dog_id: dogId,
+      cycle_id: cycleId.value || undefined,
+    })
+    if (requestToken !== matingPreviewRequestToken.value) return
+
+    const data = result?.data || result || {}
+    details.mating_number = Number(data.mating_number) || 1
+    if (!cycleId.value && data.cycle_id) {
+      cycleId.value = data.cycle_id
+    }
+  } catch {
+    if (requestToken !== matingPreviewRequestToken.value) return
+    details.mating_number = 1
+  }
+}
 
 async function submit() {
   submitState.value = 'submitting'
@@ -625,7 +659,7 @@ async function submit() {
     const res = await addRecord({
       type: form.type,
       dog_id: selectedDog.value?._id || '',
-      cycle_id: cycleId || undefined,
+      cycle_id: cycleId.value || undefined,
       date: form.date,
       cost: cost && cost > 0 ? cost : null,
       notes: form.notes || null,
@@ -648,7 +682,7 @@ async function submit() {
 }
 
 onLoad((query) => {
-  cycleId = query?.cycleId || ''
+  cycleId.value = query?.cycleId || ''
 
   // 如果 query 传入了有效的 type，设置表单类型
   const validTypes = typeOptions.map(t => t.value)
@@ -661,6 +695,15 @@ onLoad((query) => {
   today.setHours(0, 0, 0, 0)
   form.date = today.getTime()
 })
+
+watch(
+  [() => form.type, () => selectedDog.value?._id || ''],
+  async ([type]) => {
+    if (type !== 'mating') return
+    await refreshMatingNumberPreview()
+  },
+  { immediate: true }
+)
 </script>
 
 <style lang="scss" scoped>

@@ -52,7 +52,7 @@
         <view class="proto-card__tags">
           <view class="proto-tag proto-tag--plum">{{ p.drug_name }}</view>
           <view v-if="p.duration_days" class="proto-tag proto-tag--teal">{{ p.duration_days }}天疗程</view>
-          <view v-if="p.dosage" class="proto-tag proto-tag--dim">{{ p.dosage }}{{ p.dosage_unit || '' }}</view>
+          <view v-if="protocolDosageText(p)" class="proto-tag proto-tag--dim">{{ protocolDosageText(p) }}</view>
           <view v-if="p.method" class="proto-tag proto-tag--dim">{{ p.method }}</view>
         </view>
         <text v-if="p.notes" class="proto-card__notes">{{ p.notes }}</text>
@@ -103,6 +103,7 @@ import BSheet from '@/components/layout/BSheet.vue'
 import BDeleteConfirm from '@/components/layout/BDeleteConfirm.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 import { useProtocolStore } from '@/stores/protocolStore'
+import { formatMedicationDosage } from '@/utils/medicationDisplay'
 
 const protocolStore = useProtocolStore()
 const protocols = computed(() => protocolStore.list)
@@ -124,6 +125,10 @@ function openSheet() {
   form.duration_days = ''
   form.notes = ''
   showSheet.value = true
+}
+
+function protocolDosageText(protocol: { dosage?: string | number | null; dosage_unit?: string | null }) {
+  return formatMedicationDosage(protocol.dosage, protocol.dosage_unit)
 }
 
 async function saveProtocol() {

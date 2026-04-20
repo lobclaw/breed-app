@@ -57,6 +57,52 @@ function isPregnancyRejected(details = {}) {
   return details.confirmed === '否' || details.confirmed === false
 }
 
+async function countCycleMatingRecords(familyId, cycleId) {
+  if (!cycleId) return 0
+
+  const { total } = await db.collection('breeding_records')
+    .where({
+      family_id: familyId,
+      cycle_id: cycleId,
+      type: 'mating',
+    })
+    .count()
+
+  return total || 0
+}
+
+async function resolveActiveCycleId(familyId, dogId) {
+  if (!dogId) return ''
+
+  const { data: activeCycles } = await db.collection('breeding_cycles')
+    .where({
+      dam_id: dogId,
+      status: dbCmd.in(['发情中', '怀孕中']),
+      family_id: familyId,
+    })
+    .orderBy('created_at', 'desc')
+    .limit(1)
+    .get()
+
+  return activeCycles && activeCycles.length > 0 ? activeCycles[0]._id : ''
+}
+
+async function getNextMatingNumberPreview(familyId, { dogId, cycleId } = {}) {
+  const resolvedCycleId = cycleId || await resolveActiveCycleId(familyId, dogId)
+  if (!resolvedCycleId) {
+    return {
+      cycle_id: '',
+      mating_number: 1,
+    }
+  }
+
+  const matingCount = await countCycleMatingRecords(familyId, resolvedCycleId)
+  return {
+    cycle_id: resolvedCycleId,
+    mating_number: matingCount + 1,
+  }
+}
+
 async function clearPendingBreedingMilestones(familyId, { cycleId = null, litterId = null } = {}) {
   const where = {
     family_id: familyId,
@@ -152,6 +198,39 @@ async function createExtraArrangementTask(familyId, dog, cycleId, sourceRecordId
   return id
 }
 
+async function getCycleHeatDate(cycleId, familyId) {
+  if (!cycleId) return null
+
+  const { data: heatRecords } = await db.collection('breeding_records')
+    .where({
+      cycle_id: cycleId,
+      family_id: familyId,
+      type: 'heat',
+    })
+    .orderBy('date', 'asc')
+    .limit(1)
+    .get()
+
+  const heatDate = heatRecords?.[0]?.date
+  return typeof heatDate === 'number' ? heatDate : null
+}
+
+async function getLatestMatingRecord(cycleId, familyId) {
+  if (!cycleId) return null
+
+  const { data: matingRecords } = await db.collection('breeding_records')
+    .where({
+      cycle_id: cycleId,
+      family_id: familyId,
+      type: 'mating',
+    })
+    .orderBy('date', 'desc')
+    .limit(1)
+    .get()
+
+  return matingRecords?.[0] || null
+}
+
 async function syncExtraArrangementTask(familyId, dog, cycleId, sourceRecordId, extraArrangement) {
   const now = Date.now()
   const { data: existingTasks } = await db.collection('tasks').where({
@@ -221,6 +300,7 @@ async function generateTasks(familyId, type, data, cycleId, dog, recordId) {
 
   if (type === 'follicle_check') {
     await clearPendingBreedingMilestones(familyId, { cycleId })
+    const heatDate = await getCycleHeatDate(cycleId, familyId)
     await createBreedingMilestoneTask(familyId, dog, {
       cycleId,
       title: `${dog.name} · 配种`,
@@ -228,6 +308,8 @@ async function generateTasks(familyId, type, data, cycleId, dog, recordId) {
       sourceRecordId: recordId,
       details: {
         step_type: 'mating',
+        follicle_check_date: data.date,
+        heat_date: heatDate,
       },
     })
   }
@@ -241,8 +323,30 @@ async function generateTasks(familyId, type, data, cycleId, dog, recordId) {
       sourceRecordId: recordId,
       details: {
         step_type: 'follicle_check',
+        heat_date: data.date,
       },
     })
+  }
+
+  if (type === 'pregnancy_check' && isPregnancyConfirmed(data.details)) {
+    const latestMatingRecord = await getLatestMatingRecord(cycleId, familyId)
+    const expectedDueDate = latestMatingRecord?.details?.expected_due_date
+      || (latestMatingRecord?.date ? latestMatingRecord.date + 59 * 86400000 : null)
+
+    if (expectedDueDate) {
+      await createBreedingMilestoneTask(familyId, dog, {
+        cycleId,
+        title: `${dog.name} · 生产`,
+        dueDate: expectedDueDate,
+        sourceRecordId: recordId,
+        details: {
+          step_type: 'birth',
+          expected_due_date: expectedDueDate,
+          mating_date: latestMatingRecord?.date || null,
+          mating_number: latestMatingRecord?.details?.mating_number || null,
+        },
+      })
+    }
   }
 }
 
@@ -370,6 +474,17 @@ module.exports = {
     return result
   },
 
+  async getNextMatingNumber({ dog_id, cycle_id }) {
+    if (!dog_id && !cycle_id) throw new Error('缺少犬只或周期 ID')
+
+    return {
+      data: await getNextMatingNumberPreview(this.familyId, {
+        dogId: dog_id,
+        cycleId: cycle_id,
+      }),
+    }
+  },
+
   /**
    * 录入繁育记录（8种 type）
    * 核心方法：自动创建/更新周期 + 生成任务 + 创建费用
@@ -435,8 +550,20 @@ module.exports = {
       }
     }
 
+    const normalizedDetails = {
+      ...(data.details || {}),
+    }
+    if (data.type === 'mating') {
+      const preview = await getNextMatingNumberPreview(familyId, {
+        dogId: data.dog_id,
+        cycleId,
+      })
+      normalizedDetails.mating_number = preview.mating_number
+    }
+    data.details = normalizedDetails
+
     // 类型特有字段校验
-    validateDetails(data.type, data.details || {})
+    validateDetails(data.type, normalizedDetails)
 
     // 创建繁育记录
     const recordData = {
@@ -447,7 +574,7 @@ module.exports = {
       date: data.date,
       cost: data.cost || null,
       notes: data.notes || null,
-      details: data.details || {},
+      details: normalizedDetails,
       created_by: this.uid,
       created_at: now,
       updated_at: now,
@@ -1028,7 +1155,18 @@ module.exports = {
     if (date !== undefined) updateData.date = date
     if (cost !== undefined) updateData.cost = cost
     if (notes !== undefined) updateData.notes = notes
-    if (details !== undefined) updateData.details = details
+    if (details !== undefined) {
+      const nextDetails = {
+        ...(details || {}),
+      }
+
+      if (record.type === 'mating') {
+        const savedMatingNumber = Number(record.details?.mating_number || record.details?.mating_count) || 1
+        nextDetails.mating_number = savedMatingNumber
+      }
+
+      updateData.details = nextDetails
+    }
 
     await db.collection('breeding_records').doc(id).update(updateData)
 

@@ -529,6 +529,252 @@ describe('breeding-service', () => {
     })
   })
 
+  describe('配种脚次', () => {
+    it('应按当前周期已有配种记录数返回下一脚', async () => {
+      const now = Date.now()
+      seedCollection('breeding_cycles', [{
+        _id: 'cycle_mating_preview',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        status: '怀孕中',
+        created_at: now,
+        updated_at: now,
+      }])
+      seedCollection('breeding_records', [
+        {
+          _id: 'mating_record_1',
+          type: 'mating',
+          cycle_id: 'cycle_mating_preview',
+          dog_id: 'dam_1',
+          family_id: familyId,
+          date: now,
+          details: { sire_id: 'sire_1', sire_name: '大白', method: '人工授精', mating_number: 1 },
+          created_by: 'user_1',
+          created_at: now,
+          updated_at: now,
+        },
+        {
+          _id: 'mating_record_2',
+          type: 'mating',
+          cycle_id: 'cycle_mating_preview',
+          dog_id: 'dam_1',
+          family_id: familyId,
+          date: now + 3600000,
+          details: { sire_id: 'sire_1', sire_name: '大白', method: '人工授精', mating_number: 2 },
+          created_by: 'user_1',
+          created_at: now,
+          updated_at: now,
+        },
+        {
+          _id: 'mating_record_3',
+          type: 'mating',
+          cycle_id: 'cycle_mating_preview',
+          dog_id: 'dam_1',
+          family_id: familyId,
+          date: now + 7200000,
+          details: { sire_id: 'sire_1', sire_name: '大白', method: '人工授精', mating_number: 3 },
+          created_by: 'user_1',
+          created_at: now,
+          updated_at: now,
+        },
+      ])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      const res = await breedingService.getNextMatingNumber.call(ctx, {
+        dog_id: 'dam_1',
+        cycle_id: 'cycle_mating_preview',
+      })
+
+      expect(res.data.cycle_id).toBe('cycle_mating_preview')
+      expect(res.data.mating_number).toBe(4)
+    })
+
+    it('创建配种记录时应以服务端计算的脚次覆盖前端传值', async () => {
+      const now = Date.now()
+      seedCollection('breeding_cycles', [{
+        _id: 'cycle_mating_create',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        status: '发情中',
+        created_at: now,
+        updated_at: now,
+      }])
+      seedCollection('breeding_records', [
+        {
+          _id: 'existing_mating_1',
+          type: 'mating',
+          cycle_id: 'cycle_mating_create',
+          dog_id: 'dam_1',
+          family_id: familyId,
+          date: now,
+          details: { sire_id: 'sire_1', sire_name: '大白', method: '人工授精', mating_number: 1 },
+          created_by: 'user_1',
+          created_at: now,
+          updated_at: now,
+        },
+        {
+          _id: 'existing_mating_2',
+          type: 'mating',
+          cycle_id: 'cycle_mating_create',
+          dog_id: 'dam_1',
+          family_id: familyId,
+          date: now + 3600000,
+          details: { sire_id: 'sire_1', sire_name: '大白', method: '人工授精', mating_number: 2 },
+          created_by: 'user_1',
+          created_at: now,
+          updated_at: now,
+        },
+      ])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      const res = await breedingService.addBreedingRecord.call(ctx, {
+        type: 'mating',
+        dog_id: 'dam_1',
+        cycle_id: 'cycle_mating_create',
+        date: now + 86400000,
+        details: {
+          sire_id: 'sire_1',
+          sire_name: '大白',
+          method: '人工授精',
+          mating_number: 99,
+        },
+      })
+
+      const { data: records } = await db.collection('breeding_records')
+        .where({ _id: res.data.recordId })
+        .get()
+
+      expect(records).toHaveLength(1)
+      expect(records[0].details?.mating_number).toBe(3)
+    })
+
+    it('编辑配种记录时应保留原脚次', async () => {
+      const now = Date.now()
+      seedCollection('breeding_records', [{
+        _id: 'mating_record_edit',
+        type: 'mating',
+        cycle_id: 'cycle_mating_edit',
+        dog_id: 'dam_1',
+        family_id: familyId,
+        date: now,
+        notes: '原始备注',
+        details: {
+          sire_id: 'sire_1',
+          sire_name: '大白',
+          method: '人工授精',
+          mating_number: 2,
+        },
+        created_by: 'user_1',
+        created_at: now,
+        updated_at: now,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      await breedingService.updateBreedingRecord.call(ctx, {
+        id: 'mating_record_edit',
+        date: now + 86400000,
+        notes: '更新备注',
+        details: {
+          sire_id: 'sire_1',
+          sire_name: '大白',
+          method: '自然交配',
+          mating_number: 7,
+        },
+      })
+
+      const { data: records } = await db.collection('breeding_records')
+        .where({ _id: 'mating_record_edit' })
+        .get()
+
+      expect(records).toHaveLength(1)
+      expect(records[0].details?.mating_number).toBe(2)
+      expect(records[0].details?.method).toBe('自然交配')
+    })
+  })
+
+  describe('孕检后主链续接', () => {
+    it('确认怀孕后应生成生产里程碑', async () => {
+      const now = Date.now()
+      seedCollection('breeding_cycles', [{
+        _id: 'cycle_pregnancy_confirmed',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        status: '怀孕中',
+        created_at: now,
+        updated_at: now,
+      }])
+      seedCollection('breeding_records', [{
+        _id: 'mating_record_for_birth',
+        type: 'mating',
+        cycle_id: 'cycle_pregnancy_confirmed',
+        dog_id: 'dam_1',
+        family_id: familyId,
+        date: now - 25 * 86400000,
+        details: {
+          sire_id: 'sire_1',
+          sire_name: '大白',
+          method: '人工授精',
+          mating_number: 2,
+          expected_due_date: now + 34 * 86400000,
+        },
+        created_by: 'user_1',
+        created_at: now,
+        updated_at: now,
+      }])
+      seedCollection('tasks', [{
+        _id: 'pregnancy_milestone_existing',
+        family_id: familyId,
+        dog_id: 'dam_1',
+        dog_name: '花花',
+        cycle_id: 'cycle_pregnancy_confirmed',
+        type: 'breeding_milestone',
+        title: '花花 · 建议孕检',
+        due_date: now,
+        status: 'pending',
+        details: {
+          step_type: 'pregnancy_check',
+          expected_due_date: now + 34 * 86400000,
+          expected_checkup_date: now,
+        },
+        created_at: now,
+        updated_at: now,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      await breedingService.addBreedingRecord.call(ctx, {
+        type: 'pregnancy_check',
+        dog_id: 'dam_1',
+        cycle_id: 'cycle_pregnancy_confirmed',
+        date: now,
+        details: {
+          confirmed: '是',
+          puppy_count: 4,
+        },
+      })
+
+      const { data: tasks } = await db.collection('tasks')
+        .where({
+          family_id: familyId,
+          cycle_id: 'cycle_pregnancy_confirmed',
+          type: 'breeding_milestone',
+        })
+        .get()
+
+      const oldMilestone = tasks.find(t => t._id === 'pregnancy_milestone_existing')
+      const birthMilestone = tasks.find(t => t.details?.step_type === 'birth')
+
+      expect(oldMilestone?.status).toBe('cancelled')
+      expect(birthMilestone).toBeTruthy()
+      expect(birthMilestone?.title).toBe('花花 · 生产')
+      expect(birthMilestone?.due_date).toBe(now + 34 * 86400000)
+      expect(birthMilestone?.details?.mating_number).toBe(2)
+      expect(birthMilestone?.details?.mating_date).toBe(now - 25 * 86400000)
+    })
+  })
+
   describe('生产记录', () => {
     it('应创建窝 + 幼崽 + 任务', async () => {
       const now = Date.now()

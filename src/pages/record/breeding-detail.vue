@@ -85,34 +85,34 @@
                   <text>{{ record.dog_name || '未知' }}</text>
                 </view>
               </view>
-              <view class="info-row" v-if="record.details?.male_name">
+              <view class="info-row" v-if="getMatingSireName(record.details)">
                 <text class="info-row-label">种公</text>
                 <view class="info-row-value">
                   <view class="mini-avatar">
                     <text class="material-icons-round" style="color: #fff; font-size: 14px;">pets</text>
                   </view>
-                  <text>{{ record.details.male_name }}</text>
+                  <text>{{ getMatingSireName(record.details) }}</text>
                 </view>
               </view>
               <view class="info-row">
                 <text class="info-row-label">配种日期</text>
                 <text class="info-row-value">{{ formatDate(record.date) }}</text>
               </view>
-              <view class="info-row" v-if="record.details?.mating_method">
+              <view class="info-row" v-if="getMatingMethod(record.details)">
                 <text class="info-row-label">配种方式</text>
-                <text class="info-row-value">{{ record.details.mating_method }}</text>
+                <text class="info-row-value">{{ getMatingMethod(record.details) }}</text>
               </view>
-              <view class="info-row" v-if="record.details?.mating_count">
-                <text class="info-row-label">第几次</text>
-                <text class="info-row-value">第{{ record.details.mating_count }}次</text>
+              <view class="info-row" v-if="getMatingNumber(record.details)">
+                <text class="info-row-label">脚次</text>
+                <text class="info-row-value">第{{ getMatingNumber(record.details) }}脚</text>
               </view>
-              <view class="info-row" v-if="record.details?.expected_check_date">
+              <view class="info-row" v-if="getExpectedCheckDate(record.details)">
                 <text class="info-row-label">预计孕检日</text>
-                <text class="info-row-value">{{ formatDate(record.details.expected_check_date) }}</text>
+                <text class="info-row-value">{{ formatDate(getExpectedCheckDate(record.details)) }}</text>
               </view>
-              <view class="info-row" v-if="record.details?.expected_due_date">
+              <view class="info-row" v-if="getExpectedDueDate(record.details)">
                 <text class="info-row-label">预计预产期</text>
-                <text class="info-row-value">{{ formatDate(record.details.expected_due_date) }}</text>
+                <text class="info-row-value">{{ formatDate(getExpectedDueDate(record.details)) }}</text>
               </view>
             </template>
 
@@ -286,15 +286,43 @@ const tagColor = computed(() => typeMap[record.value?.type]?.tagColor || 'green'
 const cardColor = computed(() => typeMap[record.value?.type]?.cardColor || 'green')
 const canEdit = computed(() => record.value?.type !== 'heat_observation')
 const canDelete = computed(() => record.value?.type === 'heat_observation')
+
+function getMatingSireName(details: Record<string, any> = {}) {
+  return details.sire_name || details.male_name || ''
+}
+
+function getMatingMethod(details: Record<string, any> = {}) {
+  return details.method || details.mating_method || ''
+}
+
+function getMatingNumber(details: Record<string, any> = {}) {
+  const value = Number(details.mating_number || details.mating_count)
+  return value > 0 ? value : null
+}
+
+function getExpectedCheckDate(details: Record<string, any> = {}) {
+  return details.expected_checkup_date || details.expected_check_date || null
+}
+
+function getExpectedDueDate(details: Record<string, any> = {}) {
+  return details.expected_due_date || null
+}
+
 const summaryTitle = computed(() => {
   if (record.value?.type === 'heat') return '发情开始'
-  if (record.value?.type === 'mating') return record.value?.details?.male_name ? `与 ${record.value.details.male_name} 配种` : '配种记录'
+  if (record.value?.type === 'mating') {
+    const sireName = getMatingSireName(record.value?.details)
+    return sireName ? `与 ${sireName} 配种` : '配种记录'
+  }
   if (record.value?.type === 'heat_observation') return '发情周期观察'
   if (record.value?.type === 'pregnancy_check') return record.value?.details?.result || '孕检记录'
   return typeLabel.value
 })
 const summaryMeta = computed(() => {
-  if (record.value?.type === 'mating' && record.value?.details?.mating_count) return `第${record.value.details.mating_count}次`
+  if (record.value?.type === 'mating') {
+    const matingNumber = getMatingNumber(record.value?.details)
+    if (matingNumber) return `第${matingNumber}脚`
+  }
   if (record.value?.type === 'pregnancy_check' && record.value?.details?.fetus_count) return `${record.value.details.fetus_count}只`
   if (record.value?.type === 'heat_observation') return '观察日志'
   return typeLabel.value

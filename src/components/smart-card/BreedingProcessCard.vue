@@ -17,15 +17,27 @@
     <view class="process-body">
       <view class="process-copy">
         <text class="process-stage" :class="`process-stage--${milestone.suggestionStatus}`">{{ milestone.stageTitle }}</text>
-        <text class="process-day">{{ milestone.dayLabel }}</text>
-        <text class="process-reference">{{ milestone.referenceDateLabel }}</text>
+        <text class="process-day">{{ primaryLabel }}</text>
+        <text v-if="secondaryLabel" class="process-reference">{{ secondaryLabel }}</text>
+        <text
+          v-if="alertLabel"
+          class="process-alert"
+          :class="`process-alert--${milestone.suggestionStatus}`"
+        >{{ alertLabel }}</text>
       </view>
-      <view class="process-chip" :class="`process-chip--${milestone.suggestionStatus}`">
+      <view v-if="showSuggestionChip" class="process-chip" :class="`process-chip--${milestone.suggestionStatus}`">
         <text class="process-chip__text" :class="`process-chip__text--${milestone.suggestionStatus}`">{{ milestone.suggestionLabel }}</text>
       </view>
     </view>
 
     <view class="card-actions">
+      <view
+        v-if="canContinueMating"
+        class="btn btn--text"
+        @click.stop="goContinueMating"
+      >
+        <text class="btn-text btn-text--muted">继续配种</text>
+      </view>
       <view class="btn btn--primary btn--primary-amber" @click.stop="goProcess">
         <text class="material-icons-round btn-icon btn-icon--white">arrow_forward</text>
         <text class="btn-text btn-text--white">处理</text>
@@ -38,10 +50,27 @@
 import { computed } from 'vue'
 
 import { deriveBreedingMilestoneViewModel } from '@/utils/breedingMilestone'
+import { buildHomeContinueMatingUrl, canOpenHomeContinueMating } from '@/utils/homeHeatObservation'
 
 const props = defineProps<{ card: any }>()
 
 const milestone = computed(() => deriveBreedingMilestoneViewModel(props.card?.tasks?.[0] || {}))
+const primaryLabel = computed(() => {
+  if (milestone.value.stepType === 'mating' && milestone.value.heatDayLabel) return milestone.value.heatDayLabel
+  return milestone.value.dayLabel
+})
+const secondaryLabel = computed(() => {
+  if (milestone.value.stepType === 'mating') return milestone.value.stageDayLabel
+  return milestone.value.referenceDateLabel
+})
+const alertLabel = computed(() => {
+  if (milestone.value.stepType === 'mating') return milestone.value.passedWindowLabel
+  return milestone.value.suggestionStatus === 'window_passed' ? milestone.value.suggestionLabel : ''
+})
+const showSuggestionChip = computed(() => {
+  return !(milestone.value.stepType === 'mating' && milestone.value.suggestionStatus === 'window_passed')
+})
+const canContinueMating = computed(() => canOpenHomeContinueMating(props.card))
 
 const typeMap: Record<string, string> = {
   vaccination: '/pages/record/health-vaccination',
@@ -51,6 +80,7 @@ const typeMap: Record<string, string> = {
   follicle_check: '/pages/record/breeding-follicle',
   mating: '/pages/record/breeding-mating',
   pregnancy_check: '/pages/record/breeding-pregnancy',
+  birth: '/pages/breeding/birth-wizard',
   prenatal_check: '/pages/record/breeding-prenatal',
   pre_labor: '/pages/record/breeding-prelabor',
 }
@@ -75,6 +105,12 @@ function goProcess() {
       url = '/pages/record/breeding-mating'
     } else if (stepType === 'pregnancy_check') {
       url = '/pages/record/breeding-pregnancy'
+    } else if (stepType === 'birth') {
+      const birthParams: string[] = []
+      if (task.cycle_id) birthParams.push(`cycleId=${task.cycle_id}`)
+      if (props.card.dogName) birthParams.push(`damName=${encodeURIComponent(props.card.dogName)}`)
+      uni.navigateTo({ url: `/pages/breeding/birth-wizard?${birthParams.join('&')}` })
+      return
     } else if (stepType === 'weaning_confirm' && task.litter_id) {
       const litterParams = [`id=${task.litter_id}`]
       if (task._id) litterParams.push(`taskId=${task._id}`)
@@ -86,6 +122,11 @@ function goProcess() {
   }
 
   uni.navigateTo({ url: `${url}?${params.join('&')}` })
+}
+
+function goContinueMating() {
+  if (!canOpenHomeContinueMating(props.card)) return
+  uni.navigateTo({ url: buildHomeContinueMatingUrl(props.card) })
 }
 </script>
 
@@ -173,6 +214,16 @@ function goProcess() {
   color: var(--text-3);
 }
 
+.process-alert {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-3);
+}
+
+.process-alert--window_passed {
+  color: var(--red);
+}
+
 .process-chip {
   align-self: flex-start;
   padding: 6px 12px;
@@ -224,8 +275,15 @@ function goProcess() {
   background: linear-gradient(135deg, rgba(242, 167, 62, 0.92), rgba(255, 192, 108, 0.92));
 }
 
+.btn--text {
+  min-width: 0;
+  padding: 8px 4px;
+  background: transparent;
+}
+
 .btn-icon { font-size: 16px; flex-shrink: 0; }
 .btn-icon--white { color: #fff; }
 .btn-text { font-family: var(--font-display); font-size: 13px; font-weight: 700; }
 .btn-text--white { color: #fff; }
+.btn-text--muted { color: var(--text-3); }
 </style>

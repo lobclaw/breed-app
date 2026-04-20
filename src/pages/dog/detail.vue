@@ -162,8 +162,15 @@
                 <text class="material-icons-round">{{ healthIcon(record.type) }}</text>
               </view>
               <view class="dog-detail__rec-body">
-                <text class="dog-detail__rec-title">{{ typeLabel(record.type) }}<text v-if="recordSubtitle(record)"> · {{ recordSubtitle(record) }}</text></text>
+                <text class="dog-detail__rec-title">{{ recentHealthRecordTitle(record) }}</text>
                 <text class="dog-detail__rec-sub">{{ formatDate(record.date) }}</text>
+              </view>
+              <view
+                v-if="illnessStatusLabel(record)"
+                class="dog-detail__rec-tag"
+                :class="`dog-detail__rec-tag--${illnessStatusTone(record)}`"
+              >
+                <text class="dog-detail__rec-tag-text">{{ illnessStatusLabel(record) }}</text>
               </view>
               <text class="material-icons-round dog-detail__rec-chevron">chevron_right</text>
             </view>
@@ -386,7 +393,7 @@
         />
         <view v-else>
           <!-- 用药中 -->
-          <view v-if="medStatuses.length > 0">
+          <view v-if="medStatuses.length > 0" class="dog-detail__health-group">
             <view class="dog-detail__sec dog-detail__sec--plum">
               <text class="dog-detail__sec-text">用药中</text>
               <view class="dog-detail__sec-badge">
@@ -407,7 +414,7 @@
             </view>
           </view>
           <!-- 疫苗 -->
-          <view v-if="vaccineRecords.length > 0">
+          <view v-if="vaccineRecords.length > 0" class="dog-detail__health-group">
             <view class="dog-detail__sec dog-detail__sec--blue">
               <text class="dog-detail__sec-text">疫苗</text>
               <view class="dog-detail__sec-badge">
@@ -433,7 +440,7 @@
             </view>
           </view>
           <!-- 驱虫 -->
-          <view v-if="dewormingRecords.length > 0">
+          <view v-if="dewormingRecords.length > 0" class="dog-detail__health-group">
             <view class="dog-detail__sec dog-detail__sec--teal">
               <text class="dog-detail__sec-text">驱虫</text>
               <view class="dog-detail__sec-badge">
@@ -459,7 +466,7 @@
             </view>
           </view>
           <!-- 疾病 -->
-          <view v-if="illnessRecords.length > 0">
+          <view v-if="illnessRecords.length > 0" class="dog-detail__health-group">
             <view class="dog-detail__sec dog-detail__sec--red">
               <text class="dog-detail__sec-text">疾病</text>
               <view class="dog-detail__sec-badge">
@@ -479,6 +486,13 @@
                 <view class="dog-detail__rec-body">
                   <text class="dog-detail__rec-title">{{ recordSubtitle(record) || '疾病记录' }}</text>
                   <text class="dog-detail__rec-sub">{{ formatDate(record.date) }}</text>
+                </view>
+                <view
+                  v-if="illnessStatusLabel(record)"
+                  class="dog-detail__rec-tag"
+                  :class="`dog-detail__rec-tag--${illnessStatusTone(record)}`"
+                >
+                  <text class="dog-detail__rec-tag-text">{{ illnessStatusLabel(record) }}</text>
                 </view>
                 <text class="material-icons-round dog-detail__rec-chevron">chevron_right</text>
               </view>
@@ -832,9 +846,14 @@
         </view>
 
         <view class="weight-entry__actions">
-          <view class="weight-entry__save-btn" @click="saveWeight">
-            <text class="weight-entry__save-text">保存</text>
-          </view>
+          <button
+            class="submit-btn weight-entry__save-btn"
+            :class="{ 'submit-btn--success': weightSubmitState === 'success' }"
+            :disabled="weightSubmitState !== 'idle'"
+            @click="saveWeight"
+          >
+            {{ weightSaveButtonText }}
+          </button>
         </view>
       </view>
     </BSheet>
@@ -857,7 +876,7 @@
             </view>
             <view class="weight-chart__bars">
               <view
-                v-for="(w, idx) in weightHistory.slice(0, 10)"
+                v-for="(w, idx) in weightTrendRecords"
                 :key="idx"
                 class="weight-chart__bar-col"
               >
@@ -886,12 +905,12 @@
         <view class="weight-chart__section-title">
           <text>最近记录</text>
         </view>
-        <view v-if="weightHistory.length === 0" class="weight-chart__empty-list">
+        <view v-if="recentWeightRecords.length === 0" class="weight-chart__empty-list">
           <text class="weight-chart__empty-text">暂无体重记录</text>
         </view>
         <view v-else class="weight-chart__list">
           <view
-            v-for="(record, idx) in weightHistory.slice(0, 10)"
+            v-for="(record, idx) in recentWeightRecords.slice(0, 10)"
             :key="idx"
             class="weight-chart__record"
           >
@@ -901,9 +920,14 @@
             <view class="weight-chart__rec-body">
               <text class="weight-chart__rec-weight">{{ formatWeight(record.weight) }}</text>
               <text class="weight-chart__rec-date">{{ formatDate(record.date) }}</text>
+              <text v-if="record.notes" class="weight-chart__rec-note">{{ record.notes }}</text>
             </view>
-            <text v-if="idx > 0" class="weight-chart__rec-diff" :style="{ color: record.weight >= weightHistory[idx - 1].weight ? 'var(--green)' : 'var(--red)' }">
-              {{ record.weight >= weightHistory[idx - 1].weight ? '+' : '' }}{{ formatWeight(record.weight - weightHistory[idx - 1].weight) }}
+            <text
+              v-if="recentWeightRecords[idx + 1]"
+              class="weight-chart__rec-diff"
+              :style="{ color: record.weight >= recentWeightRecords[idx + 1].weight ? 'var(--green)' : 'var(--red)' }"
+            >
+              {{ record.weight >= recentWeightRecords[idx + 1].weight ? '+' : '' }}{{ formatWeight(record.weight - recentWeightRecords[idx + 1].weight) }}
             </text>
           </view>
         </view>
@@ -1121,6 +1145,29 @@ function recordSubtitle(record: any) {
   }
   if (record.type === 'deworming') return record.details?.drug_name || record.notes || null
   return record.notes || null
+}
+
+function recentHealthRecordTitle(record: any) {
+  const subtitle = recordSubtitle(record)
+  if (record?.type === 'vaccination' || record?.type === 'deworming') {
+    return subtitle || typeLabel(record?.type)
+  }
+  if (record?.type === 'illness') {
+    return subtitle ? `${typeLabel(record.type)} · ${subtitle}` : '疾病记录'
+  }
+  return subtitle || typeLabel(record?.type)
+}
+
+function illnessStatusLabel(record: any) {
+  if (record?.type !== 'illness') return ''
+  return record.details?.treatment_status || ''
+}
+
+function illnessStatusTone(record: any) {
+  const status = illnessStatusLabel(record)
+  if (status === '已康复') return 'green'
+  if (status === '治疗中') return 'amber'
+  return 'red'
 }
 
 function healthIcon(type: string) {
@@ -1597,6 +1644,13 @@ const showWeightEntry = ref(false)
 const weightInput = ref('')
 const weightDateStr = ref(todayStr())
 const weightNotes = ref('')
+const weightSubmitState = ref<'idle' | 'submitting' | 'success'>('idle')
+
+const weightSaveButtonText = computed(() => {
+  if (weightSubmitState.value === 'submitting') return '保存中...'
+  if (weightSubmitState.value === 'success') return '已保存'
+  return '保存'
+})
 
 const { run: addWeightRecord } = useCloudCall('health-service', 'addWeightRecord', {
   successMode: 'silent',
@@ -1608,10 +1662,12 @@ function openWeightEntry() {
   weightInput.value = ''
   weightDateStr.value = todayStr()
   weightNotes.value = ''
+  weightSubmitState.value = 'idle'
   showWeightEntry.value = true
 }
 
 async function saveWeight() {
+  if (weightSubmitState.value !== 'idle') return
   const kg = parseFloat(weightInput.value)
   if (!kg || kg <= 0) {
     uni.showToast({ title: '请输入有效体重', icon: 'none' })
@@ -1620,30 +1676,76 @@ async function saveWeight() {
   // 转换为克存储
   const grams = Math.round(kg * 1000)
   const dateTs = new Date(weightDateStr.value + 'T00:00:00+08:00').getTime()
-  const res = await addWeightRecord({
-    dog_id: dogId,
-    weight: grams,
-    date: dateTs,
-    notes: weightNotes.value || null,
-  })
-  if (res) {
+  weightSubmitState.value = 'submitting'
+  try {
+    const res = await addWeightRecord({
+      dog_id: dogId,
+      weight: grams,
+      date: dateTs,
+      notes: weightNotes.value || null,
+    })
+    if (!res) {
+      weightSubmitState.value = 'idle'
+      return
+    }
+
+    if (dog.value) {
+      dog.value = {
+        ...dog.value,
+        latest_weight: grams,
+      }
+    }
+    weightHistory.value = [
+      {
+        weight: grams,
+        date: dateTs,
+        notes: weightNotes.value || undefined,
+        created_at: Date.now(),
+      },
+      ...weightHistory.value.filter(item => !(item.weight === grams && item.date === dateTs)).slice(0, 19),
+    ]
+
+    weightSubmitState.value = 'success'
+    showSubmitBanner('已保存体重')
+    await new Promise(resolve => setTimeout(resolve, 180))
     showWeightEntry.value = false
-    await loadData()
-    await loadWeightHistory()
+    weightSubmitState.value = 'idle'
+    loadData({ silent: true })
+    loadWeightHistory()
+  } catch (error) {
+    weightSubmitState.value = 'idle'
+    throw error
   }
 }
 
 // ==================== D-21: 体重趋势详情 ====================
 
 const showWeightChart = ref(false)
-const weightHistory = ref<Array<{ weight: number; date: number; notes?: string }>>([])
+const weightHistory = ref<Array<{ weight: number; date: number; notes?: string; created_at?: number }>>([])
 
-const { run: fetchWeightHistory } = useCloudCall<{ data: Array<{ weight: number; date: number; notes?: string }> }>('health-service', 'getWeightHistory')
+function sortWeightRecordsDesc(records: Array<{ date: number; created_at?: number }>) {
+  return [...records].sort((a, b) => {
+    if (b.date !== a.date) return b.date - a.date
+    return (b.created_at || 0) - (a.created_at || 0)
+  })
+}
+
+function sortWeightRecordsAsc(records: Array<{ date: number; created_at?: number }>) {
+  return [...records].sort((a, b) => {
+    if (a.date !== b.date) return a.date - b.date
+    return (a.created_at || 0) - (b.created_at || 0)
+  })
+}
+
+const recentWeightRecords = computed(() => sortWeightRecordsDesc(weightHistory.value))
+const weightTrendRecords = computed(() => sortWeightRecordsAsc(recentWeightRecords.value.slice(0, 10)))
+
+const { run: fetchWeightHistory } = useCloudCall<{ data: Array<{ weight: number; date: number; notes?: string; created_at?: number }> }>('health-service', 'getWeightHistory')
 
 async function loadWeightHistory() {
   const res = await fetchWeightHistory(dogId)
   if (res?.data) {
-    weightHistory.value = res.data
+    weightHistory.value = sortWeightRecordsDesc(res.data)
   }
 }
 
@@ -1662,19 +1764,19 @@ function formatShortDate(ts: number) {
 }
 
 const weightChartMax = computed(() => {
-  if (weightHistory.value.length === 0) return 0
-  const max = Math.max(...weightHistory.value.slice(0, 10).map(w => w.weight))
+  if (weightTrendRecords.value.length === 0) return 0
+  const max = Math.max(...weightTrendRecords.value.map(w => w.weight))
   return (max / 1000).toFixed(1)
 })
 
 const weightChartMin = computed(() => {
-  if (weightHistory.value.length === 0) return 0
-  const min = Math.min(...weightHistory.value.slice(0, 10).map(w => w.weight))
+  if (weightTrendRecords.value.length === 0) return 0
+  const min = Math.min(...weightTrendRecords.value.map(w => w.weight))
   return (min / 1000).toFixed(1)
 })
 
 function weightBarHeight(grams: number) {
-  const records = weightHistory.value.slice(0, 10)
+  const records = weightTrendRecords.value
   const max = Math.max(...records.map(w => w.weight))
   const min = Math.min(...records.map(w => w.weight))
   if (max === min) return 50
@@ -1682,7 +1784,7 @@ function weightBarHeight(grams: number) {
 }
 
 const growthRate = computed(() => {
-  const records = weightHistory.value
+  const records = recentWeightRecords.value
   if (records.length < 2) return null
   const latest = records[0].weight
   const previous = records[1].weight
@@ -2077,14 +2179,27 @@ onShow(() => {
   font-weight: 600;
   color: var(--primary);
 }
+.dog-detail__health-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dog-detail__health-group + .dog-detail__health-group {
+  margin-top: 4px;
+}
 .dog-detail__sec-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: var(--card-dim);
+  border-radius: 999px;
   padding: 2px 8px;
-  border-radius: var(--radius-badge);
 }
 .dog-detail__sec-badge-text {
+  font-family: var(--font-display);
   font-size: 12px;
   font-weight: 800;
+  line-height: 1;
   color: var(--text-2);
 }
 
@@ -2257,6 +2372,14 @@ onShow(() => {
 .dog-detail__rec-tag--green {
   background: var(--green-soft);
   .dog-detail__rec-tag-text { color: var(--green); }
+}
+.dog-detail__rec-tag--amber {
+  background: var(--amber-soft);
+  .dog-detail__rec-tag-text { color: var(--amber); }
+}
+.dog-detail__rec-tag--red {
+  background: var(--red-soft);
+  .dog-detail__rec-tag-text { color: var(--red); }
 }
 .dog-detail__rec-tag--gray {
   background: var(--card-dim);
@@ -2475,6 +2598,9 @@ onShow(() => {
 .dog-detail__action-sheet-icon--plum { background: var(--icon-plum); .material-icons-round { color: var(--plum); } }
 .dog-detail__action-sheet-text {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 .dog-detail__action-sheet-title {
   font-size: 15px;
@@ -2488,7 +2614,6 @@ onShow(() => {
   font-size: 12px;
   font-weight: 500;
   color: var(--text-3);
-  margin-top: 1px;
 }
 .dog-detail__action-sheet-sep {
   height: 1px;
@@ -2828,21 +2953,9 @@ onShow(() => {
   margin-top: 20px;
 }
 .weight-entry__save-btn {
-  height: 50px;
-  border-radius: var(--radius-btn);
-  background: var(--primary);
+  width: 100%;
+  min-height: 50px;
   box-shadow: var(--shadow-fab);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.12s ease;
-  &:active { transform: scale(0.94); opacity: 0.85; }
-}
-.weight-entry__save-text {
-  font-family: var(--font-display);
-  font-size: 15px;
-  font-weight: 700;
-  color: #fff;
 }
 
 /* ==================== D-21: 体重趋势详情 Sheet ==================== */
@@ -2996,6 +3109,13 @@ onShow(() => {
   display: block;
   margin-top: 2px;
 }
+.weight-chart__rec-note {
+  font-size: 12px;
+  color: var(--text-2);
+  display: block;
+  margin-top: 4px;
+  line-height: 1.35;
+}
 .weight-chart__rec-diff {
   font-family: var(--font-display);
   font-size: 12px;
@@ -3045,12 +3165,12 @@ onShow(() => {
   height: 100%;
   border-radius: 3px;
   transition: width 0.4s ease;
-  &--rose { background: var(--rose); }
-  &--plum { background: var(--plum); }
-  &--red { background: var(--red); }
-  &--illness { background: rgba(224, 82, 82, 0.72); }
-  &--amber { background: var(--amber); }
-  &--green { background: var(--green); }
+  &--rose { background: linear-gradient(90deg, var(--rose), var(--amber)); }
+  &--plum { background: linear-gradient(90deg, var(--plum), var(--rose)); }
+  &--red { background: linear-gradient(90deg, var(--red), #f08e8e); }
+  &--illness { background: linear-gradient(90deg, rgba(224, 82, 82, 0.92), rgba(240, 142, 142, 0.92)); }
+  &--amber { background: linear-gradient(90deg, var(--amber), #f0c072); }
+  &--green { background: linear-gradient(90deg, var(--green), #78c894); }
 }
 .dog-detail__st-progress-text {
   font-size: 12px;

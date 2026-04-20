@@ -11,6 +11,9 @@ export interface BreedingMilestoneViewModel {
   suggestionStatus: BreedingMilestoneSuggestionStatus
   suggestionLabel: string
   referenceDateLabel: string
+  heatDayLabel: string
+  stageDayLabel: string
+  passedWindowLabel: string
 }
 
 interface BreedingMilestoneTaskLike {
@@ -53,6 +56,20 @@ const STEP_META: Record<string, StepMeta> = {
       return typeof task.due_date === 'number' ? task.due_date - 25 * DAY_MS : null
     },
   },
+  birth: {
+    stageTitle: '生产',
+    anchorLabel: '配种',
+    actionLabel: '记录',
+    getAnchorDate: (task) => {
+      const matingDate = getNumber(task.details?.mating_date)
+      if (matingDate) return matingDate
+
+      const expectedDueDate = getNumber(task.details?.expected_due_date)
+      if (expectedDueDate) return expectedDueDate - 59 * DAY_MS
+
+      return typeof task.due_date === 'number' ? task.due_date - 59 * DAY_MS : null
+    },
+  },
   weaning_confirm: {
     stageTitle: '确认断奶',
     anchorLabel: '出生',
@@ -88,6 +105,9 @@ export function deriveBreedingMilestoneViewModel(
     suggestionStatus,
     suggestionLabel: buildSuggestionLabel(suggestionStatus, dueDate, actionLabel, now),
     referenceDateLabel: dueDate ? `建议日期 · ${formatMonthDay(dueDate)}` : '建议日期待确认',
+    heatDayLabel: buildHeatDayLabel(task, now),
+    stageDayLabel: buildStageDayLabel(stepType, task, daysFromAnchor, now),
+    passedWindowLabel: buildPassedWindowLabel(stepType, suggestionStatus, dueDate, now),
   }
 }
 
@@ -124,6 +144,52 @@ function buildSuggestionLabel(
 function buildDayLabel(anchorLabel: string, daysFromAnchor: number | null): string {
   if (!daysFromAnchor) return `${anchorLabel}时间待确认`
   return `距${anchorLabel}第 ${daysFromAnchor} 天`
+}
+
+function buildHeatDayLabel(task: BreedingMilestoneTaskLike, now: number): string {
+  const heatDate = getNumber(task.details?.heat_date)
+  if (!heatDate) return ''
+
+  const heatDay = Math.max(1, Math.floor((startOfDay(now) - startOfDay(heatDate)) / DAY_MS) + 1)
+  return `发情第 ${heatDay} 天`
+}
+
+function buildStageDayLabel(
+  stepType: string,
+  task: BreedingMilestoneTaskLike,
+  daysFromAnchor: number | null,
+  now: number,
+): string {
+  if (stepType === 'mating') {
+    const follicleDate = getNumber(task.details?.follicle_check_date)
+    const delta = typeof follicleDate === 'number'
+      ? Math.max(1, Math.floor((startOfDay(now) - startOfDay(follicleDate)) / DAY_MS) + 1)
+      : daysFromAnchor
+    if (!delta) return ''
+    return `卵泡检查后第 ${delta} 天`
+  }
+
+  if (stepType === 'pregnancy_check' || stepType === 'birth') {
+    const matingNumber = getNumber(task.details?.mating_number)
+    if (matingNumber && daysFromAnchor) {
+      return `距第${matingNumber}脚配种第 ${daysFromAnchor} 天`
+    }
+  }
+
+  return buildDayLabel(STEP_META[stepType]?.anchorLabel || '流程', daysFromAnchor)
+}
+
+function buildPassedWindowLabel(
+  stepType: string,
+  suggestionStatus: BreedingMilestoneSuggestionStatus,
+  dueDate: number | null,
+  now: number,
+): string {
+  if (suggestionStatus !== 'window_passed' || !dueDate) return ''
+
+  const passedDays = Math.max(1, Math.floor((startOfDay(now) - startOfDay(dueDate)) / DAY_MS))
+  if (stepType === 'mating') return `建议配种窗已过 ${passedDays} 天`
+  return `建议日期已过 ${passedDays} 天`
 }
 
 function getFallbackStageTitle(title?: string): string {

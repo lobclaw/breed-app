@@ -30,10 +30,17 @@
             </view>
             <text class="detail-summary__title">{{ summaryTitle }}</text>
             <text class="detail-summary__sub">{{ record.dog_name || '未知犬只' }} · {{ formatDate(record.date) }}</text>
+            <view v-if="summaryFact" class="detail-summary__facts">
+              <view class="detail-summary__fact" :class="summaryFact.tone ? `detail-summary__fact--${summaryFact.tone}` : ''">
+                <text class="material-icons-round detail-summary__fact-icon">{{ summaryFact.icon || 'schedule' }}</text>
+                <text class="detail-summary__fact-label">{{ summaryFact.label }}</text>
+                <text class="detail-summary__fact-value">{{ summaryFact.value }}</text>
+              </view>
+            </view>
           </view>
           <view class="detail-summary__meta">
             <text class="detail-summary__meta-value">{{ summaryMeta }}</text>
-            <text class="detail-summary__meta-label">当前记录</text>
+            <text class="detail-summary__meta-label">{{ summaryMetaLabel }}</text>
           </view>
         </view>
       </view>
@@ -126,7 +133,7 @@
             </view>
             <view class="info-row">
               <text class="info-row-label">备注</text>
-              <text class="info-row-value" :style="{ color: record.notes ? 'var(--text-1)' : 'var(--text-3)' }">{{ record.notes || '—' }}</text>
+              <text class="info-row-value info-row-value--note" :style="{ color: record.notes ? 'var(--text-1)' : 'var(--text-3)' }">{{ record.notes || '暂无补充说明' }}</text>
             </view>
           </view>
         </BCard>
@@ -153,9 +160,13 @@
         <text class="section-text">操作</text>
       </view>
       <view class="action-area">
-        <view class="btn-row">
-          <BButton variant="ghost" @click="goEdit">编辑</BButton>
-          <BButton variant="ghost" color="red" @click="confirmDelete">删除</BButton>
+        <view class="record-action-card">
+          <view class="record-action-card__glow" />
+          <view class="record-action-card__row">
+            <BButton class="record-action-card__primary" variant="filled" :color="actionButtonColor" @click="goEdit">编辑记录</BButton>
+            <BButton class="record-action-card__secondary" variant="ghost" color="red" @click="confirmDelete">删除</BButton>
+          </view>
+          <text class="record-action-card__note">删除后不可恢复；编辑会保留来源页承接与返回体验。</text>
         </view>
       </view>
     </template>
@@ -252,6 +263,39 @@ const summaryMeta = computed(() => {
   if (record.value?.type === 'deworming') return dewormingTypeLabel.value
   return typeLabel.value
 })
+const summaryMetaLabel = computed(() => {
+  if (record.value?.type === 'illness') return '当前状态'
+  if (record.value?.type === 'deworming') return '驱虫类型'
+  return '当前记录'
+})
+const actionButtonColor = computed(() => {
+  if (cardColor.value === 'red') return 'red'
+  if (cardColor.value === 'teal') return 'teal'
+  return 'blue'
+})
+const summaryFact = computed(() => {
+  if (!record.value) return null
+
+  if (record.value.type === 'illness') {
+    return {
+      label: '病程',
+      value: formatIllnessCourseText(record.value.date),
+      tone: 'red',
+      icon: 'timeline',
+    }
+  }
+
+  if (record.value.type === 'vaccination' && nextReminderShortText.value) {
+    return {
+      label: '下次提醒',
+      value: nextReminderShortText.value,
+      tone: 'blue',
+      icon: 'schedule',
+    }
+  }
+
+  return null
+})
 
 const nextReminderText = computed(() => {
   const ts = record.value?.details?.next_reminder_date
@@ -260,6 +304,15 @@ const nextReminderText = computed(() => {
   if (days < 0) return `下次提醒日期已过 ${Math.abs(days)} 天`
   if (days === 0) return '今天需要进行下次接种'
   return `距下次提醒还有 ${days} 天（${formatDate(ts)}）`
+})
+
+const nextReminderShortText = computed(() => {
+  const ts = record.value?.details?.next_reminder_date
+  if (!ts) return ''
+  const days = Math.ceil((ts - Date.now()) / 86400000)
+  if (days < 0) return `已过 ${Math.abs(days)} 天`
+  if (days === 0) return '今天'
+  return `${days}天后`
 })
 
 function formatDate(ts: number | undefined): string {
@@ -272,6 +325,12 @@ function formatDateTime(ts: number | undefined): string {
   if (!ts) return ''
   const d = new Date(ts)
   return `${formatDate(ts)} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+function formatIllnessCourseText(ts: number | undefined): string {
+  if (!ts) return '病程未记录'
+  const days = Math.max(1, Math.floor((Date.now() - ts) / 86400000) + 1)
+  return `病程第${days}天`
 }
 
 function formatAmount(n: number): string {
@@ -387,12 +446,13 @@ onShow(() => {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  flex: 1;
 }
 .detail-summary__tag {
   width: fit-content;
   padding: 4px 10px;
   border-radius: var(--radius-tag);
-  background: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.86);
 }
 .detail-summary__tag-text {
   font-size: 11px;
@@ -409,17 +469,52 @@ onShow(() => {
   font-weight: 500;
   color: var(--text-2);
 }
+.detail-summary__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.detail-summary__fact {
+  min-width: 0;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.86);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.detail-summary__fact--red { background: rgba(255, 240, 240, 0.94); }
+.detail-summary__fact--green { background: rgba(240, 255, 244, 0.94); }
+.detail-summary__fact--amber { background: rgba(255, 249, 240, 0.94); }
+.detail-summary__fact--blue { background: rgba(240, 247, 255, 0.96); }
+.detail-summary__fact--teal { background: rgba(240, 255, 254, 0.96); }
+.detail-summary__fact-icon {
+  font-size: 13px;
+  color: var(--text-3);
+}
+.detail-summary__fact-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.detail-summary__fact-value {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-1);
+}
 .detail-summary__meta {
   min-width: 68px;
   padding: 8px 10px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.76);
+  background: rgba(255, 255, 255, 0.72);
   display: flex;
   flex-direction: column;
   align-items: flex-end;
 }
 .detail-summary__meta-value {
-  font-size: 14px;
+  font-family: var(--font-display);
+  font-size: 18px;
   font-weight: 800;
   color: var(--text-1);
 }
@@ -466,6 +561,13 @@ onShow(() => {
   display: flex;
   align-items: center;
   gap: 6px;
+
+  &--note {
+    max-width: 180px;
+    text-align: right;
+    line-height: 1.45;
+    font-weight: 500;
+  }
 }
 
 /* ==================== MINI AVATAR ==================== */
@@ -518,10 +620,59 @@ onShow(() => {
 
 /* ==================== CREATED INFO ==================== */
 .created-info {
-  padding: 12px 16px 4px;
+  margin: 0 16px 8px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.74);
+  border: 1px solid rgba(74, 141, 212, 0.08);
   font-size: 11px;
   color: var(--text-3);
   text-align: center;
+}
+
+.record-action-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 20px;
+  border: 1px solid rgba(224, 82, 82, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 246, 243, 0.98));
+  box-shadow: 0 10px 30px rgba(101, 74, 145, 0.06);
+  padding: 14px;
+}
+.record-action-card__glow {
+  position: absolute;
+  top: -32px;
+  right: -18px;
+  width: 120px;
+  height: 120px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(224, 82, 82, 0.1), rgba(224, 82, 82, 0));
+  pointer-events: none;
+}
+.record-action-card__row {
+  position: relative;
+  display: flex;
+  gap: 10px;
+}
+.record-action-card__primary {
+  flex: 1;
+  min-width: 0;
+  min-height: 50px;
+  border-radius: 16px;
+}
+.record-action-card__secondary {
+  min-width: 104px;
+  min-height: 50px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.88);
+  border-color: rgba(224, 82, 82, 0.16);
+}
+.record-action-card__note {
+  position: relative;
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
 }
 
 /* ==================== MORE ACTIONS ==================== */

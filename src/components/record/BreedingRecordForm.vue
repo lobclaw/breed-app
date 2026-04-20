@@ -180,9 +180,9 @@
           </view>
 
           <view class="field-group">
-            <view class="field-label"><text>第几次配种</text></view>
+            <view class="field-label"><text>第几脚</text></view>
             <view class="display-field">
-              <text>第 {{ details.mating_number || 1 }} 次（本周期）</text>
+              <text>{{ matingNumberPreviewText }}</text>
             </view>
           </view>
 
@@ -333,7 +333,7 @@
       </template>
     </view>
 
-    <view class="fixed-bottom">
+    <view class="fixed-bottom" :class="{ 'fixed-bottom--heat-observation': breedingType === 'heat_observation' }">
       <button
         class="submit-btn"
         :loading="submitState === 'submitting'"
@@ -352,7 +352,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useCloudCall } from '@/composables/useCloudCall'
 import { useRecordSubmitState } from '@/composables/useRecordSubmitState'
 import { buildRecordFeedbackMessage, queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
@@ -434,6 +434,7 @@ const dateChipActive = ref<'today' | 'yesterday' | 'dayBefore' | ''>('today')
 const vulvaStatus = ref('')
 const dischargeStatus = ref('')
 const selectedSymptoms = ref<string[]>([])
+const matingPreviewRequestToken = ref(0)
 
 const matingMethods = ['人工授精', '自然交配']
 const follicleResults = ['发育中', '已成熟', '发育不良', '其他']
@@ -504,6 +505,8 @@ const estimatedDueDate = computed(() => {
   return `${targetDate.getMonth() + 1}月${targetDate.getDate()}日`
 })
 
+const matingNumberPreviewText = computed(() => `第 ${details.mating_number || 1} 脚（本周期自动计算）`)
+
 const showTempWarning = computed(() => {
   const temperature = parseFloat(details.temperature)
   return !Number.isNaN(temperature) && temperature > 0 && temperature < 37.1
@@ -569,6 +572,9 @@ const { run: updateRecord } = useCloudCall('breeding-service', 'updateBreedingRe
   successMode: 'silent',
   loadingMode: 'local',
   throwOnError: true,
+})
+const { run: getNextMatingNumber } = useCloudCall('breeding-service', 'getNextMatingNumber', {
+  showLoading: false,
 })
 
 function resetDetails() {
@@ -732,6 +738,34 @@ function applyTaskPrefill(task: any) {
   if (taskDetails.cost) costInput.value = String(taskDetails.cost)
 }
 
+async function refreshMatingNumberPreview() {
+  if (breedingType.value !== 'mating' || isEdit.value) return
+
+  const dogId = selectedDog.value?._id
+  if (!dogId) {
+    details.mating_number = 1
+    return
+  }
+
+  const requestToken = ++matingPreviewRequestToken.value
+  try {
+    const result = await getNextMatingNumber({
+      dog_id: dogId,
+      cycle_id: cycleId.value || undefined,
+    })
+    if (requestToken !== matingPreviewRequestToken.value) return
+
+    const data = result?.data || result || {}
+    details.mating_number = Number(data.mating_number) || 1
+    if (!cycleId.value && data.cycle_id) {
+      cycleId.value = data.cycle_id
+    }
+  } catch {
+    if (requestToken !== matingPreviewRequestToken.value) return
+    details.mating_number = 1
+  }
+}
+
 async function loadCreateState() {
   resetDetails()
   const routeQuery = resolveBreedingRouteQuery(props.query)
@@ -785,9 +819,10 @@ async function loadEditState() {
       date.value = record.date || null
       Object.assign(details, record.details || {})
       if (record.type === 'mating') {
-        details.method = record.details?.method || '人工授精'
+        details.method = record.details?.method || record.details?.mating_method || '人工授精'
+        details.mating_number = record.details?.mating_number || record.details?.mating_count || 1
         selectedSire.value = record.details?.sire_id
-          ? { _id: record.details.sire_id, name: record.details.sire_name || '' }
+          ? { _id: record.details.sire_id, name: record.details.sire_name || record.details?.male_name || '' }
           : null
         manualDueDate.value = record.details?.is_due_date_manual ? (record.details?.expected_due_date || null) : null
       }
@@ -910,6 +945,15 @@ onMounted(async () => {
     loading.value = false
   }
 })
+
+watch(
+  [breedingType, isEdit, () => selectedDog.value?._id || '', cycleId],
+  async ([type, editing]) => {
+    if (type !== 'mating' || editing) return
+    await refreshMatingNumberPreview()
+  },
+  { immediate: true }
+)
 </script>
 
 <style lang="scss" scoped>
@@ -1173,12 +1217,20 @@ onMounted(async () => {
 .heat-observation__time {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   margin-top: 8px;
+  width: 100%;
 }
 
 .heat-observation__time-text {
   font-size: 13px;
   color: var(--text-3);
+}
+
+.fixed-bottom--heat-observation {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 </style>

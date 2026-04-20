@@ -19,16 +19,22 @@
           </view>
         </view>
         <text class="group-copy">
-          <text class="group-copy__strong">{{ item.milestone.dayLabel }}</text>
-          <text> · </text>
-          <text
-            class="group-copy__secondary"
-            :class="{ 'group-copy__secondary--passed': item.milestone.suggestionStatus === 'window_passed' }"
-          >{{ item.secondaryLabel }}</text>
+          <text class="group-copy__strong">{{ item.primaryLabel }}</text>
+          <template v-if="item.secondaryLabel">
+            <text> · </text>
+            <text class="group-copy__secondary">{{ item.secondaryLabel }}</text>
+          </template>
+        </text>
+        <text
+          v-if="item.alertLabel"
+          class="group-copy group-copy--alert"
+          :class="{ 'group-copy--alert-passed': item.milestone.suggestionStatus === 'window_passed' }"
+        >
+          {{ item.alertLabel }}
         </text>
       </view>
       <view class="group-actions">
-        <view v-if="item.canObserve || item.canDirectMating" class="group-secondary-actions">
+        <view v-if="item.canObserve || item.canDirectMating || item.canContinueMating" class="group-secondary-actions">
           <view
             v-if="item.canObserve"
             class="group-secondary-action"
@@ -42,6 +48,13 @@
             @click.stop="goDirectMating(item.card)"
           >
             <text class="group-secondary-action__text">直接配种</text>
+          </view>
+          <view
+            v-if="item.canContinueMating"
+            class="group-secondary-action"
+            @click.stop="goContinueMating(item.card)"
+          >
+            <text class="group-secondary-action__text">继续配种</text>
           </view>
         </view>
         <view
@@ -61,8 +74,10 @@ import { computed } from 'vue'
 
 import { deriveBreedingMilestoneViewModel } from '@/utils/breedingMilestone'
 import {
+  buildHomeContinueMatingUrl,
   buildHomeDirectMatingUrl,
   buildHomeHeatObservationUrl,
+  canOpenHomeContinueMating,
   canOpenHomeDirectMating,
   canOpenHomeHeatObservation,
 } from '@/utils/homeHeatObservation'
@@ -78,9 +93,12 @@ const items = computed(() => {
       card,
       milestone,
       stageTag: buildStageTag(milestone.stageTitle),
+      primaryLabel: buildPrimaryLabel(milestone),
       secondaryLabel: buildSecondaryLabel(milestone),
+      alertLabel: buildAlertLabel(milestone),
       canObserve: canOpenHomeHeatObservation(card),
       canDirectMating: canOpenHomeDirectMating(card),
+      canContinueMating: canOpenHomeContinueMating(card),
     }
   })
 })
@@ -93,6 +111,7 @@ const typeMap: Record<string, string> = {
   follicle_check: '/pages/record/breeding-follicle',
   mating: '/pages/record/breeding-mating',
   pregnancy_check: '/pages/record/breeding-pregnancy',
+  birth: '/pages/breeding/birth-wizard',
   prenatal_check: '/pages/record/breeding-prenatal',
   pre_labor: '/pages/record/breeding-prelabor',
 }
@@ -104,14 +123,31 @@ function buildStageTag(stageTitle: string) {
     .trim() || '流程'
 }
 
+function buildPrimaryLabel(milestone: ReturnType<typeof deriveBreedingMilestoneViewModel>) {
+  if (milestone.stepType === 'mating' && milestone.heatDayLabel) {
+    return milestone.heatDayLabel
+  }
+  return milestone.dayLabel
+}
+
 function buildSecondaryLabel(milestone: ReturnType<typeof deriveBreedingMilestoneViewModel>) {
-  if (milestone.suggestionStatus === 'window_passed') {
-    return milestone.suggestionLabel.replace('建议日期已过 ', '已过 ')
+  if (milestone.stepType === 'mating') {
+    return milestone.stageDayLabel
   }
   if (milestone.suggestionStatus === 'window_due') {
     return milestone.suggestionLabel
   }
   return milestone.referenceDateLabel.replace('建议日期 · ', '建议')
+}
+
+function buildAlertLabel(milestone: ReturnType<typeof deriveBreedingMilestoneViewModel>) {
+  if (milestone.stepType === 'mating') {
+    return milestone.passedWindowLabel
+  }
+  if (milestone.suggestionStatus === 'window_passed') {
+    return milestone.suggestionLabel
+  }
+  return ''
 }
 
 function goProcess(card: any) {
@@ -134,6 +170,12 @@ function goProcess(card: any) {
       url = '/pages/record/breeding-mating'
     } else if (stepType === 'pregnancy_check') {
       url = '/pages/record/breeding-pregnancy'
+    } else if (stepType === 'birth') {
+      const birthParams: string[] = []
+      if (task.cycle_id) birthParams.push(`cycleId=${task.cycle_id}`)
+      if (card.dogName) birthParams.push(`damName=${encodeURIComponent(card.dogName)}`)
+      uni.navigateTo({ url: `/pages/breeding/birth-wizard?${birthParams.join('&')}` })
+      return
     } else if (stepType === 'weaning_confirm' && task.litter_id) {
       const litterParams = [`id=${task.litter_id}`]
       if (task._id) litterParams.push(`taskId=${task._id}`)
@@ -155,6 +197,11 @@ function goObserve(card: any) {
 function goDirectMating(card: any) {
   if (!canOpenHomeDirectMating(card)) return
   uni.navigateTo({ url: buildHomeDirectMatingUrl(card) })
+}
+
+function goContinueMating(card: any) {
+  if (!canOpenHomeContinueMating(card)) return
+  uni.navigateTo({ url: buildHomeContinueMatingUrl(card) })
 }
 </script>
 
@@ -257,6 +304,16 @@ function goDirectMating(card: any) {
   line-height: 1.4;
 }
 
+.group-copy--alert {
+  margin-top: 2px;
+  color: var(--text-3);
+}
+
+.group-copy--alert-passed {
+  color: var(--red);
+  font-weight: 800;
+}
+
 .group-copy__strong {
   color: var(--text-2);
   font-weight: 700;
@@ -265,11 +322,6 @@ function goDirectMating(card: any) {
 .group-copy__secondary {
   color: var(--amber);
   font-weight: 700;
-}
-
-.group-copy__secondary--passed {
-  color: var(--red);
-  font-weight: 800;
 }
 
 .group-action {

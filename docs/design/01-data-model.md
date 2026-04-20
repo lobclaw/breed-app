@@ -171,6 +171,7 @@
 
 - 公共字段在顶层，类型特有字段收口到 `details`
 - 繁育记录负责推进主流程状态
+- `mating.details.mating_number` 表示“本周期第几脚”，由系统按同周期已有配种记录数自动递增计算
 - `heat_observation` 属于发情周期内补充观察日志，不推进主链、不生成任务、不修改周期状态、不联动费用
 - `heat_observation.details` 结构化记录 `vulva_status`、`discharge_status`、`symptoms`
 - 繁育表单已移除旧的“下次提醒”模型

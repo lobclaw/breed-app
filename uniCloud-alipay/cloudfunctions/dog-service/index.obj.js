@@ -24,6 +24,17 @@ const DETAIL_STATUS_PRIORITY = {
   '发情中': 4,
 }
 
+const MEDICATION_DOSAGE_UNIT_MAP = {
+  ml: 'ml',
+  mg: 'mg',
+  tablet: '片',
+}
+
+function formatMedicationFrequency(frequency) {
+  const count = Number(frequency) || 1
+  return `每日${count}次`
+}
+
 function sortListStatuses(statuses = []) {
   return [...statuses].sort((a, b) => {
     const aPriority = LIST_STATUS_PRIORITY[a.type] ?? 99
@@ -124,6 +135,57 @@ function buildListMedicationStatus(tasks = []) {
 
 function getMedicationTaskStartTs(task) {
   return task?.actual_start_date || task?.updated_at || task?.created_at || 0
+}
+
+function startOfDay(ts) {
+  const date = new Date(ts || Date.now())
+  date.setHours(0, 0, 0, 0)
+  return date.getTime()
+}
+
+function getMedicationTaskProgress(task, nowTs = Date.now()) {
+  const startTs = startOfDay(task?.actual_start_date || task?.start_date || task?.created_at || nowTs)
+  const todayTs = startOfDay(nowTs)
+  const totalDays = Math.max(1, Number(task?.duration_days) || 1)
+  const currentDay = Math.floor((todayTs - startTs) / 86400000) + 1
+
+  return {
+    currentDay,
+    totalDays,
+  }
+}
+
+function isMedicationTaskActiveForDetail(task, nowTs = Date.now()) {
+  const { currentDay, totalDays } = getMedicationTaskProgress(task, nowTs)
+  return currentDay >= 1 && currentDay <= totalDays
+}
+
+function getMedicationCompletionSummary(task) {
+  const frequency = Math.max(1, Number(task?.frequency) || 1)
+  const durationDays = Math.max(1, Number(task?.duration_days) || 1)
+  const dailyDoses = task?.daily_doses || {}
+  const completedDates = new Set(Array.isArray(task?.completed_dates) ? task.completed_dates : [])
+
+  let completedDoseCount = 0
+  for (let day = 1; day <= durationDays; day += 1) {
+    const doses = Number(dailyDoses[String(day)])
+    if (Number.isFinite(doses)) {
+      completedDoseCount += Math.min(Math.max(0, doses), frequency)
+      continue
+    }
+
+    const startTs = startOfDay(task?.actual_start_date || task?.start_date || task?.created_at || Date.now())
+    const dayTs = startTs + ((day - 1) * 86400000)
+    if (completedDates.has(dayTs)) {
+      completedDoseCount += frequency
+    }
+  }
+
+  return {
+    completedDoseCount,
+    totalDoseCount: durationDays * frequency,
+    frequency,
+  }
 }
 
 function pickPreferredMedicationTask(currentTask, nextTask) {
@@ -318,7 +380,7 @@ module.exports = {
     statuses.push(...buildDetailIllnessStatuses(activeIllnesses))
 
     // 用药状态（按药名去重，取进度最新的）
-    const medTasks = medTasksRes.data || []
+    const medTasks = (medTasksRes.data || []).filter(task => isMedicationTaskActiveForDetail(task, now))
     const medDrugMap = {}
     for (const task of medTasks) {
       const drug = task.drug_name || task.details?.drug_name || '用药'
@@ -327,20 +389,21 @@ module.exports = {
     for (const task of Object.values(medDrugMap)) {
       const parts = [
         task.drug_name,
-        task.dosage ? `${task.dosage}${task.dosage_unit || ''}` : null,
+        task.dosage ? `${task.dosage}${MEDICATION_DOSAGE_UNIT_MAP[task.dosage_unit] || task.dosage_unit || ''}` : null,
         methodMap[task.method] || task.method,
       ].filter(Boolean)
-      const startDate = new Date(task.actual_start_date)
-      startDate.setHours(0, 0, 0, 0)
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      const currentDay = Math.max(1, Math.floor((today.getTime() - startDate.getTime()) / 86400000) + 1)
+      const { currentDay, totalDays } = getMedicationTaskProgress(task, now)
+      const { completedDoseCount, totalDoseCount, frequency } = getMedicationCompletionSummary(task)
       statuses.push({
         type: '用药中',
         taskId: task._id,
         detail: parts.join(' · '),
-        progress: task.duration_days ? { current: Math.min(currentDay, task.duration_days), total: task.duration_days } : null,
+        progress: task.duration_days ? { current: Math.min(currentDay, totalDays), total: totalDays } : null,
         activityTs: task.updated_at || task.created_at || 0,
+        meta: [
+          { icon: 'schedule', text: formatMedicationFrequency(frequency) },
+          { icon: 'check_circle', text: `已执行 ${completedDoseCount}/${totalDoseCount} 次` },
+        ],
       })
     }
 
