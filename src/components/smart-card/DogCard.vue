@@ -8,7 +8,7 @@
     <!-- 头部 -->
     <view class="card-header">
       <view class="card-icon" :class="`card-icon--${barColor}`">
-        <text style="font-size: 20px;">🐩</text>
+        <BEntityIcon :role="props.card?.role" :color="entityIconColor" :size="20" />
       </view>
       <view class="card-title-area">
         <text class="card-name">{{ card.dogName }}</text>
@@ -55,6 +55,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import { getHealthTypeTone, isIllnessTaskType } from '@/utils/themeSemantics'
 
 const HEALTH_TYPES = ['vaccination', 'deworming', 'medication']
@@ -116,6 +117,7 @@ const barColor = computed(() => {
   return domainColor.value
 })
 const cardVariant = computed(() => primaryTaskTone.value.variant)
+const entityIconColor = computed(() => `var(--${barColor.value})`)
 
 const typeMap: Record<string, string> = {
   vaccination: '/pages/record/health-vaccination',

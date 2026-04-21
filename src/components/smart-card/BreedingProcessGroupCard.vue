@@ -7,7 +7,9 @@
       :class="{ 'group-row--passed': item.milestone.suggestionStatus === 'window_passed' }"
       @click="goProcess(item.card)"
     >
-      <view class="group-avatar">🐩</view>
+      <view class="group-avatar">
+        <BEntityIcon :role="item.card?.role" color="var(--amber)" :size="16" />
+      </view>
       <view class="group-main">
         <view class="group-name-row">
           <text class="group-name">{{ item.card.dogName }}</text>
@@ -89,6 +91,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
+import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import { deriveBreedingMilestoneViewModel } from '@/utils/breedingMilestone'
 import {
   buildHomeContinueMatingUrl,

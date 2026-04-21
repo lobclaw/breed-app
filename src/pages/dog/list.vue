@@ -3,13 +3,18 @@
   搜索优先 + 档案筛选 + 当前状态可见
 -->
 <template>
-  <view class="dog-list">
-    <view class="dog-list__header">
-      <view class="dog-list__header-actions">
-        <view class="dog-list__header-add" @click="goToAdd">
-          <text class="material-icons-round" style="font-size: 22px; color: var(--primary);">add</text>
+  <view class="page dog-list">
+    <view class="primary-page-header">
+      <view class="primary-page-header__row">
+        <text class="primary-page-header__title">档案</text>
+        <view class="primary-page-header__actions">
+          <view class="primary-page-header__action primary-page-header__action--primary" @click="goToAdd">
+            <text class="primary-page-header__icon primary-page-header__icon--primary">add</text>
+          </view>
+          <view class="primary-page-header__action" @click="showFilterSheet = true">
+            <text class="primary-page-header__icon">filter_list</text>
+          </view>
         </view>
-        <text class="dog-list__filter-icon material-icons-round" @click="showFilterSheet = true">filter_list</text>
       </view>
     </view>
 
@@ -29,12 +34,15 @@
     </view>
 
     <scroll-view scroll-x class="dog-list__filters">
-      <view class="dog-list__filters-inner">
+      <view class="dog-list__filters-inner primary-page-chip-row">
         <view
           v-for="filter in filterOptions"
           :key="filter.value"
-          class="dog-list__chip"
-          :class="{ 'dog-list__chip--active': activeFilter === filter.value }"
+          class="dog-list__chip primary-page-tab"
+          :class="{
+            'dog-list__chip--active': activeFilter === filter.value,
+            'primary-page-tab--active': activeFilter === filter.value,
+          }"
           @click="activeFilter = filter.value"
         >
           <text class="dog-list__chip-text">{{ filter.label }}</text>
@@ -46,20 +54,20 @@
       <view
         v-for="chip in appliedFilterChips"
         :key="`${chip.group}-${chip.value}`"
-        class="dog-list__applied-chip"
+        class="dog-list__applied-chip primary-page-applied-chip"
         @click="removeAppliedFilter(chip.group, chip.value)"
       >
-        <text class="dog-list__applied-chip-text">{{ chip.label }}</text>
-        <text class="dog-list__applied-chip-icon material-icons-round">close</text>
+        <text class="dog-list__applied-chip-text primary-page-applied-chip-text">{{ chip.label }}</text>
+        <text class="dog-list__applied-chip-icon primary-page-applied-chip-icon material-icons-round">close</text>
       </view>
       <text class="dog-list__applied-clear" @click="resetAdvancedFilters">清空</text>
     </view>
 
-    <view v-if="loading" class="dog-list__skeleton-wrap">
+    <view v-if="loading" class="primary-page-loading">
       <BSkeleton :rows="4" avatar />
     </view>
 
-    <view v-else class="dog-list__content">
+    <view v-else-if="filteredDogs.length" class="dog-list__content">
       <view
         v-for="dog in filteredDogs"
         :key="dog._id"
@@ -72,40 +80,48 @@
             class="dog-list__card-icon"
             :class="[cardIconBgClass(dog), cardRingClass(dog)]"
           >
-            <text class="dog-list__card-emoji">{{ dog.role === '幼崽' ? '🐶' : '🐩' }}</text>
+            <BEntityIcon class="dog-list__card-entity-icon" :role="dog.role" :color="entityIconColor(dog)" :size="16" />
           </view>
 
           <view class="dog-list__card-main">
-            <view class="dog-list__card-top">
-              <text class="dog-list__card-name">{{ dog.name || '未命名' }}</text>
-              <view
-                v-if="shouldShowDispositionTag(dog)"
-                class="dog-list__disposition-tag"
-                :class="dispositionTagClass(dog)"
-              >
-                <text class="dog-list__disposition-tag-text">{{ dog.displayDisposition }}</text>
-              </view>
-            </view>
-            <text
-              class="dog-list__card-meta-line"
+            <text class="dog-list__card-name">{{ dog.name || '未命名' }}</text>
+            <text class="dog-list__card-sub">{{ dog.basicInfoText }}</text>
+          </view>
+
+          <view class="dog-list__card-side">
+            <view
+              class="dog-list__side-tag dog-list__side-tag--disposition"
+              :class="dispositionTagClass(dog)"
             >
-              <text
-                v-if="dog.primaryStatusTitle"
-                class="dog-list__card-status-inline"
-                :class="primaryStatusTextClass(dog)"
-              >
-                {{ dog.primaryStatusTitle }}
-              </text>
-              <text v-if="dog.primaryStatusTitle" class="dog-list__card-meta-text"> · </text>
-              <text class="dog-list__card-meta-text">{{ dog.metaInfoText }}</text>
-              <text v-if="dog.secondaryStatusInlineText" class="dog-list__card-meta-text"> · {{ dog.secondaryStatusInlineText }}</text>
-            </text>
+              <text class="dog-list__side-tag-text">{{ dog.displayDisposition }}</text>
+            </view>
+            <view
+              class="dog-list__side-tag dog-list__side-tag--role"
+              :class="roleTagClass(dog)"
+            >
+              <text class="dog-list__side-tag-text">{{ roleLabel(dog) }}</text>
+            </view>
+          </view>
+        </view>
+
+        <view v-if="dog.statusTags.length || dog.statusOverflowCount" class="dog-list__card-statuses">
+          <view
+            v-for="tag in dog.statusTags"
+            :key="tag.key"
+            class="dog-list__status-tag"
+            :class="tag.className"
+          >
+            <text class="dog-list__status-tag-text">{{ tag.label }}</text>
+          </view>
+          <view v-if="dog.statusOverflowCount" class="dog-list__status-tag dog-list__status-tag--more">
+            <text class="dog-list__status-tag-text">+{{ dog.statusOverflowCount }}</text>
           </view>
         </view>
       </view>
+    </view>
 
+    <view v-else class="primary-page-empty">
       <BEmpty
-        v-if="filteredDogs.length === 0"
         icon="pets"
         title="暂无犬只"
         description="点击右上角 + 添加第一只犬"
@@ -149,6 +165,21 @@
         </view>
 
         <view class="filter-section">
+          <text class="filter-section__label">品种</text>
+          <view class="filter-pills">
+            <view
+              v-for="opt in breedOptions"
+              :key="opt.value"
+              class="filter-pill"
+              :class="{ 'filter-pill--active': advFilters.breeds.includes(opt.value) }"
+              @click="toggleFilter('breeds', opt.value)"
+            >
+              <text class="filter-pill__text">{{ opt.label }}</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="filter-section">
           <text class="filter-section__label">去向</text>
           <view class="filter-pills">
             <view
@@ -179,11 +210,11 @@
         </view>
 
         <view class="filter-actions">
-          <view class="filter-actions__btn filter-actions__btn--primary" @click="applyAdvancedFilters">
-            <text class="filter-actions__btn-text" style="color: #fff;">应用筛选</text>
-          </view>
           <view class="filter-actions__btn filter-actions__btn--ghost" @click="resetAdvancedFilters">
             <text class="filter-actions__btn-text" style="color: var(--text-2);">重置</text>
+          </view>
+          <view class="filter-actions__btn filter-actions__btn--primary" @click="applyAdvancedFilters">
+            <text class="filter-actions__btn-text" style="color: #fff;">应用筛选</text>
           </view>
         </view>
       </view>
@@ -194,22 +225,30 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
+import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 import BNavBar from '@/components/layout/BNavBar.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import { useDogStore } from '@/stores/dogStore'
 import type { DeriveStatus, DeriveStatusType, DogDisposition, DogWithStatus } from '@/types/dog'
+import { buildCompactDeriveStatusTitle } from '@/utils/dogStatusCopy'
 import { getDogStatusTone } from '@/utils/themeSemantics'
 
-type QuickFilterValue = 'all' | 'breeding' | 'puppy' | 'for-sale' | 'external'
-type FilterGroup = 'genders' | 'roles' | 'dispositions' | 'statuses'
+type QuickFilterValue = 'all' | 'breeding' | 'puppy' | 'sale' | 'external'
+type FilterGroup = 'genders' | 'roles' | 'breeds' | 'dispositions' | 'statuses'
 type TagColor = 'red' | 'amber' | 'green' | 'blue' | 'plum' | 'rose' | 'teal'
 
 interface AppliedFilterChip {
   group: FilterGroup
   value: string
   label: string
+}
+
+interface StatusTagItem {
+  key: string
+  label: string
+  className: string
 }
 
 interface DogListItem extends DogWithStatus {
@@ -220,15 +259,19 @@ interface DogListItem extends DogWithStatus {
   secondaryOverflowCount: number
   secondaryStatusInlineText: string
   metaInfoText: string
+  basicInfoText: string
   displayDisposition: DogDisposition
   hasHighlightedDisposition: boolean
   sortBucket: number
   statusPriority: number
   isActiveStatusDog: boolean
+  statusTags: StatusTagItem[]
+  statusOverflowCount: number
 }
 
 const DEFAULT_DISPOSITION: DogDisposition = '在养'
 const MAX_SECONDARY_STATUS_TAGS = 2
+const MAX_STATUS_TAGS = 2
 const dogs = ref<DogWithStatus[]>([])
 const loading = ref(true)
 const activeFilter = ref<QuickFilterValue>('all')
@@ -240,7 +283,7 @@ const filterOptions: Array<{ label: string; value: QuickFilterValue }> = [
   { label: '全部', value: 'all' },
   { label: '种狗', value: 'breeding' },
   { label: '幼崽', value: 'puppy' },
-  { label: '待售', value: 'for-sale' },
+  { label: '待售', value: 'sale' },
   { label: '外部种公', value: 'external' },
 ]
 
@@ -275,16 +318,28 @@ const statusOptions = [
   { label: '用药中', value: '用药中' },
 ]
 
-const filterLabelMap: Record<FilterGroup, Record<string, string>> = {
+const breedOptions = computed<Array<{ label: string; value: string }>>(() => {
+  const values = new Set(
+    dogs.value.map(dog => normalizeBreed(dog)),
+  )
+
+  return [...values]
+    .sort(compareString)
+    .map(value => ({ label: value, value }))
+})
+
+const filterLabelMap = computed<Record<FilterGroup, Record<string, string>>>(() => ({
   genders: Object.fromEntries(genderOptions.map(opt => [opt.value, opt.label])),
   roles: Object.fromEntries(roleOptions.map(opt => [opt.value, opt.label])),
+  breeds: Object.fromEntries(breedOptions.value.map(opt => [opt.value, opt.label])),
   dispositions: Object.fromEntries(dispositionOptions.map(opt => [opt.value, opt.label])),
   statuses: Object.fromEntries(statusOptions.map(opt => [opt.value, opt.label])),
-}
+}))
 
 const advFilters = reactive({
   genders: [] as string[],
   roles: [] as string[],
+  breeds: [] as string[],
   dispositions: [] as string[],
   statuses: [] as string[],
 })
@@ -292,6 +347,7 @@ const advFilters = reactive({
 const appliedFilters = reactive({
   genders: [] as string[],
   roles: [] as string[],
+  breeds: [] as string[],
   dispositions: [] as string[],
   statuses: [] as string[],
 })
@@ -336,6 +392,10 @@ function normalizeDisposition(dog: DogWithStatus): DogDisposition {
   return (dog.disposition || DEFAULT_DISPOSITION) as DogDisposition
 }
 
+function normalizeBreed(dog: Pick<DogWithStatus, 'breed'>) {
+  return dog.breed?.trim() || '马尔济斯'
+}
+
 function isWeakDisposition(disposition: DogDisposition) {
   return disposition === '在养' || disposition === '自留'
 }
@@ -362,33 +422,10 @@ function sortStatuses(statuses: DeriveStatus[]) {
     })
 }
 
-function getStatusDayText(status: DeriveStatus) {
-  if (status.progress?.current) return `第${status.progress.current}天`
-  const dayMeta = (status.meta || []).find(item => /^第\d+天$/.test(item.text))
-  return dayMeta?.text || ''
-}
-
 function statusTitle(status: DeriveStatus): string {
-  if (status.type === '怀孕中' && status.progress) return `${status.type} · 第${status.progress.current}天`
-  if (status.type === '发情中') {
-    const dayText = getStatusDayText(status)
-    return dayText ? `${status.type} · ${dayText}` : status.type
-  }
-  if (status.type === '哺乳中') {
-    const dayText = getStatusDayText(status)
-    return dayText ? `${status.type} · ${dayText}` : status.type
-  }
-  if (status.type === '用药中') {
-    const med = splitStatusDetail(status.detail).primary || status.label || status.type
-    return status.progress ? `${med} · 第${status.progress.current}天` : med
-  }
-  if (status.type === '生病中') {
-    const dayMeta = (status.meta || []).find(item => item.text.startsWith('第'))
-    const illnessName = status.label || status.type
-    if (dayMeta?.text) return `${illnessName} · ${dayMeta.text}`
-    return illnessName
-  }
-  return status.label || status.type
+  return buildCompactDeriveStatusTitle(status, {
+    nameOverride: status.type === '用药中' ? splitStatusDetail(status.detail).primary : undefined,
+  })
 }
 
 function secondaryStatusLabel(status: DeriveStatus) {
@@ -398,9 +435,15 @@ function secondaryStatusLabel(status: DeriveStatus) {
 }
 
 function buildMetaInfoText(dog: DogWithStatus) {
-  const parts = [dog.breed || '马尔济斯']
+  const parts = [normalizeBreed(dog)]
   if (dog.birth_date) parts.push(formatAge(dog.birth_date))
   parts.push(roleLabel(dog))
+  return parts.join(' · ')
+}
+
+function buildBasicInfoText(dog: DogWithStatus) {
+  const parts = [normalizeBreed(dog)]
+  if (dog.birth_date) parts.push(formatAge(dog.birth_date))
   return parts.join(' · ')
 }
 
@@ -411,6 +454,25 @@ function buildSecondaryStatusInlineText(activeStatuses: DeriveStatus[]) {
   return `+${secondaryCount}`
 }
 
+function statusTagLabel(status: DeriveStatus) {
+  return buildCompactDeriveStatusTitle(status, {
+    nameOverride: status.type === '用药中' ? splitStatusDetail(status.detail).primary : undefined,
+  })
+}
+
+function statusTagClass(status: DeriveStatus) {
+  if (isIllnessStatus(status.type)) return 'dog-list__status-tag--illness'
+  return `dog-list__status-tag--${statusColor(status.type)}`
+}
+
+function buildStatusTags(activeStatuses: DeriveStatus[]) {
+  return activeStatuses.slice(0, MAX_STATUS_TAGS).map((status, index) => ({
+    key: `${status.type}-${status.activityTs || 0}-${index}`,
+    label: statusTagLabel(status),
+    className: statusTagClass(status),
+  }))
+}
+
 function buildDogListItem(dog: DogWithStatus): DogListItem {
   const activeStatuses = sortStatuses(dog.statuses || [])
   const primaryStatus = activeStatuses[0]
@@ -418,6 +480,8 @@ function buildDogListItem(dog: DogWithStatus): DogListItem {
   const secondaryOverflowCount = Math.max(0, activeStatuses.length - 1 - MAX_SECONDARY_STATUS_TAGS)
   const displayDisposition = normalizeDisposition(dog)
   const hasHighlightedDisposition = !isWeakDisposition(displayDisposition)
+  const statusTags = buildStatusTags(activeStatuses)
+  const statusOverflowCount = Math.max(0, activeStatuses.length - MAX_STATUS_TAGS)
   const sortBucket = isInactiveDisposition(displayDisposition)
     ? 4
     : dog.role === '种狗'
@@ -435,11 +499,14 @@ function buildDogListItem(dog: DogWithStatus): DogListItem {
     secondaryOverflowCount,
     secondaryStatusInlineText: buildSecondaryStatusInlineText(activeStatuses),
     metaInfoText: buildMetaInfoText(dog),
+    basicInfoText: buildBasicInfoText(dog),
     displayDisposition,
     hasHighlightedDisposition,
     sortBucket,
     statusPriority: primaryStatus ? getStatusPriority(primaryStatus.type) : STATUS_PRIORITY_MAP.正常,
     isActiveStatusDog: activeStatuses.length > 0,
+    statusTags,
+    statusOverflowCount,
   }
 }
 
@@ -450,7 +517,7 @@ const appliedFilterChips = computed<AppliedFilterChip[]>(() => {
       chips.push({
         group,
         value,
-        label: filterLabelMap[group][value] || value,
+        label: filterLabelMap.value[group][value] || value,
       })
     })
   })
@@ -467,7 +534,7 @@ const filteredDogs = computed<DogListItem[]>(() => {
 
   if (activeFilter.value === 'breeding') result = result.filter(dog => dog.role === '种狗')
   else if (activeFilter.value === 'puppy') result = result.filter(dog => dog.role === '幼崽')
-  else if (activeFilter.value === 'for-sale') result = result.filter(dog => dog.displayDisposition === '待售')
+  else if (activeFilter.value === 'sale') result = result.filter(dog => dog.displayDisposition === '待售')
   else if (activeFilter.value === 'external') result = result.filter(dog => dog.role === '外部种公')
 
   if (appliedFilters.genders.length > 0) {
@@ -475,6 +542,9 @@ const filteredDogs = computed<DogListItem[]>(() => {
   }
   if (appliedFilters.roles.length > 0) {
     result = result.filter(dog => appliedFilters.roles.includes(dog.role))
+  }
+  if (appliedFilters.breeds.length > 0) {
+    result = result.filter(dog => appliedFilters.breeds.includes(normalizeBreed(dog)))
   }
   if (appliedFilters.dispositions.length > 0) {
     result = result.filter(dog => appliedFilters.dispositions.includes(dog.displayDisposition))
@@ -506,6 +576,7 @@ function toggleFilter(group: FilterGroup, value: string) {
 function syncAppliedFiltersFromDraft() {
   appliedFilters.genders = [...advFilters.genders]
   appliedFilters.roles = [...advFilters.roles]
+  appliedFilters.breeds = [...advFilters.breeds]
   appliedFilters.dispositions = [...advFilters.dispositions]
   appliedFilters.statuses = [...advFilters.statuses]
 }
@@ -518,6 +589,7 @@ function applyAdvancedFilters() {
 function resetAdvancedFilters() {
   advFilters.genders = []
   advFilters.roles = []
+  advFilters.breeds = []
   advFilters.dispositions = []
   advFilters.statuses = []
   syncAppliedFiltersFromDraft()
@@ -567,22 +639,26 @@ function cardRingClass(dog: DogListItem) {
   return 'dog-list__card-icon--ring-green'
 }
 
+function entityIconColor(dog: DogListItem) {
+  if (dog.primaryStatus) {
+    if (isIllnessStatus(dog.primaryStatus.type)) return 'rgba(224, 82, 82, 0.82)'
+    return `var(--${statusColor(dog.primaryStatus.type)})`
+  }
+  if (dog.role === '外部种公') return 'var(--blue)'
+  if (dog.role === '幼崽') return 'var(--amber)'
+  return 'var(--green)'
+}
+
 function primaryStatusTextClass(dog: DogListItem) {
   if (!dog.primaryStatus) return ''
   if (isIllnessStatus(dog.primaryStatus.type)) return 'dog-list__card-status-inline--illness'
   return `dog-list__card-status-inline--${statusColor(dog.primaryStatus.type)}`
 }
 
-function shouldShowDispositionTag(dog: DogListItem) {
-  return dog.hasHighlightedDisposition
-}
-
 function dispositionTagClass(dog: DogListItem) {
-  if (!dog.hasHighlightedDisposition) return 'dog-list__disposition-tag--muted'
-
   const map: Record<DogDisposition, string> = {
-    在养: 'dog-list__disposition-tag--muted',
-    自留: 'dog-list__disposition-tag--muted',
+    在养: 'dog-list__side-tag--green',
+    自留: 'dog-list__side-tag--muted',
     待售: 'dog-list__disposition-tag--amber',
     已预定: 'dog-list__disposition-tag--blue',
     已售: 'dog-list__disposition-tag--teal',
@@ -593,6 +669,11 @@ function dispositionTagClass(dog: DogListItem) {
   }
 
   return map[dog.displayDisposition]
+}
+
+function roleTagClass(dog: DogListItem) {
+  if (dog.role === '种狗') return 'dog-list__side-tag--role-primary'
+  return 'dog-list__side-tag--role-muted'
 }
 
 function roleLabel(dog: DogWithStatus) {
@@ -641,43 +722,26 @@ onShow(() => {
 
 <style lang="scss" scoped>
 .dog-list {
+  --primary-page-section-gap: 14px;
+  --primary-page-subsection-gap: 8px;
+  --primary-page-card-radius: var(--radius-card);
+  --primary-page-card-shadow: 0 4px 14px rgba(45, 27, 20, 0.05);
+  --primary-page-card-shadow-active: 0 2px 8px rgba(45, 27, 20, 0.06);
+  --primary-page-card-bar-width: 3px;
+  --primary-page-card-active-scale: 0.975;
+  --primary-page-card-title-size: 15px;
+  --primary-page-card-title-weight: 700;
+  --primary-page-card-title-line-height: 1.2;
+  --primary-page-card-subtitle-size: 12px;
+  --primary-page-card-subtitle-line-height: 1.25;
+  --primary-page-card-subtitle-color: var(--text-2);
   min-height: 100vh;
   background: var(--bg);
   padding-bottom: 100px;
 }
 
-.dog-list__header {
-  padding: 8px var(--space-page) 0;
-  display: flex;
-  justify-content: flex-end;
-}
-
-.dog-list__header-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.dog-list__header-add {
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  transition: background 0.12s ease;
-  &:active { background: var(--primary-soft); }
-}
-
-.dog-list__filter-icon {
-  font-family: 'Material Icons Round';
-  font-size: 24px;
-  color: var(--text-2);
-  padding: 6px;
-}
-
 .dog-list__search {
-  margin: 8px 16px 0;
+  margin: 0 var(--space-page);
   height: 44px;
   display: flex;
   align-items: center;
@@ -717,38 +781,11 @@ onShow(() => {
 }
 
 .dog-list__filters-inner {
-  display: flex;
-  gap: 8px;
-  padding: 10px 16px 0;
-}
-
-.dog-list__chip {
-  font-size: 13px;
-  font-weight: 600;
-  padding: 6px 16px;
-  border-radius: var(--radius-tag);
-  white-space: nowrap;
-  background: var(--card);
-  color: var(--text-2);
-  border: 1.5px solid var(--text-4);
-  transition: transform 0.12s ease;
-  &:active { transform: scale(0.94); }
-}
-
-.dog-list__chip--active {
-  background: var(--primary);
-  border-color: var(--primary);
-  .dog-list__chip-text { color: #fff; }
-}
-
-.dog-list__chip-text {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-2);
+  padding: var(--primary-page-subsection-gap) var(--space-page) 0;
 }
 
 .dog-list__applied-filters {
-  margin: 8px 16px 0;
+  margin: var(--primary-page-subsection-gap) var(--space-page) 0;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -768,53 +805,34 @@ onShow(() => {
 }
 
 .dog-list__applied-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 10px;
-  border-radius: var(--radius-tag);
-  background: var(--primary-soft);
+  box-shadow: none;
+  border-color: rgba(240, 88, 136, 0.18);
+  background: rgba(255, 245, 248, 0.92);
   &:active { opacity: 0.8; }
 }
 
-.dog-list__applied-chip-text {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--primary);
-}
-
-.dog-list__applied-chip-icon {
-  font-family: 'Material Icons Round';
-  font-size: 14px;
-  color: var(--primary);
-}
-
-.dog-list__skeleton-wrap {
-  padding: 14px 16px 0;
-}
-
 .dog-list__content {
-  padding: 0 16px;
+  padding: 0 var(--space-page);
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin-top: 10px;
+  margin-top: var(--primary-page-section-gap);
 }
 
 .dog-list__card {
   background: var(--card);
-  border-radius: var(--radius-card);
-  padding: 10px 12px;
-  padding-left: 13px;
+  border-radius: var(--primary-page-card-radius);
+  padding: 12px 14px 11px;
+  padding-left: 15px;
   position: relative;
-  box-shadow: 0 4px 14px rgba(45, 27, 20, 0.05);
+  box-shadow: var(--primary-page-card-shadow);
   overflow: hidden;
-  border-left: 3px solid transparent;
+  border-left: var(--primary-page-card-bar-width) solid transparent;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
   cursor: pointer;
   &:active {
-    transform: scale(0.975);
-    box-shadow: 0 2px 8px rgba(45, 27, 20, 0.06);
+    transform: scale(var(--primary-page-card-active-scale));
+    box-shadow: var(--primary-page-card-shadow-active);
   }
 }
 
@@ -851,23 +869,24 @@ onShow(() => {
 
 .dog-list__card-row {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  align-items: flex-start;
+  gap: 12px;
 }
 
 .dog-list__card-icon {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border-radius: var(--radius-icon);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   border: 2px solid transparent;
+  margin-top: 1px;
 }
 
-.dog-list__card-emoji {
-  font-size: 16px;
+.dog-list__card-entity-icon {
+  line-height: 1;
 }
 
 .dog-list__card-icon--red { background: var(--icon-red); }
@@ -891,99 +910,174 @@ onShow(() => {
 .dog-list__card-main {
   flex: 1;
   min-width: 0;
-}
-
-.dog-list__card-top {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
+  flex-direction: column;
+  padding-top: 1px;
 }
 
 .dog-list__card-name {
-  flex: 1;
-  min-width: 0;
-  font-size: 15px;
-  font-weight: 700;
+  font-size: var(--primary-page-card-title-size);
+  font-weight: var(--primary-page-card-title-weight);
   color: var(--text-1);
-  line-height: 1.3;
+  line-height: var(--primary-page-card-title-line-height);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.dog-list__card-meta-line {
+.dog-list__card-sub {
   display: block;
-  font-size: 12px;
-  line-height: 1.35;
-  margin-top: 2px;
+  font-size: var(--primary-page-card-subtitle-size);
+  line-height: var(--primary-page-card-subtitle-line-height);
+  color: var(--primary-page-card-subtitle-color);
+  margin-top: 4px;
+  font-weight: 400;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.dog-list__card-status-inline {
-  font-size: 12px;
-  font-weight: 700;
+.dog-list__card-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
-.dog-list__card-meta-text {
-  font-size: 12px;
-  color: var(--text-2);
-}
-
-.dog-list__disposition-tag {
+.dog-list__side-tag {
   display: inline-flex;
   align-items: center;
-  flex-shrink: 0;
+  justify-content: center;
+  min-width: 44px;
   padding: 3px 8px;
   border-radius: var(--radius-tag);
 }
 
-.dog-list__disposition-tag-text {
+.dog-list__side-tag-text {
   font-size: 10px;
   font-weight: 600;
   line-height: 1.2;
+  white-space: nowrap;
+}
+
+.dog-list__side-tag--muted {
+  background: rgba(216, 203, 189, 0.22);
+  .dog-list__side-tag-text { color: var(--text-2); }
+}
+
+.dog-list__side-tag--green {
+  background: var(--green-soft);
+  .dog-list__side-tag-text { color: var(--green); }
 }
 
 .dog-list__disposition-tag--amber {
   background: var(--amber-soft);
-  .dog-list__disposition-tag-text { color: var(--amber); }
+  .dog-list__side-tag-text { color: var(--amber); }
 }
 
 .dog-list__disposition-tag--blue {
   background: var(--blue-soft);
-  .dog-list__disposition-tag-text { color: var(--blue); }
+  .dog-list__side-tag-text { color: var(--blue); }
 }
 
 .dog-list__disposition-tag--teal {
   background: var(--teal-soft);
-  .dog-list__disposition-tag-text { color: var(--teal); }
+  .dog-list__side-tag-text { color: var(--teal); }
 }
 
 .dog-list__disposition-tag--plum {
   background: var(--plum-soft);
-  .dog-list__disposition-tag-text { color: var(--plum); }
+  .dog-list__side-tag-text { color: var(--plum); }
 }
 
 .dog-list__disposition-tag--rose {
   background: var(--rose-soft);
-  .dog-list__disposition-tag-text { color: var(--rose); }
+  .dog-list__side-tag-text { color: var(--rose); }
 }
 
 .dog-list__disposition-tag--red {
   background: var(--red-soft);
-  .dog-list__disposition-tag-text { color: var(--red); }
+  .dog-list__side-tag-text { color: var(--red); }
 }
 
-.dog-list__card-status-inline--red { color: var(--red); }
-.dog-list__card-status-inline--illness { color: rgba(201, 70, 70, 1); }
-.dog-list__card-status-inline--rose { color: var(--rose); }
-.dog-list__card-status-inline--green { color: var(--green); }
-.dog-list__card-status-inline--blue { color: var(--blue); }
-.dog-list__card-status-inline--plum { color: var(--plum); }
-.dog-list__card-status-inline--teal { color: var(--teal); }
-.dog-list__card-status-inline--amber { color: var(--amber); }
+.dog-list__side-tag--role-primary {
+  background: rgba(240, 88, 136, 0.1);
+  .dog-list__side-tag-text { color: var(--primary); }
+}
+
+.dog-list__side-tag--role-muted {
+  background: rgba(216, 203, 189, 0.18);
+  .dog-list__side-tag-text { color: var(--text-3); }
+}
+
+.dog-list__card-statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  justify-content: flex-start;
+}
+
+.dog-list__status-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 11px;
+  border-radius: var(--radius-tag);
+}
+
+.dog-list__status-tag-text {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.dog-list__status-tag--more {
+  background: rgba(216, 203, 189, 0.18);
+  .dog-list__status-tag-text { color: var(--text-3); }
+}
+
+.dog-list__status-tag--illness {
+  background: rgba(255, 228, 223, 0.95);
+  .dog-list__status-tag-text { color: rgba(201, 70, 70, 1); }
+}
+
+.dog-list__status-tag--red {
+  background: var(--red-soft);
+  .dog-list__status-tag-text { color: var(--red); }
+}
+
+.dog-list__status-tag--rose {
+  background: var(--rose-soft);
+  .dog-list__status-tag-text { color: var(--rose); }
+}
+
+.dog-list__status-tag--green {
+  background: var(--green-soft);
+  .dog-list__status-tag-text { color: var(--green); }
+}
+
+.dog-list__status-tag--blue {
+  background: var(--blue-soft);
+  .dog-list__status-tag-text { color: var(--blue); }
+}
+
+.dog-list__status-tag--plum {
+  background: var(--plum-soft);
+  .dog-list__status-tag-text { color: var(--plum); }
+}
+
+.dog-list__status-tag--teal {
+  background: var(--teal-soft);
+  .dog-list__status-tag-text { color: var(--teal); }
+}
+
+.dog-list__status-tag--amber {
+  background: var(--amber-soft);
+  .dog-list__status-tag-text { color: var(--amber); }
+}
 
 .filter-panel {
   padding-bottom: 16px;
@@ -1033,12 +1127,12 @@ onShow(() => {
 
 .filter-actions {
   display: flex;
-  flex-direction: column;
   gap: 10px;
   margin-top: 8px;
 }
 
 .filter-actions__btn {
+  flex: 1;
   height: 44px;
   display: flex;
   align-items: center;

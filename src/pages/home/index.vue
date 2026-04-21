@@ -223,11 +223,11 @@
           </view>
         </view>
         <view class="task-sheet__actions">
-          <view class="task-sheet__btn task-sheet__btn--confirm" @click="doPostpone">
-            <text style="color: #fff; font-size: 14px; font-weight: 600;">确认推迟</text>
-          </view>
           <view class="task-sheet__btn task-sheet__btn--cancel" @click="showPostponeModal = false">
             <text style="color: var(--text-2); font-size: 14px; font-weight: 600;">取消</text>
+          </view>
+          <view class="task-sheet__btn task-sheet__btn--confirm" @click="doPostpone">
+            <text style="color: #fff; font-size: 14px; font-weight: 600;">确认推迟</text>
           </view>
         </view>
       </view>
@@ -257,7 +257,7 @@
               <text v-if="batchSelected[dog.id]" style="color: #fff; font-size: 12px; font-weight: 700;">&#10003;</text>
             </view>
             <view class="task-sheet__dog-avatar">
-              <text class="material-icons-round" style="color: #fff; font-size: 14px;">pets</text>
+              <BEntityIcon :size="14" color="#fff" />
             </view>
             <text class="task-sheet__dog-name-text">{{ dog.name }}</text>
             <text v-if="dog.completed" class="task-sheet__done-badge">已完成</text>
@@ -440,6 +440,7 @@ import BEmpty from '@/components/feedback/BEmpty.vue'
 import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
 import BNavBar from '@/components/layout/BNavBar.vue'
 import BSheet from '@/components/layout/BSheet.vue'
+import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BIconBox from '@/components/base/BIconBox.vue'
 import { useTaskStore } from '@/stores/taskStore'
 import { consumeSubmitFeedback } from '@/composables/useSubmitFeedback'

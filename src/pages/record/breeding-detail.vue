@@ -59,7 +59,7 @@
                 <text class="info-row-label">种母</text>
                 <view class="info-row-value">
                   <view class="mini-avatar">
-                    <text class="material-icons-round" style="color: #fff; font-size: 14px;">pets</text>
+                    <BEntityIcon :size="14" color="#fff" />
                   </view>
                   <text>{{ record.dog_name || '未知' }}</text>
                 </view>
@@ -80,7 +80,7 @@
                 <text class="info-row-label">种母</text>
                 <view class="info-row-value">
                   <view class="mini-avatar">
-                    <text class="material-icons-round" style="color: #fff; font-size: 14px;">pets</text>
+                    <BEntityIcon :size="14" color="#fff" />
                   </view>
                   <text>{{ record.dog_name || '未知' }}</text>
                 </view>
@@ -89,7 +89,7 @@
                 <text class="info-row-label">种公</text>
                 <view class="info-row-value">
                   <view class="mini-avatar">
-                    <text class="material-icons-round" style="color: #fff; font-size: 14px;">pets</text>
+                    <BEntityIcon :size="14" color="#fff" />
                   </view>
                   <text>{{ getMatingSireName(record.details) }}</text>
                 </view>
@@ -122,7 +122,7 @@
                 <text class="info-row-label">种母</text>
                 <view class="info-row-value">
                   <view class="mini-avatar">
-                    <text class="material-icons-round" style="color: #fff; font-size: 14px;">pets</text>
+                    <BEntityIcon :size="14" color="#fff" />
                   </view>
                   <text>{{ record.dog_name || '未知' }}</text>
                 </view>
@@ -151,7 +151,7 @@
                 <text class="info-row-label">犬只</text>
                 <view class="info-row-value">
                   <view class="mini-avatar">
-                    <text class="material-icons-round" style="color: #fff; font-size: 14px;">pets</text>
+                    <BEntityIcon :size="14" color="#fff" />
                   </view>
                   <text>{{ record.dog_name || '未知' }}</text>
                 </view>
@@ -176,7 +176,7 @@
                 <text class="info-row-label">犬只</text>
                 <view class="info-row-value">
                   <view class="mini-avatar">
-                    <text class="material-icons-round" style="color: #fff; font-size: 14px;">pets</text>
+                    <BEntityIcon :size="14" color="#fff" />
                   </view>
                   <text>{{ record.dog_name || '未知' }}</text>
                 </view>
@@ -205,7 +205,7 @@
                 <text class="info-row-label">犬只</text>
                 <view class="info-row-value">
                   <view class="mini-avatar">
-                    <text class="material-icons-round" style="color: #fff; font-size: 14px;">pets</text>
+                    <BEntityIcon :size="14" color="#fff" />
                   </view>
                   <text>{{ record.dog_name || '未知' }}</text>
                 </view>
@@ -226,7 +226,7 @@
                 <text class="info-row-label">犬只</text>
                 <view class="info-row-value">
                   <view class="mini-avatar">
-                    <text class="material-icons-round" style="color: #fff; font-size: 14px;">pets</text>
+                    <BEntityIcon :size="14" color="#fff" />
                   </view>
                   <text>{{ record.dog_name || '未知' }}</text>
                 </view>
@@ -259,7 +259,7 @@
                 <text class="info-row-label">犬只</text>
                 <view class="info-row-value">
                   <view class="mini-avatar">
-                    <text class="material-icons-round" style="color: #fff; font-size: 14px;">pets</text>
+                    <BEntityIcon :size="14" color="#fff" />
                   </view>
                   <text>{{ record.dog_name || '未知' }}</text>
                 </view>
@@ -292,7 +292,7 @@
                 <text class="info-row-label">犬只</text>
                 <view class="info-row-value">
                   <view class="mini-avatar">
-                    <text class="material-icons-round" style="color: #fff; font-size: 14px;">pets</text>
+                    <BEntityIcon :size="14" color="#fff" />
                   </view>
                   <text>{{ record.dog_name || '未知' }}</text>
                 </view>
@@ -355,10 +355,13 @@
         <view class="section-dot section-dot--red" />
         <text class="section-text">操作</text>
       </view>
-      <view class="action-area">
-        <view class="btn-row">
-          <BButton v-if="canEdit" variant="ghost" @click="goEdit">编辑</BButton>
-          <BButton v-if="canDelete" variant="ghost" color="red" @click="confirmDelete">删除</BButton>
+      <view :class="['action-area', `action-area--${cardColor}`]">
+        <view class="detail-action-card">
+          <view class="detail-action-card__glow" />
+          <view class="detail-action-card__row">
+            <BButton v-if="canEdit" class="detail-action-card__primary" variant="filled" :color="cardColor" @click="goEdit">编辑记录</BButton>
+            <BButton v-if="canDelete" class="detail-action-card__secondary" variant="ghost" color="red" @click="confirmDelete">删除记录</BButton>
+          </view>
         </view>
       </view>
     </template>
@@ -403,6 +406,7 @@ import { useCloudCall } from '@/composables/useCloudCall'
 import { consumeSubmitFeedback, queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
+import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BCard from '@/components/base/BCard.vue'
 import BTag from '@/components/base/BTag.vue'
 import BButton from '@/components/base/BButton.vue'

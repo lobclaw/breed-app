@@ -377,4 +377,116 @@ describe('dog-service', () => {
 
     expect(medicationStatus).toBeUndefined()
   })
+
+  it('犬只详情在未断奶且无活跃周期时，应返回可跳转的哺乳中状态与窝摘要', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+    const birthTs = new Date('2026-04-15T00:00:00+08:00').getTime()
+
+    seedCollection('litters', [
+      {
+        _id: 'litter_1',
+        dam_id: 'dog_1',
+        dam_name: '肉肉',
+        sire_name: '弟弟1',
+        family_id: familyId,
+        cycle_id: 'cycle_1',
+        birth_date: birthTs,
+        total_born: 4,
+        born_alive: 3,
+        weaned_at: null,
+        created_at: birthTs,
+        updated_at: birthTs,
+      },
+    ])
+    seedCollection('dogs', [
+      {
+        _id: 'dog_1',
+        name: '肉肉',
+        gender: '母',
+        role: '种狗',
+        disposition: '在养',
+        family_id: familyId,
+        deleted_at: null,
+      },
+      {
+        _id: 'pup_1',
+        name: '1号',
+        role: '幼崽',
+        disposition: '在养',
+        family_id: familyId,
+        origin_litter_id: 'litter_1',
+        deleted_at: null,
+      },
+      {
+        _id: 'pup_2',
+        name: '2号',
+        role: '幼崽',
+        disposition: '自留',
+        family_id: familyId,
+        origin_litter_id: 'litter_1',
+        deleted_at: null,
+      },
+      {
+        _id: 'pup_3',
+        name: '3号',
+        role: '幼崽',
+        disposition: '待售',
+        family_id: familyId,
+        origin_litter_id: 'litter_1',
+        deleted_at: null,
+      },
+    ])
+
+    const result = await dogService.getDogDetail.call(ctx, 'dog_1')
+    const nursingStatus = (result.data.statuses || []).find((item: any) => item.type === '哺乳中')
+
+    expect(nursingStatus).toMatchObject({
+      type: '哺乳中',
+      cycleId: 'cycle_1',
+      detail: '种公: 弟弟1 · 本窝存活 3/4',
+    })
+    expect(nursingStatus.meta).toEqual([
+      { icon: 'event', text: '生产于 2026-04-15' },
+      { icon: 'schedule', text: '第6天' },
+      { icon: 'favorite', text: '本窝存活 3/4' },
+      { icon: 'pets', text: '在养 2 只' },
+    ])
+  })
+
+  it('updateDog 不应允许通过普通编辑修改 role', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+    await expect(dogService.updateDog.call(ctx, 'dog_1', {
+      role: '幼崽',
+      birth_date: new Date('2024-01-01T00:00:00+08:00').getTime(),
+    })).rejects.toThrow('角色不可通过普通编辑修改，请使用专门操作')
+
+    const { data: dogs } = await db.collection('dogs')
+      .where({ _id: 'dog_1', family_id: familyId })
+      .get()
+    expect(dogs[0].role).toBe('种狗')
+  })
+
+  it('updateDog 仍应允许更新普通档案字段', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+    const birthDate = new Date('2024-01-02T00:00:00+08:00').getTime()
+
+    const result = await dogService.updateDog.call(ctx, 'dog_1', {
+      role: '种狗',
+      birth_date: birthDate,
+      purchase_price: 18888,
+    })
+
+    expect(result).toMatchObject({ message: '已更新' })
+
+    const { data: dogs } = await db.collection('dogs')
+      .where({ _id: 'dog_1', family_id: familyId })
+      .get()
+    expect(dogs[0]).toMatchObject({
+      role: '种狗',
+      birth_date: birthDate,
+      purchase_price: 18888,
+      updated_at: mockNow,
+    })
+  })
 })

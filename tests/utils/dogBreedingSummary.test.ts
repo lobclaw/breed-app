@@ -59,7 +59,7 @@ describe('dogBreedingSummary', () => {
     expect(summary.subtitle).toBe('种公: 团团 · 怀孕中')
     expect(summary.timeline.map(item => item.title)).toEqual([
       '待产',
-      '怀孕中 · 第56天',
+      '怀孕第56天',
       '临产监测',
       '产检',
       '孕检',
@@ -91,7 +91,7 @@ describe('dogBreedingSummary', () => {
 
     expect(summary.timeline.map(item => item.title)).toEqual([
       '建议卵泡检查',
-      '发情中 · 第4天',
+      '发情第4天',
       '发情',
     ])
     expect(summary.timeline[0]).toMatchObject({
@@ -164,6 +164,9 @@ describe('dogBreedingSummary', () => {
       total_born: 4,
       born_alive: 3,
       born_dead: 1,
+      pupStats: {
+        kept: 2,
+      },
       birth_type: '顺产',
       created_by: 'user-1',
       created_at: new Date('2026-04-20T00:00:00+08:00').getTime(),
@@ -171,6 +174,7 @@ describe('dogBreedingSummary', () => {
     } as any)
 
     expect(summary.title).toBe('第2次周期')
-    expect(summary.subtitle).toBe('2026-02-18 · 种公: 团团 · 存活 3/4')
+    expect(summary.meta).toBe('2026-02-18 · 种公: 团团')
+    expect(summary.result).toBe('存活 3/4 · 在养 2')
   })
 })

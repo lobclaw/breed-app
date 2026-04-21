@@ -1,17 +1,19 @@
 <template>
   <view class="page">
     <!-- 页面标题 -->
-    <view class="page-header">
-      <text class="page-header__title">销售管理</text>
+    <view class="primary-page-header">
+      <view class="primary-page-header__row">
+        <text class="primary-page-header__title">销售管理</text>
+      </view>
     </view>
 
     <!-- 状态筛选 Tabs -->
-    <view class="filter-tabs">
+    <view class="filter-tabs primary-page-tabs primary-page-tabs--flush">
       <view
         v-for="f in statusFilters"
         :key="f.value"
-        class="filter-tab"
-        :class="{ 'filter-tab--active': activeFilter === f.value }"
+        class="filter-tab primary-page-tab"
+        :class="{ 'filter-tab--active primary-page-tab--active': activeFilter === f.value }"
         @click="activeFilter = f.value; load()"
       >
         <text>{{ f.label }}</text>
@@ -19,7 +21,7 @@
     </view>
 
     <!-- 骨架屏 -->
-    <view v-if="loading" style="padding: 0 16px; margin-top: 14px;">
+    <view v-if="loading" class="primary-page-loading">
       <BSkeleton :rows="4" />
     </view>
 
@@ -55,14 +57,15 @@
     </view>
 
     <!-- 空状态 -->
-    <BEmpty
-      v-else
-      icon="storefront"
-      title="暂无销售记录"
-      description="设定底价后犬只进入待售状态"
-      actionText="+ 创建销售"
-      @action="goToCreate"
-    />
+    <view v-else class="primary-page-empty">
+      <BEmpty
+        icon="storefront"
+        title="暂无销售记录"
+        description="设定底价后犬只进入待售状态"
+        actionText="+ 创建销售"
+        @action="goToCreate"
+      />
+    </view>
 
     <!-- 底部导航 -->
     <BNavBar current="finance" />
@@ -191,70 +194,32 @@ onShow(() => load())
   padding-bottom: 100px;
 }
 
-/* ==================== PAGE HEADER ==================== */
-.page-header {
-  padding: 12px var(--space-page) 0;
-
-  &__title {
-    font-family: var(--font-display);
-    font-size: 24px;
-    font-weight: 800;
-    color: var(--text-1);
-  }
-}
-
 /* ==================== FILTER TABS ==================== */
 .filter-tabs {
-  display: flex;
-  gap: 8px;
-  padding: 14px 16px 0;
-  overflow-x: auto;
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-  &::-webkit-scrollbar { display: none; }
-}
-
-.filter-tab {
-  font-size: 13px;
-  font-weight: 600;
-  padding: 6px 16px;
-  border-radius: var(--radius-tag);
-  white-space: nowrap;
-  background: var(--card);
-  color: var(--text-2);
-  border: 1.5px solid var(--text-4);
-  transition: transform 0.12s ease;
-  &:active { transform: scale(0.94); }
-
-  &--active {
-    background: var(--primary);
-    color: #fff;
-    border-color: var(--primary);
-  }
 }
 
 /* ==================== CARD FEED ==================== */
 .card-feed {
-  padding: 0 16px;
+  padding: 0 var(--space-page);
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin-top: 14px;
+  margin-top: var(--primary-page-section-gap);
 }
 
 .sale-card {
   background: var(--card);
-  border-radius: var(--radius-card);
+  border-radius: var(--primary-page-card-radius);
   padding: var(--space-card);
   padding-left: var(--space-card-left);
   position: relative;
-  box-shadow: var(--shadow);
+  box-shadow: var(--primary-page-card-shadow);
   overflow: hidden;
-  border-left: 3.5px solid transparent;
+  border-left: var(--primary-page-card-bar-width) solid transparent;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
   &:active {
-    transform: scale(0.975);
-    box-shadow: 0 1px 4px rgba(234, 62, 119, 0.04);
+    transform: scale(var(--primary-page-card-active-scale));
+    box-shadow: var(--primary-page-card-shadow-active);
   }
 
   &::before {
@@ -300,16 +265,16 @@ onShow(() => load())
 }
 
 .card-name {
-  font-size: 15px;
-  font-weight: 700;
+  font-size: var(--primary-page-card-title-size);
+  font-weight: var(--primary-page-card-title-weight);
   color: var(--text-1);
-  line-height: 1.3;
+  line-height: var(--primary-page-card-title-line-height);
   display: block;
 }
 
 .card-sub {
-  font-size: 12px;
-  color: var(--text-2);
+  font-size: var(--primary-page-card-subtitle-size);
+  color: var(--primary-page-card-subtitle-color);
   margin-top: 1px;
   display: block;
 }
@@ -324,8 +289,8 @@ onShow(() => load())
 
 .sale-price {
   font-family: var(--font-display);
-  font-size: 14px;
-  font-weight: 700;
+  font-size: var(--primary-page-card-accent-size);
+  font-weight: var(--primary-page-card-accent-weight);
   color: var(--text-1);
 }
 
@@ -337,8 +302,8 @@ onShow(() => load())
 }
 
 .sale-agent {
-  font-size: 11px;
-  color: var(--text-3);
+  font-size: var(--primary-page-card-meta-size);
+  color: var(--primary-page-card-meta-color);
 }
 
 .platform-badge {

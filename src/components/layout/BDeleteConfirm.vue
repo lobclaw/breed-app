@@ -30,11 +30,11 @@
       </view>
       <!-- 按钮区 -->
       <view class="b-delete-confirm__actions">
-        <view class="b-delete-confirm__btn b-delete-confirm__btn--danger" @click="doConfirm">
-          <text class="b-delete-confirm__btn-text b-delete-confirm__btn-text--white">确认删除</text>
-        </view>
         <view class="b-delete-confirm__btn b-delete-confirm__btn--cancel" @click="cancel">
           <text class="b-delete-confirm__btn-text b-delete-confirm__btn-text--muted">取消</text>
+        </view>
+        <view class="b-delete-confirm__btn b-delete-confirm__btn--danger" @click="doConfirm">
+          <text class="b-delete-confirm__btn-text b-delete-confirm__btn-text--white">确认删除</text>
         </view>
       </view>
     </view>
@@ -176,11 +176,12 @@ function doConfirm() {
 
   &__actions {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     gap: 10px;
   }
 
   &__btn {
+    flex: 1;
     height: 40px;
     display: flex;
     align-items: center;

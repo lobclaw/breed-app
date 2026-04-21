@@ -2,122 +2,133 @@
   <view class="page">
     <BPageHeader title="未来预估" />
 
-    <!-- 预估参数 -->
-    <view class="section-label">
-      <view class="section-dot" style="background:var(--primary)" />
-      <text>预估参数</text>
+    <view v-if="loading" class="skeleton-wrap">
+      <BSkeleton :rows="5" />
+      <BSkeleton :rows="4" />
     </view>
-    <view class="input-section">
-      <view class="input-card">
-        <view class="input-row">
-          <text class="input-label">在役种母数</text>
-          <view class="input-row-right">
-            <input
-              v-model="params.activeDams"
-              class="input-value"
-              type="number"
-            />
-            <text class="input-hint">来自系统</text>
+
+    <template v-else>
+      <!-- 预估参数 -->
+      <view class="section-label">
+        <view class="section-dot" style="background:var(--primary)" />
+        <text>预估参数</text>
+      </view>
+      <view class="input-section">
+        <view class="input-card">
+          <view class="input-row">
+            <text class="input-label">在役种母数</text>
+            <view class="input-row-right">
+              <input
+                v-model="params.activeDams"
+                class="input-value"
+                type="number"
+              />
+              <text class="input-hint">来自系统</text>
+            </view>
           </view>
-        </view>
-        <view class="input-row">
-          <text class="input-label">预计年均窝数</text>
-          <view class="input-row-right">
-            <input
-              v-model="params.littersPerYear"
-              class="input-value"
-              type="number"
-            />
-            <text class="input-hint">系统建议</text>
+          <view class="input-row">
+            <text class="input-label">预计年均窝数</text>
+            <view class="input-row-right">
+              <input
+                v-model="params.littersPerYear"
+                class="input-value"
+                type="number"
+              />
+              <text class="input-hint">系统建议</text>
+            </view>
           </view>
-        </view>
-        <view class="input-row">
-          <text class="input-label">平均每窝收入</text>
-          <view class="input-row-right">
-            <input
-              v-model="params.avgIncomePerLitter"
-              class="input-value"
-              type="digit"
-            />
-            <text class="input-hint">历史数据</text>
+          <view class="input-row">
+            <text class="input-label">平均每窝收入</text>
+            <view class="input-row-right">
+              <input
+                v-model="params.avgIncomePerLitter"
+                class="input-value"
+                type="digit"
+              />
+              <text class="input-hint">历史数据</text>
+            </view>
           </view>
-        </view>
-        <view class="input-row">
-          <text class="input-label">平均每窝成本</text>
-          <view class="input-row-right">
-            <input
-              v-model="params.avgCostPerLitter"
-              class="input-value"
-              type="digit"
-            />
-            <text class="input-hint">历史数据</text>
+          <view class="input-row">
+            <text class="input-label">平均每窝成本</text>
+            <view class="input-row-right">
+              <input
+                v-model="params.avgCostPerLitter"
+                class="input-value"
+                type="digit"
+              />
+              <text class="input-hint">历史数据</text>
+            </view>
           </view>
-        </view>
-        <view class="input-row">
-          <text class="input-label">月均共用开销</text>
-          <view class="input-row-right">
-            <input
-              v-model="params.monthlySharedCost"
-              class="input-value"
-              type="digit"
-            />
-            <text class="input-hint">可编辑</text>
+          <view class="input-row">
+            <text class="input-label">月均共用开销</text>
+            <view class="input-row-right">
+              <input
+                v-model="params.monthlySharedCost"
+                class="input-value"
+                type="digit"
+              />
+              <text class="input-hint">可编辑</text>
+            </view>
           </view>
         </view>
       </view>
-    </view>
 
-    <!-- 收益预估 -->
-    <view class="section-label">
-      <view class="section-dot" style="background:var(--green)" />
-      <text>收益预估</text>
-    </view>
-    <view class="projection-cards">
-      <view v-for="year in projectionYears" :key="year.year" class="projection-card">
-        <text class="projection-year">{{ year.year }}年</text>
-        <view class="projection-row">
-          <text class="p-label">收入</text>
-          <text class="p-value income">+¥{{ formatMoney(year.income) }}</text>
-        </view>
-        <view class="projection-row">
-          <text class="p-label">支出</text>
-          <text class="p-value expense">-¥{{ formatMoney(year.cost) }}</text>
-        </view>
-        <view class="projection-row">
-          <text class="p-label">利润</text>
-          <text class="p-value" :class="getProfitClass(year.profit)">{{ formatSignedMoney(year.profit) }}</text>
-        </view>
-        <view class="projection-bars">
-          <view
-            class="p-bar income"
-            :style="{ width: year.incomeBarPct + '%' }"
-          />
-          <view
-            class="p-bar expense"
-            :style="{ width: year.costBarPct + '%' }"
-          />
+      <!-- 收益预估 -->
+      <view class="section-label">
+        <view class="section-dot" style="background:var(--green)" />
+        <text>收益预估</text>
+      </view>
+      <view class="projection-cards">
+        <view v-for="year in projectionYears" :key="year.year" class="projection-card">
+          <text class="projection-year">{{ year.year }}年</text>
+          <view class="projection-row">
+            <text class="p-label">收入</text>
+            <text class="p-value income">+¥{{ formatMoney(year.income) }}</text>
+          </view>
+          <view class="projection-row">
+            <text class="p-label">支出</text>
+            <text class="p-value expense">-¥{{ formatMoney(year.cost) }}</text>
+          </view>
+          <view class="projection-row">
+            <text class="p-label">利润</text>
+            <text class="p-value" :class="getProfitClass(year.profit)">{{ formatSignedMoney(year.profit) }}</text>
+          </view>
+          <view class="projection-bars">
+            <view
+              class="p-bar income"
+              :style="{ width: year.incomeBarPct + '%' }"
+            />
+            <view
+              class="p-bar expense"
+              :style="{ width: year.costBarPct + '%' }"
+            />
+          </view>
         </view>
       </view>
-    </view>
 
-    <!-- 声明 -->
-    <text class="disclaimer">预估基于历史数据和当前参数，实际情况可能不同</text>
+      <!-- 声明 -->
+      <text class="disclaimer">预估基于历史数据和当前参数，实际情况可能不同</text>
+    </template>
   </view>
 </template>
 
 <script setup lang="ts">
-import { reactive, computed } from 'vue'
+import { reactive, computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
+import BSkeleton from '@/components/feedback/BSkeleton.vue'
 
-const params = reactive({
+const DEFAULT_PARAMS = {
   activeDams: '5',
   littersPerYear: '8',
   avgIncomePerLitter: '16000',
   avgCostPerLitter: '4500',
   monthlySharedCost: '3000',
-})
+}
+
+const loading = ref(true)
+const params = reactive({ ...DEFAULT_PARAMS })
 
 const projectionYears = computed(() => {
   const currentYear = new Date().getFullYear()
@@ -182,14 +193,16 @@ async function loadParams() {
     const res = await getProjectionParams()
     if (res?.data) {
       const data = res.data as any
-      if (data.activeDams) params.activeDams = String(data.activeDams)
-      if (data.littersPerYear) params.littersPerYear = String(data.littersPerYear)
-      if (data.avgIncomePerLitter) params.avgIncomePerLitter = String(data.avgIncomePerLitter)
-      if (data.avgCostPerLitter) params.avgCostPerLitter = String(data.avgCostPerLitter)
-      if (data.monthlySharedCost) params.monthlySharedCost = String(data.monthlySharedCost)
+      if (data.activeDams !== undefined && data.activeDams !== null) params.activeDams = String(data.activeDams)
+      if (data.littersPerYear !== undefined && data.littersPerYear !== null) params.littersPerYear = String(data.littersPerYear)
+      if (data.avgIncomePerLitter !== undefined && data.avgIncomePerLitter !== null) params.avgIncomePerLitter = String(data.avgIncomePerLitter)
+      if (data.avgCostPerLitter !== undefined && data.avgCostPerLitter !== null) params.avgCostPerLitter = String(data.avgCostPerLitter)
+      if (data.monthlySharedCost !== undefined && data.monthlySharedCost !== null) params.monthlySharedCost = String(data.monthlySharedCost)
     }
   } catch {
-    // 使用默认值
+    Object.assign(params, DEFAULT_PARAMS)
+  } finally {
+    loading.value = false
   }
 }
 
@@ -203,6 +216,13 @@ onLoad(() => {
   min-height: 100vh;
   background: var(--bg);
   padding-bottom: 40px;
+}
+
+.skeleton-wrap {
+  padding: 8px 16px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 /* ---- Section Label ---- */

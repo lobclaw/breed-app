@@ -93,7 +93,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useTaskStore } from '@/stores/taskStore'
-import { getHealthTypeTone } from '@/utils/themeSemantics'
+import { getQuickActionButtons, getRecordCatalogGroups } from '@/utils/iconRegistry'
 
 const props = defineProps<{ visible: boolean }>()
 const emit = defineEmits<{ 'update:visible': [value: boolean] }>()
@@ -107,45 +107,8 @@ watch(() => props.visible, (v) => {
   if (v) taskStore.ensure()
 })
 
-const quickActionBtns = [
-  { materialIcon: 'payments', iconColor: 'green', label: '记账', url: '/pages/finance/expense-add' },
-  { materialIcon: 'vaccines', iconColor: 'blue', label: '疫苗', url: '/pages/record/health-vaccination' },
-  { materialIcon: 'shield', iconColor: 'teal', label: '驱虫', url: '/pages/record/health-deworming' },
-  { materialIcon: 'monitor_weight', iconColor: 'teal', label: '体重', url: '/pages/health/batch-weight' },
-]
-
-const recordGroups = [
-  {
-    label: '繁育记录', color: 'rose',
-    items: [
-      { icon: 'whatshot', iconBg: 'var(--icon-rose)', iconColor: 'var(--rose)', label: '发情', url: '/pages/record/breeding-heat' },
-      { icon: 'biotech', iconBg: 'var(--icon-teal)', iconColor: 'var(--teal)', label: '卵泡', url: '/pages/record/breeding-follicle' },
-      { icon: 'favorite', iconBg: 'var(--icon-rose)', iconColor: 'var(--rose)', label: '配种', url: '/pages/record/breeding-mating' },
-      { icon: 'pregnant_woman', iconBg: 'var(--icon-green)', iconColor: 'var(--green)', label: '孕检', url: '/pages/record/breeding-pregnancy' },
-      { icon: 'medical_services', iconBg: 'var(--icon-blue)', iconColor: 'var(--blue)', label: '产检', url: '/pages/record/breeding-prenatal' },
-      { icon: 'schedule', iconBg: 'var(--icon-amber)', iconColor: 'var(--amber)', label: '临产', url: '/pages/record/breeding-prelabor' },
-      { icon: 'child_friendly', iconBg: 'var(--icon-rose)', iconColor: 'var(--rose)', label: '生产', url: '/pages/breeding/birth-wizard' },
-      { icon: 'warning', iconBg: 'var(--icon-red)', iconColor: 'var(--red)', label: '异常终止', url: '/pages/record/breeding-termination' },
-    ],
-  },
-  {
-    label: '健康记录', color: 'green',
-    items: [
-      { icon: 'vaccines', iconBg: 'var(--icon-blue)', iconColor: 'var(--blue)', label: '疫苗', url: '/pages/record/health-vaccination' },
-      { icon: 'shield', iconBg: 'var(--icon-teal)', iconColor: 'var(--teal)', label: '驱虫', url: '/pages/record/health-deworming' },
-      { icon: 'sick', iconBg: 'var(--icon-red)', iconColor: `var(--${getHealthTypeTone('illness').color})`, label: '疾病', url: '/pages/record/health-illness' },
-      { icon: 'medication', iconBg: 'var(--icon-plum)', iconColor: 'var(--plum)', label: '用药', url: '/pages/record/health-medication' },
-      { icon: 'monitor_weight', iconBg: 'var(--icon-teal)', iconColor: 'var(--teal)', label: '体重', url: '/pages/health/batch-weight' },
-    ],
-  },
-  {
-    label: '财务记录', color: 'amber',
-    items: [
-      { icon: 'payments', iconBg: 'var(--icon-green)', iconColor: 'var(--green)', label: '支出', url: '/pages/finance/expense-add' },
-      { icon: 'account_balance', iconBg: 'var(--icon-red)', iconColor: 'var(--red)', label: '收入', url: '/pages/finance/expense-add?type=income' },
-    ],
-  },
-]
+const quickActionBtns = getQuickActionButtons()
+const recordGroups = getRecordCatalogGroups()
 
 function close() {
   allRecordsView.value = false

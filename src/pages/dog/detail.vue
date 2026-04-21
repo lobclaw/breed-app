@@ -16,7 +16,12 @@
       <view class="dog-detail__back-btn" @click="goBack">
         <text class="material-icons-round">arrow_back_ios_new</text>
       </view>
-      <text class="dog-detail__topbar-title">{{ dog.name || '未命名' }}</text>
+      <text
+        class="dog-detail__topbar-title"
+        :class="{ 'dog-detail__topbar-title--visible': showCompactTopbarTitle }"
+      >
+        {{ dog.name || '未命名' }}
+      </text>
       <view class="dog-detail__topbar-cta" @click="addRecord">
         <text class="material-icons-round dog-detail__topbar-cta-icon">add</text>
         <text class="dog-detail__topbar-cta-text">添加记录</text>
@@ -31,7 +36,7 @@
     <!-- ==================== 紧凑 Hero ==================== -->
     <view class="dog-detail__hero">
       <view class="dog-detail__hero-avatar" :class="heroAvatarClass">
-        <text class="material-icons-round dog-detail__hero-avatar-icon">pets</text>
+        <BEntityIcon :role="dog.role" class="dog-detail__hero-avatar-icon" :size="24" color="#fff" />
       </view>
       <view class="dog-detail__hero-info">
         <text class="dog-detail__hero-name">{{ dog.name || '未命名' }} </text>
@@ -348,23 +353,26 @@
             <view class="dog-detail__sec dog-detail__sec--rose">
               <text class="dog-detail__sec-text">繁育历史</text>
             </view>
-            <view
-              v-for="cycle in historyCycleCards"
-              :key="cycle._id"
-              class="dog-detail__cycle-card"
-              @click="goToCycle(cycle._id)"
-            >
-              <view class="dog-detail__rec-icon" :class="cycle.status === '已生产' ? 'dog-detail__rec-icon--green' : 'dog-detail__rec-icon--gray'">
-                <text class="material-icons-round">{{ cycle.status === '已生产' ? 'check_circle' : 'close' }}</text>
+            <view class="dog-detail__cycle-list">
+              <view
+                v-for="cycle in historyCycleCards"
+                :key="cycle._id"
+                class="dog-detail__cycle-card"
+                @click="goToCycle(cycle._id)"
+              >
+                <view class="dog-detail__rec-icon" :class="cycle.status === '已生产' ? 'dog-detail__rec-icon--green' : 'dog-detail__rec-icon--gray'">
+                  <text class="material-icons-round">{{ cycle.status === '已生产' ? 'check_circle' : 'close' }}</text>
+                </view>
+                <view class="dog-detail__cycle-body">
+                  <text class="dog-detail__cycle-title">{{ cycle.summaryTitle }}</text>
+                  <text v-if="cycle.summaryMeta" class="dog-detail__cycle-meta">{{ cycle.summaryMeta }}</text>
+                  <text v-if="cycle.summaryResult" class="dog-detail__cycle-result">{{ cycle.summaryResult }}</text>
+                </view>
+                <view v-if="cycle.status" class="dog-detail__rec-tag" :class="cycle.status === '已生产' ? 'dog-detail__rec-tag--green' : 'dog-detail__rec-tag--gray'">
+                  <text class="dog-detail__rec-tag-text">{{ cycle.status }}</text>
+                </view>
+                <text class="material-icons-round dog-detail__rec-chevron">chevron_right</text>
               </view>
-              <view class="dog-detail__cycle-body">
-                <text class="dog-detail__cycle-title">{{ cycle.summaryTitle }}</text>
-                <text class="dog-detail__cycle-sub">{{ cycle.summarySubtitle }}</text>
-              </view>
-              <view v-if="cycle.status" class="dog-detail__rec-tag" :class="cycle.status === '已生产' ? 'dog-detail__rec-tag--green' : 'dog-detail__rec-tag--gray'">
-                <text class="dog-detail__rec-tag-text">{{ cycle.status }}</text>
-              </view>
-              <text class="material-icons-round dog-detail__rec-chevron">chevron_right</text>
             </view>
           </view>
 
@@ -376,25 +384,24 @@
                 <text class="dog-detail__sec-badge-text">{{ litters.length }}窝</text>
               </view>
             </view>
-            <view class="dog-detail__rec-list">
-              <view v-for="litter in litters" :key="litter._id" class="dog-detail__litter-item" @click="goToOriginLitter(litter._id)">
-                <view class="dog-detail__litter-meta">
-                  <text class="dog-detail__litter-date">{{ formatDate(litter.birth_date) }}</text>
-                  <text v-if="litter.sire_name" class="dog-detail__litter-sire">种公: {{ litter.sire_name }}</text>
-                </view>
-                <view class="dog-detail__litter-content">
-                  <view v-if="litter.pupStats" class="dog-detail__pup-chips">
-                    <view class="dog-detail__pup-chip dog-detail__pup-chip--total">
-                      <text class="dog-detail__pup-chip-text">共{{ litter.pupStats.total }}只</text>
+            <view class="dog-detail__litter-list">
+              <view v-for="litter in litterCards" :key="litter._id" class="dog-detail__litter-item" @click="goToOriginLitter(litter._id)">
+                <view class="dog-detail__litter-main">
+                  <view class="dog-detail__litter-copy">
+                    <view class="dog-detail__litter-title-row">
+                      <text class="dog-detail__litter-date">{{ litter.summaryTitle }}</text>
+                      <text v-if="litter.summaryNumber" class="dog-detail__litter-number">{{ litter.summaryNumber }}</text>
                     </view>
-                    <view v-if="litter.pupStats.alive > 0" class="dog-detail__pup-chip dog-detail__pup-chip--alive">
-                      <text class="dog-detail__pup-chip-text">在养{{ litter.pupStats.alive }}</text>
-                    </view>
-                    <view v-if="litter.pupStats.sold > 0" class="dog-detail__pup-chip dog-detail__pup-chip--sold">
-                      <text class="dog-detail__pup-chip-text">已售{{ litter.pupStats.sold }}</text>
-                    </view>
-                    <view v-if="litter.pupStats.available > 0" class="dog-detail__pup-chip dog-detail__pup-chip--avail">
-                      <text class="dog-detail__pup-chip-text">可售{{ litter.pupStats.available }}</text>
+                    <text v-if="litter.summarySire" class="dog-detail__litter-sire">{{ litter.summarySire }}</text>
+                    <view v-if="litter.chips.length > 0" class="dog-detail__pup-chips">
+                      <view
+                        v-for="chip in litter.chips"
+                        :key="chip.key"
+                        class="dog-detail__pup-chip"
+                        :class="`dog-detail__pup-chip--${chip.tone}`"
+                      >
+                        <text class="dog-detail__pup-chip-text">{{ chip.label }}</text>
+                      </view>
                     </view>
                   </view>
                   <text class="material-icons-round dog-detail__rec-chevron">chevron_right</text>
@@ -621,13 +628,13 @@
           <text class="dog-detail__action-sheet-desc">修改犬只基础信息</text>
         </view>
       </view>
-      <view class="dog-detail__action-sheet-item" @click="openStatusSheet">
+      <view v-if="hasHealthActions" class="dog-detail__action-sheet-item" @click="openStatusSheet">
         <view class="dog-detail__action-sheet-icon dog-detail__action-sheet-icon--amber">
           <text class="material-icons-round">flag</text>
         </view>
         <view class="dog-detail__action-sheet-text">
-          <text class="dog-detail__action-sheet-title">标记状态</text>
-          <text class="dog-detail__action-sheet-desc">生病、康复等状态变更</text>
+          <text class="dog-detail__action-sheet-title">健康操作</text>
+          <text class="dog-detail__action-sheet-desc">康复、治疗推进等快捷操作</text>
         </view>
       </view>
       <view class="dog-detail__action-sheet-item" @click="openDispositionSheet">
@@ -652,82 +659,144 @@
     </view>
 
     <!-- ==================== D-6: 快速标记状态 Sheet ==================== -->
-    <BSheet v-model:visible="showStatusSheet" title="标记状态">
+    <BSheet v-model:visible="showStatusSheet" title="健康操作">
       <view class="status-sheet__dog-info">
-        <text class="status-sheet__dog-emoji">&#x1F436;</text>
-        <text class="status-sheet__dog-name">{{ dog.name || '未命名' }}</text>
-      </view>
-      <view class="status-grid status-grid--3col">
-        <view class="status-card status-card--red" @click="selectIllness">
-          <text class="status-card__emoji">&#x1F912;</text>
-          <text class="status-card__label">生病</text>
-          <text class="status-card__sub">录入疾病记录</text>
+        <view class="status-sheet__dog-avatar" :class="heroAvatarClass">
+          <BEntityIcon :role="dog?.role" :size="18" color="#fff" />
         </view>
-        <view class="status-card status-card--plum" @click="openMedication">
-          <text class="status-card__emoji">&#x1F48A;</text>
-          <text class="status-card__label">开始用药</text>
-          <text class="status-card__sub">添加用药计划</text>
-        </view>
-        <view class="status-card status-card--green" @click="openRecoveryConfirm">
-          <text class="status-card__emoji">&#x2705;</text>
-          <text class="status-card__label">标记康复</text>
-          <text class="status-card__sub">退出生病状态</text>
+        <view class="status-sheet__dog-copy">
+          <text class="status-sheet__dog-name">{{ dog.name || '未命名' }}</text>
+          <text class="status-sheet__dog-sub">{{ healthActionSummary }}</text>
         </view>
       </view>
-      <view class="status-sheet__cancel" @click="showStatusSheet = false">
-        <text class="status-sheet__cancel-text">取消</text>
+      <view class="status-sheet__actions">
+        <view
+          v-for="action in healthActions"
+          :key="action.key"
+          class="status-sheet__action-row"
+          @click="handleHealthAction(action.key)"
+        >
+          <view class="status-sheet__action-left">
+            <view class="status-sheet__action-icon" :class="`status-sheet__action-icon--${action.tone}`">
+              <text class="material-icons-round">{{ action.icon }}</text>
+            </view>
+            <view class="status-sheet__action-copy">
+              <text class="status-sheet__action-title">{{ action.title }}</text>
+              <text class="status-sheet__action-sub">{{ action.sub }}</text>
+            </view>
+          </view>
+          <text class="material-icons-round status-sheet__action-chevron">chevron_right</text>
+        </view>
       </view>
     </BSheet>
 
-    <!-- ==================== D-7: 退休确认 Modal ==================== -->
-    <BModal
-      v-model:visible="showRetireModal"
-      title="标记退休"
-      confirm-text="确认退休"
-      @confirm="doRetire"
-    >
-      <view class="modal-form">
-        <view class="modal-form__group">
-          <text class="modal-form__label">退休日期 *</text>
-          <picker mode="date" :value="retireDate" @change="retireDate = $event.detail.value">
-            <view class="modal-form__input">
-              <text class="modal-form__input-text">{{ retireDate }}</text>
-              <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
-            </view>
-          </picker>
+    <!-- ==================== 去向管理 Sheet ==================== -->
+    <BSheet v-model:visible="showDispositionSheet" title="去向管理">
+      <view class="status-sheet__dog-info">
+        <view class="status-sheet__dog-avatar" :class="heroAvatarClass">
+          <BEntityIcon :role="dog?.role" :size="18" color="#fff" />
         </view>
-        <view class="modal-form__group">
-          <text class="modal-form__label">退休原因（选填）</text>
-          <input v-model="retireReason" class="modal-form__text-input" placeholder="如：年龄过大/健康问题..." />
+        <view class="status-sheet__dog-copy">
+          <text class="status-sheet__dog-name">{{ dog.name || '未命名' }}</text>
+          <text class="status-sheet__dog-sub">{{ dispositionActionSummary }}</text>
         </view>
       </view>
-    </BModal>
+      <view class="status-sheet__actions">
+        <view
+          v-for="action in dispositionActions"
+          :key="action.key"
+          class="status-sheet__action-row"
+          @click="handleDispositionActionItem(action)"
+        >
+          <view class="status-sheet__action-left">
+            <view class="status-sheet__action-icon" :class="`status-sheet__action-icon--${action.tone}`">
+              <text class="material-icons-round">{{ action.icon }}</text>
+            </view>
+            <view class="status-sheet__action-copy">
+              <text class="status-sheet__action-title" :class="action.tone === 'red' ? 'status-sheet__action-title--danger' : ''">{{ action.title }}</text>
+              <text class="status-sheet__action-sub">{{ action.sub }}</text>
+            </view>
+          </view>
+          <text class="material-icons-round status-sheet__action-chevron">chevron_right</text>
+        </view>
+      </view>
+    </BSheet>
 
-    <!-- ==================== D-8: 已故确认 Modal ==================== -->
-    <BModal
-      v-model:visible="showDeceasedModal"
-      title="标记已故"
-      confirm-text="确认"
-      :danger="true"
-      @confirm="doDeceased"
-    >
-      <text class="modal-desc">此操作将取消所有未完成的提醒任务。</text>
-      <view class="modal-form">
-        <view class="modal-form__group">
-          <text class="modal-form__label">日期 *</text>
-          <picker mode="date" :value="deceasedDate" @change="deceasedDate = $event.detail.value">
-            <view class="modal-form__input">
-              <text class="modal-form__input-text">{{ deceasedDate }}</text>
+    <!-- ==================== D-7: 退休表单 Sheet ==================== -->
+    <BSheet v-model:visible="showRetireSheet" title="标记退休">
+      <view class="sheet-form">
+        <view class="status-sheet__dog-info">
+          <view class="status-sheet__dog-avatar" :class="heroAvatarClass">
+            <BEntityIcon :role="dog?.role" :size="18" color="#fff" />
+          </view>
+          <view class="status-sheet__dog-copy">
+            <text class="status-sheet__dog-name">{{ dog.name || '未命名' }}</text>
+            <text class="status-sheet__dog-sub">{{ dispositionActionSummary }}</text>
+          </view>
+        </view>
+        <view class="sheet-form__group">
+          <text class="sheet-form__label">退休日期 *</text>
+          <picker mode="date" :value="retireDate" @change="retireDate = $event.detail.value">
+            <view class="sheet-form__input">
+              <text class="sheet-form__input-text">{{ retireDate }}</text>
               <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
             </view>
           </picker>
         </view>
-        <view class="modal-form__group">
-          <text class="modal-form__label">备注（可选）</text>
-          <input v-model="deceasedCause" class="modal-form__text-input" placeholder="死因等信息" />
+        <view class="sheet-form__group">
+          <text class="sheet-form__label">退休原因（选填）</text>
+          <input v-model="retireReason" class="sheet-form__text-input" placeholder="如：年龄过大/健康问题..." />
+        </view>
+        <view class="sheet-form__actions">
+          <view class="sheet-form__btn sheet-form__btn--cancel" @click="showRetireSheet = false">
+            <text class="sheet-form__btn-text" style="color: var(--text-2);">取消</text>
+          </view>
+          <view class="sheet-form__btn sheet-form__btn--primary" @click="doRetire">
+            <text class="sheet-form__btn-text" style="color: #fff;">确认退休</text>
+          </view>
         </view>
       </view>
-    </BModal>
+    </BSheet>
+
+    <!-- ==================== D-8: 已故表单 Sheet ==================== -->
+    <BSheet v-model:visible="showDeceasedSheet" title="标记已故">
+      <view class="sheet-form">
+        <view class="status-sheet__dog-info">
+          <view class="status-sheet__dog-avatar" :class="heroAvatarClass">
+            <BEntityIcon :role="dog?.role" :size="18" color="#fff" />
+          </view>
+          <view class="status-sheet__dog-copy">
+            <text class="status-sheet__dog-name">{{ dog.name || '未命名' }}</text>
+            <text class="status-sheet__dog-sub">{{ dispositionActionSummary }}</text>
+          </view>
+        </view>
+        <view class="sheet-form__danger-note">
+          <text class="material-icons-round sheet-form__danger-icon">warning</text>
+          <text class="sheet-form__danger-text">此操作将取消所有未完成的提醒任务。</text>
+        </view>
+        <view class="sheet-form__group">
+          <text class="sheet-form__label">日期 *</text>
+          <picker mode="date" :value="deceasedDate" @change="deceasedDate = $event.detail.value">
+            <view class="sheet-form__input">
+              <text class="sheet-form__input-text">{{ deceasedDate }}</text>
+              <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
+            </view>
+          </picker>
+        </view>
+        <view class="sheet-form__group">
+          <text class="sheet-form__label">备注（可选）</text>
+          <input v-model="deceasedCause" class="sheet-form__text-input" placeholder="死因等信息" />
+        </view>
+        <view class="sheet-form__actions">
+          <view class="sheet-form__btn sheet-form__btn--cancel" @click="showDeceasedSheet = false">
+            <text class="sheet-form__btn-text" style="color: var(--text-2);">取消</text>
+          </view>
+          <view class="sheet-form__btn sheet-form__btn--danger" @click="doDeceased">
+            <text class="sheet-form__btn-text" style="color: #fff;">确认标记已故</text>
+          </view>
+        </view>
+      </view>
+    </BSheet>
 
     <!-- ==================== D-9: 领养表单 Sheet ==================== -->
     <BSheet v-model:visible="showAdoptionSheet" title="标记领养">
@@ -754,11 +823,11 @@
           <text class="sheet-form__helper">有领养费将自动录入一笔收入</text>
         </view>
         <view class="sheet-form__actions">
-          <view class="sheet-form__btn sheet-form__btn--primary" @click="doAdoption">
-            <text class="sheet-form__btn-text" style="color: #fff;">确认领养</text>
-          </view>
           <view class="sheet-form__btn sheet-form__btn--cancel" @click="showAdoptionSheet = false">
             <text class="sheet-form__btn-text" style="color: var(--text-2);">取消</text>
+          </view>
+          <view class="sheet-form__btn sheet-form__btn--primary" @click="doAdoption">
+            <text class="sheet-form__btn-text" style="color: #fff;">确认领养</text>
           </view>
         </view>
       </view>
@@ -781,11 +850,11 @@
           <input v-model="giftRecipient" class="sheet-form__text-input" placeholder="受赠人姓名或联系方式..." />
         </view>
         <view class="sheet-form__actions">
-          <view class="sheet-form__btn sheet-form__btn--primary" @click="doGift">
-            <text class="sheet-form__btn-text" style="color: #fff;">确认赠送</text>
-          </view>
           <view class="sheet-form__btn sheet-form__btn--cancel" @click="showGiftSheet = false">
             <text class="sheet-form__btn-text" style="color: var(--text-2);">取消</text>
+          </view>
+          <view class="sheet-form__btn sheet-form__btn--primary" @click="doGift">
+            <text class="sheet-form__btn-text" style="color: #fff;">确认赠送</text>
           </view>
         </view>
       </view>
@@ -809,26 +878,37 @@
       @confirm="doPromote"
     />
 
-    <!-- ==================== D-13: 康复确认 Modal ==================== -->
-    <BModal
-      v-model:visible="showRecoveryModal"
-      title="标记康复"
-      confirm-text="确认康复"
-      @confirm="doRecovery"
-    >
-      <text class="modal-desc">确认犬只已康复？将退出当前生病状态。</text>
-      <view class="modal-form">
-        <view class="modal-form__group">
-          <text class="modal-form__label">康复日期</text>
+    <!-- ==================== D-13: 康复表单 Sheet ==================== -->
+    <BSheet v-model:visible="showRecoverySheet" title="标记康复">
+      <view class="sheet-form">
+        <view class="status-sheet__dog-info">
+          <view class="status-sheet__dog-avatar" :class="heroAvatarClass">
+            <BEntityIcon :role="dog?.role" :size="18" color="#fff" />
+          </view>
+          <view class="status-sheet__dog-copy">
+            <text class="status-sheet__dog-name">{{ dog.name || '未命名' }}</text>
+            <text class="status-sheet__dog-sub">{{ healthActionSummary }}</text>
+          </view>
+        </view>
+        <view class="sheet-form__group">
+          <text class="sheet-form__label">康复日期</text>
           <picker mode="date" :value="recoveryDate" @change="recoveryDate = $event.detail.value">
-            <view class="modal-form__input">
-              <text class="modal-form__input-text">{{ recoveryDate }}</text>
+            <view class="sheet-form__input">
+              <text class="sheet-form__input-text">{{ recoveryDate }}</text>
               <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
             </view>
           </picker>
         </view>
+        <view class="sheet-form__actions">
+          <view class="sheet-form__btn sheet-form__btn--cancel" @click="showRecoverySheet = false">
+            <text class="sheet-form__btn-text" style="color: var(--text-2);">取消</text>
+          </view>
+          <view class="sheet-form__btn sheet-form__btn--primary" @click="doRecovery">
+            <text class="sheet-form__btn-text" style="color: #fff;">确认康复</text>
+          </view>
+        </view>
       </view>
-    </BModal>
+    </BSheet>
 
     <!-- ==================== D-14: 删除犬只确认 Modal ==================== -->
     <BDeleteConfirm
@@ -843,7 +923,7 @@
       <view class="weight-entry">
         <view class="weight-entry__dog-row">
           <view class="weight-entry__dog-avatar">
-            <text class="material-icons-round" style="font-size: 16px; color: #fff;">pets</text>
+            <BEntityIcon :role="dog?.role" :size="16" color="#fff" />
           </view>
           <view class="weight-entry__dog-info">
             <text class="weight-entry__dog-name">{{ dog.name || '未命名' }}</text>
@@ -989,10 +1069,11 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { onLoad, onShow } from '@dcloudio/uni-app'
+import { onLoad, onPageScroll, onShow } from '@dcloudio/uni-app'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
+import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import BModal from '@/components/layout/BModal.vue'
 import BDeleteConfirm from '@/components/layout/BDeleteConfirm.vue'
@@ -1003,6 +1084,7 @@ import { useDogStore } from '@/stores/dogStore'
 import type { Dog, DeriveStatus } from '@/types/dog'
 import { buildMedicationDetailUrl, resolveDogDetailStatusRoute } from '@/utils/dogDetailNavigation'
 import { formatMedicationDosage } from '@/utils/medicationDisplay'
+import { buildCompactDeriveStatusTitle } from '@/utils/dogStatusCopy'
 import { getDogStatusTone, getHealthTypeTone } from '@/utils/themeSemantics'
 import type { AddRecordItem } from '@/utils/addRecordSheet'
 import { createAllAddRecordGroups } from '@/utils/addRecordSheet'
@@ -1020,6 +1102,8 @@ const showMore = ref(false)
 const showAddRecordSheet = ref(false)
 const infoExpanded = ref(false)
 const submitBannerMessage = ref('')
+const showCompactTopbarTitle = ref(false)
+const TOPBAR_TITLE_SCROLL_THRESHOLD = 36
 const activeCycleSummaryDetail = ref<BreedingCycleDetailResponse | null>(null)
 const activeCycleSummaryCache = ref<Record<string, BreedingCycleDetailResponse>>({})
 let dogId = ''
@@ -1064,6 +1148,10 @@ const heroAvatarClass = computed(() => {
   return 'dog-detail__hero-avatar--primary'
 })
 
+onPageScroll(({ scrollTop }) => {
+  showCompactTopbarTitle.value = scrollTop > TOPBAR_TITLE_SCROLL_THRESHOLD
+})
+
 // 繁育周期计算属性
 const isInEstrus = computed(() => statuses.value.some((s: any) => s.type === '发情中'))
 const TERMINAL_CYCLE_STATUSES = ['已生产', '失败', '放弃']
@@ -1075,6 +1163,95 @@ const vaccineRecords = computed(() => healthRecords.value.filter((r: any) => r.t
 const dewormingRecords = computed(() => healthRecords.value.filter((r: any) => r.type === 'deworming'))
 const illnessRecords = computed(() => healthRecords.value.filter((r: any) => r.type === 'illness'))
 const latestIllnessRecord = computed(() => illnessRecords.value[0] || null)
+const latestActiveIllnessRecord = computed(() => illnessRecords.value.find((record: any) => illnessStatusLabel(record) !== '已康复') || null)
+const activeMedicationRecords = computed(() => medicationRecords.value.filter((record: any) => record.status === 'active'))
+const canQuickStartMedication = computed(() => !!latestActiveIllnessRecord.value && activeMedicationRecords.value.length === 0)
+const canQuickRecover = computed(() => !!latestActiveIllnessRecord.value)
+type DispositionActionKey = 'promote' | 'deceased' | 'adoption' | 'gift' | 'retire' | 'cancel-retire'
+type DispositionAction = {
+  key: DispositionActionKey
+  icon: string
+  title: string
+  sub: string
+  tone: 'amber' | 'red' | 'green' | 'teal' | 'plum' | 'blue'
+}
+const healthActions = computed(() => {
+  const actions: Array<{
+    key: 'start-medication' | 'recover'
+    icon: string
+    title: string
+    sub: string
+    tone: 'plum' | 'green'
+  }> = []
+
+  if (canQuickStartMedication.value) {
+    const illnessName = latestActiveIllnessRecord.value?.details?.condition || '当前疾病'
+    actions.push({
+      key: 'start-medication',
+      icon: 'medication',
+      title: '开始用药',
+      sub: `为${illnessName}创建连续用药任务`,
+      tone: 'plum',
+    })
+  }
+
+  if (canQuickRecover.value) {
+    const illnessName = latestActiveIllnessRecord.value?.details?.condition || '当前疾病'
+    actions.push({
+      key: 'recover',
+      icon: 'check_circle',
+      title: '标记康复',
+      sub: `结束${illnessName}当前状态`,
+      tone: 'green',
+    })
+  }
+
+  return actions
+})
+const hasHealthActions = computed(() => healthActions.value.length > 0)
+const healthActionSummary = computed(() => {
+  if (latestActiveIllnessRecord.value) {
+    const illnessName = latestActiveIllnessRecord.value.details?.condition || '当前疾病'
+    const treatmentStatus = illnessStatusLabel(latestActiveIllnessRecord.value) || '观察中'
+    return `${illnessName} · ${treatmentStatus}`
+  }
+  if (activeMedicationRecords.value.length > 0) {
+    return `进行中用药 ${activeMedicationRecords.value.length} 项`
+  }
+  return '当前暂无可快捷处理的健康状态'
+})
+const dispositionActions = computed<DispositionAction[]>(() => {
+  const d = dog.value
+  if (!d) return []
+
+  if (d.role === '幼崽') {
+    return [
+      { key: 'promote', icon: 'trending_up', title: '升级为种犬', sub: '切换为种狗身份并恢复在养状态', tone: 'amber' },
+      { key: 'adoption', icon: 'volunteer_activism', title: '送领养', sub: '登记领养去向与领养费用', tone: 'green' },
+      { key: 'gift', icon: 'redeem', title: '赠送', sub: '登记受赠对象与赠送日期', tone: 'teal' },
+      { key: 'deceased', icon: 'heart_broken', title: '标记已故', sub: '结束当前状态并取消未完成任务', tone: 'red' },
+    ]
+  }
+
+  if (d.disposition === '已退休') {
+    return [
+      { key: 'cancel-retire', icon: 'replay', title: '取消退休', sub: '恢复在养状态并回到活跃犬只列表', tone: 'blue' },
+      { key: 'deceased', icon: 'heart_broken', title: '标记已故', sub: '结束当前状态并取消未完成任务', tone: 'red' },
+    ]
+  }
+
+  return [
+    { key: 'adoption', icon: 'volunteer_activism', title: '送领养', sub: '登记领养去向与领养费用', tone: 'green' },
+    { key: 'retire', icon: 'bedtime', title: '退休', sub: '结束繁育身份并保留健康管理', tone: 'plum' },
+    { key: 'gift', icon: 'redeem', title: '赠送', sub: '登记受赠对象与赠送日期', tone: 'teal' },
+    { key: 'deceased', icon: 'heart_broken', title: '标记已故', sub: '结束当前状态并取消未完成任务', tone: 'red' },
+  ]
+})
+const dispositionActionSummary = computed(() => {
+  const d = dog.value
+  if (!d) return '请选择去向管理动作'
+  return `${d.role || '种狗'} · ${d.disposition || '在养'}`
+})
 
 const litters = ref<any[]>([])
 const dogFinance = ref<any>(null)
@@ -1097,7 +1274,33 @@ const historyCycleCards = computed(() => {
     return {
       ...cycle,
       summaryTitle: summary.title,
-      summarySubtitle: summary.subtitle,
+      summaryMeta: summary.meta,
+      summaryResult: summary.result,
+    }
+  })
+})
+const litterCards = computed(() => {
+  return litters.value.map((litter: any) => {
+    const totalCount = getLitterTotalCount(litter)
+    const aliveCount = getLitterAliveCount(litter)
+    const keptCount = Number(litter?.pupStats?.kept) || 0
+    const availableCount = Number(litter?.pupStats?.available) || 0
+    const soldCount = Number(litter?.pupStats?.sold) || 0
+
+    const chips = [
+      totalCount > 0 ? { key: 'total', label: `共${totalCount}只`, tone: 'total' } : null,
+      aliveCount > 0 ? { key: 'alive', label: `存活${aliveCount}`, tone: 'alive' } : null,
+      keptCount > 0 ? { key: 'kept', label: `在养${keptCount}`, tone: 'kept' } : null,
+      availableCount > 0 ? { key: 'available', label: `待售${availableCount}`, tone: 'avail' } : null,
+      soldCount > 0 ? { key: 'sold', label: `已售${soldCount}`, tone: 'sold' } : null,
+    ].filter(Boolean)
+
+    return {
+      ...litter,
+      summaryTitle: formatDate(litter.birth_date),
+      summaryNumber: Number.isFinite(Number(litter.litter_number)) && Number(litter.litter_number) > 0 ? `第${litter.litter_number}窝` : '',
+      summarySire: litter.sire_name ? `种公: ${litter.sire_name}` : '',
+      chips,
     }
   })
 })
@@ -1272,22 +1475,18 @@ function getElapsedDaysFromTs(startTs?: number | null) {
 }
 
 function statusTitle(s: DeriveStatus): string {
-  if (s.type === '怀孕中' && s.progress) return `${s.type} · 第${s.progress.current}天`
-  if (s.type === '发情中') {
-    const day = s.progress?.current || activeCycle.value?.day_count
-    return day ? `${s.type} · 第${day}天` : s.type
-  }
-  if (s.type === '哺乳中' && s.progress) return `${s.type} · 第${s.progress.current}天`
-  if (s.type === '用药中') {
-    const med = splitStatusDetail(s.detail).primary || s.label || s.type
-    return s.progress ? `${med} · 第${s.progress.current}天` : med
-  }
-  if (s.type === '生病中') {
-    const illnessName = s.label || latestIllnessRecord.value?.details?.condition || s.type
-    const day = getElapsedDaysFromTs(getIllnessStartTs())
-    return day ? `${illnessName} · 第${day}天` : illnessName
-  }
-  return s.label || s.type
+  return buildCompactDeriveStatusTitle(s, {
+    dayCount: s.type === '发情中'
+      ? (s.progress?.current || activeCycle.value?.day_count)
+      : s.type === '生病中'
+        ? getElapsedDaysFromTs(getIllnessStartTs())
+        : undefined,
+    nameOverride: s.type === '用药中'
+      ? splitStatusDetail(s.detail).primary
+      : s.type === '生病中'
+        ? (s.label || latestIllnessRecord.value?.details?.condition || '')
+        : undefined,
+  })
 }
 
 function statusSub(s: DeriveStatus): string {
@@ -1301,6 +1500,9 @@ function statusSub(s: DeriveStatus): string {
   if (s.type === '发情中') {
     const startTs = activeCycle.value?.start_date || activeCycle.value?.created_at
     return startTs ? `当前周期开始于 ${formatDate(startTs)}` : '当前繁育周期进行中'
+  }
+  if (s.type === '哺乳中') {
+    return s.detail || '当前处于哺乳照护阶段'
   }
   return s.detail || ''
 }
@@ -1334,6 +1536,20 @@ function statusMeta(s: DeriveStatus): Array<{ icon: string; text: string }> {
   }
 
   return []
+}
+
+function getLitterTotalCount(litter: any) {
+  const totalBorn = Number(litter?.total_born)
+  if (Number.isFinite(totalBorn) && totalBorn > 0) return totalBorn
+  const total = Number(litter?.pupStats?.total)
+  return Number.isFinite(total) && total > 0 ? total : 0
+}
+
+function getLitterAliveCount(litter: any) {
+  const bornAlive = Number(litter?.born_alive)
+  if (Number.isFinite(bornAlive) && bornAlive >= 0) return bornAlive
+  const alive = Number(litter?.pupStats?.alive)
+  return Number.isFinite(alive) && alive >= 0 ? alive : 0
 }
 
 function statusToneClass(type: string, prefix: 'hero' | 'row' | 'icon' | 'progress' | 'progressText') {
@@ -1513,79 +1729,78 @@ const showStatusSheet = ref(false)
 
 function openStatusSheet() {
   showMore.value = false
+  if (!hasHealthActions.value) {
+    uni.showToast({ title: '当前暂无可执行的健康操作', icon: 'none' })
+    return
+  }
   showStatusSheet.value = true
 }
 
 // ==================== 去向管理 ====================
 
+const showDispositionSheet = ref(false)
+
 function openDispositionSheet() {
   showMore.value = false
-
-  // 根据当前状态构建选项
-  let items: string[] = []
-  const d = dog.value
-  if (!d) return
-
-  if (d.role === '幼崽') {
-    items = ['升级为种犬', '标记已故', '送领养', '赠送']
-  } else if (d.disposition === '已退休') {
-    items = ['取消退休', '标记已故']
-  } else {
-    // 在养 / 自留 / 默认
-    items = ['标记已故', '送领养', '赠送', '退休']
-  }
-
-  uni.showActionSheet({
-    itemList: items,
-    success: (res) => {
-      const selected = items[res.tapIndex]
-      switch (selected) {
-        case '标记已故':
-          deceasedDate.value = todayStr()
-          deceasedCause.value = ''
-          showDeceasedModal.value = true
-          break
-        case '送领养':
-          adoptionDate.value = todayStr()
-          adoptionNotes.value = ''
-          adoptionFee.value = ''
-          showAdoptionSheet.value = true
-          break
-        case '赠送':
-          giftDate.value = todayStr()
-          giftRecipient.value = ''
-          showGiftSheet.value = true
-          break
-        case '退休':
-          retireDate.value = todayStr()
-          retireReason.value = ''
-          showRetireModal.value = true
-          break
-        case '取消退休':
-          showCancelRetireModal.value = true
-          break
-        case '升级为种犬':
-          showPromoteModal.value = true
-          break
-      }
-    },
-  })
+  showDispositionSheet.value = true
 }
 
-function selectIllness() {
-  showStatusSheet.value = false
-  // 跳转到疾病记录表单
-  uni.navigateTo({ url: `/pages/record/health-illness?dogId=${dogId}` })
+function handleDispositionAction(actionKey: DispositionActionKey) {
+  showDispositionSheet.value = false
+
+  switch (actionKey) {
+    case 'deceased':
+      deceasedDate.value = todayStr()
+      deceasedCause.value = ''
+      showDeceasedSheet.value = true
+      return
+    case 'adoption':
+      adoptionDate.value = todayStr()
+      adoptionNotes.value = ''
+      adoptionFee.value = ''
+      showAdoptionSheet.value = true
+      return
+    case 'gift':
+      giftDate.value = todayStr()
+      giftRecipient.value = ''
+      showGiftSheet.value = true
+      return
+    case 'retire':
+      retireDate.value = todayStr()
+      retireReason.value = ''
+      showRetireSheet.value = true
+      return
+    case 'cancel-retire':
+      showCancelRetireModal.value = true
+      return
+    case 'promote':
+      showPromoteModal.value = true
+      return
+  }
+}
+
+function handleDispositionActionItem(action: DispositionAction) {
+  handleDispositionAction(action.key)
 }
 
 function openMedication() {
   showStatusSheet.value = false
-  uni.navigateTo({ url: `/pages/record/health-medication?dogId=${dogId}&dogName=${encodeURIComponent(dog.value?.name || '')}` })
+  const dogName = encodeURIComponent(dog.value?.name || '')
+  const illnessParam = latestActiveIllnessRecord.value?._id ? `&illnessRecordId=${latestActiveIllnessRecord.value._id}` : ''
+  uni.navigateTo({ url: `/pages/record/health-medication?dogId=${dogId}&dogName=${dogName}${illnessParam}` })
+}
+
+function handleHealthAction(actionKey: 'start-medication' | 'recover') {
+  if (actionKey === 'start-medication') {
+    openMedication()
+    return
+  }
+  openRecoveryConfirm()
 }
 
 // ==================== D-7: 退休确认 ====================
 
-const showRetireModal = ref(false)
+const showRetireSheet = ref(false)
 const retireDate = ref(todayStr())
 const retireReason = ref('')
 
@@ -1593,7 +1808,7 @@ function openRetireConfirm() {
   showStatusSheet.value = false
   retireDate.value = todayStr()
   retireReason.value = ''
-  showRetireModal.value = true
+  showRetireSheet.value = true
 }
 
 async function doRetire() {
@@ -1601,13 +1816,13 @@ async function doRetire() {
     date: new Date(retireDate.value + 'T00:00:00+08:00').getTime(),
     reason: retireReason.value || null,
   })
-  showRetireModal.value = false
+  showRetireSheet.value = false
   await loadData()
 }
 
 // ==================== D-8: 已故确认 ====================
 
-const showDeceasedModal = ref(false)
+const showDeceasedSheet = ref(false)
 const deceasedDate = ref(todayStr())
 const deceasedCause = ref('')
 
@@ -1616,7 +1831,7 @@ async function doDeceased() {
     date: new Date(deceasedDate.value + 'T00:00:00+08:00').getTime(),
     cause: deceasedCause.value || null,
   })
-  showDeceasedModal.value = false
+  showDeceasedSheet.value = false
   await loadData()
 }
 
@@ -1674,20 +1889,20 @@ async function doPromote() {
 
 // ==================== D-13: 康复确认 ====================
 
-const showRecoveryModal = ref(false)
+const showRecoverySheet = ref(false)
 const recoveryDate = ref(todayStr())
 
 function openRecoveryConfirm() {
   showStatusSheet.value = false
   recoveryDate.value = todayStr()
-  showRecoveryModal.value = true
+  showRecoverySheet.value = true
 }
 
 async function doRecovery() {
   await updateStatus(dogId, 'recover', {
     date: new Date(recoveryDate.value + 'T00:00:00+08:00').getTime(),
   })
-  showRecoveryModal.value = false
+  showRecoverySheet.value = false
   await loadData()
 }
 
@@ -2014,6 +2229,14 @@ onShow(() => {
   font-size: 17px;
   font-weight: 800;
   color: var(--text-1);
+  opacity: 0;
+  transform: translateY(-2px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  pointer-events: none;
+}
+.dog-detail__topbar-title--visible {
+  opacity: 1;
+  transform: translateY(0);
 }
 .dog-detail__topbar-cta {
   display: flex;
@@ -2502,10 +2725,10 @@ onShow(() => {
 .dog-detail__cycle-card {
   background: var(--card);
   border-radius: var(--radius-card);
-  padding: 14px 16px 14px 18px;
+  padding: 15px 16px 15px 18px;
   box-shadow: var(--shadow);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
   cursor: pointer;
   transition: transform 0.12s ease, box-shadow 0.12s ease;
@@ -2515,20 +2738,32 @@ onShow(() => {
     box-shadow: 0 1px 6px rgba(234, 62, 119, 0.04);
   }
 }
+.dog-detail__cycle-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
 .dog-detail__cycle-body {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 .dog-detail__cycle-title {
   font-size: 14px;
   font-weight: 700;
   color: var(--text-1);
 }
-.dog-detail__cycle-sub {
+.dog-detail__cycle-meta,
+.dog-detail__cycle-result {
   font-size: 12px;
   font-weight: 500;
   color: var(--text-2);
-  margin-top: 2px;
+  line-height: 1.4;
+}
+.dog-detail__cycle-result {
+  color: var(--text-3);
 }
 
 /* ==================== 发情中 Banner ==================== */
@@ -2656,6 +2891,7 @@ onShow(() => {
   &--green { background: var(--green); }
   &--blue { background: var(--blue); }
   &--gray { background: var(--text-4); }
+  &--red { background: var(--red); }
 
   &--upcoming {
     border-color: rgba(216, 203, 189, 0.45);
@@ -2681,6 +2917,7 @@ onShow(() => {
 .breeding-active-cycle__timeline-dot--green.breeding-active-cycle__timeline-dot--current { color: rgba(75, 168, 94, 0.4); }
 .breeding-active-cycle__timeline-dot--blue.breeding-active-cycle__timeline-dot--current { color: rgba(74, 134, 232, 0.4); }
 .breeding-active-cycle__timeline-dot--gray.breeding-active-cycle__timeline-dot--current { color: rgba(164, 148, 132, 0.36); }
+.breeding-active-cycle__timeline-dot--red.breeding-active-cycle__timeline-dot--current { color: rgba(224, 82, 82, 0.38); }
 .breeding-active-cycle__timeline-line {
   width: 2px;
   flex: 1;
@@ -2702,6 +2939,7 @@ onShow(() => {
 .breeding-active-cycle__timeline-title--rose { color: var(--rose); }
 .breeding-active-cycle__timeline-title--amber { color: var(--amber); }
 .breeding-active-cycle__timeline-title--gray { color: var(--text-3); }
+.breeding-active-cycle__timeline-title--red { color: var(--red); }
 .breeding-active-cycle__timeline-sub {
   font-size: 11px;
   line-height: 1.45;
@@ -2888,112 +3126,105 @@ onShow(() => {
 .status-sheet__dog-info {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   margin-bottom: 16px;
 }
-.status-sheet__dog-emoji {
-  font-size: 20px;
+.status-sheet__dog-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.status-sheet__dog-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 .status-sheet__dog-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-1);
-}
-.status-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  &--3col { grid-template-columns: 1fr 1fr 1fr; }
-  gap: 10px;
-  margin-bottom: 12px;
-}
-.status-card {
-  padding: 14px;
-  border-radius: var(--radius-card);
-  cursor: pointer;
-  transition: all 0.12s ease;
-  &:active { transform: scale(0.96); }
-}
-.status-card--red { background: var(--red-soft); }
-.status-card--plum { background: var(--plum-soft); }
-.status-card--green { background: var(--green-soft); }
-.status-card--amber { background: var(--amber-soft); }
-.status-card__emoji {
-  display: block;
-  font-size: 24px;
-  margin-bottom: 6px;
-}
-.status-card__label {
   display: block;
   font-size: 14px;
   font-weight: 700;
   color: var(--text-1);
-  margin-bottom: 6px;
 }
-.status-card__sub {
+.status-sheet__dog-sub {
   display: block;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--text-3);
-  margin-top: 2px;
 }
-.status-sheet__cancel {
-  text-align: center;
-  padding: 8px;
-  margin-top: 4px;
+.status-sheet__actions {
+  background: var(--card);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow);
+  overflow: hidden;
 }
-.status-sheet__cancel-text {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-3);
-}
-
-/* ==================== Modal 内表单样式 ==================== */
-.modal-desc {
-  display: block;
-  font-size: 14px;
-  color: var(--text-2);
-  text-align: center;
-  margin-bottom: 16px;
-  line-height: 1.5;
-}
-.modal-form {
-  margin-top: 4px;
-}
-.modal-form__group {
-  margin-bottom: 14px;
-  &:last-child { margin-bottom: 0; }
-}
-.modal-form__label {
-  display: block;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-2);
-  margin-bottom: 6px;
-}
-.modal-form__input {
+.status-sheet__action-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 44px;
-  padding: 0 14px;
-  border: 1.5px solid var(--text-4);
-  border-radius: var(--radius-date);
-  background: var(--bg);
+  gap: 12px;
+  padding: 14px 14px 14px 16px;
+  cursor: pointer;
+  transition: background 0.12s ease;
+  &:active { background: rgba(234, 62, 119, 0.03); }
+  & + & { border-top: 1px solid rgba(216, 203, 189, 0.12); }
 }
-.modal-form__input-text {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-1);
+.status-sheet__action-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
 }
-.modal-form__text-input {
-  width: 100%;
-  height: 44px;
-  border: 1.5px solid var(--text-4);
-  border-radius: var(--radius-date);
-  padding: 0 14px;
+.status-sheet__action-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-icon);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  .material-icons-round { font-family: 'Material Icons Round'; font-size: 18px; }
+}
+.status-sheet__action-icon--plum {
+  background: var(--icon-plum);
+  .material-icons-round { color: var(--plum); }
+}
+.status-sheet__action-icon--green {
+  background: var(--icon-green);
+  .material-icons-round { color: var(--green); }
+}
+.status-sheet__action-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.status-sheet__action-title {
+  display: block;
   font-size: 14px;
+  font-weight: 700;
   color: var(--text-1);
-  background: var(--bg);
+  line-height: 1.25;
+}
+.status-sheet__action-title--danger {
+  color: var(--red);
+}
+.status-sheet__action-sub {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-2);
+  line-height: 1.35;
+}
+.status-sheet__action-chevron {
+  font-family: 'Material Icons Round';
+  color: var(--text-4);
+  font-size: 20px;
+  flex-shrink: 0;
 }
 
 /* ==================== Sheet 内表单样式 ==================== */
@@ -3066,11 +3297,12 @@ onShow(() => {
 }
 .sheet-form__actions {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 10px;
   margin-top: 20px;
 }
 .sheet-form__btn {
+  flex: 1;
   height: 44px;
   display: flex;
   align-items: center;
@@ -3082,12 +3314,37 @@ onShow(() => {
 .sheet-form__btn--primary {
   background: var(--primary);
 }
+.sheet-form__btn--danger {
+  background: var(--red);
+}
 .sheet-form__btn--cancel {
   background: var(--card-dim);
 }
 .sheet-form__btn-text {
   font-size: 15px;
   font-weight: 600;
+}
+.sheet-form__danger-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-row);
+  background: rgba(255, 107, 107, 0.08);
+  margin-bottom: 16px;
+}
+.sheet-form__danger-icon {
+  font-family: 'Material Icons Round';
+  font-size: 18px;
+  color: var(--red);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.sheet-form__danger-text {
+  flex: 1;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--red);
 }
 
 /* ==================== 体重快捷操作 ==================== */
@@ -3469,28 +3726,53 @@ onShow(() => {
 }
 
 /* ==================== D: 产仔记录 ==================== */
-.dog-detail__litter-item {
-  padding: 12px 16px;
+.dog-detail__litter-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  & + & { border-top: 1px solid rgba(216, 203, 189, 0.12); }
+  gap: 10px;
+}
+.dog-detail__litter-item {
+  background: var(--card);
+  border-radius: var(--radius-card);
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
   &:active { background: rgba(234, 62, 119, 0.03); }
 }
-.dog-detail__litter-meta {
+.dog-detail__litter-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.dog-detail__litter-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dog-detail__litter-title-row {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
-.dog-detail__litter-content { display: flex; align-items: center; gap: 12px; }
 .dog-detail__litter-date {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 700;
   color: var(--text-1);
+}
+.dog-detail__litter-number {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+  background: var(--card-dim);
+  border-radius: var(--radius-tag);
+  padding: 3px 8px;
 }
 .dog-detail__litter-sire {
   font-size: 12px;
-  color: var(--text-3);
+  line-height: 1.35;
+  color: var(--text-2);
 }
 .dog-detail__pup-chips {
   display: flex;
@@ -3511,6 +3793,10 @@ onShow(() => {
 }
 .dog-detail__pup-chip--alive {
   background: var(--green-soft);
+  .dog-detail__pup-chip-text { color: var(--green); }
+}
+.dog-detail__pup-chip--kept {
+  background: rgba(75, 168, 94, 0.12);
   .dog-detail__pup-chip-text { color: var(--green); }
 }
 .dog-detail__pup-chip--sold {

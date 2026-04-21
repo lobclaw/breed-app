@@ -28,7 +28,7 @@
               <text class="info-row-label">关联犬只</text>
               <view class="info-row-value">
                 <view class="mini-avatar">
-                  <text class="material-icons-round" style="color: #fff; font-size: 14px;">pets</text>
+                  <BEntityIcon :size="14" color="#fff" />
                 </view>
                 <text>{{ record.linked_dog_name }}</text>
               </view>
@@ -71,10 +71,13 @@
       </view>
 
       <!-- 操作按钮（手动记录才显示） -->
-      <view v-if="record.source !== 'auto'" class="action-area">
-        <view class="btn-row">
-          <BButton variant="ghost" @click="goEdit">编辑</BButton>
-          <BButton variant="ghost" color="red" @click="confirmDelete">删除</BButton>
+      <view v-if="record.source !== 'auto'" class="action-area action-area--red">
+        <view class="detail-action-card">
+          <view class="detail-action-card__glow" />
+          <view class="detail-action-card__row">
+            <BButton class="detail-action-card__primary" variant="filled" color="red" @click="goEdit">编辑记录</BButton>
+            <BButton class="detail-action-card__secondary" variant="ghost" color="red" @click="confirmDelete">删除记录</BButton>
+          </view>
         </view>
       </view>
     </template>
@@ -106,6 +109,7 @@ import { consumeSubmitFeedback, queueSubmitFeedback, wait } from '@/composables/
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
 import BCard from '@/components/base/BCard.vue'
+import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BTag from '@/components/base/BTag.vue'
 import BButton from '@/components/base/BButton.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'

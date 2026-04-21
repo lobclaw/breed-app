@@ -3,16 +3,20 @@
     <BPageHeader :title="isEdit ? '编辑犬只' : '新建犬只'" />
 
     <!-- 角色选择器 -->
-    <view class="role-selector">
+    <view class="role-selector" :class="{ 'role-selector--locked': isEdit }">
       <view
         v-for="r in roleOptions"
         :key="r.value"
         class="role-selector__option"
         :class="{ 'role-selector__option--active': form.role === r.value }"
-        @click="form.role = r.value"
+        @click="!isEdit && (form.role = r.value)"
       >
         <text>{{ r.label }}</text>
       </view>
+    </view>
+    <view v-if="isEdit" class="role-selector__hint">
+      <text class="material-icons-round role-selector__hint-icon">lock</text>
+      <text>角色创建后不可直接修改；幼崽升级请在详情页使用专门操作</text>
     </view>
 
     <!-- 幼崽提示 -->
@@ -344,14 +348,26 @@ const { run: updateDogName } = useCloudCall('dog-service', 'updateDogName')
 const { run: fetchDetail } = useCloudCall<{ data: any }>('dog-service', 'getDogDetail')
 let originalName = ''
 
+function applyDogToForm(dog: any, { syncOriginalName = false } = {}) {
+  if (!dog) return
+  form.name = dog.name || ''
+  if (syncOriginalName) originalName = dog.name || ''
+  form.gender = dog.gender
+  form.role = dog.role
+  form.breed = dog.breed || ''
+  form.birth_date = dog.birth_date
+  form.purchase_date = dog.purchase_date || null
+  form.owner_info = dog.owner_info || ''
+  purchasePriceInput.value = dog.purchase_price ? String(dog.purchase_price) : ''
+}
+
 async function submit() {
   submitState.value = 'submitting'
 
   try {
-    const dogData = {
+    const baseDogData = {
       name: form.name.trim(),
       gender: form.gender,
-      role: form.role,
       breed: form.breed,
       birth_date: form.birth_date,
       purchase_date: form.purchase_date || null,
@@ -360,14 +376,18 @@ async function submit() {
     }
 
     if (isEdit.value) {
-      await updateDog(editDogId, dogData)
+      await updateDog(editDogId, baseDogData)
       // 名称变更时单独调用（updateDog 不处理 name；幼崽可清空名称）
-      if (dogData.name !== originalName) {
-        await updateDogName(editDogId, dogData.name)
+      if (baseDogData.name !== originalName) {
+        await updateDogName(editDogId, baseDogData.name)
       }
       // 更新缓存
-      dogStore.updateDog(editDogId, dogData as any)
+      dogStore.updateDog(editDogId, baseDogData as any)
     } else {
+      const dogData = {
+        ...baseDogData,
+        role: form.role,
+      }
       const res = await createDog(dogData)
       // 新增到缓存
       if (res?.data?._id) {
@@ -394,18 +414,14 @@ onLoad(async (query) => {
     editDogId = query.id
     uni.setNavigationBarTitle({ title: '编辑犬只' })
 
+    const cachedDog = dogStore.list.find(dog => dog._id === editDogId)
+    if (cachedDog) {
+      applyDogToForm(cachedDog, { syncOriginalName: true })
+    }
+
     const res = await fetchDetail(editDogId)
     if (res?.data) {
-      const dog = res.data
-      form.name = dog.name || ''
-      originalName = dog.name || ''
-      form.gender = dog.gender
-      form.role = dog.role
-      form.breed = dog.breed || ''
-      form.birth_date = dog.birth_date
-      form.purchase_date = dog.purchase_date || null
-      form.owner_info = dog.owner_info || ''
-      if (dog.purchase_price) purchasePriceInput.value = String(dog.purchase_price)
+      applyDogToForm(res.data, { syncOriginalName: true })
     }
   }
 })
@@ -441,6 +457,24 @@ onLoad(async (query) => {
       box-shadow: 0 2px 8px rgba(234, 62, 119, 0.25);
     }
   }
+}
+
+.role-selector--locked {
+  opacity: 0.8;
+}
+
+.role-selector__hint {
+  margin: -8px var(--space-page) 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-4);
+}
+
+.role-selector__hint-icon {
+  font-size: 14px;
 }
 
 /* ---- 幼崽提示 ---- */

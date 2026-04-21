@@ -74,6 +74,11 @@ function goBack() {
   }
 
   &__right {
+    min-width: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    margin-left: 12px;
     flex-shrink: 0;
   }
 }

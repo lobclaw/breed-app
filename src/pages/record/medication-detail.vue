@@ -49,7 +49,7 @@
               <text class="info-row-label">犬只</text>
               <view class="info-row-value">
                 <view class="mini-avatar">
-                  <text class="material-icons-round" style="color: #fff; font-size: 14px;">pets</text>
+                  <BEntityIcon :size="14" color="#fff" />
                 </view>
                 <text>{{ task.dog_name || '未知' }}</text>
               </view>
@@ -198,6 +198,7 @@ import { useCloudCall } from '@/composables/useCloudCall'
 import { consumeSubmitFeedback, queueSubmitFeedback } from '@/composables/useSubmitFeedback'
 import BButton from '@/components/base/BButton.vue'
 import BCard from '@/components/base/BCard.vue'
+import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BProgress from '@/components/base/BProgress.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'

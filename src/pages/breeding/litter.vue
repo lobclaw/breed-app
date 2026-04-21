@@ -7,7 +7,7 @@
       <!-- 顶栏 -->
       <BPageHeader :title="litter.dam_name + (litter.litter_number ? `第${litter.litter_number}窝` : '窝')">
         <template #right>
-          <view class="edit-btn" @click="onEdit">
+          <view class="edit-btn" @click="showEditSheet = true">
             <text class="material-icons-round" style="font-size: 18px; color: var(--text-2);">edit</text>
           </view>
         </template>
@@ -73,7 +73,7 @@
           @click="goToDog(puppy._id)"
         >
           <view class="puppy-avatar">
-            <text style="font-size: 18px;">{{ puppyEmoji(puppy) }}</text>
+            <BEntityIcon role="幼崽" color="var(--rose)" :size="18" />
           </view>
           <view class="puppy-info">
             <text class="puppy-name">{{ puppy.name || '未命名' }}</text>
@@ -119,15 +119,17 @@
           </BCard>
         </template>
 
-        <!-- 操作按钮 -->
-        <view class="action-buttons">
-          <view class="action-row">
-            <BButton color="teal" @click="goWeightEntry" style="flex: 1;">
-              <text class="material-icons-round" style="font-size: 16px; margin-right: 6px;">monitor_weight</text>
+      </view>
+
+      <view class="action-dock">
+        <view class="action-dock__panel">
+          <view class="action-dock__row">
+            <BButton color="teal" class="action-dock__btn" @click="goWeightEntry">
+              <text class="material-icons-round action-dock__icon">monitor_weight</text>
               记录体重
             </BButton>
-            <BButton variant="ghost" @click="addPuppy" style="flex: 1;">
-              <text class="material-icons-round" style="font-size: 16px; margin-right: 6px;">add</text>
+            <BButton variant="ghost" class="action-dock__btn action-dock__btn--ghost" @click="addPuppy">
+              <text class="material-icons-round action-dock__icon">add</text>
               添加幼崽
             </BButton>
           </view>
@@ -135,32 +137,90 @@
             v-if="!litter.weaned_at"
             color="amber"
             size="large"
+            class="action-dock__cta"
             :loading="weaning"
             @click="confirmWeaning"
-            style="width: 100%;"
           >
-            <text class="material-icons-round" style="font-size: 16px; margin-right: 6px;">check_circle</text>
+            <text class="material-icons-round action-dock__icon">check_circle</text>
             确认断奶
           </BButton>
         </view>
       </view>
     </template>
 
-    <!-- 共享输入弹窗 -->
-    <BModal
-      v-model:visible="showPrompt"
-      :title="promptTitle"
-      :content="promptContent"
-      @confirm="handlePromptConfirm"
-    >
-      <view class="custom-input-wrap">
-        <input
-          v-model="promptInput"
-          class="custom-input"
-          :placeholder="promptPlaceholder"
-        />
+    <BSheet v-model:visible="showEditSheet" title="编辑窝信息" height="auto">
+      <view class="edit-sheet">
+        <view class="edit-sheet__item" @click="editBirthDate">
+          <view class="edit-sheet__icon">
+            <text class="material-icons-round">event</text>
+          </view>
+          <view class="edit-sheet__content">
+            <text class="edit-sheet__title">修改生产日期</text>
+            <text class="edit-sheet__desc">仅支持在原日期前后 3 天内调整</text>
+          </view>
+          <text class="material-icons-round edit-sheet__arrow">chevron_right</text>
+        </view>
+        <view class="edit-sheet__item" @click="editNotes">
+          <view class="edit-sheet__icon edit-sheet__icon--notes">
+            <text class="material-icons-round">sticky_note_2</text>
+          </view>
+          <view class="edit-sheet__content">
+            <text class="edit-sheet__title">修改备注</text>
+            <text class="edit-sheet__desc">更新这窝的生产备注和经验心得</text>
+          </view>
+          <text class="material-icons-round edit-sheet__arrow">chevron_right</text>
+        </view>
       </view>
-    </BModal>
+    </BSheet>
+
+    <BSheet v-model:visible="showEditFormSheet" :title="editFormTitle" height="auto">
+      <view class="edit-form-sheet">
+        <text v-if="editFormHint" class="edit-form-sheet__hint">{{ editFormHint }}</text>
+
+        <view v-if="editMode === 'birth_date'" class="edit-form-sheet__group">
+          <text class="edit-form-sheet__label">生产日期</text>
+          <picker mode="date" :value="editBirthDateValue" @change="editBirthDateValue = $event.detail.value">
+            <view class="edit-form-sheet__picker">
+              <text class="edit-form-sheet__picker-text">{{ editBirthDateValue || '请选择生产日期' }}</text>
+              <text class="material-icons-round edit-form-sheet__picker-icon">calendar_today</text>
+            </view>
+          </picker>
+        </view>
+
+        <view v-else-if="editMode === 'notes'" class="edit-form-sheet__group">
+          <text class="edit-form-sheet__label">备注（选填）</text>
+          <textarea
+            v-model="editNotesValue"
+            class="edit-form-sheet__textarea"
+            :maxlength="300"
+            :auto-height="true"
+            placeholder="记录这窝的生产备注、经验心得或补充说明"
+          />
+        </view>
+
+        <view v-else-if="editMode === 'puppy_name'" class="edit-form-sheet__group">
+          <text class="edit-form-sheet__label">幼崽名称（选填）</text>
+          <input
+            v-model="editSingleLineValue"
+            class="edit-form-sheet__input"
+            placeholder="未填写时将按默认口径创建"
+          />
+        </view>
+
+        <view class="edit-form-sheet__actions">
+          <view class="edit-form-sheet__btn edit-form-sheet__btn--cancel" @click="closeEditFormSheet">
+            <text class="edit-form-sheet__btn-text" style="color: var(--text-2);">取消</text>
+          </view>
+          <view
+            class="edit-form-sheet__btn edit-form-sheet__btn--primary"
+            :class="{ 'edit-form-sheet__btn--disabled': promptSubmitting }"
+            @click="handlePromptConfirm"
+          >
+            <text class="edit-form-sheet__btn-text" style="color: #fff;">保存</text>
+          </view>
+        </view>
+      </view>
+    </BSheet>
 
     <BModal
       v-model:visible="showWeaningConfirm"
@@ -177,6 +237,7 @@ import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import { queueSubmitFeedback } from '@/composables/useSubmitFeedback'
+import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BCard from '@/components/base/BCard.vue'
 import BTag from '@/components/base/BTag.vue'
@@ -184,6 +245,7 @@ import BButton from '@/components/base/BButton.vue'
 import BSectionLabel from '@/components/base/BSectionLabel.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
+import BSheet from '@/components/layout/BSheet.vue'
 import BModal from '@/components/layout/BModal.vue'
 
 const litter = ref<any>(null)
@@ -204,31 +266,61 @@ const { run: completeTask } = useCloudCall('task-service', 'completeTask', {
   throwOnError: true,
 })
 
-// 共享输入弹窗状态
-const showPrompt = ref(false)
-const promptTitle = ref('')
-const promptContent = ref('')
-const promptPlaceholder = ref('')
-const promptInput = ref('')
+// 编辑表单 Sheet 状态
+const editMode = ref<'birth_date' | 'notes' | 'puppy_name' | ''>('')
+const showEditFormSheet = ref(false)
+const editFormTitle = ref('')
+const editFormHint = ref('')
+const editBirthDateValue = ref('')
+const editNotesValue = ref('')
+const editSingleLineValue = ref('')
+const promptSubmitting = ref(false)
+const showEditSheet = ref(false)
 const showWeaningConfirm = ref(false)
 let promptResolve: ((val: string) => Promise<void>) | null = null
 
-function openPrompt(title: string, placeholder: string, value: string, callback: (val: string) => Promise<void>, content = '') {
-  promptTitle.value = title
-  promptContent.value = content
-  promptPlaceholder.value = placeholder
-  promptInput.value = value
+function openPrompt(
+  mode: 'birth_date' | 'notes' | 'puppy_name',
+  title: string,
+  value: string,
+  callback: (val: string) => Promise<void>,
+  hint = '',
+) {
+  editMode.value = mode
+  editFormTitle.value = title
+  editFormHint.value = hint
+  if (mode === 'birth_date') {
+    editBirthDateValue.value = value
+  } else if (mode === 'notes') {
+    editNotesValue.value = value
+  } else {
+    editSingleLineValue.value = value
+  }
   promptResolve = callback
-  showPrompt.value = true
+  showEditFormSheet.value = true
+}
+
+function closeEditFormSheet() {
+  showEditFormSheet.value = false
+  promptResolve = null
+  editMode.value = ''
 }
 
 async function handlePromptConfirm() {
-  if (promptResolve) {
-    try {
-      await promptResolve(promptInput.value)
-    } catch (e: any) {
-      uni.showToast({ title: e.message || '操作失败', icon: 'none' })
-    }
+  if (!promptResolve || promptSubmitting.value) return
+  promptSubmitting.value = true
+  try {
+    const currentValue = editMode.value === 'birth_date'
+      ? editBirthDateValue.value
+      : editMode.value === 'notes'
+        ? editNotesValue.value
+        : editSingleLineValue.value
+    await promptResolve(currentValue)
+    closeEditFormSheet()
+  } catch (e: any) {
+    uni.showToast({ title: e.message || '操作失败', icon: 'none' })
+  } finally {
+    promptSubmitting.value = false
   }
 }
 
@@ -249,41 +341,39 @@ function goWeightEntry() {
   uni.navigateTo({ url: `/pages/health/batch-weight?litterId=${litterId}` })
 }
 
-function onEdit() {
-  uni.showActionSheet({
-    itemList: ['修改生产日期', '修改备注'],
-    success: (res) => {
-      if (res.tapIndex === 0) {
-        openPrompt(
-          '修改生产日期',
-          formatDate(litter.value?.birth_date),
-          formatDate(litter.value?.birth_date),
-          async (val) => {
-            const newDate = new Date(val + 'T00:00:00+08:00').getTime()
-            await doUpdateBirthDate(litterId, newDate)
-            loadData()
-          },
-          '生产日期只能调整 ±3 天',
-        )
-      } else if (res.tapIndex === 1) {
-        openPrompt(
-          '修改备注',
-          '输入备注内容',
-          litter.value?.birth_notes || '',
-          async (val) => {
-            await doUpdateNotes(litterId, { birth_notes: val || '' })
-            loadData()
-          },
-        )
+function editBirthDate() {
+  showEditSheet.value = false
+  openPrompt(
+    'birth_date',
+    '修改生产日期',
+    formatDate(litter.value?.birth_date),
+    async (val) => {
+      const normalizedValue = (val || '').trim()
+      if (!normalizedValue) {
+        throw new Error('请输入生产日期')
       }
+      const newDate = new Date(`${normalizedValue}T00:00:00+08:00`).getTime()
+      if (Number.isNaN(newDate)) {
+        throw new Error('请输入正确的日期格式')
+      }
+      await doUpdateBirthDate(litterId, newDate)
+      await loadData()
     },
-  })
+    '生产日期只能调整 ±3 天',
+  )
 }
 
-function puppyEmoji(puppy: any) {
-  const emojis = ['🐾', '🐶', '🐕', '🐩']
-  const idx = puppies.value.indexOf(puppy)
-  return emojis[idx % emojis.length]
+function editNotes() {
+  showEditSheet.value = false
+  openPrompt(
+    'notes',
+    '修改备注',
+    litter.value?.birth_notes || '',
+    async (val) => {
+      await doUpdateNotes(litterId, { birth_notes: val || '' })
+      await loadData()
+    },
+  )
 }
 
 function dispClass(disposition: string) {
@@ -341,12 +431,12 @@ async function handleWeaningConfirm() {
 
 function addPuppy() {
   openPrompt(
+    'puppy_name',
     '添加幼崽',
-    '幼崽名称（选填）',
     '',
     async (val) => {
       await doAddPuppy(litterId, { name: val || '' })
-      loadData()
+      await loadData()
     },
   )
 }
@@ -362,7 +452,7 @@ onLoad((query) => {
 .page {
   min-height: 100vh;
   background: var(--bg);
-  padding-bottom: 40px;
+  padding-bottom: calc(156px + env(safe-area-inset-bottom, 0px));
 }
 
 .card-feed {
@@ -370,6 +460,7 @@ onLoad((query) => {
   display: flex;
   flex-direction: column;
   gap: var(--space-card-gap);
+  padding-bottom: 12px;
 }
 
 .edit-btn {
@@ -383,6 +474,178 @@ onLoad((query) => {
   box-shadow: var(--shadow);
   transition: transform 0.12s ease;
   &:active { transform: scale(0.9); }
+}
+
+.edit-sheet {
+  padding-bottom: 10px;
+}
+
+.edit-sheet__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 2px;
+  border-bottom: 1px solid rgba(216, 203, 189, 0.32);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.edit-sheet__icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 14px;
+  background: rgba(232, 155, 62, 0.14);
+  color: var(--amber);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.edit-sheet__icon--notes {
+  background: rgba(234, 62, 119, 0.12);
+  color: var(--rose);
+}
+
+.edit-sheet__content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.edit-sheet__title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.edit-sheet__desc {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-3);
+}
+
+.edit-sheet__arrow {
+  font-size: 18px;
+  color: var(--text-4);
+  flex-shrink: 0;
+}
+
+.edit-form-sheet {
+  padding-bottom: 10px;
+}
+
+.edit-form-sheet__hint {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+
+.edit-form-sheet__group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.edit-form-sheet__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+
+.edit-form-sheet__picker {
+  min-height: 48px;
+  border-radius: 16px;
+  border: 1px solid rgba(216, 203, 189, 0.7);
+  background: rgba(250, 246, 243, 0.84);
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.edit-form-sheet__picker-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.edit-form-sheet__picker-icon {
+  font-size: 18px;
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+
+.edit-form-sheet__textarea {
+  width: 100%;
+  min-height: 132px;
+  border-radius: 18px;
+  border: 1px solid rgba(216, 203, 189, 0.7);
+  background: rgba(250, 246, 243, 0.84);
+  padding: 14px;
+  box-sizing: border-box;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-1);
+}
+
+.edit-form-sheet__input {
+  width: 100%;
+  height: 48px;
+  border-radius: 16px;
+  border: 1px solid rgba(216, 203, 189, 0.7);
+  background: rgba(250, 246, 243, 0.84);
+  padding: 0 14px;
+  box-sizing: border-box;
+  font-size: 14px;
+  color: var(--text-1);
+}
+
+.edit-form-sheet__actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.edit-form-sheet__btn {
+  flex: 1;
+  height: 46px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.12s ease, opacity 0.12s ease;
+
+  &:active {
+    transform: scale(0.96);
+    opacity: 0.88;
+  }
+}
+
+.edit-form-sheet__btn--cancel {
+  background: var(--card-dim);
+}
+
+.edit-form-sheet__btn--primary {
+  background: var(--primary);
+  box-shadow: 0 8px 18px rgba(234, 62, 119, 0.18);
+}
+
+.edit-form-sheet__btn--disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.edit-form-sheet__btn-text {
+  font-size: 14px;
+  font-weight: 700;
 }
 
 /* 摘要信息卡 */
@@ -581,14 +844,66 @@ onLoad((query) => {
 }
 
 /* 操作按钮 */
-.action-buttons {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.action-dock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  padding: 14px var(--space-page) calc(14px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(180deg, rgba(250, 246, 243, 0) 0%, rgba(250, 246, 243, 0.9) 24%, rgba(250, 246, 243, 0.98) 100%);
 }
 
-.action-row {
+.action-dock__panel {
+  position: relative;
+  overflow: hidden;
+  border-radius: 24px;
+  padding: 12px;
+  background: rgba(255, 252, 249, 0.94);
+  border: 1px solid rgba(216, 203, 189, 0.38);
+  box-shadow: 0 -4px 24px rgba(77, 52, 31, 0.08);
+  backdrop-filter: blur(12px);
+}
+
+.action-dock__panel::before {
+  content: '';
+  position: absolute;
+  top: -34px;
+  right: -6px;
+  width: 118px;
+  height: 118px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(232, 155, 62, 0.16) 0%, rgba(255, 255, 255, 0) 72%);
+  pointer-events: none;
+}
+
+.action-dock__row {
+  position: relative;
   display: flex;
-  gap: 8px;
+  gap: 10px;
+}
+
+.action-dock__btn {
+  flex: 1;
+  min-height: 48px;
+}
+
+.action-dock__btn--ghost {
+  background: rgba(255, 255, 255, 0.82);
+  border-color: rgba(175, 150, 124, 0.34) !important;
+  color: var(--text-2) !important;
+}
+
+.action-dock__cta {
+  position: relative;
+  width: 100%;
+  margin-top: 10px;
+  min-height: 50px;
+  box-shadow: 0 10px 24px rgba(232, 155, 62, 0.24);
+}
+
+.action-dock__icon {
+  font-size: 16px;
+  margin-right: 6px;
 }
 </style>

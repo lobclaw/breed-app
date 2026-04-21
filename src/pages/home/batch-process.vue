@@ -52,7 +52,7 @@
               <text v-if="selected.has(item.id)" class="material-icons-round batch-page__check-icon">check</text>
             </view>
             <view class="batch-page__item-avatar">
-              <text class="material-icons-round">pets</text>
+              <BEntityIcon :size="18" color="#fff" />
             </view>
             <view class="batch-page__item-body">
               <text class="batch-page__item-name">{{ item.dogName }}</text>
@@ -135,6 +135,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
+import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'

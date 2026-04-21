@@ -349,4 +349,67 @@ describe('finance-service', () => {
       销售: 3000,
     })
   })
+
+  it('单窝利润应避免同一笔生产费用在周期和窝级别重复统计', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+    seedCollection('litters', [{
+      _id: 'litter_1',
+      family_id: familyId,
+      cycle_id: 'cycle_1',
+      dam_name: '花花',
+    }])
+    seedCollection('dogs', [
+      { _id: 'puppy_1', name: '幼崽1', family_id: familyId, origin_litter_id: 'litter_1', gender: '公', disposition: '正常', deleted_at: null },
+      { _id: 'puppy_2', name: '幼崽2', family_id: familyId, origin_litter_id: 'litter_1', gender: '母', disposition: '正常', deleted_at: null },
+    ])
+    seedCollection('sale_records', [])
+    seedCollection('incomes', [])
+    seedCollection('expenses', [{
+      _id: 'expense_birth',
+      family_id: familyId,
+      total_amount: 1500,
+      notes: '生产',
+      linked_cycle_id: 'cycle_1',
+      linked_litter_id: 'litter_1',
+      deleted_at: null,
+    }])
+
+    const result = await financeService.getLitterProfit.call(ctx, { litter_id: 'litter_1' })
+
+    expect(result.data.totalExpense).toBe(1500)
+    expect(result.data.breedingCosts).toEqual([])
+    expect(result.data.litterCosts).toEqual([
+      expect.objectContaining({
+        id: 'expense_birth',
+        name: '生产',
+        amount: 1500,
+      }),
+    ])
+    expect(result.data.incomeItems).toEqual([
+      expect.objectContaining({ id: 'puppy_1', gender: '公', status: 'pending' }),
+      expect.objectContaining({ id: 'puppy_2', gender: '母', status: 'pending' }),
+    ])
+  })
+
+  it('getDamRoi 别名调用应兼容 dog_id 入参', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+    seedCollection('breeding_cycles', [])
+    seedCollection('litters', [])
+
+    const result = await financeService.getDamRoi.call(ctx, {
+      dog_id: 'dog_1',
+    })
+
+    expect(result.data).toMatchObject({
+      damId: 'dog_1',
+      damName: '花花',
+      totalBreedingIncome: 0,
+      totalBreedingCost: 0,
+      healthCost: 0,
+      netProfit: 0,
+      roiPercent: 0,
+    })
+  })
 })

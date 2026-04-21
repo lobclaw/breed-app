@@ -31,7 +31,7 @@
         <view class="litter-card" @click="selectLitter(litter)">
           <view class="litter-info">
             <view class="litter-avatar">
-              <text class="material-icons-round" style="font-size: 22px; color: #fff;">pets</text>
+              <BEntityIcon kind="litter" :size="22" color="#fff" />
             </view>
             <view class="litter-detail">
               <text class="litter-name">{{ litter.dam_name }}{{ litter.litter_number ? `第${litter.litter_number}窝` : '窝' }}</text>
@@ -49,7 +49,7 @@
       <view class="litter-card" @click="selectedLitter = null">
         <view class="litter-info">
           <view class="litter-avatar">
-            <text class="material-icons-round" style="font-size: 22px; color: #fff;">pets</text>
+            <BEntityIcon kind="litter" :size="22" color="#fff" />
           </view>
           <view class="litter-detail">
             <text class="litter-name">{{ selectedLitter.dam_name }}{{ selectedLitter.litter_number ? `第${selectedLitter.litter_number}窝` : '窝' }}</text>
@@ -155,6 +155,7 @@ import { ref, computed } from 'vue'
 import { onShow, onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import { wait } from '@/composables/useSubmitFeedback'
+import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 

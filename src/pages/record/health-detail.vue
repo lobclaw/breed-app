@@ -64,7 +64,7 @@
               <text class="info-row-label">犬只</text>
               <view class="info-row-value">
                 <view class="mini-avatar">
-                  <text class="material-icons-round" style="color: #fff; font-size: 14px;">pets</text>
+                  <BEntityIcon :size="14" color="#fff" />
                 </view>
                 <text>{{ record.dog_name || '未知' }}</text>
               </view>
@@ -159,14 +159,14 @@
         <view class="section-dot section-dot--red" />
         <text class="section-text">操作</text>
       </view>
-      <view class="action-area">
-        <view class="record-action-card">
-          <view class="record-action-card__glow" />
-          <view class="record-action-card__row">
-            <BButton class="record-action-card__primary" variant="filled" :color="actionButtonColor" @click="goEdit">编辑记录</BButton>
-            <BButton class="record-action-card__secondary" variant="ghost" color="red" @click="confirmDelete">删除</BButton>
+      <view :class="['action-area', `action-area--${actionButtonColor}`]">
+        <view class="detail-action-card">
+          <view class="detail-action-card__glow" />
+          <view class="detail-action-card__row">
+            <BButton class="detail-action-card__primary" variant="filled" :color="actionButtonColor" @click="goEdit">编辑记录</BButton>
+            <BButton class="detail-action-card__secondary" variant="ghost" color="red" @click="confirmDelete">删除记录</BButton>
           </view>
-          <text class="record-action-card__note">删除后不可恢复；编辑会保留来源页承接与返回体验。</text>
+          <text class="detail-action-card__note">删除后不可恢复；编辑会保留来源页承接与返回体验。</text>
         </view>
       </view>
     </template>
@@ -212,6 +212,7 @@ import { consumeSubmitFeedback, queueSubmitFeedback, wait } from '@/composables/
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
 import BCard from '@/components/base/BCard.vue'
+import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BTag from '@/components/base/BTag.vue'
 import BButton from '@/components/base/BButton.vue'
 import BSheet from '@/components/layout/BSheet.vue'
@@ -634,51 +635,6 @@ onShow(() => {
   font-size: 11px;
   color: var(--text-3);
   text-align: center;
-}
-
-.record-action-card {
-  position: relative;
-  overflow: hidden;
-  border-radius: 20px;
-  border: 1px solid rgba(224, 82, 82, 0.08);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 246, 243, 0.98));
-  box-shadow: 0 10px 30px rgba(101, 74, 145, 0.06);
-  padding: 14px;
-}
-.record-action-card__glow {
-  position: absolute;
-  top: -32px;
-  right: -18px;
-  width: 120px;
-  height: 120px;
-  border-radius: 999px;
-  background: radial-gradient(circle, rgba(224, 82, 82, 0.1), rgba(224, 82, 82, 0));
-  pointer-events: none;
-}
-.record-action-card__row {
-  position: relative;
-  display: flex;
-  gap: 10px;
-}
-.record-action-card__primary {
-  flex: 1;
-  min-width: 0;
-  min-height: 50px;
-  border-radius: 16px;
-}
-.record-action-card__secondary {
-  min-width: 104px;
-  min-height: 50px;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.88);
-  border-color: rgba(224, 82, 82, 0.16);
-}
-.record-action-card__note {
-  position: relative;
-  margin-top: 10px;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--text-3);
 }
 
 /* ==================== MORE ACTIONS ==================== */

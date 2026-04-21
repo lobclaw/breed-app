@@ -6,7 +6,7 @@
 import { defineStore } from 'pinia'
 import { cloudCall } from '@/composables/useCloudCall'
 import { buildMedicationDetailUrl } from '@/utils/dogDetailNavigation'
-import { getHealthTypeTone } from '@/utils/themeSemantics'
+import { getTaskActionMeta } from '@/utils/iconRegistry'
 
 interface TaskCard {
   id: string
@@ -104,16 +104,7 @@ export const useTaskStore = defineStore('tasks', {
 
     /** 构建智能推荐（3 槽位降级） */
     buildSmartRecommendations(): any[] {
-      const ACTION_META: Record<string, { materialIcon: string; iconColor: string; label: string; url: string }> = {
-        expense: { materialIcon: 'payments', iconColor: 'green', label: '支出录入', url: '/pages/finance/expense-add' },
-        income: { materialIcon: 'account_balance', iconColor: 'red', label: '收入录入', url: '/pages/finance/expense-add?type=income' },
-        vaccination: { materialIcon: 'vaccines', iconColor: 'blue', label: '疫苗记录', url: '/pages/record/health-vaccination' },
-        deworming: { materialIcon: 'shield', iconColor: 'teal', label: '驱虫记录', url: '/pages/record/health-deworming' },
-        illness: { materialIcon: 'sick', iconColor: getHealthTypeTone('illness').color, label: '疾病记录', url: '/pages/record/health-illness' },
-        heat: { materialIcon: 'whatshot', iconColor: 'rose', label: '发情记录', url: '/pages/record/breeding-heat' },
-        mating: { materialIcon: 'favorite', iconColor: 'rose', label: '配种记录', url: '/pages/record/breeding-mating' },
-        weight: { materialIcon: 'monitor_weight', iconColor: 'teal', label: '体重记录', url: '/pages/health/batch-weight' },
-      }
+      const ACTION_META = getTaskActionMeta()
 
       const slots: any[] = []
       const usedUrls = new Set<string>()

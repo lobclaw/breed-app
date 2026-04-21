@@ -281,7 +281,10 @@ async function calculateLitterProfit(familyId, litterId) {
     }
   }
 
-  const breedingCosts = cycleExpenses.map(expense => ({
+  const litterExpenseIds = new Set(litterExpenses.map(item => item._id))
+  const exclusiveCycleExpenses = cycleExpenses.filter(expense => !litterExpenseIds.has(expense._id))
+
+  const breedingCosts = exclusiveCycleExpenses.map(expense => ({
     id: expense._id,
     name: buildExpenseName(expense, '繁育费用'),
     amount: expense.total_amount || 0,
@@ -294,7 +297,7 @@ async function calculateLitterProfit(familyId, litterId) {
   }))
 
   const countedExpenseIds = new Set([
-    ...cycleExpenses.map(item => item._id),
+    ...exclusiveCycleExpenses.map(item => item._id),
     ...litterExpenses.map(item => item._id),
   ])
 
@@ -329,26 +332,44 @@ async function calculateLitterProfit(familyId, litterId) {
       return {
         id: puppy._id,
         name: puppy.name || `幼崽${index + 1}`,
+        gender: puppy.gender || '',
+        disposition: puppy.disposition || '',
         status: 'sold',
         amount: actualIncome,
         estimated_amount: 0,
       }
     }
 
-    if (sale && ['待售', '已预定'].includes(sale.status)) {
+    if (sale && sale.status === '已预定') {
       return {
         id: puppy._id,
         name: puppy.name || `幼崽${index + 1}`,
-        status: 'pending',
+        gender: puppy.gender || '',
+        disposition: puppy.disposition || '',
+        status: 'reserved',
         amount: 0,
         estimated_amount: sale.agreed_price || sale.floor_price || 0,
+      }
+    }
+
+    if ((sale && sale.status === '待售') || puppy.disposition === '已预定') {
+      return {
+        id: puppy._id,
+        name: puppy.name || `幼崽${index + 1}`,
+        gender: puppy.gender || '',
+        disposition: puppy.disposition || '',
+        status: puppy.disposition === '已预定' ? 'reserved' : 'pending',
+        amount: 0,
+        estimated_amount: sale?.agreed_price || sale?.floor_price || 0,
       }
     }
 
     return {
       id: puppy._id,
       name: puppy.name || `幼崽${index + 1}`,
-      status: 'kept',
+      gender: puppy.gender || '',
+      disposition: puppy.disposition || '',
+      status: 'pending',
       amount: 0,
       estimated_amount: 0,
     }
@@ -885,7 +906,10 @@ module.exports = {
   },
 
   async getDamRoi(damId) {
-    return this.getDamROI(damId)
+    const targetDamId = getIdArg(damId, 'dog_id') || getIdArg(damId, 'damId')
+    if (!targetDamId) throw new Error('缺少犬只 ID')
+
+    return module.exports.getDamROI.call(this, targetDamId)
   },
 
   async deleteExpense(id) {

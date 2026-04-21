@@ -30,7 +30,7 @@
         <view class="dog-info-card">
           <view class="dog-info-row">
             <view class="dog-avatar">
-              <text class="material-icons-round" style="font-size: 22px; color: #fff;">pets</text>
+              <BEntityIcon :size="22" color="#fff" />
             </view>
             <view class="dog-info-text">
               <text class="dog-name">{{ damName }}</text>
@@ -285,6 +285,7 @@ import { ref, reactive, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import { queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
+import BEntityIcon from '@/components/base/BEntityIcon.vue'
 
 let cycleId = ''
 const damName = ref('花花')

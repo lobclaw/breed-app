@@ -1,14 +1,14 @@
 <template>
   <view class="page">
-    <view class="page-header">
-      <view class="page-header__row">
-        <text class="page-header__title">财务</text>
-        <view class="page-header__actions">
-          <view class="page-header__btn" @click="showAddSheet = true">
-            <text class="material-icons-round" style="font-size: 22px; color: var(--primary);">add</text>
+    <view class="primary-page-header">
+      <view class="primary-page-header__row">
+        <text class="primary-page-header__title">财务</text>
+        <view class="primary-page-header__actions">
+          <view class="primary-page-header__action primary-page-header__action--primary" @click="showAddSheet = true">
+            <text class="primary-page-header__icon primary-page-header__icon--primary">add</text>
           </view>
-          <view class="page-header__icon" @click="goToStats">
-            <text class="material-icons-round" style="font-size: 22px; color: var(--text-2);">bar_chart</text>
+          <view class="primary-page-header__action" @click="goToStats">
+            <text class="primary-page-header__icon">bar_chart</text>
           </view>
         </view>
       </view>
@@ -45,19 +45,19 @@
       </view>
     </view>
 
-    <view class="filter-tabs">
+    <view class="filter-tabs primary-page-tabs primary-page-tabs--section">
       <view
         v-for="f in typeFilters"
         :key="f.value"
-        class="filter-tab"
-        :class="{ 'filter-tab--active': appliedFilters.type === f.value }"
+        class="filter-tab primary-page-tab"
+        :class="{ 'filter-tab--active primary-page-tab--active': appliedFilters.type === f.value }"
         @click="switchTypeTab(f.value)"
       >
         <text>{{ f.label }}</text>
       </view>
-      <view class="filter-tabs__spacer" />
-      <view class="filter-entry" @click="showFilterSheet = true">
-        <text class="material-icons-round" :style="{ fontSize: '22px', color: hasActiveFilters ? 'var(--primary)' : 'var(--text-2)' }">tune</text>
+      <view class="filter-tabs__spacer primary-page-tabs__spacer" />
+      <view class="filter-entry primary-page-filter-action" @click="showFilterSheet = true">
+        <text class="primary-page-filter-icon" :class="{ 'primary-page-filter-icon--active': hasActiveFilters }">tune</text>
       </view>
     </view>
 
@@ -70,16 +70,16 @@
           <view
             v-for="chip in activeFilterChips"
             :key="chip.key"
-            class="active-filters__chip"
+            class="active-filters__chip primary-page-applied-chip"
           >
-            <text class="active-filters__chip-text">{{ chip.label }}</text>
-            <text class="material-icons-round active-filters__chip-icon" @click="clearFilterChip(chip.key)">close</text>
+            <text class="active-filters__chip-text primary-page-applied-chip-text">{{ chip.label }}</text>
+            <text class="material-icons-round active-filters__chip-icon primary-page-applied-chip-icon" @click="clearFilterChip(chip.key)">close</text>
           </view>
         </view>
       </scroll-view>
     </view>
 
-    <view v-if="loading" class="loading-wrap">
+    <view v-if="loading" class="primary-page-loading">
       <BSkeleton :rows="4" />
     </view>
 
@@ -109,12 +109,13 @@
       </view>
     </view>
 
-    <BEmpty
-      v-else
-      icon="receipt_long"
-      title="暂无收支记录"
-      description="点击右上角 + 开始记录"
-    />
+    <view v-else class="primary-page-empty">
+      <BEmpty
+        icon="receipt_long"
+        title="暂无收支记录"
+        description="点击右上角 + 开始记录"
+      />
+    </view>
 
     <BSheet v-model:visible="showAddSheet" title="添加记录" height="auto">
       <view class="add-sheet">
@@ -1040,53 +1041,12 @@ onShow(async () => {
   padding-bottom: 100px;
 }
 
-.page-header {
-  padding: 12px var(--space-page) 0;
-
-  &__row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  &__title {
-    font-family: var(--font-display);
-    font-size: 24px;
-    font-weight: 800;
-    color: var(--text-1);
-  }
-
-  &__actions {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
-
-  &__btn,
-  &__icon {
-    width: 36px;
-    height: 36px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-  }
-
-  &__btn:active {
-    background: var(--primary-soft);
-  }
-
-  &__icon:active {
-    transform: scale(0.9);
-  }
-}
-
 .month-selector {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 16px;
-  padding: 8px 0 0;
+  padding: var(--primary-page-subsection-gap) 0 0;
 
   &__text {
     font-family: var(--font-display);
@@ -1112,7 +1072,7 @@ onShow(async () => {
 }
 
 .summary-card {
-  margin: 14px 16px 0;
+  margin: 0 var(--space-page);
   background: var(--card);
   border-radius: var(--radius-card);
   padding: 18px 20px;
@@ -1170,51 +1130,13 @@ onShow(async () => {
 }
 
 .filter-tabs {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 14px 16px 0;
-
   &__spacer {
     flex: 1;
   }
 }
 
-.filter-tab {
-  font-size: 13px;
-  font-weight: 600;
-  padding: 6px 16px;
-  border-radius: var(--radius-tag);
-  background: var(--card);
-  color: var(--text-2);
-  border: 1.5px solid var(--text-4);
-
-  &:active {
-    transform: scale(0.96);
-  }
-
-  &--active {
-    background: var(--primary);
-    color: #fff;
-    border-color: var(--primary);
-  }
-}
-
-.filter-entry {
-  width: 36px;
-  height: 36px;
-  border-radius: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  &:active {
-    background: var(--card-dim);
-  }
-}
-
 .active-filters {
-  padding: 8px 16px 0;
+  padding: var(--primary-page-subsection-gap) var(--space-page) 0;
   display: flex;
   gap: 8px;
   align-items: center;
@@ -1233,27 +1155,7 @@ onShow(async () => {
     padding-right: 2px;
   }
 
-  &__chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 11px;
-    border-radius: 999px;
-    background: linear-gradient(135deg, rgba(240, 88, 136, 0.16) 0%, rgba(255, 240, 242, 0.95) 100%);
-    border: 1px solid rgba(240, 88, 136, 0.34);
-    color: var(--primary);
-    box-shadow: 0 6px 16px rgba(240, 88, 136, 0.1);
-    flex-shrink: 0;
-  }
-
-  &__chip-text {
-    font-size: 11px;
-    font-weight: 700;
-    white-space: nowrap;
-  }
-
   &__chip-icon {
-    font-size: 14px;
     color: rgba(191, 65, 111, 0.72);
   }
 
@@ -1271,30 +1173,28 @@ onShow(async () => {
   }
 }
 
-.loading-wrap {
-  padding: 0 16px;
-}
-
 .card-feed {
-  padding: 0 16px;
+  padding: 0 var(--space-page);
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin-top: 14px;
+  margin-top: var(--primary-page-section-gap);
 }
 
 .flow-card {
   background: var(--card);
-  border-radius: var(--radius-card);
+  border-radius: var(--primary-page-card-radius);
   padding: var(--space-card);
   padding-left: var(--space-card-left);
   position: relative;
-  box-shadow: var(--shadow);
+  box-shadow: var(--primary-page-card-shadow);
   overflow: hidden;
-  border-left: 3.5px solid transparent;
+  border-left: var(--primary-page-card-bar-width) solid transparent;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
 
   &:active {
-    transform: scale(0.98);
+    transform: scale(var(--primary-page-card-active-scale));
+    box-shadow: var(--primary-page-card-shadow-active);
   }
 
   &::before {
@@ -1348,22 +1248,24 @@ onShow(async () => {
 }
 
 .flow-desc {
-  font-size: 13px;
-  font-weight: 700;
+  font-size: var(--primary-page-card-title-size);
+  font-weight: var(--primary-page-card-title-weight);
   color: var(--text-1);
+  line-height: var(--primary-page-card-title-line-height);
   display: block;
 }
 
 .flow-sub {
-  font-size: 12px;
-  color: var(--text-2);
+  font-size: var(--primary-page-card-subtitle-size);
+  color: var(--primary-page-card-subtitle-color);
   margin-top: 2px;
   display: block;
 }
 
 .flow-meta {
-  font-size: 11px;
-  color: var(--text-3);
+  font-size: var(--primary-page-card-meta-size);
+  color: var(--primary-page-card-meta-color);
+  line-height: var(--primary-page-card-meta-line-height);
   margin-top: 2px;
   display: block;
 }
@@ -1375,8 +1277,8 @@ onShow(async () => {
 
 .flow-amount {
   font-family: var(--font-display);
-  font-size: 14px;
-  font-weight: 700;
+  font-size: var(--primary-page-card-accent-size);
+  font-weight: var(--primary-page-card-accent-weight);
   display: block;
 
   &--income { color: var(--red); }
@@ -1384,8 +1286,8 @@ onShow(async () => {
 }
 
 .flow-date {
-  font-size: 10px;
-  color: var(--text-3);
+  font-size: var(--primary-page-card-meta-size);
+  color: var(--primary-page-card-meta-color);
   margin-top: 2px;
   display: block;
 }

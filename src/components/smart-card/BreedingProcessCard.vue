@@ -6,7 +6,7 @@
   >
     <view class="card-header">
       <view class="card-icon card-icon--amber">
-        <text style="font-size: 20px;">🐩</text>
+        <BEntityIcon :role="props.card?.role" color="var(--amber)" :size="20" />
       </view>
       <view class="card-title-area">
         <text class="card-name">{{ card.dogName }}</text>
@@ -63,6 +63,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
+import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import { deriveBreedingMilestoneViewModel } from '@/utils/breedingMilestone'
 import {
   buildHomeContinueMatingUrl,

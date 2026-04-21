@@ -4,69 +4,169 @@
 
     <!-- 种母选择器 -->
     <view class="dam-picker-area">
-      <BDogPicker v-model="selectedDam" roleFilter="种狗" genderFilter="母" title="选择种母" />
-    </view>
-
-    <!-- ROI 卡片 -->
-    <view v-if="roiData" class="roi-card">
-      <view class="roi-row">
-        <text class="roi-label">购入成本</text>
-        <text class="roi-value expense">-¥{{ formatMoney(roiData.purchaseCost) }}</text>
-      </view>
-      <view class="roi-row">
-        <text class="roi-label">总繁育支出</text>
-        <text class="roi-value expense">-¥{{ formatMoney(roiData.totalBreedingCost) }}</text>
-      </view>
-      <view class="roi-row">
-        <text class="roi-label">总繁育收入</text>
-        <text class="roi-value income">+¥{{ formatMoney(roiData.totalBreedingIncome) }}</text>
-      </view>
-      <view class="roi-row">
-        <text class="roi-label">个体健康支出</text>
-        <text class="roi-value expense">-¥{{ formatMoney(roiData.healthCost) }}</text>
-      </view>
-      <view class="roi-divider" />
-      <view class="roi-big">
-        <text class="roi-label">净收益</text>
-        <text class="roi-value" :class="netProfitClass">{{ formatSignedMoney(roiData.netProfit) }}</text>
-      </view>
-      <view class="roi-rate">
-        <text class="roi-label">投资回报率</text>
-        <text class="roi-value" :class="roiPercentClass">{{ formatPercent(roiData.roiPercent) }}</text>
+      <view class="dam-context-card" :class="{ 'dam-context-card--empty': !hasSelectedDam }" @click="showDamPickerVisible = true">
+        <view class="dam-context-card__avatar">
+          <BEntityIcon role="种狗" :size="22" color="#fff" />
+        </view>
+        <view class="dam-context-card__body">
+          <text class="dam-context-card__title">{{ hasSelectedDam ? selectedDam.name : '选择种母' }}</text>
+          <text class="dam-context-card__meta">
+            {{ hasSelectedDam ? `${selectedDam.breed || '马尔济斯'} · ${selectedDam.gender || '母'}` : '选择一只种母查看累计回报与各窝表现' }}
+          </text>
+        </view>
+        <view class="dam-context-card__side">
+          <text v-if="hasSelectedDam" class="dam-context-card__action">切换</text>
+          <text class="material-icons-round dam-context-card__chevron">chevron_right</text>
+        </view>
       </view>
     </view>
 
-    <!-- 各窝利润 -->
-    <view v-if="roiData && litterList.length" class="section-label">
-      <view class="section-dot" style="background:var(--primary)" />
-      <text>各窝利润</text>
-      <view class="section-badge">
-        <text>{{ litterList.length }}</text>
-      </view>
+    <BDogPicker
+      v-model:visible="showDamPickerVisible"
+      roleFilter="种狗"
+      genderFilter="母"
+      title="选择种母"
+      @select="handleDamSelect"
+    />
+
+    <view v-if="loading && hasSelectedDam" class="loading-wrap">
+      <BSkeleton :rows="4" />
     </view>
-    <view v-if="roiData" class="litter-list">
-      <view v-for="litter in litterList" :key="litter.id" class="litter-item">
-        <view class="litter-item-top">
+
+    <template v-else-if="roiData">
+      <!-- ROI Hero -->
+      <view class="roi-hero" :class="`roi-hero--${roiToneClass}`">
+        <view class="roi-hero__header">
           <view>
-            <text class="litter-item-title">{{ litter.title }}</text>
-            <text class="litter-item-meta">{{ litter.meta }}</text>
+            <text class="roi-hero__eyebrow">累计净收益</text>
+            <text class="roi-hero__headline">{{ roiHeadline }}</text>
+            <text class="roi-hero__sub">{{ roiInsight }}</text>
           </view>
-          <text class="litter-item-profit" :class="litter.profitClass">{{ litter.profitText }}</text>
+          <view class="roi-hero__rate-pill" :class="`roi-hero__rate-pill--${roiToneClass}`">
+            <text class="roi-hero__rate-label">ROI</text>
+            <text class="roi-hero__rate-value">{{ formatPercent(roiData.roiPercent) }}</text>
+          </view>
         </view>
-        <view class="litter-bar-track">
+
+        <view v-if="summaryFacts.length" class="roi-hero__facts" :class="{ 'roi-hero__facts--single': summaryFacts.length === 1 }">
           <view
-            class="litter-bar-fill"
-            :class="litter.barClass"
-            :style="{ width: litter.barWidth + '%' }"
-          />
+            v-for="fact in summaryFacts"
+            :key="fact.label"
+            class="roi-hero__fact"
+            :class="{ 'roi-hero__fact--single': summaryFacts.length === 1 }"
+          >
+            <view class="roi-hero__fact-main">
+              <text class="roi-hero__fact-value">{{ fact.value }}</text>
+              <view class="roi-hero__fact-copy">
+                <text class="roi-hero__fact-label">{{ fact.label }}</text>
+                <text v-if="fact.helper" class="roi-hero__fact-helper">{{ fact.helper }}</text>
+              </view>
+            </view>
+          </view>
         </view>
       </view>
-    </view>
+
+      <!-- 金额构成 -->
+      <view class="roi-section-card">
+        <view class="roi-section-card__header">
+          <view class="roi-section-card__title-wrap">
+            <view class="roi-section-card__dot roi-section-card__dot--teal" />
+            <view>
+              <text class="roi-section-card__title">回报构成</text>
+              <text class="roi-section-card__desc">先看投入和收入，再理解当前累计结果</text>
+            </view>
+          </view>
+        </view>
+
+        <view v-for="section in breakdownSections" :key="section.key" class="roi-breakdown">
+          <view class="roi-breakdown__head">
+            <text class="roi-breakdown__title">{{ section.title }}</text>
+            <text class="roi-breakdown__total" :class="section.tone">{{ section.totalText }}</text>
+          </view>
+          <view class="roi-breakdown__list">
+            <view v-for="item in section.items" :key="item.label" class="roi-breakdown__row">
+              <text class="roi-breakdown__label">{{ item.label }}</text>
+              <text class="roi-breakdown__value" :class="item.tone">{{ item.value }}</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="roi-conclusion">
+          <view class="roi-conclusion__divider" />
+          <view class="roi-conclusion__row">
+            <view>
+              <text class="roi-conclusion__label">当前结果</text>
+              <text class="roi-conclusion__note">{{ roiConclusionNote }}</text>
+            </view>
+            <view class="roi-conclusion__values">
+              <text class="roi-conclusion__value" :class="roiToneClass">{{ formatSignedMoney(roiData.netProfit) }}</text>
+              <text class="roi-conclusion__roi" :class="roiToneClass">{{ formatPercent(roiData.roiPercent) }}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <!-- 各窝利润 -->
+      <view class="roi-section-card">
+        <view class="roi-section-card__header">
+          <view class="roi-section-card__title-wrap">
+            <view class="roi-section-card__dot roi-section-card__dot--primary" />
+            <view>
+              <text class="roi-section-card__title">各窝表现</text>
+              <text class="roi-section-card__desc">按时间顺序查看每窝当前利润与状态</text>
+            </view>
+          </view>
+          <view v-if="litterList.length" class="roi-section-card__badge">
+            <text class="roi-section-card__badge-text">{{ litterList.length }}</text>
+          </view>
+        </view>
+
+        <view v-if="litterList.length" class="litter-list">
+          <view v-for="litter in litterList" :key="litter.id" class="litter-item">
+            <view class="litter-item__top">
+              <view class="litter-item__body">
+                <view class="litter-item__title-row">
+                  <text class="litter-item__title">{{ litter.title }}</text>
+                  <text class="litter-item__status" :class="`litter-item__status--${litter.statusTone}`">{{ litter.statusLabel }}</text>
+                </view>
+                <text class="litter-item__meta">{{ litter.meta }}</text>
+              </view>
+              <view class="litter-item__amounts">
+                <text class="litter-item__profit" :class="litter.profitTone">{{ litter.profitText }}</text>
+                <text class="litter-item__subprofit">{{ litter.profitHint }}</text>
+              </view>
+            </view>
+            <view class="litter-bar-track">
+              <view
+                class="litter-bar-fill"
+                :class="`litter-bar-fill--${litter.statusTone}`"
+                :style="{ width: litter.barWidth + '%' }"
+              />
+            </view>
+          </view>
+        </view>
+
+        <view v-else class="roi-section-card__empty">
+          <text>当前暂无可展示的各窝回报数据</text>
+        </view>
+      </view>
+    </template>
 
     <!-- 空状态 -->
-    <view v-if="!roiData && !loading" class="empty-state">
-      <text class="material-icons-round empty-icon">pets</text>
-      <text class="empty-text">请选择种母查看投资回报</text>
+    <view v-else-if="!hasSelectedDam && !loading" class="roi-empty-state">
+      <view class="roi-empty-state__icon">
+        <text class="material-icons-round">insights</text>
+      </view>
+      <text class="roi-empty-state__title">先选择一只种母</text>
+      <text class="roi-empty-state__desc">查看她的累计投入、累计收入和各窝回报表现</text>
+    </view>
+
+    <view v-else class="roi-empty-card">
+      <view class="roi-empty-card__icon">
+        <text class="material-icons-round">finance</text>
+      </view>
+      <text class="roi-empty-card__title">暂无繁育回报数据</text>
+      <text class="roi-empty-card__desc">这只种母还没有可汇总的繁育收入或投入记录</text>
     </view>
   </view>
 </template>
@@ -77,8 +177,11 @@ import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
+import BEntityIcon from '@/components/base/BEntityIcon.vue'
+import BSkeleton from '@/components/feedback/BSkeleton.vue'
 
 const selectedDam = ref<any>(null)
+const showDamPickerVisible = ref(false)
 
 interface RoiData {
   purchaseCost: number
@@ -87,21 +190,18 @@ interface RoiData {
   healthCost: number
   netProfit: number
   roiPercent: number
+  cycleCount?: number
+  litterCount?: number
+  puppyCount?: number
   litters: any[]
 }
 
 const loading = ref(false)
 const roiData = ref<RoiData | null>(null)
+const hasSelectedDam = computed(() => !!selectedDam.value?._id)
 
-const netProfitClass = computed(() => {
+const roiToneClass = computed(() => {
   const value = roiData.value?.netProfit || 0
-  if (value > 0) return 'primary'
-  if (value < 0) return 'negative'
-  return 'neutral'
-})
-
-const roiPercentClass = computed(() => {
-  const value = roiData.value?.roiPercent || 0
   if (value > 0) return 'primary'
   if (value < 0) return 'negative'
   return 'neutral'
@@ -112,33 +212,104 @@ watch(selectedDam, (dog) => {
   if (dog?._id) loadRoi(dog._id)
 })
 
+const totalInvestment = computed(() => {
+  if (!roiData.value) return 0
+  return roiData.value.purchaseCost + roiData.value.totalBreedingCost + roiData.value.healthCost
+})
+
+const roiHeadline = computed(() => {
+  if (!roiData.value) return ''
+  return formatSignedMoney(roiData.value.netProfit)
+})
+
+const roiInsight = computed(() => {
+  if (!roiData.value) return ''
+  if (roiData.value.netProfit > 0) return `当前累计已超过回本线 ¥${formatMoney(roiData.value.netProfit)}`
+  if (roiData.value.netProfit < 0) return `距离回本还差 ¥${formatMoney(Math.abs(roiData.value.netProfit))}`
+  return '当前累计刚好持平'
+})
+
+const roiConclusionNote = computed(() => {
+  if (!roiData.value) return ''
+  if (roiData.value.netProfit > 0) return '当前已进入累计盈利区间'
+  if (roiData.value.netProfit < 0) return '当前仍处于累计投入回收阶段'
+  return '当前投入与收入刚好相抵'
+})
+
+const summaryFacts = computed(() => {
+  if (!roiData.value) return []
+  return [
+    roiData.value.litterCount ? { label: '窝次', value: `${roiData.value.litterCount}`, helper: '已纳入回报统计' } : null,
+    roiData.value.cycleCount ? { label: '周期', value: `${roiData.value.cycleCount}`, helper: '已纳入回报统计' } : null,
+    roiData.value.puppyCount ? { label: '幼崽', value: `${roiData.value.puppyCount}`, helper: '已纳入样本记录' } : null,
+  ].filter(Boolean) as Array<{ label: string; value: string; helper: string }>
+})
+
+const breakdownSections = computed(() => {
+  if (!roiData.value) return []
+
+  return [
+    {
+      key: 'investment',
+      title: '累计投入',
+      tone: 'negative',
+      totalText: `-¥${formatMoney(totalInvestment.value)}`,
+      items: [
+        { label: '购入成本', value: `-¥${formatMoney(roiData.value.purchaseCost)}`, tone: 'negative' },
+        { label: '繁育投入', value: `-¥${formatMoney(roiData.value.totalBreedingCost)}`, tone: 'negative' },
+        { label: '健康相关支出', value: `-¥${formatMoney(roiData.value.healthCost)}`, tone: 'negative' },
+      ],
+    },
+    {
+      key: 'income',
+      title: '累计收入',
+      tone: 'positive',
+      totalText: `+¥${formatMoney(roiData.value.totalBreedingIncome)}`,
+      items: [
+        { label: '繁育收入', value: `+¥${formatMoney(roiData.value.totalBreedingIncome)}`, tone: 'positive' },
+      ],
+    },
+  ]
+})
+
 const litterList = computed(() => {
   if (!roiData.value?.litters) return []
 
-  const maxProfit = Math.max(...roiData.value.litters.map((l: any) => Math.abs(l.profit || 0)), 1)
+  const sortedLitters = [...roiData.value.litters].sort((left: any, right: any) => {
+    return (left.index || 0) - (right.index || 0)
+  })
+  const maxProfit = Math.max(...sortedLitters.map((l: any) => Math.abs(l.profit || 0)), 1)
 
-  return roiData.value.litters.map((litter: any) => {
-    let profitClass = 'income'
-    let profitText = `净利润 +¥${formatMoney(litter.profit)}`
-    let barClass = 'income'
+  return sortedLitters.map((litter: any) => {
+    let profitTone = 'positive'
+    let profitText = `+¥${formatMoney(litter.profit)}`
+    let profitHint = '当前累计盈利'
+    let statusTone = 'positive'
+    let statusLabel = '已结算'
 
     if (litter.status === 'failed') {
-      profitClass = 'expense'
-      profitText = `净亏损 -¥${formatMoney(Math.abs(litter.profit))}`
-      barClass = 'expense'
+      profitTone = 'negative'
+      profitText = `-¥${formatMoney(Math.abs(litter.profit))}`
+      profitHint = '当前累计亏损'
+      statusTone = 'negative'
+      statusLabel = '亏损'
     } else if (litter.status === 'in_progress') {
-      profitClass = 'gray'
+      profitTone = 'neutral'
       profitText = `${litter.profit >= 0 ? '暂估 +¥' : '暂估 -¥'}${formatMoney(Math.abs(litter.profit))}`
-      barClass = 'gray'
+      profitHint = '当前仍在进行中'
+      statusTone = 'neutral'
+      statusLabel = '进行中'
     }
 
     return {
       id: litter.id,
       title: litter.title || `第${litter.index}窝`,
       meta: litter.meta || `${litter.puppyCount || 0}只`,
-      profitClass,
+      profitTone,
       profitText,
-      barClass,
+      profitHint,
+      statusTone,
+      statusLabel,
       barWidth: Math.min(100, (Math.abs(litter.profit || 0) / maxProfit) * 100),
     }
   })
@@ -161,6 +332,10 @@ function formatPercent(val: number): string {
   return `${sign}${Math.abs(val)}%`
 }
 
+function handleDamSelect(dog: any) {
+  selectedDam.value = dog
+}
+
 const { run: getDamRoi } = useCloudCall('finance-service', 'getDamRoi', {
   showLoading: true,
   loadingText: '计算中...',
@@ -168,6 +343,7 @@ const { run: getDamRoi } = useCloudCall('finance-service', 'getDamRoi', {
 
 async function loadRoi(damId: string) {
   loading.value = true
+  roiData.value = null
   try {
     const res = await getDamRoi({ dog_id: damId })
     if (res?.data) {
@@ -203,177 +379,531 @@ onLoad((query) => {
   padding: 0 var(--space-page) 16px;
 }
 
-/* ---- ROI Card ---- */
-.roi-card {
-  background: var(--card);
-  border-radius: var(--radius-card);
-  padding: 20px;
-  margin: 0 16px 16px;
-  box-shadow: var(--shadow);
+.dam-context-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.98);
+  border-radius: 18px;
+  border: 1px solid rgba(216, 203, 189, 0.46);
+  box-shadow: 0 10px 24px rgba(99, 70, 49, 0.05);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+
+  &:active {
+    transform: scale(0.985);
+    box-shadow: 0 6px 18px rgba(99, 70, 49, 0.05);
+  }
+
+  &--empty {
+    border-style: dashed;
+  }
+
+  &__avatar {
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--primary), #f0789a);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  &__body {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__title {
+    display: block;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-1);
+  }
+
+  &__meta {
+    display: block;
+    margin-top: 3px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--text-2);
+  }
+
+  &__side {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  &__action {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--primary);
+  }
+
+  &__chevron {
+    font-size: 18px;
+    color: var(--text-4);
+  }
+}
+
+.loading-wrap {
+  padding: 0 var(--space-page) 16px;
+}
+
+/* ---- ROI Hero ---- */
+.roi-hero {
+  margin: 0 16px 14px;
+  padding: 18px 18px 16px;
+  border-radius: 22px;
   position: relative;
   overflow: hidden;
-  border-left: 3.5px solid var(--green);
+  border: 1px solid rgba(216, 203, 189, 0.22);
+  box-shadow: 0 12px 30px rgba(99, 70, 49, 0.06);
+
+  &--primary {
+    background: linear-gradient(135deg, rgba(255, 243, 247, 0.98) 0%, rgba(255, 255, 255, 0.98) 58%);
+    border-color: rgba(234, 62, 119, 0.14);
+  }
+
+  &--negative {
+    background: linear-gradient(135deg, rgba(240, 255, 244, 0.98) 0%, rgba(255, 255, 255, 0.98) 58%);
+    border-color: rgba(61, 174, 111, 0.18);
+  }
+
+  &--neutral {
+    background: linear-gradient(135deg, rgba(255, 249, 246, 0.98) 0%, rgba(255, 255, 255, 0.98) 58%);
+  }
+
+  &__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+  }
+
+  &__eyebrow {
+    display: block;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-3);
+    margin-bottom: 6px;
+  }
+
+  &__headline {
+    display: block;
+    font-family: var(--font-display);
+    font-size: 34px;
+    font-weight: 800;
+    line-height: 1.1;
+    color: var(--text-1);
+  }
+
+  &__sub {
+    display: block;
+    margin-top: 8px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-2);
+  }
+
+  &__rate-pill {
+    flex-shrink: 0;
+    min-width: 84px;
+    padding: 10px 12px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.74);
+    border: 1px solid rgba(216, 203, 189, 0.18);
+    text-align: right;
+
+    &--primary {
+      .roi-hero__rate-value { color: var(--primary); }
+    }
+
+    &--negative {
+      .roi-hero__rate-value { color: var(--green); }
+    }
+
+    &--neutral {
+      .roi-hero__rate-value { color: var(--text-2); }
+    }
+  }
+
+  &__rate-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-3);
+  }
+
+  &__rate-value {
+    display: block;
+    margin-top: 4px;
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 800;
+  }
+
+  &__facts {
+    margin-top: 14px;
+    display: flex;
+    gap: 10px;
+
+    &--single {
+      justify-content: flex-start;
+    }
+  }
+
+  &__fact {
+    flex: 1;
+    min-width: 0;
+    padding: 10px 12px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid rgba(216, 203, 189, 0.14);
+
+    &--single {
+      flex: 0 0 auto;
+      min-width: 188px;
+      max-width: 100%;
+      padding: 12px 16px;
+      display: inline-flex;
+      align-items: center;
+      border-color: rgba(61, 174, 111, 0.18);
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.92) 0%, rgba(245, 255, 249, 0.92) 100%);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    }
+  }
+
+  &__fact-main {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+
+  &__fact-copy {
+    min-width: 0;
+  }
+
+  &__fact-value {
+    display: block;
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--text-1);
+    line-height: 1;
+  }
+
+  &__fact--single &__fact-value {
+    font-size: 24px;
+  }
+
+  &__fact-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-3);
+  }
+
+  &__fact-helper {
+    display: block;
+    margin-top: 2px;
+    font-size: 10px;
+    line-height: 1.35;
+    color: var(--text-4);
+  }
 }
 
-.roi-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 100%;
-  background: linear-gradient(135deg, var(--green-soft) 0%, transparent 40%);
-  pointer-events: none;
+/* ---- ROI Section Card ---- */
+.roi-section-card {
+  margin: 0 16px 14px;
+  padding: 15px 15px 14px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(216, 203, 189, 0.22);
+  box-shadow: 0 10px 26px rgba(99, 70, 49, 0.05);
+
+  &__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  &__title-wrap {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  &__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-top: 5px;
+    flex-shrink: 0;
+
+    &--teal { background: var(--teal); }
+    &--primary { background: var(--primary); }
+  }
+
+  &__title {
+    display: block;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-2);
+  }
+
+  &__desc {
+    display: block;
+    margin-top: 2px;
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--text-3);
+  }
+
+  &__badge {
+    flex-shrink: 0;
+    min-width: 28px;
+    height: 24px;
+    padding: 0 8px;
+    border-radius: 999px;
+    background: rgba(255, 243, 236, 0.92);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  &__badge-text {
+    font-family: var(--font-display);
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--text-2);
+  }
+
+  &__empty {
+    padding: 6px 0 2px;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-3);
+  }
 }
 
-.roi-card > * {
-  position: relative;
-  z-index: 1;
+.roi-breakdown {
+  & + & {
+    margin-top: 12px;
+  }
+
+  &__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+
+  &__title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-3);
+  }
+
+  &__total {
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 800;
+  }
+
+  &__list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  &__row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 12px;
+    border-radius: 14px;
+    background: rgba(255, 249, 245, 0.9);
+  }
+
+  &__label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-2);
+  }
+
+  &__value {
+    font-family: var(--font-display);
+    font-size: 14px;
+    font-weight: 800;
+  }
 }
 
-.roi-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 6px;
+.roi-conclusion {
+  margin-top: 14px;
+
+  &__divider {
+    height: 1px;
+    background: rgba(216, 203, 189, 0.32);
+    margin-bottom: 12px;
+  }
+
+  &__row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  &__label {
+    display: block;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-3);
+  }
+
+  &__note {
+    display: block;
+    margin-top: 3px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-2);
+  }
+
+  &__values {
+    flex-shrink: 0;
+    text-align: right;
+  }
+
+  &__value {
+    display: block;
+    font-family: var(--font-display);
+    font-size: 26px;
+    font-weight: 800;
+  }
+
+  &__roi {
+    display: block;
+    margin-top: 4px;
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 800;
+  }
 }
 
-.roi-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-2);
-}
-
-.roi-value {
-  font-family: var(--font-display);
-  font-size: 15px;
-  font-weight: 800;
-}
-
-.roi-value.expense { color: var(--green); }
-.roi-value.income { color: var(--red); }
-
-.roi-divider {
-  border: none;
-  border-top: 1px solid var(--card-dim);
-  margin: 10px 0;
-}
-
-.roi-big {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 4px;
-}
-
-.roi-big .roi-label {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text-1);
-}
-
-.roi-big .roi-value,
-.roi-value.primary {
-  font-family: var(--font-display);
-  font-size: 24px;
-  font-weight: 800;
+.positive {
   color: var(--primary);
 }
 
-.roi-value.negative {
-  color: var(--red);
+.negative {
+  color: var(--green);
 }
 
-.roi-value.neutral {
+.neutral {
   color: var(--text-2);
-}
-
-.roi-rate {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.roi-rate .roi-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-2);
-}
-
-/* ---- Section Label ---- */
-.section-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px var(--space-page) 10px;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-3);
-  letter-spacing: 0.5px;
-}
-
-.section-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-}
-
-.section-badge {
-  background: var(--card-dim);
-  color: var(--text-2);
-  font-size: 12px;
-  font-weight: 800;
-  padding: 2px 8px;
-  border-radius: var(--radius-badge);
 }
 
 /* ---- Litter List ---- */
-.litter-list {
-  padding: 0 16px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
 .litter-item {
-  background: var(--card);
-  border-radius: var(--radius-card);
-  padding: 14px 16px;
-  box-shadow: var(--shadow);
-}
+  padding: 14px 14px 12px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 249, 246, 0.98) 100%);
+  border: 1px solid rgba(216, 203, 189, 0.18);
 
-.litter-item-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
+  & + & {
+    margin-top: 10px;
+  }
 
-.litter-item-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text-1);
-}
+  &__top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
 
-.litter-item-meta {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-2);
-}
+  &__body {
+    flex: 1;
+    min-width: 0;
+  }
 
-.litter-item-profit {
-  font-family: var(--font-display);
-  font-size: 14px;
-  font-weight: 800;
-}
+  &__title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
 
-.litter-item-profit.income { color: var(--red); }
-.litter-item-profit.expense { color: var(--red); }
-.litter-item-profit.gray { color: var(--text-3); }
+  &__title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-1);
+  }
+
+  &__status {
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+
+    &--positive {
+      background: rgba(234, 62, 119, 0.12);
+      color: var(--primary);
+    }
+
+    &--negative {
+      background: rgba(61, 174, 111, 0.12);
+      color: var(--green);
+    }
+
+    &--neutral {
+      background: rgba(216, 203, 189, 0.36);
+      color: var(--text-2);
+    }
+  }
+
+  &__meta {
+    display: block;
+    margin-top: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-2);
+  }
+
+  &__amounts {
+    flex-shrink: 0;
+    text-align: right;
+  }
+
+  &__profit {
+    display: block;
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-weight: 800;
+  }
+
+  &__subprofit {
+    display: block;
+    margin-top: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-3);
+  }
+}
 
 .litter-bar-track {
-  height: 6px;
-  background: var(--card-dim);
+  height: 7px;
+  background: rgba(255, 243, 236, 0.82);
   border-radius: var(--radius-progress);
   overflow: hidden;
 }
@@ -381,19 +911,101 @@ onLoad((query) => {
 .litter-bar-fill {
   height: 100%;
   border-radius: var(--radius-progress);
+
+  &--positive {
+    background: linear-gradient(90deg, #ef6060 0%, #f36d7f 100%);
+  }
+
+  &--negative {
+    background: linear-gradient(90deg, #44b773 0%, #53c784 100%);
+  }
+
+  &--neutral {
+    background: var(--text-3);
+    background-image: repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 4px,
+      rgba(255, 255, 255, 0.36) 4px,
+      rgba(255, 255, 255, 0.36) 8px
+    );
+  }
 }
 
-.litter-bar-fill.income { background: var(--red); }
-.litter-bar-fill.expense { background: var(--red); }
-.litter-bar-fill.gray {
-  background: var(--text-3);
-  background-image: repeating-linear-gradient(
-    90deg,
-    transparent,
-    transparent 4px,
-    var(--card-dim) 4px,
-    var(--card-dim) 8px
-  );
+/* ---- Empty State ---- */
+.roi-empty-state,
+.roi-empty-card {
+  margin: 0 16px;
+  padding: 24px 18px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px dashed rgba(216, 203, 189, 0.42);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.roi-empty-state__icon,
+.roi-empty-card__icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: rgba(234, 62, 119, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+
+  .material-icons-round {
+    font-size: 24px;
+    color: var(--primary);
+  }
+}
+
+.roi-empty-state__title,
+.roi-empty-card__title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.roi-empty-state__desc,
+.roi-empty-card__desc {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+@media (max-width: 360px) {
+  .roi-hero__header,
+  .roi-conclusion__row,
+  .litter-item__top {
+    flex-direction: column;
+  }
+
+  .roi-hero__rate-pill,
+  .roi-conclusion__values,
+  .litter-item__amounts {
+    width: 100%;
+    text-align: left;
+  }
+
+  .roi-hero__facts {
+    flex-direction: column;
+  }
+
+  .roi-hero__fact--single {
+    width: auto;
+    min-width: 160px;
+    max-width: 100%;
+  }
+
+  .roi-breakdown__head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 
 </style>

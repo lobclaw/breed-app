@@ -30,6 +30,29 @@ const MEDICATION_DOSAGE_UNIT_MAP = {
   tablet: '片',
 }
 
+function formatDateYMD(ts) {
+  if (typeof ts !== 'number') return ''
+  const date = new Date(ts)
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+function buildLitterPupStats(litter, puppies = []) {
+  const totalBorn = Number(litter?.total_born)
+  const bornAlive = Number(litter?.born_alive)
+  const total = Number.isFinite(totalBorn) && totalBorn > 0 ? totalBorn : puppies.length
+  const alive = Number.isFinite(bornAlive) && bornAlive >= 0
+    ? bornAlive
+    : puppies.filter(p => p.disposition !== '已故').length
+
+  return {
+    total,
+    alive,
+    kept: puppies.filter(p => p.disposition === '自留' || p.disposition === '在养').length,
+    sold: puppies.filter(p => ['已售', '已预定'].includes(p.disposition)).length,
+    available: puppies.filter(p => p.disposition === '待售').length,
+  }
+}
+
 function formatMedicationFrequency(frequency) {
   const count = Number(frequency) || 1
   return `每日${count}次`
@@ -380,6 +403,7 @@ module.exports = {
     if (!dogRes.data || dogRes.data.length === 0) throw new Error('犬只不存在')
     const dog = dogRes.data[0]
     const statuses = []
+    const activeLitters = littersRes.data || []
 
     const methodMap = { oral: '口服', injection: '注射', topical: '外用', other: '其他' }
 
@@ -414,10 +438,42 @@ module.exports = {
     }
 
     // 哺乳中（有未断奶的窝且无活跃繁育周期）
-    if ((littersRes.data || []).length > 0 && !activeCycle) {
-      const latestLitter = [...(littersRes.data || [])].sort((a, b) => (b.updated_at || b.created_at || 0) - (a.updated_at || a.created_at || 0))[0]
+    if (activeLitters.length > 0 && !activeCycle) {
+      let puppyMap = {}
+      const litterIds = activeLitters.map(item => item._id).filter(Boolean)
+      if (litterIds.length > 0) {
+        const { data: puppies } = await db.collection('dogs')
+          .where({ origin_litter_id: dbCmd.in(litterIds), deleted_at: null })
+          .get()
+        for (const puppy of (puppies || [])) {
+          if (!puppyMap[puppy.origin_litter_id]) puppyMap[puppy.origin_litter_id] = []
+          puppyMap[puppy.origin_litter_id].push(puppy)
+        }
+      }
+
+      const latestLitter = [...activeLitters].sort((a, b) => {
+        const aTs = a.birth_date || a.updated_at || a.created_at || 0
+        const bTs = b.birth_date || b.updated_at || b.created_at || 0
+        return bTs - aTs
+      })[0]
+      const birthTs = latestLitter?.birth_date || latestLitter?.created_at || 0
+      const nursingDay = birthTs ? Math.max(1, Math.floor((now - birthTs) / 86400000) + 1) : null
+      const pupStats = buildLitterPupStats(latestLitter, puppyMap[latestLitter?._id] || [])
+      const aliveSummary = pupStats.total > 0 ? `本窝存活 ${pupStats.alive}/${pupStats.total}` : ''
+      const detailParts = []
+      if (latestLitter?.sire_name) detailParts.push(`种公: ${latestLitter.sire_name}`)
+      if (aliveSummary) detailParts.push(aliveSummary)
+      const meta = []
+      if (birthTs) meta.push({ icon: 'event', text: `生产于 ${formatDateYMD(birthTs)}` })
+      if (nursingDay) meta.push({ icon: 'schedule', text: `第${nursingDay}天` })
+      if (aliveSummary) meta.push({ icon: 'favorite', text: aliveSummary })
+      if (pupStats.kept > 0) meta.push({ icon: 'pets', text: `在养 ${pupStats.kept} 只` })
+
       statuses.push({
         type: '哺乳中',
+        cycleId: latestLitter?.cycle_id || '',
+        detail: detailParts.join(' · '),
+        meta,
         activityTs: latestLitter?.updated_at || latestLitter?.created_at || 0,
       })
     }
@@ -519,8 +575,20 @@ module.exports = {
   async updateDog(dogId, data) {
     if (!dogId) throw new Error('缺少犬只 ID')
 
-    // 禁止通过此方法修改 name（用 updateDogName）和 disposition（用 changeDisposition）
-    const { name, disposition, family_id, deleted_at, created_at, _id, ...updateFields } = data
+    const { data: dogs } = await db.collection('dogs')
+      .where({ _id: dogId, family_id: this.familyId })
+      .get()
+
+    if (!dogs || dogs.length === 0) throw new Error('犬只不存在')
+
+    const currentDog = dogs[0]
+
+    if (Object.prototype.hasOwnProperty.call(data, 'role') && data.role !== currentDog.role) {
+      throw new Error('角色不可通过普通编辑修改，请使用专门操作')
+    }
+
+    // 禁止通过此方法修改 name（用 updateDogName）、disposition（用 changeDisposition）和 role（用专门流程）
+    const { name, disposition, role, family_id, deleted_at, created_at, _id, ...updateFields } = data
     updateFields.updated_at = Date.now()
 
     await db.collection('dogs')

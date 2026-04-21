@@ -1,8 +1,10 @@
 <template>
   <view class="page">
     <!-- 页面标题 -->
-    <view class="profile-header">
-      <text class="profile-header__title">我的</text>
+    <view class="primary-page-header">
+      <view class="primary-page-header__row">
+        <text class="primary-page-header__title">我的</text>
+      </view>
     </view>
 
     <!-- 个人信息卡片 -->
@@ -53,7 +55,7 @@
         </view>
       </view>
 
-      <view class="menu-group" style="margin-top: 16px;">
+      <view class="menu-group menu-group--offset">
         <view class="menu-item" @click="goTo('/pages/profile/about')">
           <text class="material-icons-round mi-icon">info</text>
           <text class="mi-label">关于</text>
@@ -264,22 +266,9 @@ function handleLogoutConfirm() {
   padding-bottom: 100px;
 }
 
-/* ==================== PROFILE HEADER ==================== */
-.profile-header {
-  padding: 8px var(--space-page) 0;
-  text-align: center;
-
-  &__title {
-    font-family: var(--font-display);
-    font-size: 24px;
-    font-weight: 800;
-    color: var(--text-1);
-  }
-}
-
 /* ==================== PROFILE CARD ==================== */
 .profile-card {
-  margin: 16px 16px 0;
+  margin: 0 var(--space-page);
   background: linear-gradient(135deg, #c42d62 0%, #e85d7a 100%);
   border-radius: var(--radius-card);
   padding: 20px;
@@ -390,8 +379,8 @@ function handleLogoutConfirm() {
 
 /* ==================== MENU SECTION ==================== */
 .menu-section {
-  padding: 0 16px;
-  margin-top: 20px;
+  padding: 0 var(--space-page);
+  margin-top: var(--primary-page-section-gap);
 }
 
 .menu-group-label {
@@ -409,6 +398,10 @@ function handleLogoutConfirm() {
   box-shadow: var(--shadow);
   overflow: hidden;
   margin-bottom: 16px;
+
+  &--offset {
+    margin-top: var(--primary-page-section-gap);
+  }
 }
 
 .menu-item {

@@ -11,8 +11,8 @@ describe('breeding cycle page source contract', () => {
     expect(source).toContain('timeline-card')
     expect(source).toContain('timeline-chevron')
     expect(source).toContain('timeline-badge')
-    expect(source).toContain('@click="onRecordTap(record)"')
-    expect(source).toContain("/pages/record/breeding-detail?id=${record._id}")
+    expect(source).toContain('@click="onTimelineItemTap(item)"')
+    expect(source).toContain("/pages/record/breeding-detail?id=${item.recordId}")
   })
 
   it('应让时间线轨道顶部对齐并保持点与点之间连线贯通', () => {
@@ -23,12 +23,20 @@ describe('breeding cycle page source contract', () => {
     expect(source).toContain('background: rgba(216, 203, 189, 0.42);')
   })
 
-  it('应收敛未来节点和历史节点的颜色语义', () => {
-    expect(source).toContain("heat: 'amber'")
-    expect(source).toContain("record?._is_future ? 'text-4' : dotColor(record?.type)")
-    expect(source).toContain("class=\"timeline-desc\" :class=\"{ 'timeline-desc--future': record._is_future }\"")
+  it('应在详情页顶部接入当前状态和下一步合成节点，而不是给第一条记录打最新', () => {
+    expect(source).toContain('buildBreedingTimelineSyntheticItems')
+    expect(source).toContain("dateLabel: item.kind === 'current' ? '当前' : '下一步'")
+    expect(source).not.toContain('idx === 0')
+    expect(source).not.toContain('最新')
+  })
+
+  it('应收敛未来节点和历史节点的颜色语义，并复用共享 tone helper', () => {
+    expect(source).toContain('getBreedingTimelineRecordTone')
+    expect(source).toContain('getBreedingTimelineStatusTone')
+    expect(source).toContain("tone: record._is_future ? 'gray' as const : getBreedingTimelineRecordTone(record.type)")
+    expect(source).toContain("class=\"timeline-desc\"")
     expect(source).toContain('.timeline-desc--future')
     expect(source).toContain('.timeline-detail--future')
-    expect(source).not.toContain("record._is_future ? { color: 'var(--primary)' } : {}")
+    expect(source).toContain('.timeline-desc--rose')
   })
 })

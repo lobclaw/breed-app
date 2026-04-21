@@ -24,6 +24,13 @@ describe('dogDetailNavigation', () => {
       taskId: '',
       cycleId: 'cycle-1',
     })).toBe('/pages/breeding/cycle?id=cycle-1')
+
+    expect(resolveDogDetailStatusRoute({
+      type: '哺乳中',
+      recordId: '',
+      taskId: '',
+      cycleId: 'cycle-2',
+    })).toBe('/pages/breeding/cycle?id=cycle-2')
   })
 
   it('缺少稳定标识时返回空串供页面回退处理', () => {

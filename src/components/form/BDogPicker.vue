@@ -13,7 +13,7 @@
     <template v-if="multiple && selectedDogList.length > 0">
       <view class="b-dog-tags" @click="openSheet">
         <view v-for="dog in selectedDogList" :key="dog._id" class="b-dog-tag" :class="avatarColorClass(dog)">
-          <text class="material-icons-round" style="font-size: 12px; color: #fff;">pets</text>
+          <BEntityIcon :role="dog.role" :size="12" color="#fff" />
           <text class="b-dog-tag__name">{{ dog.name }}</text>
           <text class="b-dog-tag__remove" @click.stop="removeDog(dog._id)">×</text>
         </view>
@@ -26,7 +26,7 @@
     <template v-else-if="!multiple && singleDog">
       <view class="b-dog-card" :class="{ 'b-dog-card--readonly': readonly }" @click="readonly ? undefined : openSheet()">
         <view class="b-dog-card__avatar" :class="avatarColorClass(singleDog)">
-          <text class="material-icons-round" style="font-size: 20px; color: #fff;">pets</text>
+          <BEntityIcon :role="singleDog.role" :size="20" color="#fff" />
         </view>
         <view class="b-dog-card__info">
           <text class="b-dog-card__name">{{ singleDog.name }}</text>
@@ -38,7 +38,7 @@
     </template>
     <!-- 未选中：空态 -->
     <view v-else class="b-dog-card-empty" @click="openSheet">
-      <text class="material-icons-round">pets</text>
+      <BEntityIcon :size="18" color="var(--text-3)" />
       <text>{{ placeholder }}</text>
     </view>
   </template>
@@ -99,7 +99,7 @@
         @click="toggleDog(dog)"
       >
         <view class="b-dog-picker__avatar" :class="avatarColorClass(dog)">
-          <text class="material-icons-round" style="font-size: 18px; color: #fff;">pets</text>
+          <BEntityIcon :role="dog.role" :size="18" color="#fff" />
         </view>
         <view class="b-dog-picker__info">
           <text class="b-dog-picker__name">{{ dog.name || '未命名' }}</text>
@@ -122,6 +122,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { useDogStore } from '@/stores/dogStore'
+import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BSheet from '../layout/BSheet.vue'
 import BSkeleton from '../feedback/BSkeleton.vue'
 import BEmpty from '../feedback/BEmpty.vue'
@@ -150,6 +151,8 @@ const props = withDefaults(defineProps<{
   roleFilter?: string
   /** 性别过滤 */
   genderFilter?: string
+  /** 是否包含外部种公（默认不包含） */
+  includeExternalSires?: boolean
   /** Sheet 标题 */
   title?: string
   /** 只读模式：显示已选犬只但不允许修改 */
@@ -163,6 +166,7 @@ const props = withDefaults(defineProps<{
   multiple: false,
   roleFilter: '',
   genderFilter: '',
+  includeExternalSires: false,
   title: '选择犬只',
   placeholder: '点击选择犬只',
   readonly: false,
@@ -236,7 +240,7 @@ const filterTabs = computed(() => {
 })
 
 const filteredDogs = computed(() => {
-  let list = dogs.value
+  let list = visibleDogs.value
 
   // 搜索过滤
   if (searchKeyword.value.trim()) {
@@ -246,10 +250,16 @@ const filteredDogs = computed(() => {
 
   // 角色过滤
   if (activeFilter.value === 'dam') return list.filter(d => d.role === '种狗' && d.gender === '母')
-  if (activeFilter.value === 'sire') return list.filter(d => (d.role === '种狗' && d.gender === '公') || d.role === '外部种公')
+  if (activeFilter.value === 'sire') return list.filter(d => d.role === '种狗' && d.gender === '公')
   if (activeFilter.value === 'puppy') return list.filter(d => d.role === '幼崽')
   return list
 })
+
+const visibleDogs = computed(() => (
+  props.includeExternalSires
+    ? dogs.value
+    : dogs.value.filter(d => d.role !== '外部种公')
+))
 
 const dogStore = useDogStore()
 

@@ -17,7 +17,7 @@
         <BCard color="rose" :pressable="false">
           <view class="dam-row">
             <view class="dam-avatar">
-              <text class="material-icons-round" style="font-size: 17px; color: #fff;">pets</text>
+              <BEntityIcon :size="17" color="#fff" />
             </view>
             <view class="dam-info">
               <text class="dam-name">{{ cycle.dam_name }}</text>
@@ -51,41 +51,64 @@
 
         <view class="timeline">
           <view
-            v-for="(record, idx) in timelineRecords"
-            :key="record._id"
+            v-for="(item, idx) in timelineItems"
+            :key="item.key"
             class="timeline-item"
-            :class="{ 'timeline-item--future': record._is_future }"
-            @click="onRecordTap(record)"
+            :class="[
+              `timeline-item--${item.kind}`,
+              item.isFuture ? 'timeline-item--future' : '',
+              item.clickable ? 'timeline-item--clickable' : '',
+            ]"
+            @click="onTimelineItemTap(item)"
           >
             <view class="timeline-track">
               <view
                 class="timeline-dot"
-                :class="record._is_future ? 'timeline-dot--hollow' : 'timeline-dot--filled'"
-                :style="{ color: `var(--${timelineDotColor(record)})` }"
+                :class="[
+                  item.kind === 'upcoming' ? 'timeline-dot--hollow' : 'timeline-dot--filled',
+                  `timeline-dot--${item.tone}`,
+                  item.kind === 'current' ? 'timeline-dot--current' : '',
+                ]"
               />
-              <view v-if="idx < timelineRecords.length - 1" class="timeline-line" />
+              <view
+                v-if="idx < timelineItems.length - 1"
+                class="timeline-line"
+                :class="item.kind === 'upcoming' ? 'timeline-line--future' : ''"
+              />
             </view>
             <view class="timeline-content">
-              <view class="timeline-card" :class="{ 'timeline-card--future': record._is_future }">
+              <view
+                class="timeline-card"
+                :class="[
+                  item.isFuture ? 'timeline-card--future' : '',
+                  item.kind === 'current' ? 'timeline-card--current' : '',
+                ]"
+              >
                 <view class="timeline-head">
-                  <text class="timeline-date" :class="{ 'timeline-date--future': record._is_future }">{{ formatShortDate(record.date) }}</text>
-                  <text v-if="idx === 0" class="timeline-badge">最新</text>
+                  <text class="timeline-date" :class="item.isFuture ? 'timeline-date--future' : ''">{{ item.dateLabel }}</text>
+                  <text v-if="item.badgeLabel" class="timeline-badge">{{ item.badgeLabel }}</text>
                 </view>
                 <view class="timeline-main">
                   <view class="timeline-copy">
-                    <text class="timeline-desc" :class="{ 'timeline-desc--future': record._is_future }">
-                      {{ typeLabel(record.type) }}
+                    <text
+                      class="timeline-desc"
+                      :class="[
+                        item.isFuture ? 'timeline-desc--future' : '',
+                        item.kind === 'current' ? `timeline-desc--${item.tone}` : '',
+                      ]"
+                    >
+                      {{ item.title }}
                     </text>
                     <text
-                      v-for="(detail, detailIdx) in timelineDetailLines(record)"
-                      :key="`${record._id}-detail-${detailIdx}`"
+                      v-for="(detail, detailIdx) in item.detailLines"
+                      :key="`${item.key}-detail-${detailIdx}`"
                       class="timeline-detail"
-                      :class="{ 'timeline-detail--future': record._is_future }"
+                      :class="item.isFuture ? 'timeline-detail--future' : ''"
                     >
                       {{ detail }}
                     </text>
                   </view>
-                  <view class="timeline-chevron" :class="{ 'timeline-chevron--future': record._is_future }">
+                  <view v-if="item.clickable" class="timeline-chevron" :class="item.isFuture ? 'timeline-chevron--future' : ''">
                     <text class="material-icons-round" style="font-size: 16px; color: var(--text-4);">chevron_right</text>
                   </view>
                 </view>
@@ -96,7 +119,7 @@
 
         <!-- 空状态 -->
         <BEmpty
-          v-if="timelineRecords.length === 0"
+          v-if="timelineItems.length === 0"
           icon="timeline"
           title="暂无记录"
           description="点击下方按钮添加繁育记录"
@@ -179,6 +202,7 @@ import { ref, computed } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import type { BreedingCycleDetailResponse, BreedingCycleExpense } from '@/types/breeding'
+import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BCard from '@/components/base/BCard.vue'
 import BTag from '@/components/base/BTag.vue'
@@ -191,6 +215,15 @@ import BAddRecordSheet from '@/components/record/BAddRecordSheet.vue'
 import { consumeSubmitFeedback } from '@/composables/useSubmitFeedback'
 import type { AddRecordItem } from '@/utils/addRecordSheet'
 import { createCycleBreedingAddRecordGroups } from '@/utils/addRecordSheet'
+import {
+  buildBreedingTimelineCurrentTitle,
+  getBreedingTimelineExpectedDueDate,
+  buildBreedingTimelineSyntheticItems,
+  getBreedingTimelineRecordTone,
+  getBreedingTimelineStatusTone,
+  type BreedingTimelineKind,
+  type BreedingTimelineTone,
+} from '@/utils/breedingTimeline'
 
 const cycle = ref<any>(null)
 const records = ref<any[]>([])
@@ -228,30 +261,23 @@ const timelineRecords = computed(() => {
   })
 })
 
-const latestMatingRecord = computed(() => {
-  return records.value
-    .filter(record => record.type === 'mating')
-    .sort((a, b) => {
-      const dateDiff = (b?.date || 0) - (a?.date || 0)
-      if (dateDiff !== 0) return dateDiff
-      return (b?.updated_at || b?.created_at || 0) - (a?.updated_at || a?.created_at || 0)
-    })[0] || null
-})
-
-const pregnancyDayCount = computed(() => {
-  if (cycle.value?.status !== '怀孕中') return null
-  const startTs = cycle.value?.mated_at || latestMatingRecord.value?.date
-  if (typeof startTs !== 'number') return null
-  return Math.max(1, Math.floor((startOfDay(Date.now()) - startOfDay(startTs)) / 86400000) + 1)
-})
+type CycleTimelineItem = {
+  key: string
+  kind: BreedingTimelineKind
+  type: string
+  tone: BreedingTimelineTone
+  title: string
+  detailLines: string[]
+  dateLabel: string
+  badgeLabel: string
+  isFuture: boolean
+  clickable: boolean
+  recordId?: string
+}
 
 const expectedDueDate = computed(() => {
   if (cycle.value?.status !== '怀孕中') return null
-  const dueTs = latestMatingRecord.value?.details?.expected_due_date
-  if (typeof dueTs === 'number') return dueTs
-  const startTs = cycle.value?.mated_at || latestMatingRecord.value?.date
-  if (typeof startTs !== 'number') return null
-  return startTs + 59 * 86400000
+  return getBreedingTimelineExpectedDueDate(cycle.value, timelineRecords.value)
 })
 
 const expectedDueDateText = computed(() => {
@@ -260,23 +286,7 @@ const expectedDueDateText = computed(() => {
 
 const currentStatusText = computed(() => {
   if (!cycle.value?.status) return '-'
-  if (cycle.value.status === '怀孕中' && pregnancyDayCount.value) {
-    return `${cycle.value.status} · 第${pregnancyDayCount.value}天`
-  }
-
-  if (cycle.value.status === '发情中') {
-    const startTs = cycle.value?.start_date || cycle.value?.created_at
-    if (typeof startTs === 'number') {
-      const day = Math.max(1, Math.floor((startOfDay(Date.now()) - startOfDay(startTs)) / 86400000) + 1)
-      return `${cycle.value.status} · 第${day}天`
-    }
-  }
-
-  if (cycle.value.day_count) {
-    return `${cycle.value.status} · 第${cycle.value.day_count}天`
-  }
-
-  return cycle.value.status
+  return buildBreedingTimelineCurrentTitle(cycle.value, timelineRecords.value, Date.now()) || cycle.value.status
 })
 
 const costItems = computed(() => {
@@ -298,27 +308,10 @@ const TYPE_LABELS: Record<string, string> = {
   pre_labor: '临产监测', birth: '生产', abnormal_termination: '异常终止',
 }
 
-const DOT_COLORS: Record<string, string> = {
-  heat: 'amber', heat_observation: 'amber', follicle_check: 'teal', mating: 'rose',
-  pregnancy_check: 'green', prenatal_check: 'blue',
-  pre_labor: 'amber', birth: 'green', abnormal_termination: 'red',
-}
-
 function typeLabel(type: string) { return TYPE_LABELS[type] || type }
-function dotColor(type: string) { return DOT_COLORS[type] || 'primary' }
-function timelineDotColor(record: any) { return record?._is_future ? 'text-4' : dotColor(record?.type) }
 
 function statusColor(status: string) {
-  const map: Record<string, string> = {
-    '发情中': 'amber', '怀孕中': 'rose', '已生产': 'green', '失败': 'red', '放弃': 'red',
-  }
-  return (map[status] || 'rose') as any
-}
-
-function startOfDay(ts: number) {
-  const d = new Date(ts)
-  d.setHours(0, 0, 0, 0)
-  return d.getTime()
+  return getBreedingTimelineStatusTone(status) as any
 }
 
 function formatDate(ts: number) {
@@ -376,6 +369,37 @@ function timelineDetailLines(record: any) {
   return lines
 }
 
+const timelineItems = computed<CycleTimelineItem[]>(() => {
+  const syntheticItems = buildBreedingTimelineSyntheticItems(cycle.value, timelineRecords.value, Date.now()).map(item => ({
+    key: `synthetic-${item.key}`,
+    kind: item.kind,
+    type: item.type,
+    tone: item.tone,
+    title: item.title,
+    detailLines: item.summary ? [item.summary] : [],
+    dateLabel: item.kind === 'current' ? '当前' : '下一步',
+    badgeLabel: '',
+    isFuture: item.kind === 'upcoming',
+    clickable: false,
+  }))
+
+  const recordItems = timelineRecords.value.map((record: any) => ({
+    key: record._id,
+    kind: 'record' as const,
+    type: record.type,
+    tone: record._is_future ? 'gray' as const : getBreedingTimelineRecordTone(record.type),
+    title: typeLabel(record.type),
+    detailLines: timelineDetailLines(record),
+    dateLabel: formatShortDate(record.date),
+    badgeLabel: '',
+    isFuture: !!record._is_future,
+    clickable: true,
+    recordId: record._id,
+  }))
+
+  return [...syntheticItems, ...recordItems]
+})
+
 function showSubmitBanner(message: string) {
   submitBannerMessage.value = message
   if (submitBannerTimer) clearTimeout(submitBannerTimer)
@@ -388,8 +412,9 @@ function goToLitter(id: string) {
   uni.navigateTo({ url: `/pages/breeding/litter?id=${id}` })
 }
 
-function onRecordTap(record: any) {
-  uni.navigateTo({ url: `/pages/record/breeding-detail?id=${record._id}` })
+function onTimelineItemTap(item: CycleTimelineItem) {
+  if (!item.clickable || !item.recordId) return
+  uni.navigateTo({ url: `/pages/record/breeding-detail?id=${item.recordId}` })
 }
 
 function addRecord() {
@@ -540,7 +565,7 @@ onShow(() => {
   position: relative;
   transition: background 0.12s ease;
 
-  &:active {
+  &--clickable:active {
     transform: scale(0.992);
   }
 }
@@ -561,6 +586,7 @@ onShow(() => {
   width: 10px;
   height: 10px;
   border-radius: 50%;
+  position: relative;
   flex-shrink: 0;
   z-index: 2;
   box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.9);
@@ -573,6 +599,28 @@ onShow(() => {
     background: var(--bg);
     border: 2px solid currentColor;
   }
+
+  &--amber { color: var(--amber); }
+  &--teal { color: var(--teal); }
+  &--rose { color: var(--rose); }
+  &--green { color: var(--green); }
+  &--blue { color: var(--blue); }
+  &--gray { color: var(--text-4); }
+  &--red { color: var(--red); }
+
+  &--current {
+    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.92);
+
+    &::after {
+      content: '';
+      position: absolute;
+      inset: -5px;
+      border-radius: 999px;
+      border: 2px solid currentColor;
+      opacity: 0.45;
+      animation: breeding-cycle-timeline-pulse 1.8s ease-out infinite;
+    }
+  }
 }
 
 .timeline-line {
@@ -581,6 +629,10 @@ onShow(() => {
   background: rgba(216, 203, 189, 0.42);
   border-radius: 999px;
   margin-top: 5px;
+}
+
+.timeline-line--future {
+  background: rgba(216, 203, 189, 0.34);
 }
 
 .timeline-content {
@@ -600,6 +652,10 @@ onShow(() => {
 .timeline-card--future {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(252, 247, 243, 0.98));
   border-color: rgba(216, 203, 189, 0.24);
+}
+
+.timeline-card--current {
+  border-color: rgba(234, 62, 119, 0.12);
 }
 
 .timeline-head {
@@ -631,8 +687,8 @@ onShow(() => {
   align-items: center;
   padding: 2px 7px;
   border-radius: 999px;
-  background: rgba(61, 168, 160, 0.1);
-  color: var(--teal);
+  background: rgba(234, 62, 119, 0.1);
+  color: var(--rose);
   font-size: 10px;
   font-weight: 700;
 }
@@ -659,6 +715,11 @@ onShow(() => {
 .timeline-desc--future {
   color: var(--text-2);
 }
+
+.timeline-desc--amber { color: var(--amber); }
+.timeline-desc--rose { color: var(--rose); }
+.timeline-desc--green { color: var(--green); }
+.timeline-desc--red { color: var(--red); }
 
 .timeline-detail {
   font-size: 11px;
@@ -688,6 +749,21 @@ onShow(() => {
 
 .timeline-chevron--future {
   background: rgba(248, 240, 232, 0.9);
+}
+
+@keyframes breeding-cycle-timeline-pulse {
+  0% {
+    transform: scale(0.88);
+    opacity: 0.56;
+  }
+  70% {
+    transform: scale(1.28);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.28);
+    opacity: 0;
+  }
 }
 
 /* 费用 */

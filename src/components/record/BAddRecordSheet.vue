@@ -3,7 +3,7 @@
     <view class="add-record-list">
       <view class="add-record-context">
         <view class="add-record-context__badge">
-          <text class="material-icons-round add-record-context__badge-icon">pets</text>
+          <BEntityIcon class="add-record-context__badge-icon" :size="18" color="#fff" />
         </view>
         <view class="add-record-context__body">
           <view class="add-record-context__title-row">
@@ -53,6 +53,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import type { AddRecordGroup, AddRecordItem } from '@/utils/addRecordSheet'
 

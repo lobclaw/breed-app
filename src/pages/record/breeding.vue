@@ -158,7 +158,7 @@
 
         <view class="field-group">
           <view class="field-label"><text>选择种公</text></view>
-          <BDogPicker v-model="selectedSire" genderFilter="公" title="选择种公" />
+          <BDogPicker v-model="selectedSire" genderFilter="公" :includeExternalSires="true" title="选择种公" />
         </view>
 
         <view class="field-group">

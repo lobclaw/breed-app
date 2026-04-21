@@ -16,7 +16,7 @@
       <!-- 犬只卡片 -->
       <view class="dog-card" :style="{ borderLeftColor: getDogCardBorderColor(sale.status) }">
         <view class="dog-avatar">
-          <text class="material-icons-round" style="color: #fff; font-size: 22px;">pets</text>
+          <BEntityIcon :size="22" color="#fff" />
         </view>
         <view class="dog-info">
           <text class="dog-name">{{ sale.dog_name }}</text>
@@ -414,6 +414,7 @@
 import { ref, reactive, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BTag from '@/components/base/BTag.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'

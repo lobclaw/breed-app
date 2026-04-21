@@ -7,12 +7,66 @@ const testDir = dirname(fileURLToPath(import.meta.url))
 const source = readFileSync(resolve(testDir, '../../src/pages/dog/detail.vue'), 'utf8')
 
 describe('dog detail breeding tab source contract', () => {
+  it('应将去向管理从原生 ActionSheet 改为同风格自定义 Sheet', () => {
+    expect(source).toContain('const showDispositionSheet = ref(false)')
+    expect(source).toContain('const dispositionActions = computed<DispositionAction[]>(() => {')
+    expect(source).toContain('const dispositionActionSummary = computed(() => {')
+    expect(source).toContain('function handleDispositionAction(actionKey:')
+    expect(source).toContain('<BSheet v-model:visible="showDispositionSheet" title="去向管理">')
+    expect(source).toContain('handleDispositionActionItem(action)')
+    expect(source).not.toContain('uni.showActionSheet({')
+    expect(source).toContain('status-sheet__action-row')
+  })
+
+  it('应让去向管理中的已故动作排在最后，并保留红色危险语义', () => {
+    expect(source).toContain(`  return [
+    { key: 'adoption', icon: 'volunteer_activism', title: '送领养', sub: '登记领养去向与领养费用', tone: 'green' },
+    { key: 'retire', icon: 'bedtime', title: '退休', sub: '结束繁育身份并保留健康管理', tone: 'plum' },
+    { key: 'gift', icon: 'redeem', title: '赠送', sub: '登记受赠对象与赠送日期', tone: 'teal' },
+    { key: 'deceased', icon: 'heart_broken', title: '标记已故', sub: '结束当前状态并取消未完成任务', tone: 'red' },
+  ]`)
+    expect(source).toContain(`  if (d.role === '幼崽') {
+    return [
+      { key: 'promote', icon: 'trending_up', title: '升级为种犬', sub: '切换为种狗身份并恢复在养状态', tone: 'amber' },
+      { key: 'adoption', icon: 'volunteer_activism', title: '送领养', sub: '登记领养去向与领养费用', tone: 'green' },
+      { key: 'gift', icon: 'redeem', title: '赠送', sub: '登记受赠对象与赠送日期', tone: 'teal' },
+      { key: 'deceased', icon: 'heart_broken', title: '标记已故', sub: '结束当前状态并取消未完成任务', tone: 'red' },
+    ]`)
+    expect(source).toContain("action.tone === 'red' ? 'status-sheet__action-title--danger' : ''")
+    expect(source).toContain("showDeceasedSheet.value = true")
+  })
+
+  it('应将标记状态 Sheet 收敛为健康操作快捷面板，并移除重复的生病入口', () => {
+    expect(source).toContain('title="健康操作"')
+    expect(source).toContain('hasHealthActions')
+    expect(source).toContain('healthActions')
+    expect(source).toContain('healthActionSummary')
+    expect(source).toContain('handleHealthAction(action.key)')
+    expect(source).toContain('康复、治疗推进等快捷操作')
+    expect(source).not.toContain('status-grid status-grid--3col')
+    expect(source).not.toContain('录入疾病记录')
+    expect(source).not.toContain('selectIllness')
+    expect(source).toContain('status-sheet__action-row')
+  })
+
+  it('应让顶栏标题只在滚动后接管，避免首屏与 Hero 双标题竞争', () => {
+    expect(source).toContain('onLoad, onPageScroll, onShow')
+    expect(source).toContain('const showCompactTopbarTitle = ref(false)')
+    expect(source).toContain('const TOPBAR_TITLE_SCROLL_THRESHOLD = 36')
+    expect(source).toContain("showCompactTopbarTitle.value = scrollTop > TOPBAR_TITLE_SCROLL_THRESHOLD")
+    expect(source).toContain(":class=\"{ 'dog-detail__topbar-title--visible': showCompactTopbarTitle }\"")
+    expect(source).toContain('.dog-detail__topbar-title--visible')
+    expect(source).toContain('opacity: 0;')
+  })
+
   it('应在犬只详情中接入当前周期摘要时间线与历史周期摘要', () => {
     expect(source).toContain('activeCycleSummary.timeline')
     expect(source).toContain('historyCycleCards')
+    expect(source).toContain('litterCards')
     expect(source).toContain('breeding-active-cycle__timeline-item')
     expect(source).toContain('summaryTitle')
-    expect(source).toContain('summarySubtitle')
+    expect(source).toContain('summaryMeta')
+    expect(source).toContain('summaryResult')
   })
 
   it('应让时间线节点顶部对齐，并仅为当前/下一步保留特殊标题色', () => {
@@ -33,5 +87,44 @@ describe('dog detail breeding tab source contract', () => {
     expect(source).toContain("if (tab === 'breeding')")
     expect(source).toContain('refreshBreedingSummary')
     expect(source).toContain("refreshBreedingSummary: activeTab.value === 'breeding'")
+  })
+
+  it('应让哺乳状态可点击进入周期详情，并展示副文案与窝信息', () => {
+    expect(source).toContain("if (s.type === '哺乳中') {")
+    expect(source).toContain("return s.detail || '当前处于哺乳照护阶段'")
+    expect(source).toContain("const litterCards = computed(() => {")
+    expect(source).toContain('dog-detail__cycle-list')
+    expect(source).toContain('dog-detail__cycle-meta')
+    expect(source).toContain('dog-detail__cycle-result')
+    expect(source).toContain('dog-detail__litter-list')
+    expect(source).toContain('summaryNumber')
+    expect(source).toContain('summarySire')
+    expect(source).toContain("label: `存活${aliveCount}`")
+    expect(source).toContain("label: `在养${keptCount}`")
+  })
+
+  it('应将退休、已故、康复这类表单型动作统一到底部 Sheet，并保留纯确认弹窗', () => {
+    expect(source).toContain('<BSheet v-model:visible="showRetireSheet" title="标记退休">')
+    expect(source).toContain('<BSheet v-model:visible="showDeceasedSheet" title="标记已故">')
+    expect(source).toContain('<BSheet v-model:visible="showRecoverySheet" title="标记康复">')
+    expect(source).not.toContain('v-model:visible="showRetireModal"')
+    expect(source).not.toContain('v-model:visible="showDeceasedModal"')
+    expect(source).not.toContain('v-model:visible="showRecoveryModal"')
+    expect(source).toContain('v-model:visible="showCancelRetireModal"')
+    expect(source).toContain('v-model:visible="showPromoteModal"')
+    expect(source).toContain('<BDeleteConfirm')
+  })
+
+  it('应让底部表单按钮改为左右双按钮，并保留已故 danger 语义', () => {
+    expect(source).toContain('flex-direction: row;')
+    expect(source).toContain('flex: 1;')
+    expect(source).toContain('@click="showRetireSheet = false"')
+    expect(source).toContain('@click="showDeceasedSheet = false"')
+    expect(source).toContain('@click="showRecoverySheet = false"')
+    expect(source).toContain('sheet-form__btn sheet-form__btn--danger')
+    expect(source).toContain('sheet-form__danger-note')
+    expect(source).toContain('确认标记已故')
+    expect(source).toContain('background: var(--red);')
+    expect(source).not.toContain('background: var(--danger);')
   })
 })

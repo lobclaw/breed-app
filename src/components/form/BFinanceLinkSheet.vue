@@ -4,7 +4,7 @@
       <view class="link-sheet__cards">
         <view class="link-sheet__card" @click="pick('dogs')">
           <view class="link-sheet__icon link-sheet__icon--dogs">
-            <text class="material-icons-round">pets</text>
+            <BEntityIcon :size="18" color="var(--blue)" />
           </view>
           <view class="link-sheet__body">
             <text class="link-sheet__title">关联犬只</text>
@@ -43,6 +43,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 
 const props = defineProps<{

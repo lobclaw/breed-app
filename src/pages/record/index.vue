@@ -83,41 +83,19 @@ import { onShow } from '@dcloudio/uni-app'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
 import { consumeSubmitFeedback } from '@/composables/useSubmitFeedback'
+import { BREEDING_RECORD_ITEMS, FINANCE_RECORD_ITEMS, HEALTH_RECORD_ITEMS, type UnifiedRecordItem } from '@/utils/iconRegistry'
 
-interface RecordType {
-  icon: string
-  iconBg: string
-  iconColor: string
-  label: string
-  url: string
-}
+type RecordType = Pick<UnifiedRecordItem, 'icon' | 'iconBg' | 'iconColor' | 'label' | 'url'>
 
-// 繁育记录（8 种）
-const breedingTypes: RecordType[] = [
-  { icon: 'whatshot', iconBg: 'var(--icon-rose)', iconColor: 'var(--rose)', label: '发情', url: '/pages/record/breeding-heat' },
-  { icon: 'biotech', iconBg: 'var(--icon-teal)', iconColor: 'var(--teal)', label: '卵泡', url: '/pages/record/breeding-follicle' },
-  { icon: 'favorite', iconBg: 'var(--icon-rose)', iconColor: 'var(--rose)', label: '配种', url: '/pages/record/breeding-mating' },
-  { icon: 'pregnant_woman', iconBg: 'var(--icon-green)', iconColor: 'var(--green)', label: '孕检', url: '/pages/record/breeding-pregnancy' },
-  { icon: 'medical_services', iconBg: 'var(--icon-blue)', iconColor: 'var(--blue)', label: '产检', url: '/pages/record/breeding-prenatal' },
-  { icon: 'schedule', iconBg: 'var(--icon-amber)', iconColor: 'var(--amber)', label: '临产', url: '/pages/record/breeding-prelabor' },
-  { icon: 'child_friendly', iconBg: 'var(--icon-rose)', iconColor: 'var(--rose)', label: '生产', url: '/pages/breeding/birth-wizard' },
-  { icon: 'warning', iconBg: 'var(--icon-red)', iconColor: 'var(--red)', label: '异常终止', url: '/pages/record/breeding-termination' },
-]
+const breedingTypes: RecordType[] = BREEDING_RECORD_ITEMS
+  .filter(item => item.page !== 'heat-observation')
+  .map(({ icon, iconBg, iconColor, label, url }) => ({ icon, iconBg, iconColor, label: shortenLabel(label), url }))
 
-// 健康记录（5 种）
-const healthTypes: RecordType[] = [
-  { icon: 'vaccines', iconBg: 'var(--icon-blue)', iconColor: 'var(--blue)', label: '疫苗', url: '/pages/record/health-vaccination' },
-  { icon: 'shield', iconBg: 'var(--icon-teal)', iconColor: 'var(--teal)', label: '驱虫', url: '/pages/record/health-deworming' },
-  { icon: 'sick', iconBg: 'var(--icon-red)', iconColor: 'var(--red)', label: '疾病', url: '/pages/record/health-illness' },
-  { icon: 'medication', iconBg: 'var(--icon-plum)', iconColor: 'var(--plum)', label: '用药', url: '/pages/record/health-medication' },
-  { icon: 'monitor_weight', iconBg: 'var(--icon-teal)', iconColor: 'var(--teal)', label: '体重', url: '/pages/health/batch-weight' },
-]
+const healthTypes: RecordType[] = HEALTH_RECORD_ITEMS
+  .map(({ icon, iconBg, iconColor, label, url }) => ({ icon, iconBg, iconColor, label: shortenLabel(label), url }))
 
-// 财务记录（2 种）
-const financeTypes: RecordType[] = [
-  { icon: 'payments', iconBg: 'var(--icon-green)', iconColor: 'var(--green)', label: '支出', url: '/pages/finance/expense-add' },
-  { icon: 'account_balance', iconBg: 'var(--icon-red)', iconColor: 'var(--red)', label: '收入', url: '/pages/finance/expense-add?type=income' },
-]
+const financeTypes: RecordType[] = FINANCE_RECORD_ITEMS
+  .map(({ icon, iconBg, iconColor, label, url }) => ({ icon, iconBg, iconColor, label, url }))
 
 const submitBannerMessage = ref('')
 let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
@@ -132,6 +110,10 @@ function showSubmitBanner(message: string) {
 
 function goToRecord(item: RecordType) {
   uni.navigateTo({ url: item.url })
+}
+
+function shortenLabel(label: string) {
+  return label.replace(/记录$/, '')
 }
 
 onShow(() => {
