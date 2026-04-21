@@ -54,36 +54,38 @@
             v-for="(record, idx) in timelineRecords"
             :key="record._id"
             class="timeline-item"
+            :class="{ 'timeline-item--future': record._is_future }"
             @click="onRecordTap(record)"
           >
             <view class="timeline-track">
               <view
                 class="timeline-dot"
                 :class="record._is_future ? 'timeline-dot--hollow' : 'timeline-dot--filled'"
-                :style="{ color: `var(--${dotColor(record.type)})` }"
+                :style="{ color: `var(--${timelineDotColor(record)})` }"
               />
               <view v-if="idx < timelineRecords.length - 1" class="timeline-line" />
             </view>
             <view class="timeline-content">
               <view class="timeline-card" :class="{ 'timeline-card--future': record._is_future }">
                 <view class="timeline-head">
-                  <text class="timeline-date">{{ formatShortDate(record.date) }}</text>
+                  <text class="timeline-date" :class="{ 'timeline-date--future': record._is_future }">{{ formatShortDate(record.date) }}</text>
                   <text v-if="idx === 0" class="timeline-badge">最新</text>
                 </view>
                 <view class="timeline-main">
                   <view class="timeline-copy">
-                    <text class="timeline-desc" :style="record._is_future ? { color: 'var(--primary)' } : {}">
+                    <text class="timeline-desc" :class="{ 'timeline-desc--future': record._is_future }">
                       {{ typeLabel(record.type) }}
                     </text>
                     <text
                       v-for="(detail, detailIdx) in timelineDetailLines(record)"
                       :key="`${record._id}-detail-${detailIdx}`"
                       class="timeline-detail"
+                      :class="{ 'timeline-detail--future': record._is_future }"
                     >
                       {{ detail }}
                     </text>
                   </view>
-                  <view class="timeline-chevron">
+                  <view class="timeline-chevron" :class="{ 'timeline-chevron--future': record._is_future }">
                     <text class="material-icons-round" style="font-size: 16px; color: var(--text-4);">chevron_right</text>
                   </view>
                 </view>
@@ -297,13 +299,14 @@ const TYPE_LABELS: Record<string, string> = {
 }
 
 const DOT_COLORS: Record<string, string> = {
-  heat: 'text-3', heat_observation: 'amber', follicle_check: 'teal', mating: 'rose',
+  heat: 'amber', heat_observation: 'amber', follicle_check: 'teal', mating: 'rose',
   pregnancy_check: 'green', prenatal_check: 'blue',
   pre_labor: 'amber', birth: 'green', abnormal_termination: 'red',
 }
 
 function typeLabel(type: string) { return TYPE_LABELS[type] || type }
 function dotColor(type: string) { return DOT_COLORS[type] || 'primary' }
+function timelineDotColor(record: any) { return record?._is_future ? 'text-4' : dotColor(record?.type) }
 
 function statusColor(status: string) {
   const map: Record<string, string> = {
@@ -533,7 +536,7 @@ onShow(() => {
 .timeline-item {
   display: flex;
   align-items: flex-start;
-  gap: 14px;
+  gap: 12px;
   position: relative;
   transition: background 0.12s ease;
 
@@ -545,12 +548,13 @@ onShow(() => {
 .timeline-track {
   display: flex;
   flex-direction: column;
+  justify-content: flex-start;
   align-items: center;
   flex-shrink: 0;
-  width: 18px;
+  width: 16px;
   position: relative;
-  padding-top: 18px;
   align-self: stretch;
+  padding-top: 30px;
 }
 
 .timeline-dot {
@@ -574,8 +578,9 @@ onShow(() => {
 .timeline-line {
   width: 2px;
   flex: 1;
-  background: rgba(177, 152, 125, 0.28);
-  margin-top: 6px;
+  background: rgba(216, 203, 189, 0.42);
+  border-radius: 999px;
+  margin-top: 5px;
 }
 
 .timeline-content {
@@ -586,28 +591,28 @@ onShow(() => {
 .timeline-card {
   position: relative;
   background: var(--card);
-  border-radius: 16px;
-  box-shadow: var(--shadow);
-  padding: 12px 50px 12px 14px;
+  border-radius: 18px;
+  box-shadow: 0 2px 10px rgba(234, 62, 119, 0.045);
+  padding: 12px 48px 12px 14px;
   border: 1px solid rgba(216, 203, 189, 0.18);
 }
 
 .timeline-card--future {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(255, 248, 241, 0.98));
-  border-color: rgba(234, 62, 119, 0.14);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(252, 247, 243, 0.98));
+  border-color: rgba(216, 203, 189, 0.24);
 }
 
 .timeline-head {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 7px;
 }
 
 .timeline-date {
   display: inline-flex;
   align-items: center;
-  padding: 3px 8px;
+  padding: 3px 9px;
   border-radius: 999px;
   background: var(--card-dim);
   font-size: 11px;
@@ -616,12 +621,17 @@ onShow(() => {
   font-family: var(--font-display);
 }
 
+.timeline-date--future {
+  background: rgba(216, 203, 189, 0.16);
+  color: var(--text-3);
+}
+
 .timeline-badge {
   display: inline-flex;
   align-items: center;
   padding: 2px 7px;
   border-radius: 999px;
-  background: rgba(47, 187, 166, 0.14);
+  background: rgba(61, 168, 160, 0.1);
   color: var(--teal);
   font-size: 10px;
   font-weight: 700;
@@ -646,12 +656,20 @@ onShow(() => {
   display: block;
 }
 
+.timeline-desc--future {
+  color: var(--text-2);
+}
+
 .timeline-detail {
   font-size: 11px;
-  color: var(--text-2);
+  color: var(--text-3);
   margin-top: 4px;
   display: block;
   line-height: 1.5;
+}
+
+.timeline-detail--future {
+  color: var(--text-4);
 }
 
 .timeline-chevron {
@@ -665,7 +683,11 @@ onShow(() => {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: var(--card-dim);
+  background: rgba(255, 240, 232, 0.8);
+}
+
+.timeline-chevron--future {
+  background: rgba(248, 240, 232, 0.9);
 }
 
 /* 费用 */

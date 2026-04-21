@@ -793,7 +793,18 @@ module.exports = {
       .orderBy('created_at', 'desc')
       .get()
 
-    return { data: cycles }
+    const numberedCycles = attachCycleNumbers(cycles || [])
+    const cycleNumberMap = {}
+    for (const cycle of numberedCycles) {
+      cycleNumberMap[cycle._id] = cycle.cycle_number
+    }
+
+    return {
+      data: (cycles || []).map(cycle => ({
+        ...cycle,
+        cycle_number: cycleNumberMap[cycle._id] || null,
+      })),
+    }
   },
 
   /**

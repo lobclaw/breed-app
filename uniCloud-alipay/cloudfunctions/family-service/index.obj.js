@@ -21,6 +21,117 @@ const DEFAULT_SETTINGS = {
   custom_breed_types: [],
 }
 
+const RECYCLE_RETENTION_DAYS = 30
+const RECYCLE_SUPPORTED_TYPES = {
+  dog: {
+    collection: 'dogs',
+    typeLabel: '犬只',
+    name: item => item.name || '未命名犬只',
+    summary: item => [item.breed, item.role, item.disposition].filter(Boolean).join(' · '),
+  },
+  expense: {
+    collection: 'expenses',
+    typeLabel: '支出',
+    name: item => item.category || '未命名支出',
+    summary: item => [item.category, formatCurrency(item.amount)].filter(Boolean).join(' · '),
+  },
+  income: {
+    collection: 'incomes',
+    typeLabel: '收入',
+    name: item => item.type || '未命名收入',
+    summary: item => [item.type, formatCurrency(item.amount)].filter(Boolean).join(' · '),
+  },
+  agent: {
+    collection: 'agents',
+    typeLabel: '代理人',
+    name: item => item.name || '未命名代理人',
+    summary: item => item.contact_info || '',
+  },
+  medication_protocol: {
+    collection: 'medication_protocols',
+    typeLabel: '用药方案',
+    name: item => item.name || '未命名方案',
+    summary: item => [item.drug_name, item.duration_days ? `${item.duration_days}天疗程` : ''].filter(Boolean).join(' · '),
+  },
+}
+
+function formatCurrency(amount) {
+  if (amount == null || amount === '') return ''
+  const numericAmount = Number(amount)
+  if (Number.isNaN(numericAmount)) return ''
+  return `¥${numericAmount.toLocaleString()}`
+}
+
+function clampDaysRemaining(deletedAt) {
+  if (!deletedAt) return 0
+  const elapsedDays = Math.floor((Date.now() - deletedAt) / 86400000)
+  return Math.max(0, RECYCLE_RETENTION_DAYS - elapsedDays)
+}
+
+function normalizeRecycleItem(type, item) {
+  const config = RECYCLE_SUPPORTED_TYPES[type]
+  if (!config) return null
+
+  return {
+    _id: item._id,
+    type,
+    type_label: config.typeLabel,
+    name: config.name(item),
+    summary: config.summary(item),
+    deleted_at: item.deleted_at,
+    days_remaining: clampDaysRemaining(item.deleted_at),
+  }
+}
+
+async function getDeletedDocsByType(familyId, type) {
+  const config = RECYCLE_SUPPORTED_TYPES[type]
+  if (!config) return []
+
+  const { data } = await db.collection(config.collection)
+    .where({
+      family_id: familyId,
+      deleted_at: dbCmd.neq(null),
+    })
+    .get()
+
+  return (data || [])
+    .map(item => normalizeRecycleItem(type, item))
+    .filter(Boolean)
+}
+
+async function getSoftDeletedDocByType(familyId, type, id) {
+  const config = RECYCLE_SUPPORTED_TYPES[type]
+  if (!config) throw new Error('不支持的回收站类型')
+
+  const { data } = await db.collection(config.collection)
+    .where({
+      _id: id,
+      family_id: familyId,
+      deleted_at: dbCmd.neq(null),
+    })
+    .limit(1)
+    .get()
+
+  return {
+    config,
+    doc: data && data.length > 0 ? data[0] : null,
+  }
+}
+
+function parseRecycleItemInput(input) {
+  if (!input || typeof input !== 'object') {
+    throw new Error('回收站参数无效')
+  }
+
+  const id = typeof input.id === 'string' ? input.id.trim() : ''
+  const type = typeof input.type === 'string' ? input.type.trim() : ''
+
+  if (!id) throw new Error('缺少回收站项目 ID')
+  if (!RECYCLE_SUPPORTED_TYPES[type]) throw new Error('不支持的回收站类型')
+
+  return { id, type }
+}
+
 module.exports = {
   _before: async function() {
     // createFamily 和 joinFamily 允许无家庭用户调用
@@ -412,20 +523,56 @@ module.exports = {
    * 获取已删除项目（回收站）
    */
   async getDeletedItems() {
-    const { data: dogs } = await db.collection('dogs')
-      .where({
-        family_id: this.familyId,
-        deleted_at: dbCmd.neq(null),
-      })
-      .orderBy('deleted_at', 'desc')
-      .get()
+    const lists = await Promise.all(
+      Object.keys(RECYCLE_SUPPORTED_TYPES).map(type => getDeletedDocsByType(this.familyId, type)),
+    )
 
-    return { data: dogs.map(d => ({
-      ...d,
-      _type: 'dog',
-      _label: d.name || '未命名犬只',
-      _deletedAt: d.deleted_at,
-    })) }
+    return {
+      data: lists
+        .flat()
+        .sort((left, right) => (right.deleted_at || 0) - (left.deleted_at || 0)),
+    }
+  },
+
+  /**
+   * 恢复回收站项目
+   * @param {{ id: string, type: string }} input
+   */
+  async restoreItem(input) {
+    requireAdmin(this.role)
+
+    const { id, type } = parseRecycleItemInput(input)
+    const { config, doc } = await getSoftDeletedDocByType(this.familyId, type, id)
+
+    if (!doc) {
+      throw new Error('回收站项目不存在')
+    }
+
+    await db.collection(config.collection).doc(id).update({
+      deleted_at: null,
+      updated_at: Date.now(),
+    })
+
+    return { message: '已恢复' }
+  },
+
+  /**
+   * 永久删除回收站项目
+   * @param {{ id: string, type: string }} input
+   */
+  async permanentDeleteItem(input) {
+    requireAdmin(this.role)
+
+    const { id, type } = parseRecycleItemInput(input)
+    const { config, doc } = await getSoftDeletedDocByType(this.familyId, type, id)
+
+    if (!doc) {
+      throw new Error('回收站项目不存在')
+    }
+
+    await db.collection(config.collection).doc(id).remove()
+
+    return { message: '已永久删除' }
   },
 
   /**

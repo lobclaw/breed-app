@@ -16,6 +16,10 @@
           </view>
           <view class="recycle-card__info">
             <text class="recycle-card__name">{{ item.name }}</text>
+            <view class="recycle-card__summary-row">
+              <text class="recycle-card__type">{{ item.type_label }}</text>
+              <text v-if="item.summary" class="recycle-card__summary">{{ item.summary }}</text>
+            </view>
             <view class="recycle-card__meta">
               <text class="recycle-card__date">删除于 {{ formatDate(item.deleted_at) }}</text>
               <text class="recycle-card__remain" :class="{ 'recycle-card__remain--urgent': item.days_remaining <= 3 }">
@@ -40,7 +44,7 @@
       v-else
       icon="delete_sweep"
       title="回收站为空"
-      description="被删除的犬只和记录会在这里保留30天"
+      description="被删除的犬只、财务、代理人与用药方案会在这里保留30天"
     />
 
     <BModal
@@ -62,16 +66,11 @@ import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BModal from '@/components/layout/BModal.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
+import { useProtocolStore } from '@/stores/protocolStore'
+import type { RecycleBinItem, RecycleItemType } from '@/types/recycle'
 
-interface DeletedItem {
-  _id: string
-  name: string
-  type: 'dog' | 'record' | 'sale'
-  deleted_at: number
-  days_remaining: number
-}
-
-const deletedItems = ref<DeletedItem[]>([])
+const protocolStore = useProtocolStore()
+const deletedItems = ref<RecycleBinItem[]>([])
 const loading = ref(true)
 const showConfirmModal = ref(false)
 const confirmTitle = ref('')
@@ -80,12 +79,18 @@ const confirmText = ref('确定')
 const confirmDanger = ref(false)
 let confirmAction: (() => Promise<void>) | null = null
 
-const { run: fetchDeleted } = useCloudCall<{ data: DeletedItem[] }>('family-service', 'getDeletedItems')
+const { run: fetchDeleted } = useCloudCall<{ data: RecycleBinItem[] }>('family-service', 'getDeletedItems')
 const { run: doRestore } = useCloudCall('family-service', 'restoreItem', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 const { run: doDelete } = useCloudCall('family-service', 'permanentDeleteItem', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 
-function getIcon(type: string): string {
-  const map: Record<string, string> = { dog: 'pets', record: 'description', sale: 'receipt_long' }
+function getIcon(type: RecycleItemType): string {
+  const map: Record<RecycleItemType, string> = {
+    dog: 'pets',
+    expense: 'receipt_long',
+    income: 'payments',
+    agent: 'support_agent',
+    medication_protocol: 'medication',
+  }
   return map[type] || 'description'
 }
 
@@ -95,32 +100,40 @@ function formatDate(ts: number): string {
   return `${d.getMonth() + 1}月${d.getDate()}日`
 }
 
+async function syncRecycleSideEffects(type: RecycleItemType) {
+  if (type === 'medication_protocol') {
+    await protocolStore.reload()
+  }
+}
+
 async function load() {
   loading.value = true
   const res = await fetchDeleted()
-  if (res?.data) deletedItems.value = res.data
+  deletedItems.value = res?.data || []
   loading.value = false
 }
 
-async function restoreItem(item: DeletedItem) {
+async function restoreItem(item: RecycleBinItem) {
   confirmTitle.value = '确认恢复'
   confirmContent.value = `恢复「${item.name}」？`
   confirmText.value = '恢复'
   confirmDanger.value = false
   confirmAction = async () => {
     await doRestore({ id: item._id, type: item.type })
+    await syncRecycleSideEffects(item.type)
     await load()
   }
   showConfirmModal.value = true
 }
 
-async function permanentDelete(item: DeletedItem) {
+async function permanentDelete(item: RecycleBinItem) {
   confirmTitle.value = '永久删除'
   confirmContent.value = `「${item.name}」将被永久删除，无法恢复`
   confirmText.value = '永久删除'
   confirmDanger.value = true
   confirmAction = async () => {
     await doDelete({ id: item._id, type: item.type })
+    await syncRecycleSideEffects(item.type)
     await load()
   }
   showConfirmModal.value = true
@@ -177,8 +190,10 @@ onShow(() => load())
     flex-shrink: 0;
 
     &--dog { background: var(--amber); }
-    &--record { background: var(--blue); }
-    &--sale { background: var(--green); }
+    &--expense { background: var(--red); }
+    &--income { background: var(--green); }
+    &--agent { background: var(--teal); }
+    &--medication_protocol { background: var(--plum); }
   }
 
   &__info { flex: 1; min-width: 0; }
@@ -193,11 +208,38 @@ onShow(() => load())
     white-space: nowrap;
   }
 
+  &__summary-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+    min-width: 0;
+  }
+
+  &__type {
+    flex-shrink: 0;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-2);
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: var(--card-dim);
+  }
+
+  &__summary {
+    min-width: 0;
+    font-size: 12px;
+    color: var(--text-3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   &__meta {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-top: 4px;
+    margin-top: 6px;
   }
 
   &__date {

@@ -62,17 +62,21 @@
     </view>
 
     <view v-if="activeFilterChips.length" class="active-filters">
-      <view
-        v-for="chip in activeFilterChips"
-        :key="chip.key"
-        class="active-filters__chip"
-      >
-        <text class="active-filters__chip-text">{{ chip.label }}</text>
-        <text class="material-icons-round active-filters__chip-icon" @click="clearFilterChip(chip.key)">close</text>
-      </view>
       <view class="active-filters__clear-all" @click="clearAllFilters">
         <text>清空全部</text>
       </view>
+      <scroll-view scroll-x class="active-filters__scroll" show-scrollbar="false" enhanced>
+        <view class="active-filters__track">
+          <view
+            v-for="chip in activeFilterChips"
+            :key="chip.key"
+            class="active-filters__chip"
+          >
+            <text class="active-filters__chip-text">{{ chip.label }}</text>
+            <text class="material-icons-round active-filters__chip-icon" @click="clearFilterChip(chip.key)">close</text>
+          </view>
+        </view>
+      </scroll-view>
     </view>
 
     <view v-if="loading" class="loading-wrap">
@@ -139,126 +143,169 @@
 
     <BSheet v-model:visible="showFilterSheet" title="筛选流水" height="78%">
       <view class="filter-sheet">
-        <view class="filter-section">
-          <text class="filter-section__title">时间范围</text>
-          <view class="filter-chip-row">
+        <view class="filter-sheet__hero">
+          <text class="filter-sheet__eyebrow">多条件组合筛选</text>
+          <text class="filter-sheet__hint">组合多个条件，快速定位这段时间内的收入和支出流水</text>
+        </view>
+
+        <view class="filter-sheet__content">
+          <view class="filter-section filter-section--card">
+            <view class="filter-section__head">
+              <text class="filter-section__title">时间范围</text>
+            </view>
+            <view class="filter-chip-row">
             <view
               v-for="option in dateRangeOptions"
               :key="option.value"
-              class="filter-chip"
+              class="filter-chip filter-chip--segment"
               :class="{ 'filter-chip--active': draftFilters.dateRange === option.value }"
               @click="setDraftDateRange(option.value)"
             >
               <text>{{ option.label }}</text>
             </view>
+            </view>
+            <view v-if="draftFilters.dateRange === 'custom'" class="custom-date-row">
+              <picker mode="date" :value="draftStartDateStr" @change="onDraftDateChange('start', $event)">
+                <view class="custom-date-card">
+                  <text class="custom-date-card__label">开始日期</text>
+                  <text class="custom-date-card__value">{{ draftStartDateStr || '请选择' }}</text>
+                </view>
+              </picker>
+              <picker mode="date" :value="draftEndDateStr" @change="onDraftDateChange('end', $event)">
+                <view class="custom-date-card">
+                  <text class="custom-date-card__label">结束日期</text>
+                  <text class="custom-date-card__value">{{ draftEndDateStr || '请选择' }}</text>
+                </view>
+              </picker>
+            </view>
           </view>
-          <view v-if="draftFilters.dateRange === 'custom'" class="custom-date-row">
-            <picker mode="date" :value="draftStartDateStr" @change="onDraftDateChange('start', $event)">
-              <view class="custom-date-card">
-                <text class="custom-date-card__label">开始日期</text>
-                <text class="custom-date-card__value">{{ draftStartDateStr || '请选择' }}</text>
-              </view>
-            </picker>
-            <picker mode="date" :value="draftEndDateStr" @change="onDraftDateChange('end', $event)">
-              <view class="custom-date-card">
-                <text class="custom-date-card__label">结束日期</text>
-                <text class="custom-date-card__value">{{ draftEndDateStr || '请选择' }}</text>
-              </view>
-            </picker>
-          </view>
-        </view>
 
-        <view class="filter-section">
-          <text class="filter-section__title">交易类型</text>
-          <view class="filter-chip-row">
+          <view class="filter-section filter-section--card">
+            <view class="filter-section__head">
+              <text class="filter-section__title">交易类型</text>
+            </view>
+            <view class="filter-chip-row">
             <view
               v-for="f in typeFilters"
               :key="f.value"
-              class="filter-chip"
+              class="filter-chip filter-chip--segment"
               :class="{ 'filter-chip--active': draftFilters.type === f.value }"
               @click="setDraftType(f.value)"
             >
               <text>{{ f.label }}</text>
             </view>
           </view>
-        </view>
+          </view>
 
-        <view v-if="draftFilters.type !== 'expense'" class="filter-section">
-          <text class="filter-section__title">收入分类</text>
-          <view class="filter-chip-row">
+          <view v-if="draftFilters.type !== 'expense'" class="filter-section filter-section--card">
+            <view class="filter-section__head">
+              <text class="filter-section__title">收入分类</text>
+              <text v-if="draftFilters.selectedIncomeTypes.length" class="filter-section__meta">{{ draftFilters.selectedIncomeTypes.length }} 项已选</text>
+            </view>
+            <view class="filter-chip-row">
             <view
               v-for="incomeType in incomeTypeOptions"
               :key="incomeType"
-              class="filter-chip"
+              class="filter-chip filter-chip--segment filter-chip--segment-compact"
               :class="{ 'filter-chip--active': draftFilters.selectedIncomeTypes.includes(incomeType) }"
               @click="toggleDraftIncomeType(incomeType)"
             >
               <text>{{ incomeType }}</text>
             </view>
           </view>
-        </view>
+          </view>
 
-        <view v-if="draftFilters.type !== 'income'" class="filter-section">
-          <text class="filter-section__title">支出分类</text>
-          <text class="filter-section__subhead">支出分组</text>
-          <view class="filter-chip-row">
+          <view v-if="draftFilters.type !== 'income'" class="filter-section filter-section--card">
+            <view class="filter-section__head">
+              <text class="filter-section__title">支出分类</text>
+            </view>
+            <text class="filter-section__helper">可先选分组，也可直接点具体分类</text>
+            <text class="filter-section__subhead">支出分组</text>
+            <view class="filter-chip-row">
             <view
               v-for="group in expenseGroupOptions"
               :key="group.key"
-              class="filter-chip"
+              class="filter-chip filter-chip--segment filter-chip--segment-compact"
               :class="{ 'filter-chip--active': draftFilters.selectedExpenseGroups.includes(group.key) }"
               @click="toggleDraftExpenseGroup(group.key)"
             >
               <text>{{ group.label }}</text>
             </view>
-          </view>
+            </view>
 
-          <view class="grouped-category-list">
-            <view
-              v-for="group in groupedExpenseCategories"
-              :key="group.key"
-              class="grouped-category"
-            >
-              <text class="grouped-category__title">{{ group.label }}</text>
-              <view class="filter-chip-row filter-chip-row--sub">
-                <view
-                  v-for="category in group.items"
-                  :key="category.name"
-                  class="filter-chip filter-chip--soft"
-                  :class="{ 'filter-chip--active-soft': draftFilters.selectedExpenseCategories.includes(category.name) }"
-                  @click="toggleDraftExpenseCategory(category.name)"
-                >
-                  <text>{{ category.name }}</text>
+            <view class="grouped-category-list">
+              <view
+                v-for="group in groupedExpenseCategories"
+                :key="group.key"
+                class="grouped-category-card"
+                :class="{
+                  'grouped-category-card--active': draftFilters.selectedExpenseGroups.includes(group.key) || getGroupSelectionCount(group.key) > 0,
+                }"
+              >
+                <view class="grouped-category-card__head">
+                  <view class="grouped-category-card__title-wrap">
+                    <view class="grouped-category-card__dot" :class="`grouped-category-card__dot--${group.key}`" />
+                    <text class="grouped-category-card__title">{{ group.label }}</text>
+                  </view>
+                  <text
+                    v-if="getGroupSelectionBadge(group.key)"
+                    class="grouped-category-card__badge"
+                  >{{ getGroupSelectionBadge(group.key) }}</text>
+                </view>
+                <view class="filter-chip-row filter-chip-row--sub">
+                  <view
+                    v-for="category in group.items"
+                    :key="category.name"
+                    class="filter-chip filter-chip--soft"
+                    :class="{ 'filter-chip--active-soft': draftFilters.selectedExpenseCategories.includes(category.name) }"
+                    @click="toggleDraftExpenseCategory(category.name)"
+                  >
+                    <text>{{ category.name }}</text>
+                  </view>
                 </view>
               </view>
             </view>
           </view>
-        </view>
 
-        <view class="filter-section">
-          <text class="filter-section__title">关联对象</text>
-          <view class="filter-chip-row">
+          <view class="filter-section filter-section--card">
+            <view class="filter-section__head">
+              <text class="filter-section__title">关联对象</text>
+            </view>
             <view
-              class="filter-chip filter-chip--soft"
-              :class="{ 'filter-chip--active-soft': draftFilters.unlinkedOnly }"
+              class="filter-toggle"
+              :class="{ 'filter-toggle--active': draftFilters.unlinkedOnly }"
               @click="toggleDraftUnlinkedOnly"
             >
-              <text>仅看无关联</text>
+              <view class="filter-toggle__copy">
+                <text class="filter-toggle__title">仅看无关联</text>
+                <text class="filter-toggle__desc">打开后将忽略犬只、窝和繁育周期的筛选条件</text>
+              </view>
+              <view class="filter-toggle__switch" :class="{ 'filter-toggle__switch--on': draftFilters.unlinkedOnly }">
+                <view class="filter-toggle__thumb" />
+              </view>
             </view>
-          </view>
-          <view class="link-filter-list">
+
+            <view class="link-filter-list">
             <view
               class="link-filter-card"
               :class="{ 'link-filter-card--disabled': draftFilters.unlinkedOnly }"
               @click="!draftFilters.unlinkedOnly && (showDogPicker = true)"
             >
-              <view class="link-filter-card__head">
-                <text class="link-filter-card__title">犬只</text>
-                <text v-if="draftFilters.selectedDogNames.length" class="material-icons-round link-filter-card__clear" @click.stop="clearDraftLink('dog')">close</text>
+              <view class="link-filter-card__lead">
+                <view class="link-filter-card__icon">
+                  <text class="material-icons-round" style="font-size: 16px; color: var(--primary);">pets</text>
+                </view>
+                <view class="link-filter-card__copy">
+                  <view class="link-filter-card__head">
+                    <text class="link-filter-card__title">犬只</text>
+                    <text v-if="draftFilters.selectedDogNames.length" class="material-icons-round link-filter-card__clear" @click.stop="clearDraftLink('dog')">close</text>
+                  </view>
+                  <text class="link-filter-card__value" :class="{ 'link-filter-card__value--placeholder': !draftFilters.selectedDogNames.length }">
+                    {{ formatSelectionSummary(draftFilters.selectedDogNames, draftFilters.unlinkedOnly ? '已禁用' : '按犬只筛选') }}
+                  </text>
+                </view>
               </view>
-              <text class="link-filter-card__value" :class="{ 'link-filter-card__value--placeholder': !draftFilters.selectedDogNames.length }">
-                {{ formatSelectionSummary(draftFilters.selectedDogNames, draftFilters.unlinkedOnly ? '已禁用' : '按犬只筛选') }}
-              </text>
+              <text class="material-icons-round link-filter-card__arrow">chevron_right</text>
             </view>
 
             <view
@@ -267,13 +314,21 @@
               :class="{ 'link-filter-card--disabled': draftFilters.unlinkedOnly }"
               @click="!draftFilters.unlinkedOnly && (showLitterPicker = true)"
             >
-              <view class="link-filter-card__head">
-                <text class="link-filter-card__title">窝</text>
-                <text v-if="draftFilters.selectedLitterNames.length" class="material-icons-round link-filter-card__clear" @click.stop="clearDraftLink('litter')">close</text>
+              <view class="link-filter-card__lead">
+                <view class="link-filter-card__icon">
+                  <text class="material-icons-round" style="font-size: 16px; color: var(--primary);">child_care</text>
+                </view>
+                <view class="link-filter-card__copy">
+                  <view class="link-filter-card__head">
+                    <text class="link-filter-card__title">窝</text>
+                    <text v-if="draftFilters.selectedLitterNames.length" class="material-icons-round link-filter-card__clear" @click.stop="clearDraftLink('litter')">close</text>
+                  </view>
+                  <text class="link-filter-card__value" :class="{ 'link-filter-card__value--placeholder': !draftFilters.selectedLitterNames.length }">
+                    {{ formatSelectionSummary(draftFilters.selectedLitterNames, draftFilters.unlinkedOnly ? '已禁用' : '按窝筛选') }}
+                  </text>
+                </view>
               </view>
-              <text class="link-filter-card__value" :class="{ 'link-filter-card__value--placeholder': !draftFilters.selectedLitterNames.length }">
-                {{ formatSelectionSummary(draftFilters.selectedLitterNames, draftFilters.unlinkedOnly ? '已禁用' : '按窝筛选') }}
-              </text>
+              <text class="material-icons-round link-filter-card__arrow">chevron_right</text>
             </view>
 
             <view
@@ -282,33 +337,44 @@
               :class="{ 'link-filter-card--disabled': draftFilters.unlinkedOnly }"
               @click="!draftFilters.unlinkedOnly && (showCyclePicker = true)"
             >
-              <view class="link-filter-card__head">
-                <text class="link-filter-card__title">繁育周期</text>
-                <text v-if="draftFilters.selectedCycleNames.length" class="material-icons-round link-filter-card__clear" @click.stop="clearDraftLink('cycle')">close</text>
+              <view class="link-filter-card__lead">
+                <view class="link-filter-card__icon">
+                  <text class="material-icons-round" style="font-size: 16px; color: var(--primary);">autorenew</text>
+                </view>
+                <view class="link-filter-card__copy">
+                  <view class="link-filter-card__head">
+                    <text class="link-filter-card__title">繁育周期</text>
+                    <text v-if="draftFilters.selectedCycleNames.length" class="material-icons-round link-filter-card__clear" @click.stop="clearDraftLink('cycle')">close</text>
+                  </view>
+                  <text class="link-filter-card__value" :class="{ 'link-filter-card__value--placeholder': !draftFilters.selectedCycleNames.length }">
+                    {{ formatSelectionSummary(draftFilters.selectedCycleNames, draftFilters.unlinkedOnly ? '已禁用' : '按繁育周期筛选') }}
+                  </text>
+                </view>
               </view>
-              <text class="link-filter-card__value" :class="{ 'link-filter-card__value--placeholder': !draftFilters.selectedCycleNames.length }">
-                {{ formatSelectionSummary(draftFilters.selectedCycleNames, draftFilters.unlinkedOnly ? '已禁用' : '按繁育周期筛选') }}
-              </text>
+              <text class="material-icons-round link-filter-card__arrow">chevron_right</text>
+            </view>
+          </view>
+          </view>
+
+          <view class="filter-section filter-section--card">
+            <view class="filter-section__head">
+              <text class="filter-section__title">排序</text>
+            </view>
+            <view class="filter-chip-row">
+              <view
+                v-for="option in sortOptions"
+                :key="option.value"
+                class="filter-chip filter-chip--segment filter-chip--segment-compact"
+                :class="{ 'filter-chip--active': draftFilters.sort === option.value }"
+                @click="draftFilters.sort = option.value"
+              >
+                <text>{{ option.label }}</text>
+              </view>
             </view>
           </view>
         </view>
 
-        <view class="filter-section">
-          <text class="filter-section__title">排序</text>
-          <view class="filter-chip-row">
-            <view
-              v-for="option in sortOptions"
-              :key="option.value"
-              class="filter-chip"
-              :class="{ 'filter-chip--active': draftFilters.sort === option.value }"
-              @click="draftFilters.sort = option.value"
-            >
-              <text>{{ option.label }}</text>
-            </view>
-          </view>
-        </view>
-
-        <view class="filter-actions">
+        <view class="filter-actions filter-actions--sticky">
           <button class="filter-actions__reset" @click="resetDraftFilters">重置</button>
           <button class="filter-actions__apply" :disabled="!canApplyDraftFilters" @click="applyDraftFilters">应用筛选</button>
         </view>
@@ -584,28 +650,33 @@ const activeFilterChips = computed(() => {
       label: typeFilters.find(item => item.value === appliedFilters.type)?.label || '全部',
     })
   }
-  chips.push({ key: 'dateRange', label: monthLabel.value })
+  if (appliedFilters.dateRange !== 'this_month') {
+    chips.push({
+      key: 'dateRange',
+      label: appliedFilters.dateRange === 'custom' ? '自定义时间' : monthLabel.value,
+    })
+  }
   if (appliedFilters.selectedIncomeTypes.length) {
     chips.push({
       key: 'incomeTypes',
-      label: `收入: ${appliedFilters.selectedIncomeTypes.join('、')}`,
+      label: `收入 ${appliedFilters.selectedIncomeTypes.length}项`,
     })
   }
   if (appliedFilters.selectedExpenseGroups.length) {
     chips.push({
       key: 'expenseGroups',
-      label: `支出分组: ${appliedFilters.selectedExpenseGroups.map(getExpenseCategoryGroupLabel).join('、')}`,
+      label: `支出分组 ${appliedFilters.selectedExpenseGroups.length}项`,
     })
   }
   if (appliedFilters.selectedExpenseCategories.length) {
     chips.push({
       key: 'expenseCategories',
-      label: `支出分类: ${appliedFilters.selectedExpenseCategories.join('、')}`,
+      label: `支出分类 ${appliedFilters.selectedExpenseCategories.length}项`,
     })
   }
-  if (appliedFilters.selectedDogNames.length) chips.push({ key: 'dogs', label: `犬只: ${appliedFilters.selectedDogNames.join('、')}` })
-  if (appliedFilters.selectedLitterNames.length) chips.push({ key: 'litters', label: `窝: ${appliedFilters.selectedLitterNames.join('、')}` })
-  if (appliedFilters.selectedCycleNames.length) chips.push({ key: 'cycles', label: `繁育周期: ${appliedFilters.selectedCycleNames.join('、')}` })
+  if (appliedFilters.selectedDogNames.length) chips.push({ key: 'dogs', label: `犬只 ${appliedFilters.selectedDogNames.length}项` })
+  if (appliedFilters.selectedLitterNames.length) chips.push({ key: 'litters', label: `窝 ${appliedFilters.selectedLitterNames.length}项` })
+  if (appliedFilters.selectedCycleNames.length) chips.push({ key: 'cycles', label: `繁育周期 ${appliedFilters.selectedCycleNames.length}项` })
   if (appliedFilters.unlinkedOnly) chips.push({ key: 'unlinkedOnly', label: '仅看无关联' })
   if (appliedFilters.sort !== 'date_desc') {
     chips.push({
@@ -697,7 +768,24 @@ function toPickerTimestamp(dateStr: string) {
 }
 
 function formatSelectionSummary(names: string[], placeholder: string) {
-  return names.length ? names.join('、') : placeholder
+  if (!names.length) return placeholder
+  if (names.length <= 2) return names.join('、')
+  return `${names.slice(0, 2).join('、')} +${names.length - 2}`
+}
+
+function getGroupSelectionCount(groupKey: ExpenseCategoryGroupKey) {
+  const group = groupedExpenseCategories.value.find(item => item.key === groupKey)
+  if (!group) return 0
+  return group.items.filter(item => draftFilters.selectedExpenseCategories.includes(item.name)).length
+}
+
+function getGroupSelectionBadge(groupKey: ExpenseCategoryGroupKey) {
+  const count = getGroupSelectionCount(groupKey)
+  const groupSelected = draftFilters.selectedExpenseGroups.includes(groupKey)
+  if (groupSelected && count > 0) return `分组 + ${count}项`
+  if (groupSelected) return '分组已选'
+  if (count > 0) return `${count}项已选`
+  return ''
 }
 
 function getFlowIcon(tx: any) {
@@ -1126,37 +1214,60 @@ onShow(async () => {
 }
 
 .active-filters {
-  padding: 10px 16px 0;
+  padding: 8px 16px 0;
   display: flex;
-  flex-wrap: wrap;
   gap: 8px;
   align-items: center;
+  min-width: 0;
+
+  &__scroll {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+  }
+
+  &__track {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding-right: 2px;
+  }
 
   &__chip {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 6px 12px;
+    padding: 6px 11px;
     border-radius: 999px;
-    background: var(--primary-soft);
+    background: linear-gradient(135deg, rgba(240, 88, 136, 0.16) 0%, rgba(255, 240, 242, 0.95) 100%);
+    border: 1px solid rgba(240, 88, 136, 0.34);
     color: var(--primary);
+    box-shadow: 0 6px 16px rgba(240, 88, 136, 0.1);
+    flex-shrink: 0;
   }
 
   &__chip-text {
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 700;
+    white-space: nowrap;
   }
 
   &__chip-icon {
-    font-size: 16px;
-    color: inherit;
+    font-size: 14px;
+    color: rgba(191, 65, 111, 0.72);
   }
 
   &__clear-all {
-    font-size: 12px;
+    flex-shrink: 0;
+    min-height: 32px;
+    padding: 0 2px 0 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
     font-weight: 700;
     color: var(--text-3);
-    margin-left: 2px;
+    white-space: nowrap;
   }
 }
 
@@ -1350,18 +1461,69 @@ onShow(async () => {
 }
 
 .filter-sheet {
-  padding: 0 var(--space-page) 24px;
+  padding: 0 0 24px;
+
+  &__hero {
+    margin: 0 2px 14px;
+    padding: 2px 0 16px;
+  }
+
+  &__eyebrow {
+    display: block;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    color: var(--primary);
+    margin-bottom: 6px;
+  }
+
+  &__hint {
+    display: block;
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--text-3);
+  }
+
+  &__content {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding-bottom: 112px;
+  }
 }
 
 .filter-section {
-  margin-bottom: 22px;
+  &--card {
+    background: rgba(255, 255, 255, 0.98);
+    border: 1px solid rgba(216, 203, 189, 0.4);
+    border-radius: 22px;
+    padding: 16px 14px 15px;
+    box-shadow: 0 10px 24px rgba(99, 70, 49, 0.045);
+  }
+
+  &__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
 
   &__title {
     display: block;
-    font-size: 13px;
-    font-weight: 700;
+    font-size: 14px;
+    font-weight: 800;
     color: var(--text-1);
-    margin-bottom: 12px;
+  }
+
+  &__meta {
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--primary);
+    background: rgba(240, 88, 136, 0.1);
+    padding: 4px 8px;
+    border-radius: 999px;
   }
 
   &__subhead {
@@ -1371,22 +1533,78 @@ onShow(async () => {
     color: var(--text-3);
     margin-bottom: 10px;
   }
+
+  &__helper {
+    display: block;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-3);
+    margin: -2px 0 14px;
+  }
 }
 
 .grouped-category-list {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   margin-top: 14px;
 }
 
-.grouped-category {
+.grouped-category-card {
+  background: rgba(255, 249, 245, 0.96);
+  border: 1px solid rgba(216, 203, 189, 0.3);
+  border-radius: 18px;
+  padding: 13px 12px 12px;
+  transition: all 0.18s ease;
+
+  &--active {
+    background: linear-gradient(180deg, rgba(255, 244, 247, 0.98) 0%, rgba(255, 250, 247, 1) 100%);
+    border-color: rgba(240, 88, 136, 0.24);
+    box-shadow: 0 8px 18px rgba(240, 88, 136, 0.08);
+  }
+
+  &__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  &__title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  &__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+
+    &--feeding { background: #f59a3f; }
+    &--health { background: #e56767; }
+    &--breeding { background: #d68ae8; }
+    &--operations { background: #5d9ce8; }
+    &--other { background: #9b8f86; }
+  }
+
   &__title {
-    display: block;
-    font-size: 12px;
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--text-1);
+  }
+
+  &__badge {
+    flex-shrink: 0;
+    font-size: 11px;
     font-weight: 700;
-    color: var(--text-2);
-    margin-bottom: 8px;
+    color: var(--primary);
+    background: rgba(240, 88, 136, 0.1);
+    border-radius: 999px;
+    padding: 4px 8px;
   }
 }
 
@@ -1396,33 +1614,66 @@ onShow(async () => {
   gap: 8px;
 
   &--sub {
-    margin-top: 10px;
+    margin-top: 0;
   }
 }
 
 .filter-chip {
-  padding: 8px 14px;
+  padding: 8px 13px;
   border-radius: 999px;
-  background: var(--card-dim);
-  border: 1px solid rgba(216, 203, 189, 0.4);
+  background: rgba(255, 244, 236, 0.86);
+  border: 1px solid rgba(216, 203, 189, 0.18);
   font-size: 13px;
   font-weight: 600;
   color: var(--text-2);
+  transition: all 0.16s ease;
+
+  &:active {
+    transform: scale(0.96);
+  }
+
+  &--segment {
+    min-height: 38px;
+    padding: 9px 15px;
+    background: rgba(252, 239, 229, 0.96);
+    border-color: rgba(216, 203, 189, 0.32);
+    font-weight: 700;
+    color: var(--text-2);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  }
+
+  &--segment-compact {
+    min-height: 36px;
+    padding: 8px 14px;
+    font-size: 12px;
+  }
 
   &--active {
-    background: var(--primary-soft);
-    border-color: var(--primary);
+    background: linear-gradient(135deg, rgba(240, 88, 136, 0.16) 0%, rgba(255, 240, 242, 0.95) 100%);
+    border-color: rgba(240, 88, 136, 0.4);
     color: var(--primary);
+    box-shadow: 0 6px 16px rgba(240, 88, 136, 0.1);
   }
 
   &--soft {
-    background: #fff7f0;
+    background: rgba(255, 250, 246, 0.92);
+    border-color: rgba(216, 203, 189, 0.14);
+    color: var(--text-2);
+  }
+
+  &--soft.filter-chip--active {
+    background: linear-gradient(135deg, rgba(240, 88, 136, 0.2) 0%, rgba(255, 236, 241, 0.98) 100%);
+    border-color: rgba(240, 88, 136, 0.46);
+    color: #b93465;
+    box-shadow: 0 6px 16px rgba(240, 88, 136, 0.12);
+    font-weight: 700;
   }
 
   &--active-soft {
-    background: rgba(224, 82, 82, 0.12);
-    border-color: rgba(224, 82, 82, 0.28);
-    color: var(--red);
+    background: linear-gradient(135deg, rgba(240, 88, 136, 0.12) 0%, rgba(255, 247, 249, 0.98) 100%);
+    border-color: rgba(240, 88, 136, 0.24);
+    color: var(--primary);
+    box-shadow: 0 4px 14px rgba(240, 88, 136, 0.08);
   }
 }
 
@@ -1433,10 +1684,11 @@ onShow(async () => {
 }
 
 .custom-date-card {
-  padding: 12px;
-  border-radius: 16px;
-  background: #fff8f4;
-  border: 1px solid rgba(216, 203, 189, 0.35);
+  padding: 13px 12px;
+  border-radius: 18px;
+  background: rgba(255, 250, 246, 0.98);
+  border: 1px solid rgba(216, 203, 189, 0.32);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
 
   &__label {
     display: block;
@@ -1459,14 +1711,105 @@ onShow(async () => {
   gap: 10px;
 }
 
+.filter-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(216, 203, 189, 0.34);
+  box-shadow: 0 4px 12px rgba(99, 70, 49, 0.03);
+  margin-bottom: 12px;
+
+  &--active {
+    background: linear-gradient(135deg, rgba(240, 88, 136, 0.09) 0%, rgba(255, 249, 250, 1) 100%);
+    border-color: rgba(240, 88, 136, 0.28);
+  }
+
+  &__copy {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__title {
+    display: block;
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--text-1);
+  }
+
+  &__desc {
+    display: block;
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--text-3);
+    margin-top: 3px;
+  }
+
+  &__switch {
+    width: 42px;
+    height: 24px;
+    border-radius: 999px;
+    background: rgba(216, 203, 189, 0.62);
+    padding: 3px;
+    display: flex;
+    align-items: center;
+    transition: all 0.18s ease;
+
+    &--on {
+      justify-content: flex-end;
+      background: rgba(240, 88, 136, 0.34);
+    }
+  }
+
+  &__thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+  }
+}
+
 .link-filter-card {
-  padding: 12px 14px;
-  border-radius: 16px;
-  background: #fff8f4;
-  border: 1px solid rgba(216, 203, 189, 0.35);
+  padding: 13px 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(216, 203, 189, 0.34);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  box-shadow: 0 4px 12px rgba(99, 70, 49, 0.03), inset 0 1px 0 rgba(255, 255, 255, 0.72);
 
   &--disabled {
-    opacity: 0.55;
+    opacity: 0.56;
+  }
+
+  &__lead {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  &__icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 12px;
+    background: rgba(240, 88, 136, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  &__copy {
+    flex: 1;
+    min-width: 0;
   }
 
   &__head {
@@ -1492,37 +1835,74 @@ onShow(async () => {
     font-size: 14px;
     font-weight: 700;
     color: var(--text-1);
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 
     &--placeholder {
       color: var(--text-3);
       font-weight: 500;
     }
   }
+
+  &__arrow {
+    font-size: 18px;
+    color: var(--text-4);
+    flex-shrink: 0;
+  }
 }
 
 .filter-actions {
   display: flex;
   gap: 10px;
-  margin-top: 8px;
+  margin-top: 10px;
+
+  &--sticky {
+    position: sticky;
+    bottom: 0;
+    z-index: 3;
+    padding: 18px var(--space-page) calc(env(safe-area-inset-bottom, 0px) + 14px);
+    margin: 0 calc(var(--space-page) * -1) -20px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, rgba(255, 252, 249, 0.94) 24%, rgba(255, 255, 255, 0.985) 100%);
+    border-top: 1px solid rgba(216, 203, 189, 0.24);
+    box-shadow: 0 -12px 28px rgba(77, 52, 31, 0.06);
+    backdrop-filter: blur(10px);
+  }
 
   &__reset,
   &__apply {
     flex: 1;
-    height: 42px;
-    border-radius: 14px;
+    height: 48px;
+    border-radius: 18px;
     border: none;
+    padding: 0 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     font-size: 14px;
     font-weight: 700;
+    line-height: 1;
+    box-sizing: border-box;
+    -webkit-appearance: none;
+
+    &::after {
+      border: none;
+    }
   }
 
   &__reset {
-    background: var(--card-dim);
+    background: rgba(255, 244, 236, 0.98);
+    border: 1px solid rgba(216, 203, 189, 0.72);
     color: var(--text-2);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
   }
 
   &__apply {
-    background: var(--primary);
+    background: linear-gradient(135deg, var(--primary) 0%, #ff6f98 100%);
     color: #fff;
+    border: 1px solid rgba(240, 88, 136, 0.2);
+    box-shadow: 0 12px 24px rgba(240, 88, 136, 0.22);
 
     &[disabled] {
       opacity: 0.45;

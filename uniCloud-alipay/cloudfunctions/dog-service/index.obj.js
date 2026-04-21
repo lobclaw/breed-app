@@ -82,11 +82,12 @@ function buildDetailIllnessStatuses(illnesses = []) {
 }
 
 function buildListIllnessStatuses(illnesses = []) {
+  const sortedRecords = [...illnesses].sort((a, b) => (b.updated_at || b.date || b.created_at || 0) - (a.updated_at || a.date || a.created_at || 0))
   const labels = []
   const seen = new Set()
   let firstRecordId = null
 
-  for (const illness of illnesses) {
+  for (const illness of sortedRecords) {
     const label = (illness.details?.condition || '生病中').trim()
     const dedupeKey = label
     if (seen.has(dedupeKey)) continue
@@ -97,12 +98,19 @@ function buildListIllnessStatuses(illnesses = []) {
 
   if (labels.length === 0) return []
 
+  const latest = sortedRecords[0]
+  const illnessStartTs = latest?.details?.start_date || latest?.date || latest?.created_at || 0
+  const illnessDay = illnessStartTs ? Math.max(1, Math.floor((Date.now() - illnessStartTs) / 86400000) + 1) : null
+  const illnessMeta = illnessDay ? [{ icon: 'schedule', text: `第${illnessDay}天` }] : []
+
   if (labels.length === 1) {
     return [{
       type: '生病中',
       label: labels[0],
       count: 1,
       recordId: firstRecordId,
+      activityTs: latest?.updated_at || latest?.date || latest?.created_at || 0,
+      meta: illnessMeta,
     }]
   }
 
@@ -112,6 +120,8 @@ function buildListIllnessStatuses(illnesses = []) {
       label: `${labels[0]}/${labels[1]}`,
       count: 2,
       recordId: firstRecordId,
+      activityTs: latest?.updated_at || latest?.date || latest?.created_at || 0,
+      meta: illnessMeta,
     }]
   }
 
@@ -120,16 +130,24 @@ function buildListIllnessStatuses(illnesses = []) {
     label: `${labels[0]}/${labels[1]}等${labels.length}项`,
     count: labels.length,
     recordId: firstRecordId,
+    activityTs: latest?.updated_at || latest?.date || latest?.created_at || 0,
+    meta: illnessMeta,
   }]
 }
 
-function buildListMedicationStatus(tasks = []) {
+function buildListMedicationStatus(tasks = [], nowTs = Date.now()) {
   if (!tasks.length) return []
+  const preferredTask = tasks.reduce((currentTask, nextTask) => pickPreferredMedicationTask(currentTask, nextTask), null)
+  const { currentDay, totalDays } = getMedicationTaskProgress(preferredTask, nowTs)
+  const drugName = preferredTask?.drug_name || preferredTask?.details?.drug_name || '用药'
   return [{
     type: '用药中',
     label: '用药中',
     count: tasks.length,
-    taskId: tasks[0]?._id,
+    taskId: preferredTask?._id,
+    detail: drugName,
+    progress: { current: Math.min(currentDay, totalDays), total: totalDays },
+    activityTs: preferredTask?.updated_at || preferredTask?.created_at || 0,
   }]
 }
 
@@ -276,13 +294,36 @@ module.exports = {
     for (const cycle of cycles) {
       const damId = cycle.dam_id
       if (cycle.status === '发情中') {
-        breedingStatusMap[damId] = [{ type: '发情中', cycleId: cycle._id }]
+        const startTs = cycle.start_date || cycle.created_at || now
+        const day = Math.max(1, Math.floor((now - startTs) / 86400000) + 1)
+        breedingStatusMap[damId] = [{
+          type: '发情中',
+          cycleId: cycle._id,
+          activityTs: cycle.updated_at || cycle.created_at || 0,
+          meta: [{ icon: 'schedule', text: `第${day}天` }],
+        }]
       } else if (cycle.status === '怀孕中') {
-        breedingStatusMap[damId] = [{ type: '怀孕中', cycleId: cycle._id }]
+        const startTs = cycle.mated_at || cycle.updated_at || cycle.created_at || now
+        const daysPassed = Math.max(1, Math.floor((now - startTs) / 86400000))
+        breedingStatusMap[damId] = [{
+          type: '怀孕中',
+          cycleId: cycle._id,
+          progress: { current: Math.min(daysPassed, 63), total: 63 },
+          activityTs: cycle.updated_at || cycle.created_at || 0,
+        }]
       } else if (cycle.status === '已生产') {
-        const hasActiveLitter = activeLitters.some(l => l.dam_id === damId)
-        if (hasActiveLitter) {
-          breedingStatusMap[damId] = [{ type: '哺乳中', cycleId: cycle._id }]
+        const latestLitter = activeLitters
+          .filter(l => l.dam_id === damId)
+          .sort((a, b) => (b.birth_date || b.created_at || 0) - (a.birth_date || a.created_at || 0))[0]
+        if (latestLitter) {
+          const startTs = latestLitter.birth_date || latestLitter.created_at || now
+          const day = Math.max(1, Math.floor((now - startTs) / 86400000) + 1)
+          breedingStatusMap[damId] = [{
+            type: '哺乳中',
+            cycleId: cycle._id,
+            activityTs: latestLitter.updated_at || latestLitter.created_at || 0,
+            meta: [{ icon: 'schedule', text: `第${day}天` }],
+          }]
         }
       }
     }
@@ -309,7 +350,7 @@ module.exports = {
         const statuses = [
           ...(buildListIllnessStatuses(illnessMap[dog._id] || [])),
           ...((breedingStatusMap[dog._id]) || []),
-          ...(buildListMedicationStatus(medicationMap[dog._id] || [])),
+          ...(buildListMedicationStatus(medicationMap[dog._id] || [], now)),
         ]
         const sorted = sortListStatuses(statuses)
         return sorted.length > 0 ? sorted : [{ type: '正常' }]

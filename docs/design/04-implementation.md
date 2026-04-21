@@ -38,6 +38,8 @@
 - 创建家庭
 - 获取家庭信息
 - 更新家庭设置
+- 回收站聚合查询
+- 回收站恢复与永久删除路由
 - 依赖 `_before` 注入 `familyId`
 
 ### `dog-service`
@@ -136,6 +138,7 @@
 - `pages/home/index.vue`
 - `pages/dog/list.vue`
 - `pages/dog/detail.vue`
+- `pages/profile/recycle.vue`
 - `pages/record/breeding*.vue`
 - `pages/record/health*.vue`
 - `pages/health/medication*.vue`

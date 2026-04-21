@@ -1,25 +1,18 @@
 <!--
   犬只列表页 (D-1)
-  设计稿：docs/ui/pages-list.html
-  筛选 chips + 犬只卡片列表 + 状态标签 + FAB 添加
-  + D-5 高级筛选 Sheet
+  搜索优先 + 档案筛选 + 当前状态可见
 -->
 <template>
   <view class="dog-list">
-    <!-- 页面标题 -->
     <view class="dog-list__header">
-      <view class="dog-list__header-row">
-        <text class="dog-list__title">档案</text>
-        <view class="dog-list__header-actions">
-          <view class="dog-list__header-add" @click="goToAdd">
-            <text class="material-icons-round" style="font-size: 22px; color: var(--primary);">add</text>
-          </view>
-          <text class="dog-list__filter-icon material-icons-round" @click="showFilterSheet = true">filter_list</text>
+      <view class="dog-list__header-actions">
+        <view class="dog-list__header-add" @click="goToAdd">
+          <text class="material-icons-round" style="font-size: 22px; color: var(--primary);">add</text>
         </view>
+        <text class="dog-list__filter-icon material-icons-round" @click="showFilterSheet = true">filter_list</text>
       </view>
     </view>
 
-    <!-- 搜索栏 -->
     <view class="dog-list__search">
       <text class="dog-list__search-icon material-icons-round">search</text>
       <input
@@ -35,7 +28,6 @@
       >close</text>
     </view>
 
-    <!-- 筛选 chips -->
     <scroll-view scroll-x class="dog-list__filters">
       <view class="dog-list__filters-inner">
         <view
@@ -50,18 +42,23 @@
       </view>
     </scroll-view>
 
-    <!-- 已激活高级筛选提示 -->
-    <view v-if="hasAdvancedFilter" class="dog-list__filter-active">
-      <text class="dog-list__filter-active-text">已应用高级筛选</text>
-      <text class="dog-list__filter-active-clear" @click="resetAdvancedFilters">清除</text>
+    <view v-if="appliedFilterChips.length" class="dog-list__applied-filters">
+      <view
+        v-for="chip in appliedFilterChips"
+        :key="`${chip.group}-${chip.value}`"
+        class="dog-list__applied-chip"
+        @click="removeAppliedFilter(chip.group, chip.value)"
+      >
+        <text class="dog-list__applied-chip-text">{{ chip.label }}</text>
+        <text class="dog-list__applied-chip-icon material-icons-round">close</text>
+      </view>
+      <text class="dog-list__applied-clear" @click="resetAdvancedFilters">清空</text>
     </view>
 
-    <!-- 加载骨架屏 -->
     <view v-if="loading" class="dog-list__skeleton-wrap">
       <BSkeleton :rows="4" avatar />
     </view>
 
-    <!-- 犬只列表 -->
     <view v-else class="dog-list__content">
       <view
         v-for="dog in filteredDogs"
@@ -70,9 +67,7 @@
         :class="cardBarClass(dog)"
         @click="goToDetail(dog._id)"
       >
-        <!-- 渐变背景层（CSS ::before 处理） -->
         <view class="dog-list__card-row">
-          <!-- 左侧图标 -->
           <view
             class="dog-list__card-icon"
             :class="[cardIconBgClass(dog), cardRingClass(dog)]"
@@ -80,39 +75,35 @@
             <text class="dog-list__card-emoji">{{ dog.role === '幼崽' ? '🐶' : '🐩' }}</text>
           </view>
 
-          <!-- 中间信息 -->
-          <view class="dog-list__card-middle">
-            <text class="dog-list__card-name">{{ dog.name || '未命名' }}</text>
-            <text class="dog-list__card-sub">
-              {{ dog.breed || '马尔济斯' }}<text v-if="dog.birth_date"> · {{ formatAge(dog.birth_date) }}</text>
+          <view class="dog-list__card-main">
+            <view class="dog-list__card-top">
+              <text class="dog-list__card-name">{{ dog.name || '未命名' }}</text>
+              <view
+                v-if="shouldShowDispositionTag(dog)"
+                class="dog-list__disposition-tag"
+                :class="dispositionTagClass(dog)"
+              >
+                <text class="dog-list__disposition-tag-text">{{ dog.displayDisposition }}</text>
+              </view>
+            </view>
+            <text
+              class="dog-list__card-meta-line"
+            >
+              <text
+                v-if="dog.primaryStatusTitle"
+                class="dog-list__card-status-inline"
+                :class="primaryStatusTextClass(dog)"
+              >
+                {{ dog.primaryStatusTitle }}
+              </text>
+              <text v-if="dog.primaryStatusTitle" class="dog-list__card-meta-text"> · </text>
+              <text class="dog-list__card-meta-text">{{ dog.metaInfoText }}</text>
+              <text v-if="dog.secondaryStatusInlineText" class="dog-list__card-meta-text"> · {{ dog.secondaryStatusInlineText }}</text>
             </text>
           </view>
-
-          <!-- 右侧标签 -->
-          <view class="dog-list__card-right">
-            <BTag :label="dispositionLabel(dog)" :color="dispositionColor(dog)" />
-            <view class="dog-list__role-tag" :class="roleTagClass(dog)">
-              <text class="dog-list__role-tag-text">{{ roleLabel(dog) }}</text>
-            </view>
-          </view>
-        </view>
-
-        <!-- 底部状态标签 -->
-        <view v-if="visibleStatuses(dog).length" class="dog-list__status-labels">
-          <template v-for="(status, idx) in visibleStatuses(dog)" :key="`${status.type}-${status.label || status.type}-${idx}`">
-            <view v-if="status.overflow" class="dog-list__status-overflow">
-              <text class="dog-list__status-overflow-text">{{ status.label }}</text>
-            </view>
-            <BTag
-              v-else
-              :label="status.label || status.type"
-              :color="statusColor(status.type)"
-            />
-          </template>
         </view>
       </view>
 
-      <!-- 空状态 -->
       <BEmpty
         v-if="filteredDogs.length === 0"
         icon="pets"
@@ -123,13 +114,10 @@
       />
     </view>
 
-    <!-- 底部导航栏 -->
     <BNavBar current="dog" />
 
-    <!-- ==================== D-5: 高级筛选 Sheet ==================== -->
     <BSheet v-model:visible="showFilterSheet" title="筛选">
       <view class="filter-panel">
-        <!-- 性别 -->
         <view class="filter-section">
           <text class="filter-section__label">性别</text>
           <view class="filter-pills">
@@ -145,7 +133,6 @@
           </view>
         </view>
 
-        <!-- 角色 -->
         <view class="filter-section">
           <text class="filter-section__label">角色</text>
           <view class="filter-pills">
@@ -161,7 +148,6 @@
           </view>
         </view>
 
-        <!-- 去向 -->
         <view class="filter-section">
           <text class="filter-section__label">去向</text>
           <view class="filter-pills">
@@ -177,7 +163,6 @@
           </view>
         </view>
 
-        <!-- 状态 -->
         <view class="filter-section">
           <text class="filter-section__label">状态</text>
           <view class="filter-pills">
@@ -193,7 +178,6 @@
           </view>
         </view>
 
-        <!-- 按钮区 -->
         <view class="filter-actions">
           <view class="filter-actions__btn filter-actions__btn--primary" @click="applyAdvancedFilters">
             <text class="filter-actions__btn-text" style="color: #fff;">应用筛选</text>
@@ -208,35 +192,57 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import BTag from '@/components/base/BTag.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 import BNavBar from '@/components/layout/BNavBar.vue'
 import BSheet from '@/components/layout/BSheet.vue'
-import { useCloudCall } from '@/composables/useCloudCall'
-import type { DogWithStatus, DeriveStatusType } from '@/types/dog'
+import { useDogStore } from '@/stores/dogStore'
+import type { DeriveStatus, DeriveStatusType, DogDisposition, DogWithStatus } from '@/types/dog'
 import { getDogStatusTone } from '@/utils/themeSemantics'
 
-const MAX_STATUS_TAGS = 4
+type QuickFilterValue = 'all' | 'breeding' | 'puppy' | 'for-sale' | 'external'
+type FilterGroup = 'genders' | 'roles' | 'dispositions' | 'statuses'
+type TagColor = 'red' | 'amber' | 'green' | 'blue' | 'plum' | 'rose' | 'teal'
 
+interface AppliedFilterChip {
+  group: FilterGroup
+  value: string
+  label: string
+}
+
+interface DogListItem extends DogWithStatus {
+  activeStatuses: DeriveStatus[]
+  primaryStatus?: DeriveStatus
+  primaryStatusTitle: string
+  secondaryStatuses: DeriveStatus[]
+  secondaryOverflowCount: number
+  secondaryStatusInlineText: string
+  metaInfoText: string
+  displayDisposition: DogDisposition
+  hasHighlightedDisposition: boolean
+  sortBucket: number
+  statusPriority: number
+  isActiveStatusDog: boolean
+}
+
+const DEFAULT_DISPOSITION: DogDisposition = '在养'
+const MAX_SECONDARY_STATUS_TAGS = 2
 const dogs = ref<DogWithStatus[]>([])
 const loading = ref(true)
-const activeFilter = ref('all')
+const activeFilter = ref<QuickFilterValue>('all')
 const showFilterSheet = ref(false)
-
-import { useDogStore } from '@/stores/dogStore'
+const searchKeyword = ref('')
 const dogStore = useDogStore()
 
-const filterOptions = [
+const filterOptions: Array<{ label: string; value: QuickFilterValue }> = [
   { label: '全部', value: 'all' },
   { label: '种狗', value: 'breeding' },
   { label: '幼崽', value: 'puppy' },
+  { label: '待售', value: 'for-sale' },
   { label: '外部种公', value: 'external' },
 ]
-
-// ==================== D-5: 高级筛选 ====================
 
 const genderOptions = [
   { label: '公', value: '公' },
@@ -251,9 +257,10 @@ const roleOptions = [
 
 const dispositionOptions = [
   { label: '在养', value: '在养' },
+  { label: '自留', value: '自留' },
   { label: '待售', value: '待售' },
   { label: '已预定', value: '已预定' },
-  { label: '已成交', value: '已成交' },
+  { label: '已售', value: '已售' },
   { label: '已退休', value: '已退休' },
   { label: '已领养', value: '已领养' },
   { label: '已赠送', value: '已赠送' },
@@ -268,7 +275,13 @@ const statusOptions = [
   { label: '用药中', value: '用药中' },
 ]
 
-// 高级筛选状态
+const filterLabelMap: Record<FilterGroup, Record<string, string>> = {
+  genders: Object.fromEntries(genderOptions.map(opt => [opt.value, opt.label])),
+  roles: Object.fromEntries(roleOptions.map(opt => [opt.value, opt.label])),
+  dispositions: Object.fromEntries(dispositionOptions.map(opt => [opt.value, opt.label])),
+  statuses: Object.fromEntries(statusOptions.map(opt => [opt.value, opt.label])),
+}
+
 const advFilters = reactive({
   genders: [] as string[],
   roles: [] as string[],
@@ -276,7 +289,6 @@ const advFilters = reactive({
   statuses: [] as string[],
 })
 
-// 已应用的高级筛选（仅在点击"应用筛选"后生效）
 const appliedFilters = reactive({
   genders: [] as string[],
   roles: [] as string[],
@@ -284,27 +296,222 @@ const appliedFilters = reactive({
   statuses: [] as string[],
 })
 
-const hasAdvancedFilter = computed(() => {
-  return appliedFilters.genders.length > 0
-    || appliedFilters.roles.length > 0
-    || appliedFilters.dispositions.length > 0
-    || appliedFilters.statuses.length > 0
-})
+const STATUS_PRIORITY_MAP: Record<string, number> = {
+  生病中: 1,
+  用药中: 2,
+  怀孕中: 3,
+  哺乳中: 4,
+  发情中: 5,
+  正常: 99,
+}
 
-function toggleFilter(group: 'genders' | 'roles' | 'dispositions' | 'statuses', value: string) {
-  const idx = advFilters[group].indexOf(value)
-  if (idx >= 0) {
-    advFilters[group].splice(idx, 1)
-  } else {
-    advFilters[group].push(value)
+function splitStatusDetail(detail?: string | null) {
+  const raw = `${detail || ''}`.trim()
+  if (!raw) return { primary: '', secondary: '' }
+
+  const dotParts = raw.split('·').map(part => part.trim()).filter(Boolean)
+  if (dotParts.length > 1) {
+    return {
+      primary: dotParts[0],
+      secondary: dotParts.slice(1).join(' · '),
+    }
+  }
+
+  const spaceParts = raw.split(/\s+/).filter(Boolean)
+  if (spaceParts.length > 1) {
+    return {
+      primary: spaceParts[0],
+      secondary: spaceParts.slice(1).join(' '),
+    }
+  }
+
+  return { primary: raw, secondary: '' }
+}
+
+function getStatusPriority(type?: string) {
+  return STATUS_PRIORITY_MAP[type || '正常'] || STATUS_PRIORITY_MAP.正常
+}
+
+function normalizeDisposition(dog: DogWithStatus): DogDisposition {
+  return (dog.disposition || DEFAULT_DISPOSITION) as DogDisposition
+}
+
+function isWeakDisposition(disposition: DogDisposition) {
+  return disposition === '在养' || disposition === '自留'
+}
+
+function isInactiveDisposition(disposition: DogDisposition) {
+  return ['已售', '已领养', '已赠送', '已退休', '已故'].includes(disposition)
+}
+
+function compareString(a?: string | null, b?: string | null) {
+  return `${a || ''}`.localeCompare(`${b || ''}`, 'zh-Hans-CN')
+}
+
+function sortStatuses(statuses: DeriveStatus[]) {
+  return [...statuses]
+    .filter(status => status.type !== '正常')
+    .sort((a, b) => {
+      const priorityDiff = getStatusPriority(a.type) - getStatusPriority(b.type)
+      if (priorityDiff !== 0) return priorityDiff
+
+      const activityDiff = (b.activityTs || 0) - (a.activityTs || 0)
+      if (activityDiff !== 0) return activityDiff
+
+      return compareString(a.label || a.type, b.label || b.type)
+    })
+}
+
+function getStatusDayText(status: DeriveStatus) {
+  if (status.progress?.current) return `第${status.progress.current}天`
+  const dayMeta = (status.meta || []).find(item => /^第\d+天$/.test(item.text))
+  return dayMeta?.text || ''
+}
+
+function statusTitle(status: DeriveStatus): string {
+  if (status.type === '怀孕中' && status.progress) return `${status.type} · 第${status.progress.current}天`
+  if (status.type === '发情中') {
+    const dayText = getStatusDayText(status)
+    return dayText ? `${status.type} · ${dayText}` : status.type
+  }
+  if (status.type === '哺乳中') {
+    const dayText = getStatusDayText(status)
+    return dayText ? `${status.type} · ${dayText}` : status.type
+  }
+  if (status.type === '用药中') {
+    const med = splitStatusDetail(status.detail).primary || status.label || status.type
+    return status.progress ? `${med} · 第${status.progress.current}天` : med
+  }
+  if (status.type === '生病中') {
+    const dayMeta = (status.meta || []).find(item => item.text.startsWith('第'))
+    const illnessName = status.label || status.type
+    if (dayMeta?.text) return `${illnessName} · ${dayMeta.text}`
+    return illnessName
+  }
+  return status.label || status.type
+}
+
+function secondaryStatusLabel(status: DeriveStatus) {
+  if (status.type === '生病中') return '生病中'
+  if (status.type === '用药中') return '用药中'
+  return status.type
+}
+
+function buildMetaInfoText(dog: DogWithStatus) {
+  const parts = [dog.breed || '马尔济斯']
+  if (dog.birth_date) parts.push(formatAge(dog.birth_date))
+  parts.push(roleLabel(dog))
+  return parts.join(' · ')
+}
+
+function buildSecondaryStatusInlineText(activeStatuses: DeriveStatus[]) {
+  const secondaryCount = Math.max(0, activeStatuses.length - 1)
+  if (secondaryCount === 0) return ''
+  if (secondaryCount === 1) return secondaryStatusLabel(activeStatuses[1])
+  return `+${secondaryCount}`
+}
+
+function buildDogListItem(dog: DogWithStatus): DogListItem {
+  const activeStatuses = sortStatuses(dog.statuses || [])
+  const primaryStatus = activeStatuses[0]
+  const secondaryStatuses = activeStatuses.slice(1, 1 + MAX_SECONDARY_STATUS_TAGS)
+  const secondaryOverflowCount = Math.max(0, activeStatuses.length - 1 - MAX_SECONDARY_STATUS_TAGS)
+  const displayDisposition = normalizeDisposition(dog)
+  const hasHighlightedDisposition = !isWeakDisposition(displayDisposition)
+  const sortBucket = isInactiveDisposition(displayDisposition)
+    ? 4
+    : dog.role === '种狗'
+      ? 1
+      : dog.role === '幼崽'
+        ? 2
+        : 3
+
+  return {
+    ...dog,
+    activeStatuses,
+    primaryStatus,
+    primaryStatusTitle: primaryStatus ? statusTitle(primaryStatus) : '',
+    secondaryStatuses,
+    secondaryOverflowCount,
+    secondaryStatusInlineText: buildSecondaryStatusInlineText(activeStatuses),
+    metaInfoText: buildMetaInfoText(dog),
+    displayDisposition,
+    hasHighlightedDisposition,
+    sortBucket,
+    statusPriority: primaryStatus ? getStatusPriority(primaryStatus.type) : STATUS_PRIORITY_MAP.正常,
+    isActiveStatusDog: activeStatuses.length > 0,
   }
 }
 
-function applyAdvancedFilters() {
+const appliedFilterChips = computed<AppliedFilterChip[]>(() => {
+  const chips: AppliedFilterChip[] = []
+  ;(Object.keys(appliedFilters) as FilterGroup[]).forEach(group => {
+    appliedFilters[group].forEach(value => {
+      chips.push({
+        group,
+        value,
+        label: filterLabelMap[group][value] || value,
+      })
+    })
+  })
+  return chips
+})
+
+const filteredDogs = computed<DogListItem[]>(() => {
+  let result = dogs.value.map(buildDogListItem)
+
+  if (searchKeyword.value.trim()) {
+    const kw = searchKeyword.value.trim().toLowerCase()
+    result = result.filter(dog => `${dog.name || ''}`.toLowerCase().includes(kw))
+  }
+
+  if (activeFilter.value === 'breeding') result = result.filter(dog => dog.role === '种狗')
+  else if (activeFilter.value === 'puppy') result = result.filter(dog => dog.role === '幼崽')
+  else if (activeFilter.value === 'for-sale') result = result.filter(dog => dog.displayDisposition === '待售')
+  else if (activeFilter.value === 'external') result = result.filter(dog => dog.role === '外部种公')
+
+  if (appliedFilters.genders.length > 0) {
+    result = result.filter(dog => appliedFilters.genders.includes(dog.gender))
+  }
+  if (appliedFilters.roles.length > 0) {
+    result = result.filter(dog => appliedFilters.roles.includes(dog.role))
+  }
+  if (appliedFilters.dispositions.length > 0) {
+    result = result.filter(dog => appliedFilters.dispositions.includes(dog.displayDisposition))
+  }
+  if (appliedFilters.statuses.length > 0) {
+    result = result.filter(dog => dog.activeStatuses.some(status => appliedFilters.statuses.includes(status.type)))
+  }
+
+  return result.sort((a, b) => {
+    const bucketDiff = a.sortBucket - b.sortBucket
+    if (bucketDiff !== 0) return bucketDiff
+
+    const activeDiff = Number(b.isActiveStatusDog) - Number(a.isActiveStatusDog)
+    if (activeDiff !== 0) return activeDiff
+
+    const statusDiff = a.statusPriority - b.statusPriority
+    if (statusDiff !== 0) return statusDiff
+
+    return compareString(a.name, b.name)
+  })
+})
+
+function toggleFilter(group: FilterGroup, value: string) {
+  const idx = advFilters[group].indexOf(value)
+  if (idx >= 0) advFilters[group].splice(idx, 1)
+  else advFilters[group].push(value)
+}
+
+function syncAppliedFiltersFromDraft() {
   appliedFilters.genders = [...advFilters.genders]
   appliedFilters.roles = [...advFilters.roles]
   appliedFilters.dispositions = [...advFilters.dispositions]
   appliedFilters.statuses = [...advFilters.statuses]
+}
+
+function applyAdvancedFilters() {
+  syncAppliedFiltersFromDraft()
   showFilterSheet.value = false
 }
 
@@ -313,129 +520,85 @@ function resetAdvancedFilters() {
   advFilters.roles = []
   advFilters.dispositions = []
   advFilters.statuses = []
-  appliedFilters.genders = []
-  appliedFilters.roles = []
-  appliedFilters.dispositions = []
-  appliedFilters.statuses = []
+  syncAppliedFiltersFromDraft()
   showFilterSheet.value = false
 }
 
-const filteredDogs = computed(() => {
-  let result = dogs.value
-
-  // 搜索过滤
-  if (searchKeyword.value.trim()) {
-    const kw = searchKeyword.value.trim().toLowerCase()
-    result = result.filter(d => d.name?.toLowerCase().includes(kw))
-  }
-
-  // 快捷筛选
-  if (activeFilter.value === 'breeding') result = result.filter(d => d.role === '种狗')
-  else if (activeFilter.value === 'puppy') result = result.filter(d => d.role === '幼崽')
-  else if (activeFilter.value === 'external') result = result.filter(d => d.role === '外部种公')
-
-  // 高级筛选
-  if (appliedFilters.genders.length > 0) {
-    result = result.filter(d => appliedFilters.genders.includes(d.gender))
-  }
-  if (appliedFilters.roles.length > 0) {
-    result = result.filter(d => appliedFilters.roles.includes(d.role))
-  }
-  if (appliedFilters.dispositions.length > 0) {
-    result = result.filter(d => appliedFilters.dispositions.includes(d.disposition || '在养'))
-  }
-  if (appliedFilters.statuses.length > 0) {
-    result = result.filter(d =>
-      d.statuses?.some(s => appliedFilters.statuses.includes(s.type))
-    )
-  }
-
-  return result
-})
-
-/** 状态类型 → 功能色映射 */
-function statusColor(type: DeriveStatusType): 'red' | 'amber' | 'green' | 'rose' | 'plum' | 'teal' {
-  const tone = getDogStatusTone(type)
-  return tone.color === 'blue' ? 'green' : tone.color
+function removeAppliedFilter(group: FilterGroup, value: string) {
+  advFilters[group] = advFilters[group].filter(item => item !== value)
+  appliedFilters[group] = appliedFilters[group].filter(item => item !== value)
 }
 
-function isIllnessStatus(type: DeriveStatusType): boolean {
+function statusColor(type: DeriveStatusType): TagColor {
+  return getDogStatusTone(type).color
+}
+
+function isIllnessStatus(type: DeriveStatusType) {
   return getDogStatusTone(type).variant === 'illness'
 }
 
-/** 卡片左侧色条 class */
-function cardBarClass(dog: DogWithStatus) {
-  if (dog.statuses?.length) {
-    const mainStatus = dog.statuses[0].type
-    if (isIllnessStatus(mainStatus)) return 'dog-list__card--bar-illness'
-    return `dog-list__card--bar-${statusColor(mainStatus)}`
+function cardBarClass(dog: DogListItem) {
+  if (dog.primaryStatus) {
+    if (isIllnessStatus(dog.primaryStatus.type)) return 'dog-list__card--bar-illness'
+    return `dog-list__card--bar-${statusColor(dog.primaryStatus.type)}`
   }
   if (dog.role === '外部种公') return 'dog-list__card--bar-blue'
   if (dog.role === '幼崽') return 'dog-list__card--bar-amber'
   return 'dog-list__card--bar-green'
 }
 
-/** 图标背景色 class */
-function cardIconBgClass(dog: DogWithStatus) {
-  if (dog.statuses?.length) {
-    const mainStatus = dog.statuses[0].type
-    if (isIllnessStatus(mainStatus)) return 'dog-list__card-icon--illness'
-    return `dog-list__card-icon--${statusColor(mainStatus)}`
+function cardIconBgClass(dog: DogListItem) {
+  if (dog.primaryStatus) {
+    if (isIllnessStatus(dog.primaryStatus.type)) return 'dog-list__card-icon--illness'
+    return `dog-list__card-icon--${statusColor(dog.primaryStatus.type)}`
   }
   if (dog.role === '外部种公') return 'dog-list__card-icon--blue'
   if (dog.role === '幼崽') return 'dog-list__card-icon--amber'
   return 'dog-list__card-icon--green'
 }
 
-/** 图标状态环 class */
-function cardRingClass(dog: DogWithStatus) {
-  if (dog.statuses?.length) {
-    const mainStatus = dog.statuses[0].type
-    if (isIllnessStatus(mainStatus)) return 'dog-list__card-icon--ring-illness'
-    return `dog-list__card-icon--ring-${statusColor(mainStatus)}`
+function cardRingClass(dog: DogListItem) {
+  if (dog.primaryStatus) {
+    if (isIllnessStatus(dog.primaryStatus.type)) return 'dog-list__card-icon--ring-illness'
+    return `dog-list__card-icon--ring-${statusColor(dog.primaryStatus.type)}`
   }
   if (dog.role === '外部种公') return 'dog-list__card-icon--ring-blue'
   if (dog.role === '幼崽') return 'dog-list__card-icon--ring-amber'
   return 'dog-list__card-icon--ring-green'
 }
 
-/** 去向标签文字 */
-function dispositionLabel(dog: DogWithStatus) {
-  if (dog.disposition === '待售') return '待售'
-  return '在养'
+function primaryStatusTextClass(dog: DogListItem) {
+  if (!dog.primaryStatus) return ''
+  if (isIllnessStatus(dog.primaryStatus.type)) return 'dog-list__card-status-inline--illness'
+  return `dog-list__card-status-inline--${statusColor(dog.primaryStatus.type)}`
 }
 
-/** 去向标签颜色 */
-function dispositionColor(dog: DogWithStatus): 'green' | 'amber' | 'blue' | 'rose' {
-  if (dog.disposition === '待售') return 'amber'
-  if (dog.role === '外部种公') return 'blue'
-  return 'green'
+function shouldShowDispositionTag(dog: DogListItem) {
+  return dog.hasHighlightedDisposition
 }
 
-/** 角色标签文字 */
+function dispositionTagClass(dog: DogListItem) {
+  if (!dog.hasHighlightedDisposition) return 'dog-list__disposition-tag--muted'
+
+  const map: Record<DogDisposition, string> = {
+    在养: 'dog-list__disposition-tag--muted',
+    自留: 'dog-list__disposition-tag--muted',
+    待售: 'dog-list__disposition-tag--amber',
+    已预定: 'dog-list__disposition-tag--blue',
+    已售: 'dog-list__disposition-tag--teal',
+    已领养: 'dog-list__disposition-tag--blue',
+    已赠送: 'dog-list__disposition-tag--plum',
+    已退休: 'dog-list__disposition-tag--rose',
+    已故: 'dog-list__disposition-tag--red',
+  }
+
+  return map[dog.displayDisposition]
+}
+
 function roleLabel(dog: DogWithStatus) {
   if (dog.role === '外部种公') return '外部种公'
   if (dog.role === '幼崽') return '幼崽'
   return '种狗'
-}
-
-/** 角色标签样式 class */
-function roleTagClass(dog: DogWithStatus) {
-  if (dog.role === '种狗') return 'dog-list__role-tag--primary'
-  return 'dog-list__role-tag--gray'
-}
-
-function visibleStatuses(dog: DogWithStatus) {
-  const statuses = (dog.statuses || []).filter(status => status.type !== '正常')
-  if (statuses.length <= MAX_STATUS_TAGS) return statuses
-
-  const visible = statuses.slice(0, MAX_STATUS_TAGS - 1)
-  visible.push({
-    type: '正常',
-    label: `+${statuses.length - (MAX_STATUS_TAGS - 1)}`,
-    overflow: true,
-  })
-  return visible
 }
 
 function formatAge(birthTs: number) {
@@ -456,15 +619,10 @@ function goToAdd() {
   uni.navigateTo({ url: '/pages/dog/add' })
 }
 
-
-const searchKeyword = ref('')
-
 async function loadDogs() {
-  // 有缓存：瞬间显示
   if (dogStore.list.length > 0) {
     dogs.value = dogStore.list
     loading.value = false
-    // 后台刷新
     dogStore.fetchFromServer().then(() => {
       dogs.value = dogStore.list
     })
@@ -488,27 +646,18 @@ onShow(() => {
   padding-bottom: 100px;
 }
 
-/* ==================== 页面标题 ==================== */
 .dog-list__header {
-  padding: 12px var(--space-page) 0;
-}
-.dog-list__header-row {
+  padding: 8px var(--space-page) 0;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  justify-content: flex-end;
 }
-.dog-list__title {
-  font-family: var(--font-display);
-  font-size: 24px;
-  font-weight: 800;
-  color: var(--text-1);
-  line-height: 1.3;
-}
+
 .dog-list__header-actions {
   display: flex;
   align-items: center;
   gap: 4px;
 }
+
 .dog-list__header-add {
   width: 36px;
   height: 36px;
@@ -519,6 +668,7 @@ onShow(() => {
   transition: background 0.12s ease;
   &:active { background: var(--primary-soft); }
 }
+
 .dog-list__filter-icon {
   font-family: 'Material Icons Round';
   font-size: 24px;
@@ -526,9 +676,8 @@ onShow(() => {
   padding: 6px;
 }
 
-/* ==================== 搜索栏 ==================== */
 .dog-list__search {
-  margin: 12px 16px 0;
+  margin: 8px 16px 0;
   height: 44px;
   display: flex;
   align-items: center;
@@ -538,15 +687,13 @@ onShow(() => {
   padding: 0 16px;
   box-shadow: var(--shadow);
 }
+
 .dog-list__search-icon {
   font-family: 'Material Icons Round';
   font-size: 20px;
   color: var(--text-3);
 }
-.dog-list__search-placeholder {
-  font-size: 14px;
-  color: var(--text-3);
-}
+
 .dog-list__search-input {
   flex: 1;
   height: 44px;
@@ -558,21 +705,23 @@ onShow(() => {
   outline: none;
   font-family: var(--font-body);
 }
+
 .dog-list__search-clear {
   font-size: 18px;
   color: var(--text-3);
   padding: 4px;
 }
 
-/* ==================== 筛选 chips ==================== */
 .dog-list__filters {
   white-space: nowrap;
 }
+
 .dog-list__filters-inner {
   display: flex;
   gap: 8px;
-  padding: 14px 16px 0;
+  padding: 10px 16px 0;
 }
+
 .dog-list__chip {
   font-size: 13px;
   font-weight: 600;
@@ -585,86 +734,98 @@ onShow(() => {
   transition: transform 0.12s ease;
   &:active { transform: scale(0.94); }
 }
+
 .dog-list__chip--active {
   background: var(--primary);
   border-color: var(--primary);
-  .dog-list__chip-text { color: #FFFFFF; }
+  .dog-list__chip-text { color: #fff; }
 }
+
 .dog-list__chip-text {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-2);
 }
-.dog-list__chip--active .dog-list__chip-text {
-  color: #FFFFFF;
-}
 
-/* ==================== 高级筛选已激活提示 ==================== */
-.dog-list__filter-active {
+.dog-list__applied-filters {
+  margin: 8px 16px 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  margin: 10px 16px 0;
-  padding: 8px 12px;
-  background: var(--primary-soft);
-  border-radius: var(--radius-date);
-}
-.dog-list__filter-active-text {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--primary);
-}
-.dog-list__filter-active-clear {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--primary);
-  text-decoration: underline;
+  gap: 8px;
 }
 
-/* ==================== 骨架屏容器 ==================== */
+.dog-list__applied-clear {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.dog-list__applied-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dog-list__applied-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: var(--radius-tag);
+  background: var(--primary-soft);
+  &:active { opacity: 0.8; }
+}
+
+.dog-list__applied-chip-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.dog-list__applied-chip-icon {
+  font-family: 'Material Icons Round';
+  font-size: 14px;
+  color: var(--primary);
+}
+
 .dog-list__skeleton-wrap {
   padding: 14px 16px 0;
 }
 
-/* ==================== 列表内容区 ==================== */
 .dog-list__content {
   padding: 0 16px;
   display: flex;
   flex-direction: column;
-  gap: var(--space-card-gap);
-  margin-top: 14px;
+  gap: 10px;
+  margin-top: 10px;
 }
 
-/* ==================== 犬只卡片 ==================== */
 .dog-list__card {
   background: var(--card);
   border-radius: var(--radius-card);
-  padding: var(--space-card);
-  padding-left: var(--space-card-left);
+  padding: 10px 12px;
+  padding-left: 13px;
   position: relative;
-  box-shadow: var(--shadow);
+  box-shadow: 0 4px 14px rgba(45, 27, 20, 0.05);
   overflow: hidden;
-  border-left: 3.5px solid transparent;
+  border-left: 3px solid transparent;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
   cursor: pointer;
   &:active {
     transform: scale(0.975);
-    box-shadow: 0 1px 4px rgba(45, 27, 20, 0.08);
+    box-shadow: 0 2px 8px rgba(45, 27, 20, 0.06);
   }
 }
 
-/* 渐变背景层 */
 .dog-list__card::before {
   content: '';
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 100%;
+  inset: 0;
   pointer-events: none;
+  opacity: 0.66;
 }
 
-/* 卡片左色条颜色 */
 .dog-list__card--bar-red { border-left-color: var(--red); }
 .dog-list__card--bar-illness { border-left-color: rgba(224, 82, 82, 0.72); }
 .dog-list__card--bar-rose { border-left-color: var(--rose); }
@@ -674,45 +835,41 @@ onShow(() => {
 .dog-list__card--bar-teal { border-left-color: var(--teal); }
 .dog-list__card--bar-amber { border-left-color: var(--amber); }
 
-/* 渐变背景 */
-.dog-list__card--bar-red::before { background: linear-gradient(135deg, var(--red-soft) 0%, transparent 40%); }
-.dog-list__card--bar-illness::before { background: linear-gradient(135deg, rgba(255, 241, 239, 0.96) 0%, transparent 42%); }
-.dog-list__card--bar-rose::before { background: linear-gradient(135deg, var(--rose-soft) 0%, transparent 40%); }
-.dog-list__card--bar-green::before { background: linear-gradient(135deg, var(--green-soft) 0%, transparent 40%); }
-.dog-list__card--bar-blue::before { background: linear-gradient(135deg, var(--blue-soft) 0%, transparent 40%); }
-.dog-list__card--bar-plum::before { background: linear-gradient(135deg, var(--plum-soft) 0%, transparent 40%); }
-.dog-list__card--bar-teal::before { background: linear-gradient(135deg, var(--teal-soft) 0%, transparent 40%); }
-.dog-list__card--bar-amber::before { background: linear-gradient(135deg, var(--amber-soft) 0%, transparent 40%); }
+.dog-list__card--bar-red::before { background: linear-gradient(135deg, rgba(255, 241, 239, 0.84) 0%, transparent 38%); }
+.dog-list__card--bar-illness::before { background: linear-gradient(135deg, rgba(255, 241, 239, 0.8) 0%, transparent 38%); }
+.dog-list__card--bar-rose::before { background: linear-gradient(135deg, rgba(255, 243, 247, 0.82) 0%, transparent 38%); }
+.dog-list__card--bar-green::before { background: linear-gradient(135deg, rgba(241, 251, 246, 0.8) 0%, transparent 38%); }
+.dog-list__card--bar-blue::before { background: linear-gradient(135deg, rgba(241, 247, 255, 0.82) 0%, transparent 38%); }
+.dog-list__card--bar-plum::before { background: linear-gradient(135deg, rgba(247, 243, 252, 0.82) 0%, transparent 38%); }
+.dog-list__card--bar-teal::before { background: linear-gradient(135deg, rgba(240, 251, 249, 0.82) 0%, transparent 38%); }
+.dog-list__card--bar-amber::before { background: linear-gradient(135deg, rgba(255, 247, 236, 0.82) 0%, transparent 38%); }
 
-/* 确保内容在渐变层之上 */
 .dog-list__card > * {
   position: relative;
   z-index: 1;
 }
 
-/* 卡片行布局 */
 .dog-list__card-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
-/* 左侧图标 */
 .dog-list__card-icon {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-radius: var(--radius-icon);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  border: 2.5px solid transparent;
-}
-.dog-list__card-emoji {
-  font-size: 18px;
+  border: 2px solid transparent;
 }
 
-/* 图标背景色 */
+.dog-list__card-emoji {
+  font-size: 16px;
+}
+
 .dog-list__card-icon--red { background: var(--icon-red); }
 .dog-list__card-icon--illness { background: rgba(255, 217, 212, 0.78); }
 .dog-list__card-icon--rose { background: var(--icon-rose); }
@@ -722,7 +879,6 @@ onShow(() => {
 .dog-list__card-icon--teal { background: var(--icon-teal); }
 .dog-list__card-icon--amber { background: var(--icon-amber); }
 
-/* 图标状态环 */
 .dog-list__card-icon--ring-red { border-color: var(--red); }
 .dog-list__card-icon--ring-illness { border-color: rgba(224, 82, 82, 0.68); }
 .dog-list__card-icon--ring-rose { border-color: var(--rose); }
@@ -732,13 +888,21 @@ onShow(() => {
 .dog-list__card-icon--ring-teal { border-color: var(--teal); }
 .dog-list__card-icon--ring-amber { border-color: var(--amber); }
 
-/* 中间信息 */
-.dog-list__card-middle {
+.dog-list__card-main {
   flex: 1;
   min-width: 0;
 }
+
+.dog-list__card-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
 .dog-list__card-name {
-  display: block;
+  flex: 1;
+  min-width: 0;
   font-size: 15px;
   font-weight: 700;
   color: var(--text-1);
@@ -747,73 +911,88 @@ onShow(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.dog-list__card-sub {
+
+.dog-list__card-meta-line {
   display: block;
   font-size: 12px;
+  line-height: 1.35;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dog-list__card-status-inline {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dog-list__card-meta-text {
+  font-size: 12px;
   color: var(--text-2);
-  margin-top: 1px;
 }
 
-/* 右侧标签列 */
-.dog-list__card-right {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-/* 角色小标签 */
-.dog-list__role-tag {
+.dog-list__disposition-tag {
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
+  flex-shrink: 0;
+  padding: 3px 8px;
   border-radius: var(--radius-tag);
 }
-.dog-list__role-tag-text {
+
+.dog-list__disposition-tag-text {
   font-size: 10px;
   font-weight: 600;
   line-height: 1.2;
 }
-.dog-list__role-tag--primary {
-  background: var(--primary-soft);
-  .dog-list__role-tag-text { color: var(--primary); }
-}
-.dog-list__role-tag--gray {
-  background: var(--card-dim);
-  .dog-list__role-tag-text { color: var(--text-3); }
+
+.dog-list__disposition-tag--amber {
+  background: var(--amber-soft);
+  .dog-list__disposition-tag-text { color: var(--amber); }
 }
 
-/* 底部状态标签 */
-.dog-list__status-labels {
-  display: flex;
-  gap: var(--space-tag-gap);
-  margin-top: 8px;
-  flex-wrap: wrap;
-}
-.dog-list__status-overflow {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: var(--card-dim);
-}
-.dog-list__status-overflow-text {
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1;
-  color: var(--text-3);
+.dog-list__disposition-tag--blue {
+  background: var(--blue-soft);
+  .dog-list__disposition-tag-text { color: var(--blue); }
 }
 
+.dog-list__disposition-tag--teal {
+  background: var(--teal-soft);
+  .dog-list__disposition-tag-text { color: var(--teal); }
+}
 
-/* ==================== D-5: 筛选面板样式 ==================== */
+.dog-list__disposition-tag--plum {
+  background: var(--plum-soft);
+  .dog-list__disposition-tag-text { color: var(--plum); }
+}
+
+.dog-list__disposition-tag--rose {
+  background: var(--rose-soft);
+  .dog-list__disposition-tag-text { color: var(--rose); }
+}
+
+.dog-list__disposition-tag--red {
+  background: var(--red-soft);
+  .dog-list__disposition-tag-text { color: var(--red); }
+}
+
+.dog-list__card-status-inline--red { color: var(--red); }
+.dog-list__card-status-inline--illness { color: rgba(201, 70, 70, 1); }
+.dog-list__card-status-inline--rose { color: var(--rose); }
+.dog-list__card-status-inline--green { color: var(--green); }
+.dog-list__card-status-inline--blue { color: var(--blue); }
+.dog-list__card-status-inline--plum { color: var(--plum); }
+.dog-list__card-status-inline--teal { color: var(--teal); }
+.dog-list__card-status-inline--amber { color: var(--amber); }
+
 .filter-panel {
   padding-bottom: 16px;
 }
+
 .filter-section {
   margin-bottom: 16px;
 }
+
 .filter-section__label {
   display: block;
   font-size: 12px;
@@ -821,11 +1000,13 @@ onShow(() => {
   color: var(--text-3);
   margin-bottom: 8px;
 }
+
 .filter-pills {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
+
 .filter-pill {
   padding: 6px 14px;
   border-radius: var(--radius-tag);
@@ -837,22 +1018,26 @@ onShow(() => {
   transition: all 0.12s ease;
   &:active { transform: scale(0.94); }
 }
+
 .filter-pill--active {
   background: var(--primary-soft);
   color: var(--primary);
   border-color: var(--primary);
   .filter-pill__text { color: var(--primary); }
 }
+
 .filter-pill__text {
   font-size: 12px;
   font-weight: 600;
 }
+
 .filter-actions {
   display: flex;
   flex-direction: column;
   gap: 10px;
   margin-top: 8px;
 }
+
 .filter-actions__btn {
   height: 44px;
   display: flex;
@@ -862,13 +1047,16 @@ onShow(() => {
   transition: transform 0.12s ease, opacity 0.12s ease;
   &:active { transform: scale(0.94); opacity: 0.85; }
 }
+
 .filter-actions__btn--primary {
   background: var(--primary);
 }
+
 .filter-actions__btn--ghost {
   background: transparent;
   border: 1.5px solid var(--text-4);
 }
+
 .filter-actions__btn-text {
   font-size: 15px;
   font-weight: 600;

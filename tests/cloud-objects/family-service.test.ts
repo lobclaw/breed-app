@@ -12,6 +12,7 @@ import {
 // 模拟 uniCloud 全局对象
 const mockUniCloud = createMockUniCloud()
 ;(globalThis as any).uniCloud = mockUniCloud
+const familyService = require('../../uniCloud-alipay/cloudfunctions/family-service/index.obj.js')
 
 // auth 工具函数 —— 直接实现（云对象的 require('common/auth') 路径在 node 中不可用）
 function requireAdmin(role: string) {
@@ -32,6 +33,8 @@ function requireFamily(familyId: string | null) {
 
 describe('family-service', () => {
   const db = mockUniCloud.database()
+  const familyId = 'fam_1'
+  const DAY_MS = 86400000
 
   beforeEach(() => {
     resetDB()
@@ -229,6 +232,195 @@ describe('family-service', () => {
 
     it('requireFamily 应拒绝无家庭用户', () => {
       expect(() => requireFamily(null)).toThrow('请先创建或加入家庭')
+    })
+  })
+
+  describe('getDeletedItems', () => {
+    it('应返回混合回收站项目并按删除时间倒序排序', async () => {
+      const now = 1710000000000
+      const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(now)
+
+      seedCollection('dogs', [{
+        _id: 'dog_1',
+        family_id: familyId,
+        name: '奶盖',
+        breed: '马尔济斯',
+        role: '种狗',
+        disposition: '在养',
+        deleted_at: now - (3 * DAY_MS),
+      }])
+
+      seedCollection('expenses', [{
+        _id: 'expense_1',
+        family_id: familyId,
+        category: '医疗',
+        amount: 200,
+        deleted_at: now - DAY_MS,
+      }])
+
+      seedCollection('incomes', [{
+        _id: 'income_1',
+        family_id: familyId,
+        type: '销售',
+        amount: 8000,
+        deleted_at: now - (2 * DAY_MS),
+      }])
+
+      seedCollection('agents', [{
+        _id: 'agent_1',
+        family_id: familyId,
+        name: '王阿姨',
+        contact_info: '13800001111',
+        deleted_at: now - (4 * DAY_MS),
+      }])
+
+      seedCollection('medication_protocols', [{
+        _id: 'protocol_1',
+        family_id: familyId,
+        name: '黄体酮保胎',
+        drug_name: '黄体酮',
+        duration_days: 7,
+        deleted_at: now - (5 * DAY_MS),
+      }])
+
+      const ctx = createCloudObjectContext({ familyId })
+      const result = await familyService.getDeletedItems.call(ctx)
+
+      expect(result.data.map((item: any) => item.type)).toEqual([
+        'expense',
+        'income',
+        'dog',
+        'agent',
+        'medication_protocol',
+      ])
+
+      expect(result.data[0]).toMatchObject({
+        _id: 'expense_1',
+        type: 'expense',
+        type_label: '支出',
+        name: '医疗',
+        summary: '医疗 · ¥200',
+        deleted_at: now - DAY_MS,
+        days_remaining: 29,
+      })
+
+      expect(result.data[1]).toMatchObject({
+        type: 'income',
+        type_label: '收入',
+        summary: '销售 · ¥8,000',
+        days_remaining: 28,
+      })
+
+      expect(result.data[2]).toMatchObject({
+        type: 'dog',
+        type_label: '犬只',
+        name: '奶盖',
+        summary: '马尔济斯 · 种狗 · 在养',
+        days_remaining: 27,
+      })
+
+      expect(result.data[3]).toMatchObject({
+        type: 'agent',
+        type_label: '代理人',
+        name: '王阿姨',
+        summary: '13800001111',
+        days_remaining: 26,
+      })
+
+      expect(result.data[4]).toMatchObject({
+        type: 'medication_protocol',
+        type_label: '用药方案',
+        name: '黄体酮保胎',
+        summary: '黄体酮 · 7天疗程',
+        days_remaining: 25,
+      })
+
+      nowSpy.mockRestore()
+    })
+
+    it('回收站为空时应返回空数组', async () => {
+      const ctx = createCloudObjectContext({ familyId })
+      const result = await familyService.getDeletedItems.call(ctx)
+      expect(result.data).toEqual([])
+    })
+  })
+
+  describe('restoreItem', () => {
+    it('应支持恢复所有已纳入回收站的类型', async () => {
+      seedCollection('dogs', [{ _id: 'dog_1', family_id: familyId, deleted_at: 1000, updated_at: 1000 }])
+      seedCollection('expenses', [{ _id: 'expense_1', family_id: familyId, deleted_at: 1000, updated_at: 1000 }])
+      seedCollection('incomes', [{ _id: 'income_1', family_id: familyId, deleted_at: 1000, updated_at: 1000 }])
+      seedCollection('agents', [{ _id: 'agent_1', family_id: familyId, deleted_at: 1000, updated_at: 1000 }])
+      seedCollection('medication_protocols', [{ _id: 'protocol_1', family_id: familyId, deleted_at: 1000, updated_at: 1000 }])
+
+      const ctx = createCloudObjectContext({ familyId, role: 'creator' })
+      const cases = [
+        { collection: 'dogs', id: 'dog_1', type: 'dog' },
+        { collection: 'expenses', id: 'expense_1', type: 'expense' },
+        { collection: 'incomes', id: 'income_1', type: 'income' },
+        { collection: 'agents', id: 'agent_1', type: 'agent' },
+        { collection: 'medication_protocols', id: 'protocol_1', type: 'medication_protocol' },
+      ]
+
+      for (const item of cases) {
+        await familyService.restoreItem.call(ctx, { id: item.id, type: item.type })
+        const { data } = await db.collection(item.collection).doc(item.id).get()
+        expect(data[0].deleted_at).toBeNull()
+      }
+    })
+
+    it('非法类型、不存在项目或跨家庭项目时应报错', async () => {
+      seedCollection('dogs', [{ _id: 'dog_1', family_id: 'other_family', deleted_at: 1000, updated_at: 1000 }])
+
+      const ctx = createCloudObjectContext({ familyId, role: 'creator' })
+
+      await expect(familyService.restoreItem.call(ctx, { id: 'dog_1', type: 'sale' }))
+        .rejects.toThrow('不支持的回收站类型')
+      await expect(familyService.restoreItem.call(ctx, { id: 'missing', type: 'dog' }))
+        .rejects.toThrow('回收站项目不存在')
+      await expect(familyService.restoreItem.call(ctx, { id: 'dog_1', type: 'dog' }))
+        .rejects.toThrow('回收站项目不存在')
+    })
+  })
+
+  describe('permanentDeleteItem', () => {
+    it('应支持永久删除所有已纳入回收站的类型', async () => {
+      seedCollection('dogs', [{ _id: 'dog_1', family_id: familyId, deleted_at: 1000 }])
+      seedCollection('expenses', [{ _id: 'expense_1', family_id: familyId, deleted_at: 1000 }])
+      seedCollection('incomes', [{ _id: 'income_1', family_id: familyId, deleted_at: 1000 }])
+      seedCollection('agents', [{ _id: 'agent_1', family_id: familyId, deleted_at: 1000 }])
+      seedCollection('medication_protocols', [{ _id: 'protocol_1', family_id: familyId, deleted_at: 1000 }])
+
+      const ctx = createCloudObjectContext({ familyId, role: 'creator' })
+      const cases = [
+        { collection: 'dogs', id: 'dog_1', type: 'dog' },
+        { collection: 'expenses', id: 'expense_1', type: 'expense' },
+        { collection: 'incomes', id: 'income_1', type: 'income' },
+        { collection: 'agents', id: 'agent_1', type: 'agent' },
+        { collection: 'medication_protocols', id: 'protocol_1', type: 'medication_protocol' },
+      ]
+
+      for (const item of cases) {
+        await familyService.permanentDeleteItem.call(ctx, { id: item.id, type: item.type })
+        const { data } = await db.collection(item.collection).doc(item.id).get()
+        expect(data).toHaveLength(0)
+      }
+    })
+
+    it('未软删项目、非法类型或跨家庭项目时应报错', async () => {
+      seedCollection('dogs', [
+        { _id: 'dog_1', family_id: familyId, deleted_at: null },
+        { _id: 'dog_2', family_id: 'other_family', deleted_at: 1000 },
+      ])
+
+      const ctx = createCloudObjectContext({ familyId, role: 'creator' })
+
+      await expect(familyService.permanentDeleteItem.call(ctx, { id: 'dog_1', type: 'dog' }))
+        .rejects.toThrow('回收站项目不存在')
+      await expect(familyService.permanentDeleteItem.call(ctx, { id: 'dog_2', type: 'dog' }))
+        .rejects.toThrow('回收站项目不存在')
+      await expect(familyService.permanentDeleteItem.call(ctx, { id: 'dog_1', type: 'sale' }))
+        .rejects.toThrow('不支持的回收站类型')
     })
   })
 })

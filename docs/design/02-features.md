@@ -188,6 +188,15 @@ V1 保持三级角色：
 - `income-add.vue` 视为弃用
 - 从首页进入繁育流程时必须带 `dogId + dogName + cycleId + taskId + locked=true`
 
+### 6.3 回收站
+
+- 回收站是“软删除对象恢复中心”，不是业务历史列表
+- 当前纳入：`dogs`、`expenses`、`incomes`、`agents`、`medication_protocols`
+- 当前不纳入：`sale_records`，因为其删除/恢复还会联动自动收入与犬只去向
+- 回收站按混合列表展示，按删除时间倒序排序
+- 每项可执行 `恢复` 或 `永久删除`
+- 统一保留 30 天，倒计时按 `deleted_at` 与当前时间实时计算
+
 ## 7. 关键业务细则
 
 ### 7.1 健康提醒

@@ -1063,6 +1063,69 @@ describe('breeding-service', () => {
   })
 
   describe('周期详情', () => {
+    it('获取周期历史时会补齐 cycle_number 且保持倒序返回', async () => {
+      const now = Date.now()
+      seedCollection('breeding_cycles', [
+        {
+          _id: 'cycle_first',
+          dam_id: 'dam_1',
+          dam_name: '花花',
+          family_id: familyId,
+          status: '已生产',
+          start_date: now - 30 * 86400000,
+          created_at: now - 31 * 86400000,
+          updated_at: now - 30 * 86400000,
+        },
+        {
+          _id: 'cycle_second',
+          dam_id: 'dam_1',
+          dam_name: '花花',
+          family_id: familyId,
+          status: '怀孕中',
+          start_date: now - 10 * 86400000,
+          created_at: now - 11 * 86400000,
+          updated_at: now - 10 * 86400000,
+        },
+      ])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      const history = await breedingService.getCycleHistory.call(ctx, 'dam_1')
+
+      expect(history.data.map(item => item._id)).toEqual(['cycle_second', 'cycle_first'])
+      expect(history.data[0].cycle_number).toBe(2)
+      expect(history.data[1].cycle_number).toBe(1)
+    })
+
+    it('获取周期历史时缺少 start_date 也能稳定计算 cycle_number', async () => {
+      const now = Date.now()
+      seedCollection('breeding_cycles', [
+        {
+          _id: 'cycle_created_first',
+          dam_id: 'dam_1',
+          dam_name: '花花',
+          family_id: familyId,
+          status: '已生产',
+          created_at: now - 20 * 86400000,
+          updated_at: now - 20 * 86400000,
+        },
+        {
+          _id: 'cycle_created_second',
+          dam_id: 'dam_1',
+          dam_name: '花花',
+          family_id: familyId,
+          status: '发情中',
+          created_at: now - 10 * 86400000,
+          updated_at: now - 10 * 86400000,
+        },
+      ])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      const history = await breedingService.getCycleHistory.call(ctx, 'dam_1')
+
+      expect(history.data[0].cycle_number).toBe(2)
+      expect(history.data[1].cycle_number).toBe(1)
+    })
+
     it('获取周期详情时会返回同母犬历史序号与关联周期支出', async () => {
       const now = Date.now()
       seedCollection('breeding_cycles', [

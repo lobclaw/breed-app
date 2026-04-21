@@ -25,6 +25,8 @@ export interface BreedingCycle extends BaseDocument {
   sire_id?: string
   sire_name?: string          // 冗余
   status: CycleStatus
+  start_date?: number
+  mated_at?: number
   // cycle_number 动态计算，不存储
   cycle_number?: number
 }

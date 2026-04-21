@@ -277,35 +277,69 @@
           <!-- 当前进行中周期（突出显示） -->
           <view v-if="activeCycle" class="breeding-active-cycle" @click="goToCycle(activeCycle._id)">
             <view class="breeding-active-cycle__header">
-              <view class="breeding-active-cycle__dot" />
-              <text class="breeding-active-cycle__label">进行中</text>
-              <text class="material-icons-round breeding-active-cycle__chevron">chevron_right</text>
-            </view>
-            <text class="breeding-active-cycle__title">{{ activeCycle.title || '当前繁育周期' }}</text>
-            <text class="breeding-active-cycle__sub">开始于 {{ formatDate(activeCycle.created_at) }}<text v-if="activeCycle.sire_name"> · 种公: {{ activeCycle.sire_name }}</text></text>
-            <!-- 里程碑节点 -->
-            <view class="breeding-milestones">
-              <template v-for="(node, ni) in cycleNodes(activeCycle)" :key="ni">
-                <view
-                  class="breeding-milestone"
-                  :class="node.active ? 'breeding-milestone--active' : node.done ? 'breeding-milestone--done' : 'breeding-milestone--pending'"
-                >
-                  <view class="breeding-milestone__dot" />
-                  <text class="breeding-milestone__label">{{ node.key }}</text>
-                </view>
-                <view
-                  v-if="ni < 3"
-                  class="breeding-milestone-line"
-                  :class="node.done && cycleNodes(activeCycle)[ni + 1]?.done ? 'breeding-milestone-line--done' : ''"
-                />
-              </template>
-            </view>
-            <!-- 孕期进度 -->
-            <view v-if="activeCycleProgress" class="breeding-active-cycle__progress-wrap">
-              <view class="breeding-active-cycle__progress-track">
-                <view class="breeding-active-cycle__progress-fill" :style="{ width: activeCycleProgress.pct + '%' }" />
+              <view class="breeding-active-cycle__eyebrow">
+                <view class="breeding-active-cycle__dot" />
+                <text class="breeding-active-cycle__label">进行中</text>
               </view>
-              <text class="breeding-active-cycle__progress-label">{{ activeCycleProgress.label }}</text>
+              <view class="dog-detail__rec-tag dog-detail__rec-tag--rose">
+                <text class="dog-detail__rec-tag-text">进行中</text>
+              </view>
+            </view>
+            <text class="breeding-active-cycle__title">{{ activeCycleSummary.title }}</text>
+            <text class="breeding-active-cycle__sub">{{ activeCycleSummary.subtitle }}</text>
+
+            <view v-if="activeCycleDetailLoading" class="breeding-active-cycle__loading">
+              <text class="breeding-active-cycle__loading-text">正在加载当前周期摘要...</text>
+            </view>
+
+            <view v-else-if="activeCycleSummary.timeline.length > 0" class="breeding-active-cycle__timeline">
+              <view
+                v-for="(item, idx) in activeCycleSummary.timeline"
+                :key="`${activeCycle._id}-${item.key}`"
+                class="breeding-active-cycle__timeline-item"
+                :class="`breeding-active-cycle__timeline-item--${item.kind}`"
+              >
+                <view class="breeding-active-cycle__timeline-rail">
+                  <view
+                    class="breeding-active-cycle__timeline-dot"
+                    :class="[
+                      `breeding-active-cycle__timeline-dot--${item.tone}`,
+                      `breeding-active-cycle__timeline-dot--${item.kind}`,
+                    ]"
+                  />
+                  <view
+                    v-if="idx < activeCycleSummary.timeline.length - 1"
+                    class="breeding-active-cycle__timeline-line"
+                  />
+                </view>
+                <view class="breeding-active-cycle__timeline-copy">
+                  <text
+                    class="breeding-active-cycle__timeline-title"
+                    :class="[
+                      item.kind === 'upcoming' ? 'breeding-active-cycle__timeline-title--gray' : '',
+                      item.kind === 'current' ? `breeding-active-cycle__timeline-title--${item.tone}` : '',
+                    ]"
+                  >
+                    {{ item.title }}
+                  </text>
+                  <text
+                    v-if="item.summary"
+                    class="breeding-active-cycle__timeline-sub"
+                    :class="item.kind === 'upcoming' ? 'breeding-active-cycle__timeline-sub--gray' : ''"
+                  >
+                    {{ item.summary }}
+                  </text>
+                </view>
+              </view>
+            </view>
+
+            <view v-else class="breeding-active-cycle__empty">
+              <text class="breeding-active-cycle__empty-text">当前周期已建立，等待录入关键繁育记录</text>
+            </view>
+
+            <view v-if="activeCycleSummary.stageSummary" class="breeding-active-cycle__footer">
+              <text class="breeding-active-cycle__footer-text">{{ activeCycleSummary.stageSummary }}</text>
+              <text class="material-icons-round breeding-active-cycle__chevron">chevron_right</text>
             </view>
           </view>
 
@@ -315,7 +349,7 @@
               <text class="dog-detail__sec-text">繁育历史</text>
             </view>
             <view
-              v-for="cycle in pastCycles"
+              v-for="cycle in historyCycleCards"
               :key="cycle._id"
               class="dog-detail__cycle-card"
               @click="goToCycle(cycle._id)"
@@ -324,8 +358,8 @@
                 <text class="material-icons-round">{{ cycle.status === '已生产' ? 'check_circle' : 'close' }}</text>
               </view>
               <view class="dog-detail__cycle-body">
-                <text class="dog-detail__cycle-title">{{ cycle.title || '繁育周期' }}</text>
-                <text class="dog-detail__cycle-sub">{{ formatDate(cycle.created_at) }}<text v-if="cycle.sire_name"> · 种公: {{ cycle.sire_name }}</text></text>
+                <text class="dog-detail__cycle-title">{{ cycle.summaryTitle }}</text>
+                <text class="dog-detail__cycle-sub">{{ cycle.summarySubtitle }}</text>
               </view>
               <view v-if="cycle.status" class="dog-detail__rec-tag" :class="cycle.status === '已生产' ? 'dog-detail__rec-tag--green' : 'dog-detail__rec-tag--gray'">
                 <text class="dog-detail__rec-tag-text">{{ cycle.status }}</text>
@@ -954,7 +988,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
@@ -972,6 +1006,8 @@ import { formatMedicationDosage } from '@/utils/medicationDisplay'
 import { getDogStatusTone, getHealthTypeTone } from '@/utils/themeSemantics'
 import type { AddRecordItem } from '@/utils/addRecordSheet'
 import { createAllAddRecordGroups } from '@/utils/addRecordSheet'
+import type { BreedingCycleDetailResponse } from '@/types/breeding'
+import { buildActiveCycleSummaryViewModel, buildHistoryCycleSummaryViewModel } from '@/utils/dogBreedingSummary'
 
 const dog = ref<Dog | null>(null)
 const statuses = ref<DeriveStatus[]>([])
@@ -984,10 +1020,13 @@ const showMore = ref(false)
 const showAddRecordSheet = ref(false)
 const infoExpanded = ref(false)
 const submitBannerMessage = ref('')
+const activeCycleSummaryDetail = ref<BreedingCycleDetailResponse | null>(null)
+const activeCycleSummaryCache = ref<Record<string, BreedingCycleDetailResponse>>({})
 let dogId = ''
 let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
 let hasLoadedOnce = false
 let latestLoadToken = 0
+let latestActiveCycleSummaryToken = 0
 
 const tabs = [
   { key: 'overview', label: '概览' },
@@ -1030,23 +1069,44 @@ const isInEstrus = computed(() => statuses.value.some((s: any) => s.type === '�
 const TERMINAL_CYCLE_STATUSES = ['已生产', '失败', '放弃']
 const activeCycle = computed(() => cycles.value.find((c: any) => !TERMINAL_CYCLE_STATUSES.includes(c.status)))
 const pastCycles = computed(() => cycles.value.filter((c: any) => TERMINAL_CYCLE_STATUSES.includes(c.status)))
+const activeCycleId = computed(() => activeCycle.value?._id || '')
 
 const vaccineRecords = computed(() => healthRecords.value.filter((r: any) => r.type === 'vaccination'))
 const dewormingRecords = computed(() => healthRecords.value.filter((r: any) => r.type === 'deworming'))
 const illnessRecords = computed(() => healthRecords.value.filter((r: any) => r.type === 'illness'))
 const latestIllnessRecord = computed(() => illnessRecords.value[0] || null)
-const activeCycleProgress = computed(() => {
-  const pregStatus = statuses.value.find((s: DeriveStatus) => s.type === '怀孕中')
-  if (!pregStatus?.progress) return null
-  const pct = Math.min(100, Math.round(pregStatus.progress.current / pregStatus.progress.total * 100))
-  return { pct, label: pregStatus.detail || `孕期第${pregStatus.progress.current}天` }
-})
 
 const litters = ref<any[]>([])
 const dogFinance = ref<any>(null)
+const litterByCycleId = computed(() => {
+  const map = new Map<string, any>()
+  for (const litter of litters.value) {
+    if (litter?.cycle_id) {
+      map.set(litter.cycle_id, litter)
+    }
+  }
+  return map
+})
+const activeCycleSummary = computed(() => buildActiveCycleSummaryViewModel(
+  activeCycleSummaryDetail.value?.cycle || activeCycle.value || null,
+  activeCycleSummaryDetail.value?.records || [],
+))
+const historyCycleCards = computed(() => {
+  return pastCycles.value.map((cycle: any) => {
+    const summary = buildHistoryCycleSummaryViewModel(cycle, litterByCycleId.value.get(cycle._id) || null)
+    return {
+      ...cycle,
+      summaryTitle: summary.title,
+      summarySubtitle: summary.subtitle,
+    }
+  })
+})
 
 const { run: fetchDetail } = useCloudCall<{ data: Dog }>('dog-service', 'getDogDetail')
 const { run: fetchCycles } = useCloudCall<{ data: any[] }>('breeding-service', 'getCycleHistory')
+const { loading: activeCycleDetailLoading, run: fetchCycleDetail } = useCloudCall<{ data: BreedingCycleDetailResponse }>('breeding-service', 'getCycleDetail', {
+  showError: false,
+})
 const { run: fetchHealth } = useCloudCall<{ data: any[] }>('health-service', 'getHealthHistory')
 const { run: fetchMedicationHistory } = useCloudCall<{ data: any[] }>('health-service', 'getMedicationHistory')
 const { run: fetchLitters } = useCloudCall<{ data: any[] }>('breeding-service', 'getLittersByDam')
@@ -1286,14 +1346,30 @@ function statusToneClass(type: string, prefix: 'hero' | 'row' | 'icon' | 'progre
   return `dog-detail__st-progress-fill--${tone}`
 }
 
-function cycleNodes(cycle: any) {
-  const st = cycle.status || ''
-  return [
-    { key: '发情', done: true, active: st === '发情中' },
-    { key: '配种', done: st !== '发情中', active: false },
-    { key: '确孕', done: ['怀孕中', '临产中', '已生产'].includes(st), active: st === '怀孕中' },
-    { key: '分娩', done: st === '已生产', active: st === '临产中' },
-  ]
+async function ensureActiveCycleSummary(force = false) {
+  const cycleId = activeCycleId.value
+  if (!cycleId) {
+    activeCycleSummaryDetail.value = null
+    return
+  }
+
+  if (!force && activeCycleSummaryCache.value[cycleId]) {
+    activeCycleSummaryDetail.value = activeCycleSummaryCache.value[cycleId]
+    return
+  }
+
+  const requestToken = ++latestActiveCycleSummaryToken
+  const result = await fetchCycleDetail(cycleId)
+  if (requestToken !== latestActiveCycleSummaryToken) return
+
+  const detail = result?.data || null
+  if (!detail) return
+
+  activeCycleSummaryCache.value = {
+    ...activeCycleSummaryCache.value,
+    [cycleId]: detail,
+  }
+  activeCycleSummaryDetail.value = detail
 }
 
 function formatAmount(amount: number) {
@@ -1789,7 +1865,15 @@ async function doDelete() {
 
 // ==================== 数据加载 ====================
 
-async function loadData({ silent = false, shouldCleanup = false }: { silent?: boolean; shouldCleanup?: boolean } = {}) {
+async function loadData({
+  silent = false,
+  shouldCleanup = false,
+  refreshBreedingSummary = false,
+}: {
+  silent?: boolean
+  shouldCleanup?: boolean
+  refreshBreedingSummary?: boolean
+} = {}) {
   const loadToken = ++latestLoadToken
   const showSkeleton = !silent && !hasLoadedOnce
 
@@ -1832,6 +1916,23 @@ async function loadData({ silent = false, shouldCleanup = false }: { silent?: bo
     if (financeRes?.data) {
       dogFinance.value = financeRes.data
     }
+
+    const nextActiveCycleId = (cyclesRes?.data || []).find((cycle: any) => !TERMINAL_CYCLE_STATUSES.includes(cycle.status))?._id || ''
+    if (!nextActiveCycleId) {
+      activeCycleSummaryDetail.value = null
+    } else if (refreshBreedingSummary) {
+      const nextCache = { ...activeCycleSummaryCache.value }
+      delete nextCache[nextActiveCycleId]
+      activeCycleSummaryCache.value = nextCache
+      activeCycleSummaryDetail.value = null
+    } else {
+      activeCycleSummaryDetail.value = activeCycleSummaryCache.value[nextActiveCycleId] || null
+    }
+
+    if (refreshBreedingSummary && activeTab.value === 'breeding' && nextActiveCycleId) {
+      await ensureActiveCycleSummary(true)
+    }
+
     hasLoadedOnce = true
   } finally {
     if (showSkeleton && loadToken === latestLoadToken) {
@@ -1839,6 +1940,21 @@ async function loadData({ silent = false, shouldCleanup = false }: { silent?: bo
     }
   }
 }
+
+watch([activeTab, activeCycleId], async ([tab, cycleId], [, previousCycleId]) => {
+  if (!cycleId) {
+    activeCycleSummaryDetail.value = null
+    return
+  }
+
+  if (cycleId !== previousCycleId) {
+    activeCycleSummaryDetail.value = activeCycleSummaryCache.value[cycleId] || null
+  }
+
+  if (tab === 'breeding') {
+    await ensureActiveCycleSummary()
+  }
+})
 
 onLoad((query) => {
   dogId = query?.id || ''
@@ -1855,7 +1971,11 @@ onShow(() => {
     showSubmitBanner(feedback.message)
   }
   if (feedback && dogId) {
-    loadData({ silent: true, shouldCleanup: true })
+    loadData({
+      silent: true,
+      shouldCleanup: true,
+      refreshBreedingSummary: activeTab.value === 'breeding',
+    })
   }
 })
 </script>
@@ -2446,7 +2566,16 @@ onShow(() => {
   &:active { opacity: 0.8; }
 }
 .breeding-active-cycle__header {
-  display: flex; align-items: center; gap: 6px; margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.breeding-active-cycle__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .breeding-active-cycle__dot {
   width: 8px; height: 8px; border-radius: 50%; background: var(--rose);
@@ -2456,14 +2585,161 @@ onShow(() => {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
 }
-.breeding-active-cycle__label { font-size: 11px; font-weight: 700; color: var(--rose); flex: 1; }
+.breeding-active-cycle__label { font-size: 11px; font-weight: 700; color: var(--rose); }
 .breeding-active-cycle__chevron { font-size: 16px; color: var(--text-4); }
-.breeding-active-cycle__title { display: block; font-size: 15px; font-weight: 700; color: var(--text-1); margin-bottom: 2px; }
-.breeding-active-cycle__sub { display: block; font-size: 12px; color: var(--text-2); }
-.breeding-active-cycle__status-badge {
-  display: inline-block; margin-top: 8px;
-  padding: 2px 10px; border-radius: 999px;
-  background: var(--rose-soft); font-size: 11px; font-weight: 700; color: var(--rose);
+.breeding-active-cycle__title {
+  display: block;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-1);
+  margin-bottom: 2px;
+}
+.breeding-active-cycle__sub {
+  display: block;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.breeding-active-cycle__loading {
+  padding: 14px 0 6px;
+}
+.breeding-active-cycle__loading-text,
+.breeding-active-cycle__empty-text,
+.breeding-active-cycle__footer-text {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.breeding-active-cycle__timeline {
+  margin-top: 12px;
+}
+.breeding-active-cycle__timeline-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+
+  & + & {
+    margin-top: 10px;
+  }
+
+  &--upcoming {
+    .breeding-active-cycle__timeline-line {
+      background: rgba(216, 203, 189, 0.34);
+    }
+  }
+
+  &--current {
+    .breeding-active-cycle__timeline-title {
+      font-size: 13px;
+    }
+  }
+}
+.breeding-active-cycle__timeline-rail {
+  width: 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: center;
+  align-self: stretch;
+  flex-shrink: 0;
+  padding-top: 3px;
+}
+.breeding-active-cycle__timeline-dot {
+  width: 10px;
+  height: 10px;
+  position: relative;
+  border-radius: 50%;
+  background: var(--text-4);
+  border: 2px solid transparent;
+
+  &--amber { background: var(--amber); }
+  &--teal { background: var(--teal); }
+  &--rose { background: var(--rose); }
+  &--green { background: var(--green); }
+  &--blue { background: var(--blue); }
+  &--gray { background: var(--text-4); }
+
+  &--upcoming {
+    border-color: rgba(216, 203, 189, 0.45);
+  }
+
+  &--current {
+    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.92);
+
+    &::after {
+      content: '';
+      position: absolute;
+      inset: -5px;
+      border-radius: 999px;
+      border: 2px solid currentColor;
+      opacity: 0.45;
+      animation: breeding-active-cycle-pulse 1.8s ease-out infinite;
+    }
+  }
+}
+.breeding-active-cycle__timeline-dot--amber.breeding-active-cycle__timeline-dot--current { color: rgba(239, 161, 54, 0.46); }
+.breeding-active-cycle__timeline-dot--teal.breeding-active-cycle__timeline-dot--current { color: rgba(67, 166, 161, 0.46); }
+.breeding-active-cycle__timeline-dot--rose.breeding-active-cycle__timeline-dot--current { color: rgba(255, 108, 148, 0.42); }
+.breeding-active-cycle__timeline-dot--green.breeding-active-cycle__timeline-dot--current { color: rgba(75, 168, 94, 0.4); }
+.breeding-active-cycle__timeline-dot--blue.breeding-active-cycle__timeline-dot--current { color: rgba(74, 134, 232, 0.4); }
+.breeding-active-cycle__timeline-dot--gray.breeding-active-cycle__timeline-dot--current { color: rgba(164, 148, 132, 0.36); }
+.breeding-active-cycle__timeline-line {
+  width: 2px;
+  flex: 1;
+  margin-top: 5px;
+  background: rgba(216, 203, 189, 0.42);
+  border-radius: 999px;
+}
+.breeding-active-cycle__timeline-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.breeding-active-cycle__timeline-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.breeding-active-cycle__timeline-title--rose { color: var(--rose); }
+.breeding-active-cycle__timeline-title--amber { color: var(--amber); }
+.breeding-active-cycle__timeline-title--gray { color: var(--text-3); }
+.breeding-active-cycle__timeline-sub {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+.breeding-active-cycle__timeline-sub--gray {
+  color: var(--text-4);
+}
+.breeding-active-cycle__empty {
+  padding-top: 12px;
+}
+.breeding-active-cycle__footer {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(216, 203, 189, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.breeding-active-cycle__footer-text {
+  flex: 1;
+}
+
+@keyframes breeding-active-cycle-pulse {
+  0% {
+    transform: scale(0.88);
+    opacity: 0.56;
+  }
+  70% {
+    transform: scale(1.28);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.28);
+    opacity: 0;
+  }
 }
 
 /* ==================== 可折叠详细信息 ==================== */
@@ -3190,85 +3466,6 @@ onShow(() => {
   font-size: 12px;
   font-weight: 500;
   color: var(--text-2);
-}
-
-/* ==================== C: 繁育里程碑 ==================== */
-.breeding-milestones {
-  display: flex;
-  align-items: flex-start;
-  margin-top: 12px;
-  margin-bottom: 2px;
-}
-.breeding-milestone {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-}
-.breeding-milestone__dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--text-4);
-  border: 2px solid var(--text-4);
-}
-.breeding-milestone__label {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--text-3);
-}
-.breeding-milestone--done .breeding-milestone__dot {
-  background: var(--rose);
-  border-color: var(--rose);
-}
-.breeding-milestone--done .breeding-milestone__label {
-  color: var(--rose);
-}
-.breeding-milestone--active .breeding-milestone__dot {
-  background: var(--rose);
-  border-color: var(--rose);
-  box-shadow: 0 0 0 3px var(--rose-soft);
-  animation: pulse 1.5s ease-in-out infinite;
-}
-.breeding-milestone--active .breeding-milestone__label {
-  color: var(--rose);
-  font-weight: 700;
-}
-.breeding-milestone-line {
-  flex: 1;
-  height: 2px;
-  background: var(--text-4);
-  margin-top: 4px;
-  margin-bottom: 18px;
-}
-.breeding-milestone-line--done {
-  background: var(--rose);
-}
-.breeding-active-cycle__progress-wrap {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 10px;
-}
-.breeding-active-cycle__progress-track {
-  flex: 1;
-  height: 5px;
-  background: rgba(216, 203, 189, 0.25);
-  border-radius: 3px;
-  overflow: hidden;
-}
-.breeding-active-cycle__progress-fill {
-  height: 100%;
-  background: var(--rose);
-  border-radius: 3px;
-  transition: width 0.4s ease;
-}
-.breeding-active-cycle__progress-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-3);
-  flex-shrink: 0;
 }
 
 /* ==================== D: 产仔记录 ==================== */
