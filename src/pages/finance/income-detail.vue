@@ -86,6 +86,15 @@
       title="记录不存在"
       description="可能已被删除"
     />
+
+    <BModal
+      v-model:visible="showDeleteConfirm"
+      title="确认删除"
+      content="删除后不可恢复，确定要删除这条收入记录吗？"
+      confirmText="删除"
+      :danger="true"
+      @confirm="handleDeleteConfirm"
+    />
   </view>
 </template>
 
@@ -101,10 +110,12 @@ import BTag from '@/components/base/BTag.vue'
 import BButton from '@/components/base/BButton.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
+import BModal from '@/components/layout/BModal.vue'
 
 const record = ref<any>(null)
 const loading = ref(true)
 const submitBannerMessage = ref('')
+const showDeleteConfirm = ref(false)
 let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
 let hasLoadedOnce = false
 
@@ -154,21 +165,16 @@ function goToSale() {
 }
 
 function confirmDelete() {
-  uni.showModal({
-    title: '确认删除',
-    content: '删除后不可恢复，确定要删除这条收入记录吗？',
-    confirmColor: '#e05252',
-    async success(res) {
-      if (res.confirm) {
-        const result = await deleteRecord(recordId)
-        if (result) {
-          queueSubmitFeedback({ message: '已删除收入记录' })
-          await wait(140)
-          uni.navigateBack()
-        }
-      }
-    },
-  })
+  showDeleteConfirm.value = true
+}
+
+async function handleDeleteConfirm() {
+  const result = await deleteRecord(recordId)
+  if (result) {
+    queueSubmitFeedback({ message: '已删除收入记录' })
+    await wait(140)
+    uni.navigateBack()
+  }
 }
 
 function showSubmitBanner(message: string) {

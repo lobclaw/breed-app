@@ -444,6 +444,25 @@ async function computeLitterNumber(familyId, damId, birthDate) {
   return total + 1
 }
 
+function getCycleSortTimestamp(cycle = {}) {
+  return cycle.start_date || cycle.created_at || 0
+}
+
+function attachCycleNumbers(cycles = []) {
+  return [...cycles]
+    .sort((a, b) => {
+      const startDiff = getCycleSortTimestamp(a) - getCycleSortTimestamp(b)
+      if (startDiff !== 0) return startDiff
+      const createdDiff = (a.created_at || 0) - (b.created_at || 0)
+      if (createdDiff !== 0) return createdDiff
+      return `${a._id || ''}`.localeCompare(`${b._id || ''}`)
+    })
+    .map((cycle, index) => ({
+      ...cycle,
+      cycle_number: index + 1,
+    }))
+}
+
 /**
  * 为窝列表批量计算窝号
  * 输入已按 birth_date 排序的窝列表，按 dam_id 分组计算
@@ -682,18 +701,28 @@ module.exports = {
       .get()
     if (!cycles || cycles.length === 0) throw new Error('周期不存在')
 
-    const cycle = cycles[0]
+    const currentCycle = cycles[0]
+    const [cycleHistoryRes, recordRes, litterRes, expenseRes] = await Promise.all([
+      db.collection('breeding_cycles')
+        .where({ dam_id: currentCycle.dam_id, family_id: this.familyId })
+        .get(),
+      db.collection('breeding_records')
+        .where({ cycle_id: cycleId, family_id: this.familyId })
+        .orderBy('date', 'asc')
+        .get(),
+      db.collection('litters')
+        .where({ cycle_id: cycleId, family_id: this.familyId })
+        .get(),
+      db.collection('expenses')
+        .where({ linked_cycle_id: cycleId, family_id: this.familyId, deleted_at: null })
+        .orderBy('date', 'desc')
+        .get(),
+    ])
 
-    // 获取子记录（按日期排序）
-    const { data: records } = await db.collection('breeding_records')
-      .where({ cycle_id: cycleId, family_id: this.familyId })
-      .orderBy('date', 'asc')
-      .get()
-
-    // 获取关联的窝
-    const { data: litters } = await db.collection('litters')
-      .where({ cycle_id: cycleId })
-      .get()
+    const cycle = attachCycleNumbers(cycleHistoryRes?.data || []).find(item => item._id === cycleId) || currentCycle
+    const records = recordRes?.data || []
+    const litters = litterRes?.data || []
+    const expenses = expenseRes?.data || []
 
     // 动态计算窝号
     const litter = litters.length > 0 ? litters[0] : null
@@ -706,6 +735,7 @@ module.exports = {
         cycle,
         records,
         litter,
+        expenses,
       }
     }
   },
@@ -1185,6 +1215,18 @@ module.exports = {
     if (!records || records.length === 0) throw new Error('记录不存在')
 
     const record = records[0]
+
+    // 兼容未冗余 dog_name 的记录，详情页与编辑页统一按 dog_id 回填犬名
+    if (!record.dog_name && record.dog_id) {
+      const { data: dogs } = await db.collection('dogs')
+        .where({ _id: record.dog_id, family_id: this.familyId, deleted_at: null })
+        .field({ name: true })
+        .get()
+      if (dogs && dogs.length > 0) {
+        record.dog_name = dogs[0].name || ''
+      }
+    }
+
     const { data: extraTasks } = await db.collection('tasks')
       .where({
         family_id: this.familyId,

@@ -42,6 +42,15 @@
       title="回收站为空"
       description="被删除的犬只和记录会在这里保留30天"
     />
+
+    <BModal
+      v-model:visible="showConfirmModal"
+      :title="confirmTitle"
+      :content="confirmContent"
+      :confirmText="confirmText"
+      :danger="confirmDanger"
+      @confirm="handleConfirm"
+    />
   </view>
 </template>
 
@@ -50,6 +59,7 @@ import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
+import BModal from '@/components/layout/BModal.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 
@@ -63,6 +73,12 @@ interface DeletedItem {
 
 const deletedItems = ref<DeletedItem[]>([])
 const loading = ref(true)
+const showConfirmModal = ref(false)
+const confirmTitle = ref('')
+const confirmContent = ref('')
+const confirmText = ref('确定')
+const confirmDanger = ref(false)
+let confirmAction: (() => Promise<void>) | null = null
 
 const { run: fetchDeleted } = useCloudCall<{ data: DeletedItem[] }>('family-service', 'getDeletedItems')
 const { run: doRestore } = useCloudCall('family-service', 'restoreItem', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
@@ -87,30 +103,33 @@ async function load() {
 }
 
 async function restoreItem(item: DeletedItem) {
-  uni.showModal({
-    title: '确认恢复',
-    content: `恢复「${item.name}」？`,
-    success: async (res) => {
-      if (res.confirm) {
-        await doRestore({ id: item._id, type: item.type })
-        load()
-      }
-    },
-  })
+  confirmTitle.value = '确认恢复'
+  confirmContent.value = `恢复「${item.name}」？`
+  confirmText.value = '恢复'
+  confirmDanger.value = false
+  confirmAction = async () => {
+    await doRestore({ id: item._id, type: item.type })
+    await load()
+  }
+  showConfirmModal.value = true
 }
 
 async function permanentDelete(item: DeletedItem) {
-  uni.showModal({
-    title: '永久删除',
-    content: `「${item.name}」将被永久删除，无法恢复`,
-    confirmColor: '#e05252',
-    success: async (res) => {
-      if (res.confirm) {
-        await doDelete({ id: item._id, type: item.type })
-        load()
-      }
-    },
-  })
+  confirmTitle.value = '永久删除'
+  confirmContent.value = `「${item.name}」将被永久删除，无法恢复`
+  confirmText.value = '永久删除'
+  confirmDanger.value = true
+  confirmAction = async () => {
+    await doDelete({ id: item._id, type: item.type })
+    await load()
+  }
+  showConfirmModal.value = true
+}
+
+async function handleConfirm() {
+  if (confirmAction) {
+    await confirmAction()
+  }
 }
 
 onShow(() => load())

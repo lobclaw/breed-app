@@ -299,4 +299,82 @@ describe('dog-service', () => {
     expect(medicationStatuses).toHaveLength(3)
     expect(medicationStatuses.map((item: any) => item.taskId)).toEqual(['med_5', 'med_4', 'med_3'])
   })
+
+  it('犬只列表只应在存在当前有效疗程时显示用药中，且不显示任务数量', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+    seedCollection('medication_tasks', [
+      {
+        _id: 'med_expired',
+        dog_id: 'dog_1',
+        dog_name: '肉肉',
+        family_id: familyId,
+        drug_name: '旧疗程',
+        duration_days: 3,
+        actual_start_date: new Date('2026-04-10T09:00:00+08:00').getTime(),
+        status: '进行中',
+        created_at: new Date('2026-04-10T09:00:00+08:00').getTime(),
+        updated_at: new Date('2026-04-10T09:00:00+08:00').getTime(),
+      },
+      {
+        _id: 'med_active_a',
+        dog_id: 'dog_1',
+        dog_name: '肉肉',
+        family_id: familyId,
+        drug_name: '药2',
+        duration_days: 5,
+        actual_start_date: new Date('2026-04-18T09:00:00+08:00').getTime(),
+        status: '进行中',
+        created_at: new Date('2026-04-18T09:00:00+08:00').getTime(),
+        updated_at: new Date('2026-04-18T09:00:00+08:00').getTime(),
+      },
+      {
+        _id: 'med_active_b',
+        dog_id: 'dog_1',
+        dog_name: '肉肉',
+        family_id: familyId,
+        drug_name: '药3',
+        duration_days: 7,
+        actual_start_date: new Date('2026-04-19T09:00:00+08:00').getTime(),
+        status: '进行中',
+        created_at: new Date('2026-04-19T09:00:00+08:00').getTime(),
+        updated_at: new Date('2026-04-19T09:00:00+08:00').getTime(),
+      },
+    ])
+
+    const result = await dogService.getDogListWithStatus.call(ctx)
+    const dog = result.data.find((item: any) => item._id === 'dog_1')
+    const medicationStatus = (dog.statuses || []).find((item: any) => item.type === '用药中')
+
+    expect(medicationStatus).toMatchObject({
+      type: '用药中',
+      label: '用药中',
+      count: 2,
+    })
+  })
+
+  it('犬只列表不应因超疗程未收口的旧任务而继续显示用药中', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+    seedCollection('medication_tasks', [
+      {
+        _id: 'med_expired_only',
+        dog_id: 'dog_1',
+        dog_name: '肉肉',
+        family_id: familyId,
+        drug_name: '旧疗程',
+        duration_days: 3,
+        actual_start_date: new Date('2026-04-10T09:00:00+08:00').getTime(),
+        status: '进行中',
+        created_at: new Date('2026-04-10T09:00:00+08:00').getTime(),
+        updated_at: new Date('2026-04-10T09:00:00+08:00').getTime(),
+      },
+    ])
+
+    const result = await dogService.getDogListWithStatus.call(ctx)
+    const dog = result.data.find((item: any) => item._id === 'dog_1')
+    const medicationStatus = (dog.statuses || []).find((item: any) => item.type === '用药中')
+
+    expect(medicationStatus).toBeUndefined()
+  })
 })

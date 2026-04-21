@@ -142,6 +142,8 @@ const props = withDefaults(defineProps<{
   modelValue?: Dog | Dog[] | null
   /** Sheet 可见性（v-model:visible），仅 sheet-only 模式 */
   visible?: boolean
+  /** sheet-only 模式下的已选 ID */
+  selectedIds?: string[]
   /** 是否多选 */
   multiple?: boolean
   /** 角色过滤 */
@@ -157,6 +159,7 @@ const props = withDefaults(defineProps<{
 }>(), {
   modelValue: undefined,
   visible: undefined,
+  selectedIds: () => [],
   multiple: false,
   roleFilter: '',
   genderFilter: '',
@@ -255,11 +258,19 @@ dogStore.ensure()
 
 watch(() => sheetVisible.value, (val) => {
   if (val) {
-    selectedIds.value = []
+    selectedIds.value = !hasModelValue.value && props.multiple
+      ? [...(props.selectedIds || [])]
+      : []
     searchKeyword.value = ''
     loadDogs()
   }
 })
+
+watch(() => props.selectedIds, (val) => {
+  if (!hasModelValue.value && props.multiple) {
+    selectedIds.value = [...(val || [])]
+  }
+}, { deep: true })
 
 async function loadDogs() {
   if (dogStore.loaded) {

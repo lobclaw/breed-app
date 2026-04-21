@@ -243,6 +243,16 @@
         <text class="med-prompt__text">可以为生病的犬只创建连续用药任务</text>
       </view>
     </BModal>
+
+    <BModal
+      v-model:visible="showDuplicateIllnessModal"
+      title="已有进行中的疾病"
+      :content="duplicateIllnessContent"
+      confirmText="去编辑"
+      cancelText="知道了"
+      @confirm="handleDuplicateIllnessConfirm"
+      @cancel="handleDuplicateIllnessClose"
+    />
   </view>
 </template>
 
@@ -396,6 +406,10 @@ const customCondition = ref('')
 const showDeleteConfirm = ref(false)
 const pendingDeleteVal = ref('')
 let confirmDeleteFn: (() => Promise<void>) | null = null
+const showDuplicateIllnessModal = ref(false)
+const duplicateIllnessContent = ref('')
+const duplicateIllnessRecordId = ref('')
+const duplicateIllnessUseRedirect = ref(false)
 
 const showCustomModal = ref(false)
 const customModalKind = ref<CustomModalKind>('')
@@ -764,23 +778,11 @@ async function handleDuplicateIllnessIfNeeded() {
   if (duplicates.length === 1 && dogIds.length === 1) {
     const duplicate = duplicates[0]
     await new Promise<void>((resolve) => {
-      uni.showModal({
-        title: '已有进行中的疾病',
-        content: `${isEdit.value ? currentRecord.value?.dog_name : selectedDogs.value[0]?.name || '该犬'} 已有未康复的「${condition}」记录，去编辑原记录吗？`,
-        confirmText: '去编辑',
-        cancelText: '知道了',
-        success: (modalRes) => {
-          if (modalRes.confirm && duplicate.recordId) {
-            if (isEdit.value) {
-              uni.redirectTo({ url: `/pages/record/health-edit?id=${duplicate.recordId}` })
-            } else {
-              uni.navigateTo({ url: `/pages/record/health-edit?id=${duplicate.recordId}` })
-            }
-          }
-          resolve()
-        },
-        fail: () => resolve(),
-      })
+      duplicateIllnessContent.value = `${isEdit.value ? currentRecord.value?.dog_name : selectedDogs.value[0]?.name || '该犬'} 已有未康复的「${condition}」记录，去编辑原记录吗？`
+      duplicateIllnessRecordId.value = duplicate.recordId || ''
+      duplicateIllnessUseRedirect.value = isEdit.value
+      showDuplicateIllnessModal.value = true
+      duplicateIllnessResolve = resolve
     })
   } else {
     const nameMap = new Map(selectedDogs.value.map((dog: any) => [dog._id, dog.name]))
@@ -795,6 +797,26 @@ async function handleDuplicateIllnessIfNeeded() {
   }
 
   return true
+}
+
+let duplicateIllnessResolve: (() => void) | null = null
+
+function handleDuplicateIllnessClose() {
+  if (duplicateIllnessResolve) {
+    duplicateIllnessResolve()
+    duplicateIllnessResolve = null
+  }
+}
+
+function handleDuplicateIllnessConfirm() {
+  if (duplicateIllnessRecordId.value) {
+    if (duplicateIllnessUseRedirect.value) {
+      uni.redirectTo({ url: `/pages/record/health-edit?id=${duplicateIllnessRecordId.value}` })
+    } else {
+      uni.navigateTo({ url: `/pages/record/health-edit?id=${duplicateIllnessRecordId.value}` })
+    }
+  }
+  handleDuplicateIllnessClose()
 }
 
 async function submitCreateRecord() {

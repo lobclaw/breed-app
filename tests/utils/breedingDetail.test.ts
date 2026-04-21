@@ -1,0 +1,29 @@
+import { readFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { describe, expect, it } from 'vitest'
+
+const testDir = dirname(fileURLToPath(import.meta.url))
+const source = readFileSync(resolve(testDir, '../../src/pages/record/breeding-detail.vue'), 'utf8')
+
+describe('breeding-detail source contract', () => {
+  it('应为繁育记录详情提供完整类型映射，而不是直接暴露内部 type key', () => {
+    expect(source).toContain("follicle_check: { label: '卵泡检查'")
+    expect(source).toContain("prenatal_check: { label: '产检'")
+    expect(source).toContain("pre_labor: { label: '临产监测'")
+    expect(source).toContain("abnormal_termination: { label: '异常终止'")
+  })
+
+  it('应展示卵泡检查详情字段', () => {
+    expect(source).toContain("<!-- 卵泡检查 -->")
+    expect(source).toContain('左侧卵泡')
+    expect(source).toContain('右侧卵泡')
+    expect(source).toContain("function getFollicleSideText")
+  })
+
+  it('应兼容孕检新旧字段口径', () => {
+    expect(source).toContain('function getPregnancyResult')
+    expect(source).toContain('details.confirmed === \'是\'')
+    expect(source).toContain('details.fetus_count || details.puppy_count || details.count')
+  })
+})

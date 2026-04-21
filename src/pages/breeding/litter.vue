@@ -161,6 +161,14 @@
         />
       </view>
     </BModal>
+
+    <BModal
+      v-model:visible="showWeaningConfirm"
+      title="确认断奶"
+      content="确认该窝幼崽已完成断奶？"
+      confirmText="确认断奶"
+      @confirm="handleWeaningConfirm"
+    />
   </view>
 </template>
 
@@ -202,6 +210,7 @@ const promptTitle = ref('')
 const promptContent = ref('')
 const promptPlaceholder = ref('')
 const promptInput = ref('')
+const showWeaningConfirm = ref(false)
 let promptResolve: ((val: string) => Promise<void>) | null = null
 
 function openPrompt(title: string, placeholder: string, value: string, callback: (val: string) => Promise<void>, content = '') {
@@ -308,30 +317,26 @@ async function loadData() {
 }
 
 async function confirmWeaning() {
-  uni.showModal({
-    title: '确认断奶',
-    content: '确认该窝幼崽已完成断奶？',
-    success: async (res) => {
-      if (res.confirm) {
-        weaning.value = true
-        try {
-          await doWeaning(litterId)
-          if (sourceTaskId) {
-            await completeTask(sourceTaskId)
-            queueSubmitFeedback({
-              message: '已确认断奶并处理待办',
-              completedTaskIds: [sourceTaskId],
-              suppressTaskIds: [sourceTaskId],
-              refreshHome: true,
-            })
-          }
-          loadData()
-        } finally {
-          weaning.value = false
-        }
-      }
-    },
-  })
+  showWeaningConfirm.value = true
+}
+
+async function handleWeaningConfirm() {
+  weaning.value = true
+  try {
+    await doWeaning(litterId)
+    if (sourceTaskId) {
+      await completeTask(sourceTaskId)
+      queueSubmitFeedback({
+        message: '已确认断奶并处理待办',
+        completedTaskIds: [sourceTaskId],
+        suppressTaskIds: [sourceTaskId],
+        refreshHome: true,
+      })
+    }
+    loadData()
+  } finally {
+    weaning.value = false
+  }
 }
 
 function addPuppy() {

@@ -5,7 +5,7 @@
 
     <template v-if="cycle">
       <!-- 顶栏 -->
-      <BPageHeader :title="`${cycle.dam_name} · 第${cycle.cycle_number || ''}次繁育`">
+      <BPageHeader :title="pageTitle">
         <template #right>
           <BTag :label="cycle.status" :color="statusColor(cycle.status)" />
         </template>
@@ -36,8 +36,12 @@
             <view class="info-row">
               <text class="info-label">当前状态</text>
               <text class="info-value info-value--highlight" :style="{ color: `var(--${statusColor(cycle.status)})` }">
-                {{ cycle.status }}{{ cycle.day_count ? ` · 第${cycle.day_count}天` : '' }}
+                {{ currentStatusText }}
               </text>
+            </view>
+            <view v-if="expectedDueDateText" class="info-row">
+              <text class="info-label">预产期</text>
+              <text class="info-value">{{ expectedDueDateText }}</text>
             </view>
           </view>
         </BCard>
@@ -47,7 +51,7 @@
 
         <view class="timeline">
           <view
-            v-for="(record, idx) in records"
+            v-for="(record, idx) in timelineRecords"
             :key="record._id"
             class="timeline-item"
             @click="onRecordTap(record)"
@@ -58,37 +62,39 @@
                 :class="record._is_future ? 'timeline-dot--hollow' : 'timeline-dot--filled'"
                 :style="{ color: `var(--${dotColor(record.type)})` }"
               />
-              <view v-if="idx < records.length - 1" class="timeline-line" />
+              <view v-if="idx < timelineRecords.length - 1" class="timeline-line" />
             </view>
             <view class="timeline-content">
-              <text class="timeline-date">{{ formatShortDate(record.date) }}</text>
-              <text class="timeline-desc" :style="record._is_future ? { color: 'var(--primary)' } : {}">
-                {{ typeLabel(record.type) }}
-              </text>
-              <text v-if="record.notes" class="timeline-detail">{{ record.notes }}</text>
-              <!-- 类型特有信息 -->
-              <text v-if="record.type === 'mating' && record.details" class="timeline-detail">
-                {{ record.details.method || '自然交配' }} · {{ record.details.sire_name || '未知' }}
-              </text>
-              <text v-if="record.type === 'heat_observation' && record.details" class="timeline-detail">
-                {{ record.details.vulva_status || '外阴状态待补充' }}<text v-if="record.details.discharge_status"> · {{ record.details.discharge_status }}</text><text v-if="record.details.symptoms?.length"> · {{ record.details.symptoms.join(' / ') }}</text>
-              </text>
-              <text v-if="record.type === 'follicle_check' && record.details" class="timeline-detail">
-                左{{ record.details.left_count }}右{{ record.details.right_count }} · 发育良好
-              </text>
-              <text v-if="record.type === 'pregnancy_check' && record.details" class="timeline-detail">
-                确认怀孕 · {{ record.details.count || '?' }}只
-              </text>
-            </view>
-            <view class="timeline-chevron">
-              <text class="material-icons-round" style="font-size: 16px; color: var(--text-4);">chevron_right</text>
+              <view class="timeline-card" :class="{ 'timeline-card--future': record._is_future }">
+                <view class="timeline-head">
+                  <text class="timeline-date">{{ formatShortDate(record.date) }}</text>
+                  <text v-if="idx === 0" class="timeline-badge">最新</text>
+                </view>
+                <view class="timeline-main">
+                  <view class="timeline-copy">
+                    <text class="timeline-desc" :style="record._is_future ? { color: 'var(--primary)' } : {}">
+                      {{ typeLabel(record.type) }}
+                    </text>
+                    <text
+                      v-for="(detail, detailIdx) in timelineDetailLines(record)"
+                      :key="`${record._id}-detail-${detailIdx}`"
+                      class="timeline-detail"
+                    >
+                      {{ detail }}
+                    </text>
+                  </view>
+                  <view class="timeline-chevron">
+                    <text class="material-icons-round" style="font-size: 16px; color: var(--text-4);">chevron_right</text>
+                  </view>
+                </view>
+              </view>
             </view>
           </view>
         </view>
 
         <!-- 空状态 -->
         <BEmpty
-          v-if="records.length === 0"
+          v-if="timelineRecords.length === 0"
           icon="timeline"
           title="暂无记录"
           description="点击下方按钮添加繁育记录"
@@ -98,7 +104,7 @@
         <template v-if="totalCost > 0">
           <BSectionLabel title="周期费用" color="amber" />
           <BCard color="amber" :pressable="false">
-            <view v-for="item in costItems" :key="item.label" class="cost-row">
+            <view v-for="item in costItems" :key="item.id" class="cost-row">
               <text class="cost-label">{{ item.label }}</text>
               <text class="cost-value">¥{{ item.amount.toLocaleString() }}</text>
             </view>
@@ -153,6 +159,15 @@
           </BButton>
         </view>
       </view>
+
+      <BAddRecordSheet
+        v-model:visible="showAddRecordSheet"
+        :context-title="cycle.dam_name || '当前种母'"
+        :context-status="cycle.status || ''"
+        context-sub="将自动带入当前周期"
+        :groups="cycleAddRecordGroups"
+        @select="navigateToRecord"
+      />
     </template>
   </view>
 </template>
@@ -161,6 +176,7 @@
 import { ref, computed } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import type { BreedingCycleDetailResponse, BreedingCycleExpense } from '@/types/breeding'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BCard from '@/components/base/BCard.vue'
 import BTag from '@/components/base/BTag.vue'
@@ -169,29 +185,107 @@ import BSectionLabel from '@/components/base/BSectionLabel.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
+import BAddRecordSheet from '@/components/record/BAddRecordSheet.vue'
 import { consumeSubmitFeedback } from '@/composables/useSubmitFeedback'
+import type { AddRecordItem } from '@/utils/addRecordSheet'
+import { createCycleBreedingAddRecordGroups } from '@/utils/addRecordSheet'
 
 const cycle = ref<any>(null)
 const records = ref<any[]>([])
 const litter = ref<any>(null)
+const expenses = ref<BreedingCycleExpense[]>([])
 const loading = ref(true)
+const showAddRecordSheet = ref(false)
 let cycleId = ''
 const submitBannerMessage = ref('')
 let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
 let hasLoadedOnce = false
 
-const { run: fetchDetail } = useCloudCall<{ data: any }>('breeding-service', 'getCycleDetail')
+const { run: fetchDetail } = useCloudCall<{ data: BreedingCycleDetailResponse }>('breeding-service', 'getCycleDetail')
 const { run: doClose } = useCloudCall('breeding-service', 'closeCycle', { successMessage: '已关闭' })
+
+const pageTitle = computed(() => {
+  if (!cycle.value?.dam_name) return '繁育周期'
+  const cycleNumber = Number(cycle.value?.cycle_number)
+  return cycleNumber > 0 ? `${cycle.value.dam_name} · 第${cycleNumber}次繁育` : `${cycle.value.dam_name} · 繁育周期`
+})
 
 const isTerminal = computed(() => {
   return cycle.value && ['已生产', '失败', '放弃'].includes(cycle.value.status)
 })
 
-const costItems = computed(() => {
-  if (!records.value.length) return []
+const cycleAddRecordGroups = computed(() => createCycleBreedingAddRecordGroups(cycle.value?.status))
+
+const timelineRecords = computed(() => {
+  return [...records.value].sort((a, b) => {
+    const dateDiff = (b?.date || 0) - (a?.date || 0)
+    if (dateDiff !== 0) return dateDiff
+    const updatedDiff = (b?.updated_at || b?.created_at || 0) - (a?.updated_at || a?.created_at || 0)
+    if (updatedDiff !== 0) return updatedDiff
+    return `${b?._id || ''}`.localeCompare(`${a?._id || ''}`)
+  })
+})
+
+const latestMatingRecord = computed(() => {
   return records.value
-    .filter(r => r.cost && r.cost > 0)
-    .map(r => ({ label: typeLabel(r.type), amount: r.cost }))
+    .filter(record => record.type === 'mating')
+    .sort((a, b) => {
+      const dateDiff = (b?.date || 0) - (a?.date || 0)
+      if (dateDiff !== 0) return dateDiff
+      return (b?.updated_at || b?.created_at || 0) - (a?.updated_at || a?.created_at || 0)
+    })[0] || null
+})
+
+const pregnancyDayCount = computed(() => {
+  if (cycle.value?.status !== '怀孕中') return null
+  const startTs = cycle.value?.mated_at || latestMatingRecord.value?.date
+  if (typeof startTs !== 'number') return null
+  return Math.max(1, Math.floor((startOfDay(Date.now()) - startOfDay(startTs)) / 86400000) + 1)
+})
+
+const expectedDueDate = computed(() => {
+  if (cycle.value?.status !== '怀孕中') return null
+  const dueTs = latestMatingRecord.value?.details?.expected_due_date
+  if (typeof dueTs === 'number') return dueTs
+  const startTs = cycle.value?.mated_at || latestMatingRecord.value?.date
+  if (typeof startTs !== 'number') return null
+  return startTs + 59 * 86400000
+})
+
+const expectedDueDateText = computed(() => {
+  return typeof expectedDueDate.value === 'number' ? formatDate(expectedDueDate.value) : ''
+})
+
+const currentStatusText = computed(() => {
+  if (!cycle.value?.status) return '-'
+  if (cycle.value.status === '怀孕中' && pregnancyDayCount.value) {
+    return `${cycle.value.status} · 第${pregnancyDayCount.value}天`
+  }
+
+  if (cycle.value.status === '发情中') {
+    const startTs = cycle.value?.start_date || cycle.value?.created_at
+    if (typeof startTs === 'number') {
+      const day = Math.max(1, Math.floor((startOfDay(Date.now()) - startOfDay(startTs)) / 86400000) + 1)
+      return `${cycle.value.status} · 第${day}天`
+    }
+  }
+
+  if (cycle.value.day_count) {
+    return `${cycle.value.status} · 第${cycle.value.day_count}天`
+  }
+
+  return cycle.value.status
+})
+
+const costItems = computed(() => {
+  if (!expenses.value.length) return []
+  return expenses.value
+    .filter(item => Number(item.total_amount) > 0)
+    .map(item => ({
+      id: item._id,
+      label: item.notes || item.category || '支出',
+      amount: Number(item.total_amount) || 0,
+    }))
 })
 
 const totalCost = computed(() => costItems.value.reduce((s, i) => s + i.amount, 0))
@@ -218,6 +312,12 @@ function statusColor(status: string) {
   return (map[status] || 'rose') as any
 }
 
+function startOfDay(ts: number) {
+  const d = new Date(ts)
+  d.setHours(0, 0, 0, 0)
+  return d.getTime()
+}
+
 function formatDate(ts: number) {
   if (!ts) return '-'
   const d = new Date(ts)
@@ -228,6 +328,49 @@ function formatShortDate(ts: number) {
   if (!ts) return '-'
   const d = new Date(ts)
   return `${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`
+}
+
+function timelineDetailLines(record: any) {
+  const lines: string[] = []
+
+  if (record.type === 'mating' && record.details) {
+    const parts = [
+      record.details.method || '自然交配',
+      record.details.sire_name || '未知',
+      record.details.mating_number ? `第${record.details.mating_number}脚` : '',
+    ].filter(Boolean)
+    if (parts.length > 0) lines.push(parts.join(' · '))
+  }
+
+  if (record.type === 'heat_observation' && record.details) {
+    const parts = [
+      record.details.vulva_status || '外阴状态待补充',
+      record.details.discharge_status || '',
+      Array.isArray(record.details.symptoms) && record.details.symptoms.length > 0 ? record.details.symptoms.join(' / ') : '',
+    ].filter(Boolean)
+    if (parts.length > 0) lines.push(parts.join(' · '))
+  }
+
+  if (record.type === 'follicle_check' && record.details) {
+    const left = record.details.left_count
+    const right = record.details.right_count
+    const counts = `左${left ?? '?'}右${right ?? '?'}`
+    lines.push(`${counts} · 发育良好`)
+  }
+
+  if (record.type === 'pregnancy_check' && record.details) {
+    const result = record.details.result || (record.details.confirmed ? '确认怀孕' : '')
+    const count = record.details.count || record.details.fetus_count
+    const parts = [result]
+    if (count) parts.push(`${count}只`)
+    if (parts.filter(Boolean).length > 0) lines.push(parts.filter(Boolean).join(' · '))
+  }
+
+  if (record.notes) {
+    lines.push(record.notes)
+  }
+
+  return lines
 }
 
 function showSubmitBanner(message: string) {
@@ -247,18 +390,16 @@ function onRecordTap(record: any) {
 }
 
 function addRecord() {
-  // 显示操作菜单选择记录类型
-  const itemList = cycle.value?.status === '发情中'
-    ? ['发情记录', '发情观察', '卵泡检查', '配种记录', '孕检记录', '产检记录', '临产监测', '异常终止']
-    : ['发情记录', '卵泡检查', '配种记录', '孕检记录', '产检记录', '临产监测', '异常终止']
-  const pages = cycle.value?.status === '发情中'
-    ? ['breeding-heat', 'heat-observation', 'breeding-follicle', 'breeding-mating', 'breeding-pregnancy', 'breeding-prenatal', 'breeding-prelabor', 'breeding-termination']
-    : ['breeding-heat', 'breeding-follicle', 'breeding-mating', 'breeding-pregnancy', 'breeding-prenatal', 'breeding-prelabor', 'breeding-termination']
-  uni.showActionSheet({
-    itemList,
-    success: (res) => {
-      const page = pages[res.tapIndex]
-      uni.navigateTo({ url: `/pages/record/${page}?cycleId=${cycleId}&dogId=${cycle.value.dam_id}&dogName=${encodeURIComponent(cycle.value.dam_name)}&locked=true` })
+  showAddRecordSheet.value = true
+}
+
+function navigateToRecord(item: AddRecordItem) {
+  showAddRecordSheet.value = false
+  const baseUrl = item.url || `/pages/record/${item.page}`
+  uni.navigateTo({
+    url: `${baseUrl}?cycleId=${cycleId}&dogId=${cycle.value.dam_id}&dogName=${encodeURIComponent(cycle.value.dam_name)}&locked=true`,
+    fail() {
+      uni.showToast({ title: '页面打开失败', icon: 'none' })
     },
   })
 }
@@ -285,6 +426,7 @@ async function loadData() {
     cycle.value = res.data.cycle
     records.value = res.data.records
     litter.value = res.data.litter
+    expenses.value = res.data.expenses || []
   }
   loading.value = false
   hasLoadedOnce = true
@@ -383,6 +525,9 @@ onShow(() => {
 .timeline {
   position: relative;
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .timeline-item {
@@ -390,16 +535,10 @@ onShow(() => {
   align-items: flex-start;
   gap: 14px;
   position: relative;
-  padding-bottom: 20px;
   transition: background 0.12s ease;
 
-  &:last-child {
-    padding-bottom: 0;
-  }
-
   &:active {
-    background: var(--card-dim);
-    border-radius: 12px;
+    transform: scale(0.992);
   }
 }
 
@@ -408,17 +547,19 @@ onShow(() => {
   flex-direction: column;
   align-items: center;
   flex-shrink: 0;
-  width: 20px;
+  width: 18px;
   position: relative;
+  padding-top: 18px;
+  align-self: stretch;
 }
 
 .timeline-dot {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   flex-shrink: 0;
-  margin-top: 4px;
   z-index: 2;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.9);
 
   &--filled {
     background: currentColor;
@@ -433,8 +574,8 @@ onShow(() => {
 .timeline-line {
   width: 2px;
   flex: 1;
-  background: var(--text-4);
-  margin-top: 4px;
+  background: rgba(177, 152, 125, 0.28);
+  margin-top: 6px;
 }
 
 .timeline-content {
@@ -442,18 +583,65 @@ onShow(() => {
   min-width: 0;
 }
 
+.timeline-card {
+  position: relative;
+  background: var(--card);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  padding: 12px 50px 12px 14px;
+  border: 1px solid rgba(216, 203, 189, 0.18);
+}
+
+.timeline-card--future {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(255, 248, 241, 0.98));
+  border-color: rgba(234, 62, 119, 0.14);
+}
+
+.timeline-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
 .timeline-date {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--card-dim);
   font-size: 11px;
   font-weight: 700;
   color: var(--text-3);
   font-family: var(--font-display);
 }
 
+.timeline-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(47, 187, 166, 0.14);
+  color: var(--teal);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.timeline-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.timeline-copy {
+  flex: 1;
+  min-width: 0;
+}
+
 .timeline-desc {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 700;
   color: var(--text-1);
-  margin-top: 2px;
   line-height: 1.4;
   display: block;
 }
@@ -461,15 +649,23 @@ onShow(() => {
 .timeline-detail {
   font-size: 11px;
   color: var(--text-2);
-  margin-top: 1px;
+  margin-top: 4px;
   display: block;
+  line-height: 1.5;
 }
 
 .timeline-chevron {
-  flex-shrink: 0;
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  transform: translateY(-50%);
   display: flex;
   align-items: center;
-  margin-top: 4px;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--card-dim);
 }
 
 /* 费用 */

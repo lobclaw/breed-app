@@ -386,28 +386,36 @@
         </view>
 
         <BEmpty
-          v-if="healthRecords.length === 0 && medStatuses.length === 0"
+          v-if="healthRecords.length === 0 && medicationRecords.length === 0"
           icon="healing"
           title="暂无健康记录"
-          description="记录疫苗、驱虫、疾病等信息"
+          description="记录疫苗、驱虫、疾病、用药等信息"
         />
         <view v-else>
-          <!-- 用药中 -->
-          <view v-if="medStatuses.length > 0" class="dog-detail__health-group">
+          <!-- 用药 -->
+          <view v-if="medicationRecords.length > 0" class="dog-detail__health-group">
             <view class="dog-detail__sec dog-detail__sec--plum">
-              <text class="dog-detail__sec-text">用药中</text>
+              <text class="dog-detail__sec-text">用药</text>
               <view class="dog-detail__sec-badge">
-                <text class="dog-detail__sec-badge-text">{{ medStatuses.length }}</text>
+                <text class="dog-detail__sec-badge-text">{{ medicationRecords.length }}</text>
               </view>
             </view>
             <view class="dog-detail__rec-list">
-              <view v-for="s in medStatuses" :key="s.taskId || s.detail" class="dog-detail__rec-item" @click="handleStatusTap(s)">
+              <view
+                v-for="record in medicationRecords"
+                :key="record._id || record.id"
+                class="dog-detail__rec-item"
+                @click="goToMedicationDetail(record._id || record.id)"
+              >
                 <view class="dog-detail__rec-icon dog-detail__rec-icon--plum">
                   <text class="material-icons-round">medication</text>
                 </view>
                 <view class="dog-detail__rec-body">
-                  <text class="dog-detail__rec-title">{{ s.detail || '用药' }}</text>
-                  <text v-if="s.progress" class="dog-detail__rec-sub">第{{ s.progress.current }}天 / 共{{ s.progress.total }}天</text>
+                  <text class="dog-detail__rec-title">{{ medicationRecordTitle(record) }}</text>
+                  <text class="dog-detail__rec-sub">{{ medicationRecordSub(record) }}</text>
+                </view>
+                <view class="dog-detail__rec-tag" :class="`dog-detail__rec-tag--${medicationRecordTagTone(record)}`">
+                  <text class="dog-detail__rec-tag-text">{{ medicationRecordTagText(record) }}</text>
                 </view>
                 <text class="material-icons-round dog-detail__rec-chevron">chevron_right</text>
               </view>
@@ -934,59 +942,14 @@
       </view>
     </BSheet>
 
-    <!-- ==================== 添加记录 Sheet ==================== -->
-    <BSheet v-model:visible="showAddRecordSheet" title="添加记录" height="78vh">
-      <view class="add-record-list">
-        <view class="add-record-context">
-          <view class="add-record-context__badge">
-            <text class="material-icons-round add-record-context__badge-icon">pets</text>
-          </view>
-          <view class="add-record-context__body">
-            <view class="add-record-context__title-row">
-              <text class="add-record-context__title">{{ dog?.name || '当前犬只' }}</text>
-              <text v-if="activeCycle?._id" class="add-record-context__status">{{ activeCycle.status || '进行中' }}</text>
-            </view>
-            <text class="add-record-context__sub">{{ activeCycle?._id ? '繁育记录将自动带入当前周期' : '按业务分组快速记录' }}</text>
-          </view>
-        </view>
-        <view
-          v-for="group in addRecordGroups"
-          :key="group.key"
-          class="add-record-group"
-        >
-          <view class="add-record-group__head">
-            <view class="add-record-group__meta">
-              <text class="add-record-group__title">{{ group.title }}</text>
-              <text class="add-record-group__count">{{ group.items.length }}项</text>
-            </view>
-            <text
-              v-if="group.key === 'breeding' && activeCycle?._id"
-              class="add-record-group__hint"
-            >将自动带入当前周期</text>
-          </view>
-          <view class="add-record-group__body">
-            <view
-              v-for="item in group.items"
-              :key="item.page"
-              class="add-record-item"
-              :class="{ 'add-record-item--full': item.layout === 'full' }"
-              @click="navigateToRecord(item)"
-            >
-              <view class="add-record-item__icon" :style="{ background: item.iconBg }">
-                <text class="material-icons-round" :style="{ color: item.color, fontSize: '20px' }">{{ item.icon }}</text>
-              </view>
-              <view class="add-record-item__content">
-                <text class="add-record-item__label">{{ item.label }}</text>
-                <text class="add-record-item__desc">{{ item.desc }}</text>
-              </view>
-              <view class="add-record-item__action">
-                <text class="material-icons-round add-record-item__arrow">chevron_right</text>
-              </view>
-            </view>
-          </view>
-        </view>
-      </view>
-    </BSheet>
+    <BAddRecordSheet
+      v-model:visible="showAddRecordSheet"
+      :context-title="dog?.name || '当前犬只'"
+      :context-status="activeCycle?.status || ''"
+      :context-sub="activeCycle?._id ? '繁育记录将自动带入当前周期' : '按业务分组快速记录'"
+      :groups="addRecordGroups"
+      @select="navigateToRecord"
+    />
   </view>
 </template>
 
@@ -999,17 +962,22 @@ import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import BModal from '@/components/layout/BModal.vue'
 import BDeleteConfirm from '@/components/layout/BDeleteConfirm.vue'
+import BAddRecordSheet from '@/components/record/BAddRecordSheet.vue'
 import { useCloudCall } from '@/composables/useCloudCall'
 import { consumeSubmitFeedback } from '@/composables/useSubmitFeedback'
 import { useDogStore } from '@/stores/dogStore'
 import type { Dog, DeriveStatus } from '@/types/dog'
-import { resolveDogDetailStatusRoute } from '@/utils/dogDetailNavigation'
+import { buildMedicationDetailUrl, resolveDogDetailStatusRoute } from '@/utils/dogDetailNavigation'
+import { formatMedicationDosage } from '@/utils/medicationDisplay'
 import { getDogStatusTone, getHealthTypeTone } from '@/utils/themeSemantics'
+import type { AddRecordItem } from '@/utils/addRecordSheet'
+import { createAllAddRecordGroups } from '@/utils/addRecordSheet'
 
 const dog = ref<Dog | null>(null)
 const statuses = ref<DeriveStatus[]>([])
 const cycles = ref<any[]>([])
 const healthRecords = ref<any[]>([])
+const medicationRecords = ref<any[]>([])
 const activeTab = ref('overview')
 const loading = ref(true)
 const showMore = ref(false)
@@ -1027,18 +995,6 @@ const tabs = [
   { key: 'health', label: '健康' },
   { key: 'finance', label: '财务' },
 ]
-
-type AddRecordItem = {
-  icon: string
-  iconBg: string
-  color: string
-  label: string
-  desc: string
-  page: string
-  url?: string
-  kind: 'breeding' | 'health' | 'medication'
-  layout?: 'default' | 'full'
-}
 
 // 状态 → 功能色映射
 const statusColorMap: Record<string, 'amber' | 'rose' | 'green' | 'red' | 'plum'> = {
@@ -1075,7 +1031,6 @@ const TERMINAL_CYCLE_STATUSES = ['已生产', '失败', '放弃']
 const activeCycle = computed(() => cycles.value.find((c: any) => !TERMINAL_CYCLE_STATUSES.includes(c.status)))
 const pastCycles = computed(() => cycles.value.filter((c: any) => TERMINAL_CYCLE_STATUSES.includes(c.status)))
 
-const medStatuses = computed(() => statuses.value.filter((s: DeriveStatus) => s.type === '用药中'))
 const vaccineRecords = computed(() => healthRecords.value.filter((r: any) => r.type === 'vaccination'))
 const dewormingRecords = computed(() => healthRecords.value.filter((r: any) => r.type === 'deworming'))
 const illnessRecords = computed(() => healthRecords.value.filter((r: any) => r.type === 'illness'))
@@ -1093,6 +1048,7 @@ const dogFinance = ref<any>(null)
 const { run: fetchDetail } = useCloudCall<{ data: Dog }>('dog-service', 'getDogDetail')
 const { run: fetchCycles } = useCloudCall<{ data: any[] }>('breeding-service', 'getCycleHistory')
 const { run: fetchHealth } = useCloudCall<{ data: any[] }>('health-service', 'getHealthHistory')
+const { run: fetchMedicationHistory } = useCloudCall<{ data: any[] }>('health-service', 'getMedicationHistory')
 const { run: fetchLitters } = useCloudCall<{ data: any[] }>('breeding-service', 'getLittersByDam')
 const { run: fetchDogFinance } = useCloudCall<{ data: any }>('finance-service', 'getDogFinanceSummary')
 const { run: cleanupDuplicateIllnesses } = useCloudCall('health-service', 'cleanupDuplicateIllnesses', {
@@ -1156,6 +1112,44 @@ function recentHealthRecordTitle(record: any) {
     return subtitle ? `${typeLabel(record.type)} · ${subtitle}` : '疾病记录'
   }
   return subtitle || typeLabel(record?.type)
+}
+
+function medicationRecordTitle(record: any) {
+  const dosageText = formatMedicationDosage(record?.dosage, record?.dosage_unit)
+  const parts = [record?.drug_name || '用药', dosageText, record?.method].filter(Boolean)
+  return parts.join(' · ')
+}
+
+function medicationRecordTagText(record: any) {
+  if (record?.status === 'active') return '用药中'
+  if (record?.status === 'completed') return '已完成'
+  if (record?.status === 'cancelled') return '已取消'
+  return '用药'
+}
+
+function medicationRecordTagTone(record: any) {
+  if (record?.status === 'active') return 'plum'
+  if (record?.status === 'completed') return 'green'
+  return 'gray'
+}
+
+function medicationRecordSub(record: any) {
+  if (record?.status === 'active' && record?.progress) {
+    return `第${record.progress.current}天 / 共${record.progress.total}天`
+  }
+
+  const startText = typeof record?.start_date === 'number'
+    ? `${formatDate(record.start_date)} 开始`
+    : '开始日期未知'
+
+  if (typeof record?.completed_dose_count === 'number' && typeof record?.total_dose_count === 'number' && record.total_dose_count > 0) {
+    const summary = record.status === 'completed'
+      ? `已完成 ${record.completed_dose_count}/${record.total_dose_count} 次`
+      : `已执行 ${record.completed_dose_count}/${record.total_dose_count} 次`
+    return `${startText} · ${summary}`
+  }
+
+  return startText
 }
 
 function illnessStatusLabel(record: any) {
@@ -1337,39 +1331,7 @@ function editDog() {
   uni.navigateTo({ url: `/pages/dog/add?id=${dogId}` })
 }
 
-const addRecordGroups = [
-  {
-    key: 'breeding',
-    title: '繁育',
-    items: [
-      { icon: 'whatshot', iconBg: 'var(--icon-rose)', color: 'var(--rose)', label: '发情记录', desc: '记录发情开始', page: 'breeding-heat', kind: 'breeding' },
-      { icon: 'monitor_heart', iconBg: 'var(--icon-amber)', color: 'var(--amber)', label: '发情观察', desc: '补充观察日志', page: 'heat-observation', kind: 'breeding' },
-      { icon: 'biotech', iconBg: 'var(--icon-teal)', color: 'var(--teal)', label: '卵泡检查', desc: '记录发育情况', page: 'breeding-follicle', kind: 'breeding' },
-      { icon: 'favorite', iconBg: 'var(--icon-rose)', color: 'var(--rose)', label: '配种记录', desc: '进入配种节点', page: 'breeding-mating', kind: 'breeding' },
-      { icon: 'pregnant_woman', iconBg: 'var(--icon-green)', color: 'var(--green)', label: '孕检记录', desc: '确认怀孕结果', page: 'breeding-pregnancy', kind: 'breeding' },
-      { icon: 'medical_services', iconBg: 'var(--icon-blue)', color: 'var(--blue)', label: '产检记录', desc: '补录产检结果', page: 'breeding-prenatal', kind: 'breeding' },
-      { icon: 'schedule', iconBg: 'var(--icon-amber)', color: 'var(--amber)', label: '临产监测', desc: '观察临产信号', page: 'breeding-prelabor', kind: 'breeding' },
-      { icon: 'child_friendly', iconBg: 'var(--icon-rose)', color: 'var(--rose)', label: '生产记录', desc: '记录分娩结果', page: 'birth-wizard', url: '/pages/breeding/birth-wizard', kind: 'breeding' },
-      { icon: 'warning', iconBg: 'var(--icon-red)', color: 'var(--red)', label: '异常终止', desc: '记录终止结果', page: 'breeding-termination', kind: 'breeding' },
-    ] as AddRecordItem[],
-  },
-  {
-    key: 'health',
-    title: '健康',
-    items: [
-      { icon: 'vaccines', iconBg: 'var(--icon-blue)', color: 'var(--blue)', label: '疫苗记录', desc: '接种与提醒', page: 'health-vaccination', kind: 'health' },
-      { icon: 'shield', iconBg: 'var(--icon-teal)', color: 'var(--teal)', label: '驱虫记录', desc: '内驱外驱补录', page: 'health-deworming', kind: 'health' },
-      { icon: 'sick', iconBg: 'var(--icon-red)', color: 'var(--red)', label: '疾病记录', desc: '症状与治疗状态', page: 'health-illness', kind: 'health', layout: 'full' },
-    ] as AddRecordItem[],
-  },
-  {
-    key: 'medication',
-    title: '用药',
-    items: [
-      { icon: 'medication', iconBg: 'var(--icon-plum)', color: 'var(--plum)', label: '开始用药', desc: '创建连续用药任务', page: 'health-medication', kind: 'medication', layout: 'full' },
-    ] as AddRecordItem[],
-  },
-]
+const addRecordGroups = computed(() => createAllAddRecordGroups({ includeBreedingHint: !!activeCycle.value?._id }))
 
 function addRecord() {
   showAddRecordSheet.value = true
@@ -1397,7 +1359,7 @@ function navigateToRecord(item: AddRecordItem) {
 }
 
 function navigateToRecordByPage(page: string) {
-  const target = addRecordGroups.flatMap(group => group.items).find(item => item.page === page)
+  const target = addRecordGroups.value.flatMap(group => group.items).find(item => item.page === page)
   if (!target) {
     uni.showToast({ title: '入口暂不可用', icon: 'none' })
     return
@@ -1413,6 +1375,21 @@ function goToHealthDetail(recordId?: string) {
   }
   uni.navigateTo({
     url: `/pages/record/health-detail?id=${normalizedId}`,
+    fail() {
+      uni.showToast({ title: '详情打开失败', icon: 'none' })
+    },
+  })
+}
+
+function goToMedicationDetail(taskId?: string) {
+  const normalizedId = typeof taskId === 'string' ? taskId.trim() : ''
+  if (!normalizedId) {
+    uni.showToast({ title: '用药信息缺失', icon: 'none' })
+    return
+  }
+
+  uni.navigateTo({
+    url: buildMedicationDetailUrl(normalizedId),
     fail() {
       uni.showToast({ title: '详情打开失败', icon: 'none' })
     },
@@ -1721,16 +1698,18 @@ async function saveWeight() {
 // ==================== D-21: 体重趋势详情 ====================
 
 const showWeightChart = ref(false)
-const weightHistory = ref<Array<{ weight: number; date: number; notes?: string; created_at?: number }>>([])
+type WeightRecord = { weight: number; date: number; notes?: string; created_at?: number }
 
-function sortWeightRecordsDesc(records: Array<{ date: number; created_at?: number }>) {
+const weightHistory = ref<WeightRecord[]>([])
+
+function sortWeightRecordsDesc(records: WeightRecord[]) {
   return [...records].sort((a, b) => {
     if (b.date !== a.date) return b.date - a.date
     return (b.created_at || 0) - (a.created_at || 0)
   })
 }
 
-function sortWeightRecordsAsc(records: Array<{ date: number; created_at?: number }>) {
+function sortWeightRecordsAsc(records: WeightRecord[]) {
   return [...records].sort((a, b) => {
     if (a.date !== b.date) return a.date - b.date
     return (a.created_at || 0) - (b.created_at || 0)
@@ -1740,7 +1719,7 @@ function sortWeightRecordsAsc(records: Array<{ date: number; created_at?: number
 const recentWeightRecords = computed(() => sortWeightRecordsDesc(weightHistory.value))
 const weightTrendRecords = computed(() => sortWeightRecordsAsc(recentWeightRecords.value.slice(0, 10)))
 
-const { run: fetchWeightHistory } = useCloudCall<{ data: Array<{ weight: number; date: number; notes?: string; created_at?: number }> }>('health-service', 'getWeightHistory')
+const { run: fetchWeightHistory } = useCloudCall<{ data: WeightRecord[] }>('health-service', 'getWeightHistory')
 
 async function loadWeightHistory() {
   const res = await fetchWeightHistory(dogId)
@@ -1823,10 +1802,11 @@ async function loadData({ silent = false, shouldCleanup = false }: { silent?: bo
       await cleanupDuplicateIllnesses({ dog_id: dogId }).catch(() => {})
     }
 
-    const [detailRes, cyclesRes, healthRes, littersRes, financeRes] = await Promise.all([
+    const [detailRes, cyclesRes, healthRes, medicationRes, littersRes, financeRes] = await Promise.all([
       fetchDetail(dogId),
       fetchCycles(dogId),
       fetchHealth(dogId),
+      fetchMedicationHistory(dogId),
       fetchLitters(dogId),
       fetchDogFinance(dogId),
     ])
@@ -1842,6 +1822,9 @@ async function loadData({ silent = false, shouldCleanup = false }: { silent?: bo
     }
     if (healthRes?.data) {
       healthRecords.value = healthRes.data
+    }
+    if (medicationRes?.data) {
+      medicationRecords.value = medicationRes.data
     }
     if (littersRes?.data) {
       litters.value = littersRes.data
@@ -2372,6 +2355,10 @@ onShow(() => {
 .dog-detail__rec-tag--green {
   background: var(--green-soft);
   .dog-detail__rec-tag-text { color: var(--green); }
+}
+.dog-detail__rec-tag--plum {
+  background: var(--plum-soft);
+  .dog-detail__rec-tag-text { color: var(--plum); }
 }
 .dog-detail__rec-tag--amber {
   background: var(--amber-soft);
@@ -3381,203 +3368,4 @@ onShow(() => {
 .dog-detail__rec-amount--green { color: var(--green); }
 .dog-detail__rec-amount--red { color: var(--red); }
 
-/* ==================== 添加记录 Sheet ==================== */
-.add-record-list {
-  padding-bottom: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.add-record-context {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 2px 2px 0;
-}
-
-.add-record-context__badge {
-  width: 36px;
-  height: 36px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, var(--primary-soft), rgba(255, 240, 232, 0.9));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.add-record-context__badge-icon {
-  font-size: 18px;
-  color: var(--primary);
-}
-
-.add-record-context__body {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.add-record-context__title-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.add-record-context__title {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--text-1);
-  line-height: 1.2;
-}
-
-.add-record-context__status {
-  display: inline-flex;
-  align-items: center;
-  height: 20px;
-  padding: 0 8px;
-  border-radius: 999px;
-  background: var(--amber-soft);
-  color: var(--amber);
-  font-size: 11px;
-  font-weight: 700;
-  flex-shrink: 0;
-}
-
-.add-record-context__sub {
-  font-size: 11px;
-  line-height: 1.35;
-  color: var(--text-3);
-}
-
-.add-record-group {
-  background: var(--card);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow);
-  overflow: hidden;
-  border: 1px solid rgba(184, 160, 138, 0.08);
-}
-.add-record-group__head {
-  padding: 10px 12px 8px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-.add-record-group__meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.add-record-group__title {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-3);
-  letter-spacing: 0.3px;
-}
-.add-record-group__count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 24px;
-  height: 18px;
-  padding: 0 7px;
-  border-radius: 999px;
-  background: var(--card-dim);
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--text-3);
-}
-.add-record-group__hint {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--primary);
-  background: var(--primary-soft);
-  padding: 3px 8px;
-  border-radius: 999px;
-  flex-shrink: 0;
-}
-.add-record-group__body {
-  padding: 0 10px 10px;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-.add-record-item {
-  min-height: 76px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 11px;
-  border-radius: 16px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(250, 246, 243, 0.96));
-  border: 1px solid rgba(184, 160, 138, 0.10);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
-  transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
-
-  &:active {
-    transform: scale(0.98);
-    opacity: 0.86;
-  }
-}
-.add-record-item--full {
-  grid-column: 1 / -1;
-}
-.add-record-item__icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 11px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-.add-record-item__content {
-  flex: 1;
-  min-width: 0;
-}
-.add-record-item__label {
-  display: block;
-  font-size: 14px;
-  line-height: 1.2;
-  font-weight: 700;
-  color: var(--text-1);
-}
-.add-record-item__desc {
-  display: block;
-  margin-top: 4px;
-  font-size: 11px;
-  line-height: 1.25;
-  color: var(--text-3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.add-record-item__action {
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-.add-record-item__arrow {
-  font-size: 16px;
-  color: var(--text-4);
-}
-
-@media (max-width: 380px) {
-  .add-record-group__body {
-    grid-template-columns: 1fr;
-  }
-
-  .add-record-item--full {
-    grid-column: auto;
-  }
-
-  .add-record-context {
-    align-items: flex-start;
-  }
-}
 </style>

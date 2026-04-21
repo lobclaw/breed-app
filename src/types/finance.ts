@@ -2,6 +2,8 @@
  * 财务相关类型
  */
 import type { BaseDocument, SoftDeletable } from './index'
+import type { ExpenseCategoryGroupKey } from '@/constants/financeCategories'
+export type { ExpenseCategoryGroupKey } from '@/constants/financeCategories'
 
 // 费用来源类型
 export type ExpenseSourceType = 'manual' | 'auto'
@@ -10,6 +12,7 @@ export type ExpenseSourceType = 'manual' | 'auto'
 export interface Expense extends BaseDocument, SoftDeletable {
   total_amount: number
   category: string
+  category_group_label?: string
   date: number
   linked_cycle_id?: string
   linked_litter_id?: string
@@ -59,4 +62,10 @@ export interface Agent extends BaseDocument, SoftDeletable {
   wechat?: string
   commission_rate?: number
   notes?: string
+}
+
+export interface ExpenseCategory {
+  name: string
+  parent_group: ExpenseCategoryGroupKey
+  is_default?: boolean
 }

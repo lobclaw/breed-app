@@ -117,7 +117,7 @@ const form = reactive({ name: '', drug_name: '', duration_days: '', notes: '' })
 const canSave = computed(() => !!form.name.trim() && !!form.drug_name.trim())
 
 const { run: addProtocol } = useCloudCall('health-service', 'addMedicationProtocol', { successMessage: '已添加' })
-const { run: removeProtocol } = useCloudCall('health-service', 'removeMedicationProtocol', { successMessage: '已删除' })
+const { run: removeProtocol } = useCloudCall('health-service', 'removeMedicationProtocol', { successMode: 'silent' })
 
 function openSheet() {
   form.name = ''

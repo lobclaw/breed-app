@@ -192,6 +192,15 @@
         </view>
       </view>
     </BSheet>
+
+    <BModal
+      v-model:visible="showDeleteConfirm"
+      title="确认删除"
+      content="删除后不可恢复，确定要删除这条健康记录吗？"
+      confirmText="删除"
+      :danger="true"
+      @confirm="handleDeleteConfirm"
+    />
   </view>
 </template>
 
@@ -206,12 +215,14 @@ import BCard from '@/components/base/BCard.vue'
 import BTag from '@/components/base/BTag.vue'
 import BButton from '@/components/base/BButton.vue'
 import BSheet from '@/components/layout/BSheet.vue'
+import BModal from '@/components/layout/BModal.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 
 const record = ref<any>(null)
 const loading = ref(true)
 const showMore = ref(false)
+const showDeleteConfirm = ref(false)
 
 let recordId = ''
 let hasShownOnce = false
@@ -372,21 +383,16 @@ function handleEditFromMore() {
 
 function confirmDelete() {
   showMore.value = false
-  uni.showModal({
-    title: '确认删除',
-    content: '删除后不可恢复，确定要删除这条健康记录吗？',
-    confirmColor: '#e05252',
-    async success(res) {
-      if (res.confirm) {
-        const result = await deleteRecord(recordId)
-        if (result) {
-          queueSubmitFeedback({ message: '已删除健康记录' })
-          await wait(140)
-          uni.navigateBack()
-        }
-      }
-    },
-  })
+  showDeleteConfirm.value = true
+}
+
+async function handleDeleteConfirm() {
+  const result = await deleteRecord(recordId)
+  if (result) {
+    queueSubmitFeedback({ message: '已删除健康记录' })
+    await wait(140)
+    uni.navigateBack()
+  }
 }
 
 function handleDeleteFromMore() {

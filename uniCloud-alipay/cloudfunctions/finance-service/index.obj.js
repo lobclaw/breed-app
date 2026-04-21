@@ -7,8 +7,211 @@ const { verifyAndGetFamily, requireFamily } = require('breed-auth/auth')
 const db = uniCloud.database()
 const dbCmd = db.command
 
-// 默认支出分类
-const DEFAULT_EXPENSE_CATEGORIES = ['食品', '营养品', '消耗品', '日常用品', '固定开销', '交通', '医疗', '配种费', '其他']
+const EXPENSE_CATEGORY_GROUPS = [
+  { key: 'feeding', label: '喂养营养' },
+  { key: 'health', label: '医疗健康' },
+  { key: 'breeding', label: '繁育投入' },
+  { key: 'operations', label: '日常运营' },
+  { key: 'other', label: '其他' },
+]
+
+const DEFAULT_EXPENSE_CATEGORY_ITEMS = [
+  { name: '食品', parent_group: 'feeding', is_default: true },
+  { name: '营养品', parent_group: 'feeding', is_default: true },
+  { name: '医疗', parent_group: 'health', is_default: true },
+  { name: '配种费', parent_group: 'breeding', is_default: true },
+  { name: '消耗品', parent_group: 'operations', is_default: true },
+  { name: '日常用品', parent_group: 'operations', is_default: true },
+  { name: '固定开销', parent_group: 'operations', is_default: true },
+  { name: '交通', parent_group: 'operations', is_default: true },
+  { name: '其他', parent_group: 'other', is_default: true },
+]
+
+const DEFAULT_EXPENSE_CATEGORIES = DEFAULT_EXPENSE_CATEGORY_ITEMS.map(item => item.name)
+
+function normalizeExpenseCategoryGroupKey(groupKey) {
+  return EXPENSE_CATEGORY_GROUPS.some(item => item.key === groupKey) ? groupKey : 'other'
+}
+
+function getExpenseCategoryGroupLabel(groupKey) {
+  return EXPENSE_CATEGORY_GROUPS.find(item => item.key === groupKey)?.label || '其他'
+}
+
+function normalizeCustomExpenseCategories(rawCategories = []) {
+  return (rawCategories || [])
+    .map((item) => {
+      if (!item) return null
+      if (typeof item === 'string') {
+        return {
+          name: item,
+          parent_group: 'other',
+        }
+      }
+      if (!item.name || !String(item.name).trim()) return null
+      return {
+        name: String(item.name).trim(),
+        parent_group: normalizeExpenseCategoryGroupKey(item.parent_group),
+      }
+    })
+    .filter(Boolean)
+}
+
+function buildExpenseCategoryOptions(customCategories = []) {
+  return [
+    ...DEFAULT_EXPENSE_CATEGORY_ITEMS,
+    ...normalizeCustomExpenseCategories(customCategories).map(item => ({ ...item, is_default: false })),
+  ]
+}
+
+function getExpenseCategoryMetaMap(customCategories = []) {
+  return buildExpenseCategoryOptions(customCategories).reduce((map, item) => {
+    map[item.name] = item
+    return map
+  }, {})
+}
+
+function getExpenseCategoryGroupKeyByName(categoryName, categoryMetaMap = {}) {
+  return categoryMetaMap[categoryName]?.parent_group || 'other'
+}
+
+function normalizeStringArray(rawValue) {
+  if (!rawValue) return []
+  const values = Array.isArray(rawValue) ? rawValue : [rawValue]
+  return Array.from(new Set(
+    values
+      .map(item => (typeof item === 'string' ? item.trim() : ''))
+      .filter(Boolean),
+  ))
+}
+
+function normalizeFinanceFilters(filters = {}) {
+  const type = filters.type || ''
+  const normalized = {
+    type,
+    incomeTypes: normalizeStringArray(filters.incomeTypes),
+    expenseCategoryGroups: normalizeStringArray(filters.expenseCategoryGroups).map(normalizeExpenseCategoryGroupKey),
+    expenseCategories: normalizeStringArray(filters.expenseCategories || filters.subCategory || filters.category),
+    dogIds: normalizeStringArray(filters.dogIds || filters.dogId),
+    litterIds: normalizeStringArray(filters.litterIds || filters.litterId),
+    cycleIds: normalizeStringArray(filters.cycleIds || filters.cycleId),
+    unlinkedOnly: !!filters.unlinkedOnly,
+    sort: filters.sort || 'date_desc',
+  }
+
+  if (type === 'income') {
+    normalized.expenseCategoryGroups = []
+    normalized.expenseCategories = []
+    normalized.litterIds = []
+    normalized.cycleIds = []
+  }
+
+  if (type === 'expense') {
+    normalized.incomeTypes = []
+  }
+
+  if (normalized.unlinkedOnly) {
+    normalized.dogIds = []
+    normalized.litterIds = []
+    normalized.cycleIds = []
+  }
+
+  return normalized
+}
+
+function hasIntersection(left = [], right = []) {
+  if (!left.length || !right.length) return false
+  const rightSet = new Set(right)
+  return left.some(item => rightSet.has(item))
+}
+
+function isExpenseUnlinked(expense = {}) {
+  return (!expense.linked_dog_ids || expense.linked_dog_ids.length === 0)
+    && !expense.linked_litter_id
+    && !expense.linked_cycle_id
+}
+
+function isIncomeUnlinked(income = {}) {
+  return !income.dog_id
+}
+
+function matchesExpenseCategoryFilter(expense, filters, categoryMetaMap = {}) {
+  const hasCategoryFilter = filters.expenseCategoryGroups.length > 0 || filters.expenseCategories.length > 0
+  if (!hasCategoryFilter) return true
+
+  const groupKey = getExpenseCategoryGroupKeyByName(expense.category, categoryMetaMap)
+  return filters.expenseCategoryGroups.includes(groupKey) || filters.expenseCategories.includes(expense.category)
+}
+
+function matchesExpenseLinkFilter(expense, filters) {
+  if (filters.unlinkedOnly) return isExpenseUnlinked(expense)
+  if (filters.dogIds.length > 0 && !hasIntersection(expense.linked_dog_ids || [], filters.dogIds)) return false
+  if (filters.litterIds.length > 0 && !filters.litterIds.includes(expense.linked_litter_id || '')) return false
+  if (filters.cycleIds.length > 0 && !filters.cycleIds.includes(expense.linked_cycle_id || '')) return false
+  return true
+}
+
+function matchesIncomeLinkFilter(income, filters) {
+  if (filters.unlinkedOnly) return isIncomeUnlinked(income)
+  if (filters.dogIds.length > 0 && !filters.dogIds.includes(income.dog_id || '')) return false
+  return true
+}
+
+function resolveDateRange(filters = {}) {
+  if (filters.startDate != null && filters.endDate != null) {
+    return {
+      startDate: Number(filters.startDate),
+      endDate: Number(filters.endDate),
+    }
+  }
+
+  const rangeValue = typeof filters.dateRange === 'string'
+    ? filters.dateRange
+    : (filters.dateRange?.value || filters.dateRange?.kind || '')
+
+  if (rangeValue === 'custom') {
+    const startDate = Number(filters.dateRange?.startDate || filters.customStartDate || 0)
+    const endDate = Number(filters.dateRange?.endDate || filters.customEndDate || 0)
+    if (startDate && endDate) {
+      return { startDate, endDate: endDate + 86400000 }
+    }
+  }
+
+  const now = new Date()
+  const year = Number(filters.year || now.getFullYear())
+  const month = Number(filters.month || (now.getMonth() + 1))
+  const anchorDate = new Date(year, month - 1, 1)
+
+  if (rangeValue === 'last_month') {
+    return {
+      startDate: new Date(year, month - 2, 1).getTime(),
+      endDate: new Date(year, month - 1, 1).getTime(),
+    }
+  }
+
+  if (rangeValue === 'this_quarter') {
+    const quarterStartMonth = Math.floor(anchorDate.getMonth() / 3) * 3
+    return {
+      startDate: new Date(anchorDate.getFullYear(), quarterStartMonth, 1).getTime(),
+      endDate: new Date(anchorDate.getFullYear(), quarterStartMonth + 3, 1).getTime(),
+    }
+  }
+
+  if (rangeValue === 'this_year' || filters.period === 'yearly') {
+    return {
+      startDate: new Date(anchorDate.getFullYear(), 0, 1).getTime(),
+      endDate: new Date(anchorDate.getFullYear() + 1, 0, 1).getTime(),
+    }
+  }
+
+  return {
+    startDate: new Date(year, month - 1, 1).getTime(),
+    endDate: new Date(year, month, 1).getTime(),
+  }
+}
+
+function getTransactionAmount(item) {
+  return item._txType === 'expense' ? (item.total_amount || 0) : Math.abs(item.amount || 0)
+}
 
 function getIdArg(input, key) {
   if (!input) return ''
@@ -290,39 +493,59 @@ module.exports = {
    */
   async getTransactionList(filters = {}) {
     const familyId = this.familyId
+    const { data: familyData } = await db.collection('families')
+      .doc(familyId)
+      .field({ settings: true })
+      .get()
+    const family = familyData[0] || familyData || {}
+    const customCategories = family.settings?.custom_expense_categories || []
+    const categoryMetaMap = getExpenseCategoryMetaMap(customCategories)
 
-    // 按月份计算日期范围
-    const year = filters.year || new Date().getFullYear()
-    const month = filters.month || (new Date().getMonth() + 1)
-    const startDate = new Date(year, month - 1, 1).getTime()
-    const endDate = new Date(year, month, 1).getTime()
+    const { startDate, endDate } = resolveDateRange(filters)
     const dateFilter = dbCmd.gte(startDate).and(dbCmd.lt(endDate))
-
+    const normalizedFilters = normalizeFinanceFilters(filters)
     const baseWhere = { family_id: familyId, deleted_at: null, date: dateFilter }
-    const type = filters.type  // 'income' | 'expense' | undefined
 
     // 按类型决定查哪些集合
-    const fetchExpenses = !type || type === 'expense'
-    const fetchIncomes = !type || type === 'income'
-
-    const expenseWhere = { ...baseWhere }
-    if (filters.category) expenseWhere.category = filters.category
+    const fetchExpenses = !normalizedFilters.type || normalizedFilters.type === 'expense'
+    const fetchIncomes = !normalizedFilters.type || normalizedFilters.type === 'income'
 
     const [expenseResult, incomeResult] = await Promise.all([
       fetchExpenses
-        ? db.collection('expenses').where(expenseWhere).orderBy('date', 'desc').limit(200).get()
+        ? db.collection('expenses').where(baseWhere).orderBy('date', 'desc').limit(1000).get()
         : { data: [] },
       fetchIncomes
-        ? db.collection('incomes').where(baseWhere).orderBy('date', 'desc').limit(200).get()
+        ? db.collection('incomes').where(baseWhere).orderBy('date', 'desc').limit(1000).get()
         : { data: [] },
     ])
 
     const transactions = [
-      ...expenseResult.data.map(e => ({ ...e, _txType: 'expense' })),
-      ...incomeResult.data.map(i => ({ ...i, _txType: 'income' })),
+      ...expenseResult.data
+        .filter(expense => matchesExpenseCategoryFilter(expense, normalizedFilters, categoryMetaMap))
+        .filter(expense => matchesExpenseLinkFilter(expense, normalizedFilters))
+        .map((expense) => ({
+        ...expense,
+        _txType: 'expense',
+        category_group_label: getExpenseCategoryGroupLabel(
+          getExpenseCategoryGroupKeyByName(expense.category, categoryMetaMap),
+        ),
+      })),
+      ...incomeResult.data
+        .filter((income) => {
+          if (normalizedFilters.incomeTypes.length > 0 && !normalizedFilters.incomeTypes.includes(income.type || '其他')) {
+            return false
+          }
+          return matchesIncomeLinkFilter(income, normalizedFilters)
+        })
+        .map(i => ({ ...i, _txType: 'income' })),
     ]
 
-    transactions.sort((a, b) => (b.date || 0) - (a.date || 0))
+    const sort = normalizedFilters.sort
+    transactions.sort((a, b) => {
+      if (sort === 'amount_desc') return getTransactionAmount(b) - getTransactionAmount(a)
+      if (sort === 'amount_asc') return getTransactionAmount(a) - getTransactionAmount(b)
+      return (b.date || 0) - (a.date || 0)
+    })
 
     return { data: transactions.slice(0, 100) }
   },
@@ -334,12 +557,21 @@ module.exports = {
     const expenseId = getIdArg(id, 'id')
     if (!expenseId) throw new Error('缺少记录 ID')
 
-    const { data: expenses } = await db.collection('expenses')
-      .where({ _id: expenseId, family_id: this.familyId, deleted_at: null })
-      .get()
+    const [expenseResult, familyResult] = await Promise.all([
+      db.collection('expenses')
+        .where({ _id: expenseId, family_id: this.familyId, deleted_at: null })
+        .get(),
+      db.collection('families')
+        .doc(this.familyId)
+        .field({ settings: true })
+        .get(),
+    ])
+    const expenses = expenseResult.data
     if (!expenses || expenses.length === 0) throw new Error('记录不存在')
 
     const expense = expenses[0]
+    const family = familyResult.data?.[0] || familyResult.data || {}
+    const categoryMetaMap = getExpenseCategoryMetaMap(family.settings?.custom_expense_categories || [])
     const linkedDogs = await fetchDogsByIds(this.familyId, expense.linked_dog_ids || [])
 
     let linkedRef = ''
@@ -358,6 +590,9 @@ module.exports = {
         ...expense,
         amount: expense.total_amount || 0,
         source: expense.source_type,
+        category_group_label: getExpenseCategoryGroupLabel(
+          getExpenseCategoryGroupKeyByName(expense.category, categoryMetaMap),
+        ),
         linked_dogs: linkedDogs,
         linked_ref: linkedRef,
       },
@@ -440,45 +675,65 @@ module.exports = {
     const familyId = this.familyId
     // 兼容旧调用（直接传字符串）和新调用（传对象）
     const period = typeof params === 'string' ? params : (params.period || 'monthly')
-    const now = new Date()
-    const year = (typeof params === 'object' && params.year) || now.getFullYear()
-    const month = (typeof params === 'object' && params.month) || (now.getMonth() + 1)
-    let startDate, endDate
+    const { data: familyData } = await db.collection('families')
+      .doc(familyId)
+      .field({ settings: true })
+      .get()
+    const family = familyData[0] || familyData || {}
+    const customCategories = family.settings?.custom_expense_categories || []
+    const categoryMetaMap = getExpenseCategoryMetaMap(customCategories)
 
-    if (period === 'yearly') {
-      startDate = new Date(year, 0, 1).getTime()
-      endDate = new Date(year + 1, 0, 1).getTime()
-    } else {
-      startDate = new Date(year, month - 1, 1).getTime()
-      endDate = new Date(year, month, 1).getTime()
-    }
+    const { startDate, endDate } = resolveDateRange({
+      ...(typeof params === 'object' ? params : {}),
+      period,
+    })
 
     const dateFilter = { $gte: startDate, $lt: endDate }
+    const normalizedFilters = normalizeFinanceFilters(typeof params === 'object' ? params : {})
+    const baseWhere = { family_id: familyId, deleted_at: null, date: dateFilter }
+    const fetchExpenses = !normalizedFilters.type || normalizedFilters.type === 'expense'
+    const fetchIncomes = !normalizedFilters.type || normalizedFilters.type === 'income'
 
     const [expenseResult, incomeResult] = await Promise.all([
-      db.collection('expenses')
-        .where({ family_id: familyId, deleted_at: null, date: dateFilter })
-        .limit(1000)
-        .get(),
-      db.collection('incomes')
-        .where({ family_id: familyId, deleted_at: null, date: dateFilter })
-        .limit(1000)
-        .get(),
+      fetchExpenses
+        ? db.collection('expenses')
+          .where(baseWhere)
+          .limit(1000)
+          .get()
+        : { data: [] },
+      fetchIncomes
+        ? db.collection('incomes')
+          .where(baseWhere)
+          .limit(1000)
+          .get()
+        : { data: [] },
     ])
+    const filteredExpenses = expenseResult.data
+      .filter(expense => matchesExpenseCategoryFilter(expense, normalizedFilters, categoryMetaMap))
+      .filter(expense => matchesExpenseLinkFilter(expense, normalizedFilters))
+    const filteredIncomes = incomeResult.data
+      .filter((income) => {
+        if (normalizedFilters.incomeTypes.length > 0 && !normalizedFilters.incomeTypes.includes(income.type || '其他')) {
+          return false
+        }
+        return matchesIncomeLinkFilter(income, normalizedFilters)
+      })
 
-    const totalExpense = expenseResult.data.reduce((sum, e) => sum + (e.total_amount || 0), 0)
-    const totalIncome = incomeResult.data.reduce((sum, i) => sum + (i.amount || 0), 0)
+    const totalExpense = filteredExpenses.reduce((sum, e) => sum + (e.total_amount || 0), 0)
+    const totalIncome = filteredIncomes.reduce((sum, i) => sum + (i.amount || 0), 0)
 
-    // 按分类汇总支出
+    // 按顶层分组汇总支出
     const categoryBreakdown = {}
-    for (const e of expenseResult.data) {
-      const cat = e.category || '其他'
-      categoryBreakdown[cat] = (categoryBreakdown[cat] || 0) + (e.total_amount || 0)
+    for (const e of filteredExpenses) {
+      const groupLabel = getExpenseCategoryGroupLabel(
+        getExpenseCategoryGroupKeyByName(e.category, categoryMetaMap),
+      )
+      categoryBreakdown[groupLabel] = (categoryBreakdown[groupLabel] || 0) + (e.total_amount || 0)
     }
 
     // 按类型汇总收入
     const incomeBreakdown = {}
-    for (const i of incomeResult.data) {
+    for (const i of filteredIncomes) {
       const type = i.type || '其他'
       incomeBreakdown[type] = (incomeBreakdown[type] || 0) + (i.amount || 0)
     }
@@ -493,8 +748,8 @@ module.exports = {
         netProfit: totalIncome - totalExpense,
         categoryBreakdown,
         incomeBreakdown,
-        expenseCount: expenseResult.data.length,
-        incomeCount: incomeResult.data.length,
+        expenseCount: filteredExpenses.length,
+        incomeCount: filteredIncomes.length,
       }
     }
   },
@@ -1127,12 +1382,7 @@ module.exports = {
       .get()
 
     const family = data[0] || data
-    const customCategories = family.settings?.custom_expense_categories || []
-
-    const categories = [
-      ...DEFAULT_EXPENSE_CATEGORIES.map(name => ({ name, is_default: true })),
-      ...customCategories.map(name => ({ name, is_default: false })),
-    ]
+    const categories = buildExpenseCategoryOptions(family.settings?.custom_expense_categories || [])
 
     return { data: categories }
   },
@@ -1140,20 +1390,24 @@ module.exports = {
   /**
    * 新增自定义支出分类
    */
-  async addExpenseCategory({ name } = {}) {
+  async addExpenseCategory({ name, parentGroup } = {}) {
     if (!name || !name.trim()) throw new Error('请填写分类名称')
     name = name.trim()
+    const normalizedParentGroup = normalizeExpenseCategoryGroupKey(parentGroup)
 
     if (DEFAULT_EXPENSE_CATEGORIES.includes(name)) throw new Error('该分类名称与预设分类重复')
 
     const { data } = await db.collection('families').doc(this.familyId).field({ settings: true }).get()
     const family = data[0] || data
-    const custom = family.settings?.custom_expense_categories || []
+    const custom = normalizeCustomExpenseCategories(family.settings?.custom_expense_categories || [])
 
-    if (custom.includes(name)) throw new Error('分类名称已存在')
+    if (custom.some(item => item.name === name)) throw new Error('分类名称已存在')
 
     await db.collection('families').doc(this.familyId).update({
-      'settings.custom_expense_categories': dbCmd.push(name),
+      'settings.custom_expense_categories': [
+        ...custom,
+        { name, parent_group: normalizedParentGroup },
+      ],
     })
 
     return { message: '已添加' }
@@ -1162,32 +1416,40 @@ module.exports = {
   /**
    * 重命名自定义支出分类（同步迁移历史账单）
    */
-  async updateExpenseCategory({ oldName, newName } = {}) {
+  async updateExpenseCategory({ oldName, newName, parentGroup } = {}) {
     if (!oldName || !newName || !newName.trim()) throw new Error('参数不完整')
     newName = newName.trim()
 
     if (DEFAULT_EXPENSE_CATEGORIES.includes(oldName)) throw new Error('预设分类不可编辑')
-    if (newName === oldName) return { message: '无变化' }
     if (DEFAULT_EXPENSE_CATEGORIES.includes(newName)) throw new Error('新名称与预设分类重复')
 
     const { data } = await db.collection('families').doc(this.familyId).field({ settings: true }).get()
     const family = data[0] || data
-    const custom = family.settings?.custom_expense_categories || []
+    const custom = normalizeCustomExpenseCategories(family.settings?.custom_expense_categories || [])
 
-    if (!custom.includes(oldName)) throw new Error('分类不存在')
-    if (custom.includes(newName)) throw new Error('新名称已存在')
+    const current = custom.find(item => item.name === oldName)
+    if (!current) throw new Error('分类不存在')
+    if (oldName !== newName && custom.some(item => item.name === newName)) throw new Error('新名称已存在')
 
-    const updated = custom.map(c => c === oldName ? newName : c)
+    const normalizedParentGroup = normalizeExpenseCategoryGroupKey(parentGroup || current.parent_group)
+    if (newName === oldName && normalizedParentGroup === current.parent_group) return { message: '无变化' }
+    const updated = custom.map((item) => (
+      item.name === oldName
+        ? { ...item, name: newName, parent_group: normalizedParentGroup }
+        : item
+    ))
     await db.collection('families').doc(this.familyId).update({
       'settings.custom_expense_categories': updated,
     })
 
     // 迁移历史账单中的分类名称
-    await db.collection('expenses').where({
-      family_id: this.familyId,
-      category: oldName,
-      deleted_at: null,
-    }).update({ category: newName })
+    if (newName !== oldName) {
+      await db.collection('expenses').where({
+        family_id: this.familyId,
+        category: oldName,
+        deleted_at: null,
+      }).update({ category: newName })
+    }
 
     return { message: '已更新' }
   },
@@ -1202,12 +1464,12 @@ module.exports = {
 
     const { data } = await db.collection('families').doc(this.familyId).field({ settings: true }).get()
     const family = data[0] || data
-    const custom = family.settings?.custom_expense_categories || []
+    const custom = normalizeCustomExpenseCategories(family.settings?.custom_expense_categories || [])
 
-    if (!custom.includes(name)) throw new Error('分类不存在')
+    if (!custom.some(item => item.name === name)) throw new Error('分类不存在')
 
     await db.collection('families').doc(this.familyId).update({
-      'settings.custom_expense_categories': dbCmd.pull(name),
+      'settings.custom_expense_categories': custom.filter(item => item.name !== name),
     })
 
     return { message: '已删除' }

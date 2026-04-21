@@ -131,6 +131,25 @@ function isMedicationTaskExpired(task) {
   return day > totalDays
 }
 
+function getMedicationHistorySortTs(task) {
+  return Number(task?.actual_start_date) || Number(task?.updated_at) || Number(task?.created_at) || 0
+}
+
+function getMedicationHistoryStatusRank(task) {
+  const status = mapMedicationStatus(task?.status)
+  if (status === 'active') return 0
+  if (status === 'completed') return 1
+  return 2
+}
+
+function sortMedicationHistory(tasks = []) {
+  return [...tasks].sort((a, b) => {
+    const rankDiff = getMedicationHistoryStatusRank(a) - getMedicationHistoryStatusRank(b)
+    if (rankDiff !== 0) return rankDiff
+    return getMedicationHistorySortTs(b) - getMedicationHistorySortTs(a)
+  })
+}
+
 async function normalizeExpiredMedicationTasks(tasks = []) {
   const normalizedTasks = []
   const now = Date.now()
@@ -763,6 +782,36 @@ module.exports = {
       .where(where)
       .orderBy('date', 'desc')
       .get()
+
+    return { data: records }
+  },
+
+  /**
+   * 获取某犬的全部用药记录
+   */
+  async getMedicationHistory(dogId) {
+    if (!dogId) throw new Error('缺少犬只 ID')
+
+    const { data: tasks } = await db.collection('medication_tasks')
+      .where({ dog_id: dogId, family_id: this.familyId })
+      .get()
+
+    const normalizedTasks = await normalizeExpiredMedicationTasks(tasks || [])
+    const records = sortMedicationHistory(normalizedTasks).map((task) => {
+      const normalizedTask = normalizeMedicationTaskDetail(task, null)
+      const progress = getMedicationProgressInfo(task)
+
+      return {
+        ...normalizedTask,
+        activity_ts: getMedicationHistorySortTs(task),
+        progress: normalizedTask.status === 'active'
+          ? {
+              current: Math.min(progress.day, progress.totalDays),
+              total: progress.totalDays,
+            }
+          : null,
+      }
+    })
 
     return { data: records }
   },

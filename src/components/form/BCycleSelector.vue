@@ -4,8 +4,11 @@
   Props:
     visible — 是否显示 (v-model)
     damId — 按母犬过滤（可选）
+    multiple — 是否多选
+    selectedIds — 已选周期 ID 列表
   Emits:
     select(cycle) — 选中周期
+    selectMultiple(cycles) — 多选回传
     update:visible — 关闭面板
 -->
 <template>
@@ -41,8 +44,14 @@
         </view>
         <view
           class="b-cycle-selector__radio"
-          :class="{ 'b-cycle-selector__radio--active': selected === cycle._id }"
-        />
+          :class="{ 'b-cycle-selector__radio--active': isSelected(cycle._id) }"
+        >
+          <text
+            v-if="props.multiple && isSelected(cycle._id)"
+            class="material-icons-round"
+            style="font-size: 14px; color: #fff;"
+          >check</text>
+        </view>
       </view>
 
       <!-- 已完成周期分隔 -->
@@ -68,8 +77,14 @@
         </view>
         <view
           class="b-cycle-selector__radio"
-          :class="{ 'b-cycle-selector__radio--active': selected === cycle._id }"
-        />
+          :class="{ 'b-cycle-selector__radio--active': isSelected(cycle._id) }"
+        >
+          <text
+            v-if="props.multiple && isSelected(cycle._id)"
+            class="material-icons-round"
+            style="font-size: 14px; color: #fff;"
+          >check</text>
+        </view>
       </view>
     </view>
   </BSheet>
@@ -96,11 +111,14 @@ interface Cycle {
 const props = defineProps<{
   visible: boolean
   damId?: string
+  multiple?: boolean
+  selectedIds?: string[]
 }>()
 
 const emit = defineEmits<{
   'update:visible': [value: boolean]
   select: [cycle: Cycle]
+  selectMultiple: [cycles: Cycle[]]
 }>()
 
 const sheetVisible = computed({
@@ -111,6 +129,7 @@ const sheetVisible = computed({
 const loading = ref(false)
 const cycles = ref<Cycle[]>([])
 const selected = ref('')
+const selectedIdsState = ref<string[]>([])
 
 const activeCycles = computed(() => cycles.value.filter(c => c.status !== 'completed'))
 const closedCycles = computed(() => cycles.value.filter(c => c.status === 'completed'))
@@ -127,9 +146,16 @@ const STATUS_MAP: Record<string, string> = {
 
 watch(() => props.visible, async (val) => {
   if (val) {
+    selectedIdsState.value = [...(props.selectedIds || [])]
     await fetchCycles()
   }
 })
+
+watch(() => props.selectedIds, (val) => {
+  if (props.multiple) {
+    selectedIdsState.value = [...(val || [])]
+  }
+}, { deep: true })
 
 async function fetchCycles() {
   loading.value = true
@@ -190,9 +216,23 @@ function getTagClass(status?: string): string {
 }
 
 function handleSelect(cycle: Cycle) {
+  if (props.multiple) {
+    if (isSelected(cycle._id)) {
+      selectedIdsState.value = selectedIdsState.value.filter(id => id !== cycle._id)
+    } else {
+      selectedIdsState.value = [...selectedIdsState.value, cycle._id]
+    }
+    emit('selectMultiple', cycles.value.filter(item => selectedIdsState.value.includes(item._id)))
+    return
+  }
   selected.value = cycle._id
   emit('select', cycle)
   sheetVisible.value = false
+}
+
+function isSelected(id: string) {
+  if (props.multiple) return selectedIdsState.value.includes(id)
+  return selected.value === id
 }
 </script>
 
@@ -271,6 +311,9 @@ function handleSelect(cycle: Cycle) {
     height: 22px;
     border-radius: 50%;
     border: 2px solid var(--text-4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
     flex-shrink: 0;
     position: relative;
     transition: border-color 0.12s ease;

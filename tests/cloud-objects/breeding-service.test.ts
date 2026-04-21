@@ -1062,7 +1062,173 @@ describe('breeding-service', () => {
     })
   })
 
+  describe('周期详情', () => {
+    it('获取周期详情时会返回同母犬历史序号与关联周期支出', async () => {
+      const now = Date.now()
+      seedCollection('breeding_cycles', [
+        {
+          _id: 'cycle_older',
+          dam_id: 'dam_1',
+          dam_name: '花花',
+          family_id: familyId,
+          status: '已生产',
+          created_at: now - 30 * 86400000,
+          updated_at: now - 29 * 86400000,
+        },
+        {
+          _id: 'cycle_target',
+          dam_id: 'dam_1',
+          dam_name: '花花',
+          family_id: familyId,
+          status: '怀孕中',
+          start_date: now - 10 * 86400000,
+          created_at: now - 11 * 86400000,
+          updated_at: now - 9 * 86400000,
+        },
+        {
+          _id: 'cycle_other_dam',
+          dam_id: 'dam_2',
+          dam_name: '点点',
+          family_id: familyId,
+          status: '发情中',
+          created_at: now - 5 * 86400000,
+          updated_at: now - 5 * 86400000,
+        },
+      ])
+      seedCollection('breeding_records', [{
+        _id: 'record_cycle_detail_1',
+        type: 'mating',
+        cycle_id: 'cycle_target',
+        dog_id: 'dam_1',
+        dog_name: '花花',
+        family_id: familyId,
+        date: now - 9 * 86400000,
+        details: { mating_number: 1 },
+        created_at: now - 9 * 86400000,
+        updated_at: now - 9 * 86400000,
+      }])
+      seedCollection('expenses', [
+        {
+          _id: 'exp_auto_1',
+          linked_cycle_id: 'cycle_target',
+          family_id: familyId,
+          total_amount: 300,
+          category: '配种费',
+          notes: '自动生成借配费',
+          source_type: 'auto',
+          source_record_id: 'record_cycle_detail_1',
+          date: now - 8 * 86400000,
+          deleted_at: null,
+          created_at: now - 8 * 86400000,
+          updated_at: now - 8 * 86400000,
+        },
+        {
+          _id: 'exp_manual_1',
+          linked_cycle_id: 'cycle_target',
+          family_id: familyId,
+          total_amount: 120,
+          category: '医疗',
+          notes: 'B超检查',
+          source_type: 'manual',
+          source_record_id: null,
+          date: now - 7 * 86400000,
+          deleted_at: null,
+          created_at: now - 7 * 86400000,
+          updated_at: now - 7 * 86400000,
+        },
+        {
+          _id: 'exp_deleted_1',
+          linked_cycle_id: 'cycle_target',
+          family_id: familyId,
+          total_amount: 999,
+          category: '其他',
+          notes: '已删除费用',
+          source_type: 'manual',
+          source_record_id: null,
+          date: now - 6 * 86400000,
+          deleted_at: now - 5 * 86400000,
+          created_at: now - 6 * 86400000,
+          updated_at: now - 6 * 86400000,
+        },
+        {
+          _id: 'exp_other_cycle_1',
+          linked_cycle_id: 'cycle_older',
+          family_id: familyId,
+          total_amount: 888,
+          category: '其他',
+          notes: '其他周期费用',
+          source_type: 'manual',
+          source_record_id: null,
+          date: now - 4 * 86400000,
+          deleted_at: null,
+          created_at: now - 4 * 86400000,
+          updated_at: now - 4 * 86400000,
+        },
+      ])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      const detail = await breedingService.getCycleDetail.call(ctx, 'cycle_target')
+
+      expect(detail.data.cycle.cycle_number).toBe(2)
+      expect(detail.data.records).toHaveLength(1)
+      expect(detail.data.expenses.map(item => item._id)).toEqual(['exp_manual_1', 'exp_auto_1'])
+    })
+
+    it('获取周期详情时缺少 start_date 也能稳定计算序号', async () => {
+      const now = Date.now()
+      seedCollection('breeding_cycles', [
+        {
+          _id: 'cycle_created_first',
+          dam_id: 'dam_1',
+          dam_name: '花花',
+          family_id: familyId,
+          status: '已生产',
+          created_at: now - 20 * 86400000,
+          updated_at: now - 20 * 86400000,
+        },
+        {
+          _id: 'cycle_created_second',
+          dam_id: 'dam_1',
+          dam_name: '花花',
+          family_id: familyId,
+          status: '发情中',
+          created_at: now - 10 * 86400000,
+          updated_at: now - 10 * 86400000,
+        },
+      ])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      const detail = await breedingService.getCycleDetail.call(ctx, 'cycle_created_second')
+
+      expect(detail.data.cycle.cycle_number).toBe(2)
+      expect(detail.data.expenses).toEqual([])
+    })
+  })
+
   describe('记录详情与编辑', () => {
+    it('获取繁育记录详情时会按 dog_id 回填缺失的犬名', async () => {
+      const now = Date.now()
+      seedCollection('breeding_records', [{
+        _id: 'record_without_name_1',
+        type: 'heat_observation',
+        cycle_id: 'cycle_extra_1',
+        dog_id: 'dam_1',
+        family_id: familyId,
+        date: now,
+        details: {
+          vulva_status: '开始软化',
+          discharge_status: '鲜红较多',
+        },
+        created_at: now,
+        updated_at: now,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      const record = await breedingService.getBreedingRecordDetail.call(ctx, { id: 'record_without_name_1' })
+
+      expect(record.dog_name).toBe('花花')
+    })
+
     it('获取繁育记录详情时附带当前额外安排', async () => {
       const now = Date.now()
       seedCollection('breeding_records', [{

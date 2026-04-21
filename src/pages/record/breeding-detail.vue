@@ -160,13 +160,150 @@
                 <text class="info-row-label">检查日期</text>
                 <text class="info-row-value">{{ formatDate(record.date) }}</text>
               </view>
-              <view class="info-row" v-if="record.details?.result">
+              <view class="info-row" v-if="getPregnancyResult(record.details)">
                 <text class="info-row-label">结果</text>
+                <text class="info-row-value">{{ getPregnancyResult(record.details) }}</text>
+              </view>
+              <view class="info-row" v-if="getPregnancyPuppyCount(record.details)">
+                <text class="info-row-label">胎儿数</text>
+                <text class="info-row-value">{{ getPregnancyPuppyCount(record.details) }}只</text>
+              </view>
+            </template>
+
+            <!-- 卵泡检查 -->
+            <template v-if="record.type === 'follicle_check'">
+              <view class="info-row">
+                <text class="info-row-label">犬只</text>
+                <view class="info-row-value">
+                  <view class="mini-avatar">
+                    <text class="material-icons-round" style="color: #fff; font-size: 14px;">pets</text>
+                  </view>
+                  <text>{{ record.dog_name || '未知' }}</text>
+                </view>
+              </view>
+              <view class="info-row">
+                <text class="info-row-label">检查日期</text>
+                <text class="info-row-value">{{ formatDate(record.date) }}</text>
+              </view>
+              <view class="info-row">
+                <text class="info-row-label">左侧卵泡</text>
+                <text class="info-row-value">{{ getFollicleSideText(record.details, 'left') }}</text>
+              </view>
+              <view class="info-row">
+                <text class="info-row-label">右侧卵泡</text>
+                <text class="info-row-value">{{ getFollicleSideText(record.details, 'right') }}</text>
+              </view>
+              <view class="info-row" v-if="record.details?.result">
+                <text class="info-row-label">检查结果</text>
                 <text class="info-row-value">{{ record.details.result }}</text>
               </view>
-              <view class="info-row" v-if="record.details?.fetus_count">
-                <text class="info-row-label">胎儿数</text>
-                <text class="info-row-value">{{ record.details.fetus_count }}只</text>
+            </template>
+
+            <!-- 产检 -->
+            <template v-if="record.type === 'prenatal_check'">
+              <view class="info-row">
+                <text class="info-row-label">犬只</text>
+                <view class="info-row-value">
+                  <view class="mini-avatar">
+                    <text class="material-icons-round" style="color: #fff; font-size: 14px;">pets</text>
+                  </view>
+                  <text>{{ record.dog_name || '未知' }}</text>
+                </view>
+              </view>
+              <view class="info-row">
+                <text class="info-row-label">检查日期</text>
+                <text class="info-row-value">{{ formatDate(record.date) }}</text>
+              </view>
+              <view class="info-row" v-if="record.details?.results">
+                <text class="info-row-label">检查结果</text>
+                <text class="info-row-value">{{ record.details.results }}</text>
+              </view>
+            </template>
+
+            <!-- 临产监测 -->
+            <template v-if="record.type === 'pre_labor'">
+              <view class="info-row">
+                <text class="info-row-label">犬只</text>
+                <view class="info-row-value">
+                  <view class="mini-avatar">
+                    <text class="material-icons-round" style="color: #fff; font-size: 14px;">pets</text>
+                  </view>
+                  <text>{{ record.dog_name || '未知' }}</text>
+                </view>
+              </view>
+              <view class="info-row">
+                <text class="info-row-label">记录日期</text>
+                <text class="info-row-value">{{ formatDate(record.date) }}</text>
+              </view>
+              <view class="info-row" v-if="record.details?.temperature !== undefined && record.details?.temperature !== null">
+                <text class="info-row-label">体温</text>
+                <text class="info-row-value">{{ record.details.temperature }}°C</text>
+              </view>
+              <view class="info-row">
+                <text class="info-row-label">刨窝行为</text>
+                <text class="info-row-value">{{ record.details?.nesting_behavior ? '有' : '无' }}</text>
+              </view>
+              <view class="info-row" v-if="record.details?.appetite_change">
+                <text class="info-row-label">食欲变化</text>
+                <text class="info-row-value">{{ record.details.appetite_change }}</text>
+              </view>
+              <view class="info-row" v-if="record.details?.other_signs">
+                <text class="info-row-label">其他征兆</text>
+                <text class="info-row-value">{{ record.details.other_signs }}</text>
+              </view>
+            </template>
+
+            <!-- 生产 -->
+            <template v-if="record.type === 'birth'">
+              <view class="info-row">
+                <text class="info-row-label">犬只</text>
+                <view class="info-row-value">
+                  <view class="mini-avatar">
+                    <text class="material-icons-round" style="color: #fff; font-size: 14px;">pets</text>
+                  </view>
+                  <text>{{ record.dog_name || '未知' }}</text>
+                </view>
+              </view>
+              <view class="info-row">
+                <text class="info-row-label">生产日期</text>
+                <text class="info-row-value">{{ formatDate(record.date) }}</text>
+              </view>
+              <view class="info-row" v-if="record.details?.birth_type">
+                <text class="info-row-label">生产方式</text>
+                <text class="info-row-value">{{ record.details.birth_type }}</text>
+              </view>
+              <view class="info-row" v-if="record.details?.total_born">
+                <text class="info-row-label">幼崽总数</text>
+                <text class="info-row-value">{{ record.details.total_born }}只</text>
+              </view>
+              <view class="info-row" v-if="record.details?.born_alive !== undefined">
+                <text class="info-row-label">存活幼崽</text>
+                <text class="info-row-value">{{ record.details.born_alive || 0 }}只</text>
+              </view>
+              <view class="info-row" v-if="record.details?.born_dead">
+                <text class="info-row-label">死胎</text>
+                <text class="info-row-value">{{ record.details.born_dead }}只</text>
+              </view>
+            </template>
+
+            <!-- 异常终止 -->
+            <template v-if="record.type === 'abnormal_termination'">
+              <view class="info-row">
+                <text class="info-row-label">犬只</text>
+                <view class="info-row-value">
+                  <view class="mini-avatar">
+                    <text class="material-icons-round" style="color: #fff; font-size: 14px;">pets</text>
+                  </view>
+                  <text>{{ record.dog_name || '未知' }}</text>
+                </view>
+              </view>
+              <view class="info-row">
+                <text class="info-row-label">记录日期</text>
+                <text class="info-row-value">{{ formatDate(record.date) }}</text>
+              </view>
+              <view class="info-row" v-if="record.details?.termination_type">
+                <text class="info-row-label">终止类型</text>
+                <text class="info-row-value">{{ record.details.termination_type }}</text>
               </view>
             </template>
 
@@ -247,6 +384,15 @@
         </view>
       </view>
     </BSheet>
+
+    <BModal
+      v-model:visible="showDeleteConfirm"
+      title="确认删除"
+      content="删除后不可恢复，确定要删除这条繁育记录吗？"
+      confirmText="删除"
+      :danger="true"
+      @confirm="handleDeleteConfirm"
+    />
   </view>
 </template>
 
@@ -261,12 +407,14 @@ import BCard from '@/components/base/BCard.vue'
 import BTag from '@/components/base/BTag.vue'
 import BButton from '@/components/base/BButton.vue'
 import BSheet from '@/components/layout/BSheet.vue'
+import BModal from '@/components/layout/BModal.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 
 const record = ref<any>(null)
 const loading = ref(true)
 const showMore = ref(false)
+const showDeleteConfirm = ref(false)
 
 let recordId = ''
 let hasShownOnce = false
@@ -276,9 +424,13 @@ let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
 const typeMap: Record<string, { label: string; tagColor: any; cardColor: any }> = {
   heat: { label: '发情', tagColor: 'amber', cardColor: 'amber' },
   heat_observation: { label: '发情观察', tagColor: 'amber', cardColor: 'amber' },
+  follicle_check: { label: '卵泡检查', tagColor: 'teal', cardColor: 'teal' },
   mating: { label: '配种', tagColor: 'rose', cardColor: 'rose' },
-  pregnancy_check: { label: '孕检', tagColor: 'blue', cardColor: 'blue' },
+  pregnancy_check: { label: '孕检', tagColor: 'green', cardColor: 'green' },
+  prenatal_check: { label: '产检', tagColor: 'blue', cardColor: 'blue' },
+  pre_labor: { label: '临产监测', tagColor: 'amber', cardColor: 'amber' },
   birth: { label: '生产', tagColor: 'green', cardColor: 'green' },
+  abnormal_termination: { label: '异常终止', tagColor: 'red', cardColor: 'red' },
 }
 
 const typeLabel = computed(() => typeMap[record.value?.type]?.label || record.value?.type || '未知')
@@ -308,23 +460,68 @@ function getExpectedDueDate(details: Record<string, any> = {}) {
   return details.expected_due_date || null
 }
 
+function getPregnancyResult(details: Record<string, any> = {}) {
+  if (details.result) return details.result
+  if (details.confirmed === '是' || details.confirmed === true) return '确认怀孕'
+  if (details.confirmed === '否' || details.confirmed === false) return '未怀孕'
+  return ''
+}
+
+function getPregnancyPuppyCount(details: Record<string, any> = {}) {
+  const value = Number(details.fetus_count || details.puppy_count || details.count)
+  return value > 0 ? value : null
+}
+
+function getFollicleSideText(details: Record<string, any> = {}, side: 'left' | 'right') {
+  const countKey = side === 'left' ? 'left_count' : 'right_count'
+  const sizeKey = side === 'left' ? 'left_size' : 'right_size'
+  const count = details[countKey]
+  const size = details[sizeKey]
+  const parts = []
+  if (count !== undefined && count !== null && count !== '') parts.push(`${count}个`)
+  if (size !== undefined && size !== null && size !== '') parts.push(`${size}`)
+  return parts.length > 0 ? parts.join(' · ') : '—'
+}
+
 const summaryTitle = computed(() => {
   if (record.value?.type === 'heat') return '发情开始'
+  if (record.value?.type === 'follicle_check') return record.value?.details?.result || '卵泡检查'
   if (record.value?.type === 'mating') {
     const sireName = getMatingSireName(record.value?.details)
     return sireName ? `与 ${sireName} 配种` : '配种记录'
   }
   if (record.value?.type === 'heat_observation') return '发情周期观察'
-  if (record.value?.type === 'pregnancy_check') return record.value?.details?.result || '孕检记录'
+  if (record.value?.type === 'pregnancy_check') return getPregnancyResult(record.value?.details) || '孕检记录'
+  if (record.value?.type === 'prenatal_check') return record.value?.details?.results || '产检记录'
+  if (record.value?.type === 'pre_labor') {
+    const temperature = record.value?.details?.temperature
+    return temperature !== undefined && temperature !== null ? `体温 ${temperature}°C` : '临产监测'
+  }
+  if (record.value?.type === 'birth') return record.value?.details?.birth_type || '生产记录'
+  if (record.value?.type === 'abnormal_termination') return record.value?.details?.termination_type || '异常终止'
   return typeLabel.value
 })
 const summaryMeta = computed(() => {
+  if (record.value?.type === 'follicle_check') {
+    const left = record.value?.details?.left_count
+    const right = record.value?.details?.right_count
+    return `左${left ?? '—'} 右${right ?? '—'}`
+  }
   if (record.value?.type === 'mating') {
     const matingNumber = getMatingNumber(record.value?.details)
     if (matingNumber) return `第${matingNumber}脚`
   }
-  if (record.value?.type === 'pregnancy_check' && record.value?.details?.fetus_count) return `${record.value.details.fetus_count}只`
+  if (record.value?.type === 'pregnancy_check' && getPregnancyPuppyCount(record.value?.details)) {
+    return `${getPregnancyPuppyCount(record.value?.details)}只`
+  }
   if (record.value?.type === 'heat_observation') return '观察日志'
+  if (record.value?.type === 'pre_labor') return record.value?.details?.nesting_behavior ? '有刨窝' : '监测中'
+  if (record.value?.type === 'birth' && record.value?.details?.born_alive !== undefined) {
+    return `存活${record.value.details.born_alive || 0}只`
+  }
+  if (record.value?.type === 'abnormal_termination' && record.value?.details?.termination_type) {
+    return record.value.details.termination_type
+  }
   return typeLabel.value
 })
 const summaryDateText = computed(() => record.value?.type === 'heat_observation' ? formatDateTime(record.value?.date) : formatDate(record.value?.date))
@@ -378,21 +575,16 @@ function goToCycle() {
 
 function confirmDelete() {
   showMore.value = false
-  uni.showModal({
-    title: '确认删除',
-    content: '删除后不可恢复，确定要删除这条繁育记录吗？',
-    confirmColor: '#e05252',
-    async success(res) {
-      if (res.confirm) {
-        const result = await deleteRecord(recordId)
-        if (result) {
-          queueSubmitFeedback({ message: '已删除繁育记录' })
-          await wait(140)
-          uni.navigateBack()
-        }
-      }
-    },
-  })
+  showDeleteConfirm.value = true
+}
+
+async function handleDeleteConfirm() {
+  const result = await deleteRecord(recordId)
+  if (result) {
+    queueSubmitFeedback({ message: '已删除繁育记录' })
+    await wait(140)
+    uni.navigateBack()
+  }
 }
 
 function handleDeleteFromMore() {
@@ -447,7 +639,9 @@ onShow(() => {
 .detail-summary--amber { background: linear-gradient(135deg, var(--amber-soft), rgba(255, 255, 255, 0.98)); }
 .detail-summary--rose { background: linear-gradient(135deg, var(--rose-soft), rgba(255, 255, 255, 0.98)); }
 .detail-summary--blue { background: linear-gradient(135deg, var(--blue-soft), rgba(255, 255, 255, 0.98)); }
+.detail-summary--teal { background: linear-gradient(135deg, rgba(61, 168, 160, 0.12), rgba(255, 255, 255, 0.98)); }
 .detail-summary--green { background: linear-gradient(135deg, var(--green-soft), rgba(255, 255, 255, 0.98)); }
+.detail-summary--red { background: linear-gradient(135deg, var(--red-soft), rgba(255, 255, 255, 0.98)); }
 .detail-summary__main {
   min-width: 0;
   display: flex;
@@ -562,6 +756,7 @@ onShow(() => {
 .section-dot--amber { background: var(--amber); }
 .section-dot--rose { background: var(--rose); }
 .section-dot--blue { background: var(--blue); }
+.section-dot--teal { background: var(--teal); }
 .section-dot--green { background: var(--green); }
 .section-dot--red { background: var(--red); }
 .section-text {

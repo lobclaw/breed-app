@@ -51,8 +51,8 @@
         </view>
       </view>
 
-      <!-- 支出分类 -->
-      <BSectionLabel title="支出分类" color="green" />
+      <!-- 支出分组 -->
+      <BSectionLabel title="支出分组" color="green" />
       <view class="bar-chart">
         <view v-for="(item, idx) in expenseItems" :key="item.cat" class="bar-row">
           <view class="bar-row__header">

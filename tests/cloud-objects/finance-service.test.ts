@@ -1,433 +1,352 @@
 /**
  * finance-service 云对象测试
- * 测试费用/收入 CRUD、财务统计、销售流程
+ * 测试财务分类分组、多选筛选与汇总口径
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import {
+  createCloudObjectContext,
+  createMockUniCloud,
   resetDB,
   seedCollection,
-  createMockUniCloud,
 } from '../helpers/mock-unicloud'
 
 const mockUniCloud = createMockUniCloud()
 ;(globalThis as any).uniCloud = mockUniCloud
+process.env.NODE_ENV = 'test'
+const financeService = require('../../uniCloud-alipay/cloudfunctions/finance-service/index.obj.js')
 
 describe('finance-service', () => {
   const db = mockUniCloud.database()
-  const familyId = 'fam_1'
+  const familyId = 'fam_finance_1'
+  const aprilTs = new Date('2026-04-20T10:00:00+08:00').getTime()
 
   beforeEach(() => {
     resetDB()
     seedCollection('families', [{
       _id: familyId,
       name: '测试犬舍',
+      settings: {
+        custom_expense_categories: ['美容'],
+      },
     }])
     seedCollection('dogs', [
-      { _id: 'dog_1', name: '花花', gender: '母', family_id: familyId, deleted_at: null, disposition: '在养' },
-      { _id: 'puppy_1', name: '小白', gender: '公', family_id: familyId, deleted_at: null, disposition: '在养', origin_litter_id: 'litter_1' },
-      { _id: 'puppy_2', name: '小黑', gender: '母', family_id: familyId, deleted_at: null, disposition: '在养', origin_litter_id: 'litter_1' },
+      { _id: 'dog_1', name: '花花', family_id: familyId, deleted_at: null },
+      { _id: 'dog_2', name: '可可', family_id: familyId, deleted_at: null },
+      { _id: 'dog_3', name: '糖糖', family_id: familyId, deleted_at: null },
+    ])
+    seedCollection('expenses', [])
+    seedCollection('incomes', [])
+  })
+
+  it('获取分类时应兼容旧字符串数组，并默认归到其他分组', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+    const result = await financeService.getExpenseCategories.call(ctx)
+    const beautyCategory = result.data.find((item: any) => item.name === '美容')
+
+    expect(beautyCategory).toMatchObject({
+      name: '美容',
+      parent_group: 'other',
+      is_default: false,
+    })
+  })
+
+  it('新增自定义分类时应写入 parent_group', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+    await financeService.addExpenseCategory.call(ctx, {
+      name: '玩具',
+      parentGroup: 'operations',
+    })
+
+    const { data } = await db.collection('families').doc(familyId).get()
+    expect(data[0].settings.custom_expense_categories).toEqual([
+      { name: '美容', parent_group: 'other' },
+      { name: '玩具', parent_group: 'operations' },
     ])
   })
 
-  describe('费用 CRUD', () => {
-    it('应创建手动支出', async () => {
-      const now = Date.now()
+  it('全部类型下可同时筛收入分类与支出分组/分类', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
 
-      const { id } = await db.collection('expenses').add({
+    seedCollection('expenses', [
+      {
+        _id: 'exp_medical',
         family_id: familyId,
+        category: '医疗',
         total_amount: 500,
+        deleted_at: null,
+        date: aprilTs,
+      },
+      {
+        _id: 'exp_food',
+        family_id: familyId,
         category: '食品',
-        date: now,
-        source_type: 'manual',
+        total_amount: 200,
         deleted_at: null,
-        created_at: now,
-      })
-
-      const { data } = await db.collection('expenses').doc(id).get()
-      expect(data[0].total_amount).toBe(500)
-      expect(data[0].category).toBe('食品')
-      expect(data[0].source_type).toBe('manual')
-    })
-
-    it('应创建收入', async () => {
-      const now = Date.now()
-
-      const { id } = await db.collection('incomes').add({
+        date: aprilTs,
+      },
+      {
+        _id: 'exp_transport',
         family_id: familyId,
-        dog_id: 'puppy_1',
-        dog_name: '小白',
-        type: '销售',
-        amount: 8000,
-        date: now,
-        deleted_at: null,
-        created_at: now,
-      })
-
-      const { data } = await db.collection('incomes').doc(id).get()
-      expect(data[0].amount).toBe(8000)
-      expect(data[0].type).toBe('销售')
-    })
-
-    it('应软删除支出', async () => {
-      const now = Date.now()
-
-      seedCollection('expenses', [{
-        _id: 'exp_del',
-        family_id: familyId,
+        category: '交通',
         total_amount: 100,
-        source_type: 'manual',
         deleted_at: null,
-      }])
-
-      await db.collection('expenses').doc('exp_del').update({
-        deleted_at: now,
-        updated_at: now,
-      })
-
-      const { data } = await db.collection('expenses').doc('exp_del').get()
-      expect(data[0].deleted_at).toBe(now)
-    })
-
-    it('自动生成的费用不可删除', () => {
-      // source_type=auto 的费用应该被阻止删除
-      const expense = { source_type: 'auto' }
-      expect(expense.source_type).toBe('auto')
-      // 实际云对象会抛错，这里只验证逻辑
-    })
-  })
-
-  describe('收支流水', () => {
-    it('应合并收支并按日期排序', async () => {
-      const now = Date.now()
-
-      seedCollection('expenses', [
-        { _id: 'e1', family_id: familyId, total_amount: 100, date: now - 2000, deleted_at: null },
-        { _id: 'e2', family_id: familyId, total_amount: 200, date: now, deleted_at: null },
-      ])
-
-      seedCollection('incomes', [
-        { _id: 'i1', family_id: familyId, amount: 5000, date: now - 1000, deleted_at: null },
-      ])
-
-      const { data: expenses } = await db.collection('expenses')
-        .where({ family_id: familyId, deleted_at: null })
-        .get()
-      const { data: incomes } = await db.collection('incomes')
-        .where({ family_id: familyId, deleted_at: null })
-        .get()
-
-      const merged = [
-        ...expenses.map(e => ({ ...e, _txType: 'expense' })),
-        ...incomes.map(i => ({ ...i, _txType: 'income' })),
-      ].sort((a, b) => (b.date || 0) - (a.date || 0))
-
-      expect(merged).toHaveLength(3)
-      expect(merged[0].date).toBe(now)
-      expect(merged[0]._txType).toBe('expense')
-    })
-
-    it('不应包含已删除的记录', async () => {
-      const now = Date.now()
-
-      seedCollection('expenses', [
-        { _id: 'e_live', family_id: familyId, total_amount: 100, date: now, deleted_at: null },
-        { _id: 'e_dead', family_id: familyId, total_amount: 200, date: now, deleted_at: now },
-      ])
-
-      const { data } = await db.collection('expenses')
-        .where({ family_id: familyId, deleted_at: null })
-        .get()
-
-      expect(data).toHaveLength(1)
-      expect(data[0]._id).toBe('e_live')
-    })
-  })
-
-  describe('财务统计', () => {
-    it('应计算月度收支汇总', async () => {
-      const now = Date.now()
-
-      seedCollection('expenses', [
-        { _id: 'e1', family_id: familyId, total_amount: 1000, category: '食品', date: now, deleted_at: null },
-        { _id: 'e2', family_id: familyId, total_amount: 500, category: '医疗', date: now, deleted_at: null },
-      ])
-
-      seedCollection('incomes', [
-        { _id: 'i1', family_id: familyId, amount: 8000, type: '销售', date: now, deleted_at: null },
-      ])
-
-      const { data: expenses } = await db.collection('expenses')
-        .where({ family_id: familyId, deleted_at: null })
-        .get()
-      const { data: incomes } = await db.collection('incomes')
-        .where({ family_id: familyId, deleted_at: null })
-        .get()
-
-      const totalExpense = expenses.reduce((sum, e) => sum + e.total_amount, 0)
-      const totalIncome = incomes.reduce((sum, i) => sum + i.amount, 0)
-
-      expect(totalExpense).toBe(1500)
-      expect(totalIncome).toBe(8000)
-      expect(totalIncome - totalExpense).toBe(6500)
-    })
-
-    it('应按分类汇总支出', async () => {
-      seedCollection('expenses', [
-        { _id: 'e1', family_id: familyId, total_amount: 1000, category: '食品', date: Date.now(), deleted_at: null },
-        { _id: 'e2', family_id: familyId, total_amount: 500, category: '食品', date: Date.now(), deleted_at: null },
-        { _id: 'e3', family_id: familyId, total_amount: 300, category: '医疗', date: Date.now(), deleted_at: null },
-      ])
-
-      const { data: expenses } = await db.collection('expenses')
-        .where({ family_id: familyId, deleted_at: null })
-        .get()
-
-      const breakdown: Record<string, number> = {}
-      for (const e of expenses) {
-        breakdown[e.category] = (breakdown[e.category] || 0) + e.total_amount
-      }
-
-      expect(breakdown['食品']).toBe(1500)
-      expect(breakdown['医疗']).toBe(300)
-    })
-  })
-
-  describe('单窝利润', () => {
-    it('应计算窝利润 = 收入 - 支出', async () => {
-      const now = Date.now()
-
-      seedCollection('litters', [{
-        _id: 'litter_1',
-        cycle_id: 'cycle_1',
-        dam_id: 'dog_1',
-        dam_name: '花花',
+        date: aprilTs,
+      },
+    ])
+    seedCollection('incomes', [
+      {
+        _id: 'income_sale',
         family_id: familyId,
-      }])
-
-      // 周期费用
-      seedCollection('expenses', [
-        { _id: 'exp_cycle', linked_cycle_id: 'cycle_1', family_id: familyId, total_amount: 1000, deleted_at: null },
-        { _id: 'exp_litter', linked_litter_id: 'litter_1', family_id: familyId, total_amount: 500, deleted_at: null },
-      ])
-
-      // 幼崽收入
-      seedCollection('incomes', [
-        { _id: 'inc_1', dog_id: 'puppy_1', family_id: familyId, amount: 8000, deleted_at: null },
-        { _id: 'inc_2', dog_id: 'puppy_2', family_id: familyId, amount: 7000, deleted_at: null },
-      ])
-
-      // 计算
-      const { data: cycleExp } = await db.collection('expenses')
-        .where({ linked_cycle_id: 'cycle_1', family_id: familyId, deleted_at: null })
-        .get()
-      const { data: litterExp } = await db.collection('expenses')
-        .where({ linked_litter_id: 'litter_1', family_id: familyId, deleted_at: null })
-        .get()
-
-      const totalExpense = [...cycleExp, ...litterExp].reduce((sum, e) => sum + e.total_amount, 0)
-
-      const puppyIds = ['puppy_1', 'puppy_2']
-      let totalIncome = 0
-      for (const pid of puppyIds) {
-        const { data: incomes } = await db.collection('incomes')
-          .where({ dog_id: pid, family_id: familyId, deleted_at: null })
-          .get()
-        totalIncome += incomes.reduce((sum, i) => sum + i.amount, 0)
-      }
-
-      expect(totalExpense).toBe(1500)
-      expect(totalIncome).toBe(15000)
-      expect(totalIncome - totalExpense).toBe(13500)
-    })
-  })
-
-  describe('销售流程', () => {
-    it('应创建待售记录并更新犬只去向', async () => {
-      const now = Date.now()
-
-      const { id: saleId } = await db.collection('sale_records').add({
-        dog_id: 'puppy_1',
-        dog_name: '小白',
-        family_id: familyId,
-        status: '待售',
-        floor_price: 6000,
-        deleted_at: null,
-        created_at: now,
-      })
-
-      await db.collection('dogs').doc('puppy_1').update({ disposition: '待售', updated_at: now })
-
-      const { data: sales } = await db.collection('sale_records').doc(saleId).get()
-      expect(sales[0].status).toBe('待售')
-      expect(sales[0].floor_price).toBe(6000)
-
-      const { data: dogs } = await db.collection('dogs').doc('puppy_1').get()
-      expect(dogs[0].disposition).toBe('待售')
-    })
-
-    it('收定金应变为已预定', async () => {
-      const now = Date.now()
-
-      seedCollection('sale_records', [{
-        _id: 'sale_1',
-        dog_id: 'puppy_1',
-        dog_name: '小白',
-        family_id: familyId,
-        status: '待售',
-      }])
-
-      await db.collection('sale_records').doc('sale_1').update({
-        status: '已预定',
-        deposit_amount: 2000,
-        deposit_date: now,
-        buyer_info: '张先生',
-        updated_at: now,
-      })
-
-      await db.collection('dogs').doc('puppy_1').update({ disposition: '已预定', updated_at: now })
-
-      const { data } = await db.collection('sale_records').doc('sale_1').get()
-      expect(data[0].status).toBe('已预定')
-      expect(data[0].deposit_amount).toBe(2000)
-    })
-
-    it('完成交易应生成收入并更新犬只去向', async () => {
-      const now = Date.now()
-
-      seedCollection('sale_records', [{
-        _id: 'sale_2',
-        dog_id: 'puppy_1',
-        dog_name: '小白',
-        family_id: familyId,
-        status: '已预定',
-        deposit_amount: 2000,
-      }])
-
-      // 完成交易
-      await db.collection('sale_records').doc('sale_2').update({
-        status: '已成交',
-        received_amount: 8000,
-        date: now,
-        updated_at: now,
-      })
-
-      // 自动创建收入
-      await db.collection('incomes').add({
-        dog_id: 'puppy_1',
-        dog_name: '小白',
+        dog_id: 'dog_1',
         type: '销售',
-        amount: 8000,
-        date: now,
-        source_sale_id: 'sale_2',
-        family_id: familyId,
+        amount: 3000,
         deleted_at: null,
-        created_at: now,
-      })
-
-      // 更新犬只
-      await db.collection('dogs').doc('puppy_1').update({ disposition: '已售', updated_at: now })
-
-      // 验证
-      const { data: sale } = await db.collection('sale_records').doc('sale_2').get()
-      expect(sale[0].status).toBe('已成交')
-      expect(sale[0].received_amount).toBe(8000)
-
-      const { data: incomes } = await db.collection('incomes')
-        .where({ source_sale_id: 'sale_2' })
-        .get()
-      expect(incomes).toHaveLength(1)
-      expect(incomes[0].amount).toBe(8000)
-
-      const { data: dogs } = await db.collection('dogs').doc('puppy_1').get()
-      expect(dogs[0].disposition).toBe('已售')
-    })
-
-    it('退款应生成负收入', async () => {
-      const now = Date.now()
-
-      seedCollection('sale_records', [{
-        _id: 'sale_refund',
-        dog_id: 'puppy_1',
-        dog_name: '小白',
+        date: aprilTs,
+      },
+      {
+        _id: 'income_keep',
         family_id: familyId,
-        status: '已成交',
-        received_amount: 8000,
-      }])
-
-      // 全额退款
-      await db.collection('sale_records').doc('sale_refund').update({
-        status: '已退款',
-        refund_amount: 8000,
-        refund_reason: '买家退回',
-        refund_date: now,
-        updated_at: now,
-      })
-
-      await db.collection('incomes').add({
-        dog_id: 'puppy_1',
-        dog_name: '小白',
-        type: '退款',
-        amount: -8000,
-        date: now,
-        source_sale_id: 'sale_refund',
-        family_id: familyId,
-        deleted_at: null,
-        created_at: now,
-      })
-
-      await db.collection('dogs').doc('puppy_1').update({ disposition: '待售', updated_at: now })
-
-      // 验证
-      const { data: incomes } = await db.collection('incomes')
-        .where({ source_sale_id: 'sale_refund' })
-        .get()
-      expect(incomes).toHaveLength(1)
-      expect(incomes[0].amount).toBe(-8000)
-      expect(incomes[0].type).toBe('退款')
-
-      const { data: dogs } = await db.collection('dogs').doc('puppy_1').get()
-      expect(dogs[0].disposition).toBe('待售')
-    })
-
-    it('定金取消应保留部分定金为收入', async () => {
-      const now = Date.now()
-
-      seedCollection('sale_records', [{
-        _id: 'sale_cancel',
-        dog_id: 'puppy_1',
-        dog_name: '小白',
-        family_id: familyId,
-        status: '已预定',
-        deposit_amount: 2000,
-      }])
-
-      // 定金取消，保留 1000
-      await db.collection('sale_records').doc('sale_cancel').update({
-        status: '定金取消',
-        deposit_kept_amount: 1000,
-        updated_at: now,
-      })
-
-      await db.collection('incomes').add({
-        dog_id: 'puppy_1',
-        dog_name: '小白',
+        dog_id: 'dog_2',
         type: '定金保留',
         amount: 1000,
-        date: now,
-        source_sale_id: 'sale_cancel',
-        family_id: familyId,
         deleted_at: null,
-        created_at: now,
-      })
+        date: aprilTs,
+      },
+    ])
 
-      await db.collection('dogs').doc('puppy_1').update({ disposition: '待售', updated_at: now })
+    const result = await financeService.getTransactionList.call(ctx, {
+      type: '',
+      incomeTypes: ['销售'],
+      expenseCategoryGroups: ['health'],
+      expenseCategories: ['食品'],
+      year: 2026,
+      month: 4,
+    })
 
-      const { data: incomes } = await db.collection('incomes')
-        .where({ source_sale_id: 'sale_cancel' })
-        .get()
-      expect(incomes).toHaveLength(1)
-      expect(incomes[0].amount).toBe(1000)
-      expect(incomes[0].type).toBe('定金保留')
+    expect(result.data.map((item: any) => item._id).sort()).toEqual([
+      'exp_food',
+      'exp_medical',
+      'income_sale',
+    ].sort())
+  })
+
+  it('收入类型筛选时应忽略支出分类条件', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+    seedCollection('expenses', [{
+      _id: 'exp_medical',
+      family_id: familyId,
+      category: '医疗',
+      total_amount: 500,
+      deleted_at: null,
+      date: aprilTs,
+    }])
+    seedCollection('incomes', [
+      {
+        _id: 'income_sale',
+        family_id: familyId,
+        dog_id: 'dog_1',
+        type: '销售',
+        amount: 3000,
+        deleted_at: null,
+        date: aprilTs,
+      },
+      {
+        _id: 'income_keep',
+        family_id: familyId,
+        dog_id: 'dog_2',
+        type: '定金保留',
+        amount: 1000,
+        deleted_at: null,
+        date: aprilTs,
+      },
+    ])
+
+    const result = await financeService.getTransactionList.call(ctx, {
+      type: 'income',
+      incomeTypes: ['销售'],
+      expenseCategoryGroups: ['health'],
+      expenseCategories: ['医疗'],
+      year: 2026,
+      month: 4,
+    })
+
+    expect(result.data).toHaveLength(1)
+    expect(result.data[0]).toMatchObject({
+      _id: 'income_sale',
+      _txType: 'income',
+    })
+  })
+
+  it('犬只多选取并集，叠加窝筛选时按交集处理支出', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+    seedCollection('expenses', [
+      {
+        _id: 'exp_match_1',
+        family_id: familyId,
+        category: '食品',
+        total_amount: 100,
+        linked_dog_ids: ['dog_1'],
+        linked_litter_id: 'litter_1',
+        deleted_at: null,
+        date: aprilTs,
+      },
+      {
+        _id: 'exp_match_2',
+        family_id: familyId,
+        category: '医疗',
+        total_amount: 200,
+        linked_dog_ids: ['dog_2'],
+        linked_litter_id: 'litter_1',
+        deleted_at: null,
+        date: aprilTs,
+      },
+      {
+        _id: 'exp_other_litter',
+        family_id: familyId,
+        category: '医疗',
+        total_amount: 300,
+        linked_dog_ids: ['dog_2'],
+        linked_litter_id: 'litter_2',
+        deleted_at: null,
+        date: aprilTs,
+      },
+    ])
+
+    const result = await financeService.getTransactionList.call(ctx, {
+      type: 'expense',
+      dogIds: ['dog_1', 'dog_2'],
+      litterIds: ['litter_1'],
+      year: 2026,
+      month: 4,
+    })
+
+    expect(result.data.map((item: any) => item._id).sort()).toEqual(['exp_match_1', 'exp_match_2'].sort())
+  })
+
+  it('仅看无关联时应忽略其他关联对象条件，并同时返回无关联收入与支出', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+    seedCollection('expenses', [
+      {
+        _id: 'exp_unlinked',
+        family_id: familyId,
+        category: '交通',
+        total_amount: 60,
+        deleted_at: null,
+        date: aprilTs,
+      },
+      {
+        _id: 'exp_linked',
+        family_id: familyId,
+        category: '食品',
+        total_amount: 120,
+        linked_dog_ids: ['dog_1'],
+        deleted_at: null,
+        date: aprilTs,
+      },
+    ])
+    seedCollection('incomes', [
+      {
+        _id: 'income_unlinked',
+        family_id: familyId,
+        type: '其他',
+        amount: 500,
+        deleted_at: null,
+        date: aprilTs,
+      },
+      {
+        _id: 'income_linked',
+        family_id: familyId,
+        dog_id: 'dog_1',
+        type: '销售',
+        amount: 3000,
+        deleted_at: null,
+        date: aprilTs,
+      },
+    ])
+
+    const result = await financeService.getTransactionList.call(ctx, {
+      type: '',
+      unlinkedOnly: true,
+      dogIds: ['dog_1'],
+      year: 2026,
+      month: 4,
+    })
+
+    expect(result.data.map((item: any) => item._id)).toEqual(['exp_unlinked', 'income_unlinked'])
+  })
+
+  it('汇总应与多选筛选条件保持一致', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+    seedCollection('expenses', [
+      {
+        _id: 'exp_medical',
+        family_id: familyId,
+        category: '医疗',
+        total_amount: 500,
+        deleted_at: null,
+        date: aprilTs,
+      },
+      {
+        _id: 'exp_food',
+        family_id: familyId,
+        category: '食品',
+        total_amount: 200,
+        deleted_at: null,
+        date: aprilTs,
+      },
+      {
+        _id: 'exp_transport',
+        family_id: familyId,
+        category: '交通',
+        total_amount: 100,
+        deleted_at: null,
+        date: aprilTs,
+      },
+    ])
+    seedCollection('incomes', [
+      {
+        _id: 'income_sale',
+        family_id: familyId,
+        dog_id: 'dog_1',
+        type: '销售',
+        amount: 3000,
+        deleted_at: null,
+        date: aprilTs,
+      },
+      {
+        _id: 'income_keep',
+        family_id: familyId,
+        dog_id: 'dog_2',
+        type: '定金保留',
+        amount: 1000,
+        deleted_at: null,
+        date: aprilTs,
+      },
+    ])
+
+    const result = await financeService.getFinancialSummary.call(ctx, {
+      period: 'monthly',
+      year: 2026,
+      month: 4,
+      incomeTypes: ['销售'],
+      expenseCategoryGroups: ['health'],
+      expenseCategories: ['食品'],
+    })
+
+    expect(result.data.totalIncome).toBe(3000)
+    expect(result.data.totalExpense).toBe(700)
+    expect(result.data.categoryBreakdown).toEqual({
+      医疗健康: 500,
+      喂养营养: 200,
+    })
+    expect(result.data.incomeBreakdown).toEqual({
+      销售: 3000,
     })
   })
 })

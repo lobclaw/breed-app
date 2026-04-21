@@ -32,11 +32,21 @@
       <text class="material-icons-round b-image-upload__add-icon">add</text>
       <text class="b-image-upload__add-text">{{ images.length }}/{{ max }}</text>
     </view>
+
+    <BModal
+      v-model:visible="showDeleteConfirm"
+      title="删除图片"
+      content="确定要删除这张图片吗？"
+      confirmText="删除"
+      :danger="true"
+      @confirm="handleDeleteConfirm"
+    />
   </view>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import BModal from '@/components/layout/BModal.vue'
 
 const props = withDefaults(defineProps<{
   modelValue?: string[]
@@ -51,6 +61,8 @@ const emit = defineEmits<{
 }>()
 
 const images = computed(() => props.modelValue || [])
+const showDeleteConfirm = ref(false)
+const pendingDeleteIndex = ref(-1)
 
 function chooseImage() {
   const remaining = props.max - images.value.length
@@ -91,18 +103,16 @@ function previewImage(index: number) {
 }
 
 function confirmDelete(index: number) {
-  uni.showModal({
-    title: '删除图片',
-    content: '确定要删除这张图片吗？',
-    confirmColor: '#e05252',
-    success: (res) => {
-      if (res.confirm) {
-        const updated = [...images.value]
-        updated.splice(index, 1)
-        emit('update:modelValue', updated)
-      }
-    },
-  })
+  pendingDeleteIndex.value = index
+  showDeleteConfirm.value = true
+}
+
+function handleDeleteConfirm() {
+  if (pendingDeleteIndex.value < 0) return
+  const updated = [...images.value]
+  updated.splice(pendingDeleteIndex.value, 1)
+  emit('update:modelValue', updated)
+  pendingDeleteIndex.value = -1
 }
 </script>
 

@@ -251,6 +251,7 @@
 
 - `total_amount`
 - `category`
+- `category_group_label`
 - `date`
 - `linked_cycle_id`
 - `linked_litter_id`
@@ -262,6 +263,12 @@
 - `litter_number`
 - `family_id`
 - `deleted_at`
+
+规则：
+
+- `category` 保存二级分类名称，如 `食品 / 医疗 / 配种费`
+- `category_group_label` 不单独持久化，查询时按分类映射为顶层用途分组：`喂养营养 / 医疗健康 / 繁育投入 / 日常运营 / 其他`
+- 顶层分组只用于筛选、统计与展示聚合，真实记账字段仍以 `category` 为准
 
 #### `incomes`
 
@@ -309,6 +316,17 @@
 - `agents`：代理人/中间人
 - `dog_weights`：体重历史
 - `medication_protocols`：用药方案库
+
+其中 `families.settings.custom_expense_categories` 结构为：
+
+- `name`
+- `parent_group`
+
+规则：
+
+- 自定义支出分类必须带 `parent_group`
+- 历史字符串数组格式兼容读取，但写回时统一升级为对象数组
+- 未识别或缺失分组的历史分类默认归到 `其他`
 
 ## 4. 自动推导状态
 

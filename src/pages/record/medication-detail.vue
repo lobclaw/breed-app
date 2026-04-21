@@ -179,6 +179,15 @@
       title="任务不存在"
       description="可能已被删除"
     />
+
+    <BModal
+      v-model:visible="showCancelConfirm"
+      title="确认取消"
+      content="取消后将不再提醒每日用药，确定要取消这个用药任务吗？"
+      confirmText="确认取消"
+      :danger="true"
+      @confirm="handleCancelConfirm"
+    />
   </view>
 </template>
 
@@ -194,6 +203,7 @@ import BEmpty from '@/components/feedback/BEmpty.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
+import BModal from '@/components/layout/BModal.vue'
 import { resolveMedicationDetailId } from '@/utils/dogDetailNavigation'
 import { formatMedicationDosage, formatMedicationFrequency } from '@/utils/medicationDisplay'
 import { getMedicationDayState, getMedicationTodayProgress, getMedicationFrequency } from '@/utils/medicationState'
@@ -201,6 +211,7 @@ import { getMedicationDayState, getMedicationTodayProgress, getMedicationFrequen
 const task = ref<any>(null)
 const loading = ref(true)
 const submitBannerMessage = ref('')
+const showCancelConfirm = ref(false)
 
 let taskId = ''
 let hasShownOnce = false
@@ -395,21 +406,16 @@ function goToProtocol() {
 }
 
 function confirmEndEarly() {
-  uni.showModal({
-    title: '确认取消',
-    content: '取消后将不再提醒每日用药，确定要取消这个用药任务吗？',
-    confirmColor: '#e05252',
-    async success(res) {
-      if (res.confirm) {
-        const result = await cancelTask(taskId)
-        if (result) {
-          queueSubmitFeedback({ message: '已取消用药任务' })
-          showSubmitBanner('已取消用药任务')
-          await loadTask()
-        }
-      }
-    },
-  })
+  showCancelConfirm.value = true
+}
+
+async function handleCancelConfirm() {
+  const result = await cancelTask(taskId)
+  if (result) {
+    queueSubmitFeedback({ message: '已取消用药任务' })
+    showSubmitBanner('已取消用药任务')
+    await loadTask()
+  }
 }
 
 onLoad((query) => {

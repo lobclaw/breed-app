@@ -83,6 +83,15 @@
         />
       </view>
     </BModal>
+
+    <BModal
+      v-model:visible="showConfirmModal"
+      :title="confirmTitle"
+      :content="confirmContent"
+      :confirmText="confirmText"
+      :danger="confirmDanger"
+      @confirm="handleConfirm"
+    />
   </view>
 </template>
 
@@ -105,6 +114,12 @@ const createdDate = computed(() => formatDate(currentFamily.value?.created_at))
 
 const showNameModal = ref(false)
 const nameInput = ref('')
+const showConfirmModal = ref(false)
+const confirmTitle = ref('')
+const confirmContent = ref('')
+const confirmText = ref('确定')
+const confirmDanger = ref(false)
+let confirmAction: (() => Promise<void>) | null = null
 
 const { run: updateRole } = useCloudCall('family-service', 'updateMemberRole', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 const { run: removeMember } = useCloudCall('family-service', 'removeMember', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
@@ -141,29 +156,33 @@ async function onNameConfirm() {
 async function changeRole(member: any) {
   const newRole = member.role === 'admin' ? 'helper' : 'admin'
   const label = newRole === 'admin' ? '管理员' : '协助者'
-  uni.showModal({
-    title: '更改角色',
-    content: `将该成员设为${label}？`,
-    success: async (res) => {
-      if (res.confirm) {
-        await updateRole(member.user_id, newRole)
-        await loadFamily()
-      }
-    }
-  })
+  confirmTitle.value = '更改角色'
+  confirmContent.value = `将该成员设为${label}？`
+  confirmText.value = '确认更改'
+  confirmDanger.value = false
+  confirmAction = async () => {
+    await updateRole(member.user_id, newRole)
+    await loadFamily()
+  }
+  showConfirmModal.value = true
 }
 
 async function remove(member: any) {
-  uni.showModal({
-    title: '确认移除',
-    content: '移除后该成员将无法访问家庭数据',
-    success: async (res) => {
-      if (res.confirm) {
-        await removeMember(member.user_id)
-        await loadFamily()
-      }
-    }
-  })
+  confirmTitle.value = '确认移除'
+  confirmContent.value = '移除后该成员将无法访问家庭数据'
+  confirmText.value = '确认移除'
+  confirmDanger.value = true
+  confirmAction = async () => {
+    await removeMember(member.user_id)
+    await loadFamily()
+  }
+  showConfirmModal.value = true
+}
+
+async function handleConfirm() {
+  if (confirmAction) {
+    await confirmAction()
+  }
 }
 
 function goToInvite() {

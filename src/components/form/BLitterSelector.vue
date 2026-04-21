@@ -4,8 +4,11 @@
   Props:
     visible — 是否显示 (v-model)
     familyId — 家庭 ID
+    multiple — 是否多选
+    selectedIds — 已选窝 ID 列表
   Emits:
     select(litter) — 选中窝次
+    selectMultiple(litters) — 多选回传
     update:visible — 关闭面板
 -->
 <template>
@@ -37,8 +40,14 @@
         </view>
         <view
           class="b-litter-selector__radio"
-          :class="{ 'b-litter-selector__radio--active': selected === litter._id }"
-        />
+          :class="{ 'b-litter-selector__radio--active': isSelected(litter._id) }"
+        >
+          <text
+            v-if="props.multiple && isSelected(litter._id)"
+            class="material-icons-round"
+            style="font-size: 14px; color: #fff;"
+          >check</text>
+        </view>
       </view>
     </view>
   </BSheet>
@@ -63,11 +72,14 @@ interface Litter {
 const props = defineProps<{
   visible: boolean
   familyId?: string
+  multiple?: boolean
+  selectedIds?: string[]
 }>()
 
 const emit = defineEmits<{
   'update:visible': [value: boolean]
   select: [litter: Litter]
+  selectMultiple: [litters: Litter[]]
 }>()
 
 const sheetVisible = computed({
@@ -78,14 +90,22 @@ const sheetVisible = computed({
 const loading = ref(false)
 const litters = ref<Litter[]>([])
 const selected = ref('')
+const selectedIdsState = ref<string[]>([])
 
 const { run: fetchAllLitters } = useCloudCall<{ data: any[] }>('breeding-service', 'getAllLitters')
 
 watch(() => props.visible, async (val) => {
   if (val) {
+    selectedIdsState.value = [...(props.selectedIds || [])]
     await fetchLitters()
   }
 })
+
+watch(() => props.selectedIds, (val) => {
+  if (props.multiple) {
+    selectedIdsState.value = [...(val || [])]
+  }
+}, { deep: true })
 
 async function fetchLitters() {
   loading.value = true
@@ -107,9 +127,23 @@ async function fetchLitters() {
 }
 
 function handleSelect(litter: Litter) {
+  if (props.multiple) {
+    if (isSelected(litter._id)) {
+      selectedIdsState.value = selectedIdsState.value.filter(id => id !== litter._id)
+    } else {
+      selectedIdsState.value = [...selectedIdsState.value, litter._id]
+    }
+    emit('selectMultiple', litters.value.filter(item => selectedIdsState.value.includes(item._id)))
+    return
+  }
   selected.value = litter._id
   emit('select', litter)
   sheetVisible.value = false
+}
+
+function isSelected(id: string) {
+  if (props.multiple) return selectedIdsState.value.includes(id)
+  return selected.value === id
 }
 
 function formatDate(ts?: number): string {
@@ -166,6 +200,9 @@ function formatDate(ts?: number): string {
     height: 22px;
     border-radius: 50%;
     border: 2px solid var(--text-4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
     flex-shrink: 0;
     position: relative;
     transition: border-color 0.12s ease;

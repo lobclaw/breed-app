@@ -160,6 +160,15 @@
       </view>
     </BModal>
 
+    <BModal
+      v-model:visible="showLogoutConfirm"
+      title="确认退出"
+      content="退出后需要重新登录"
+      confirmText="退出登录"
+      :danger="true"
+      @confirm="handleLogoutConfirm"
+    />
+
     <!-- 底部导航栏 -->
     <BNavBar current="profile" />
   </view>
@@ -219,6 +228,7 @@ const { run: doUpdateNickname } = useCloudCall('family-service', 'updateNickname
 // 昵称编辑
 const showNicknameModal = ref(false)
 const nicknameInput = ref('')
+const showLogoutConfirm = ref(false)
 
 function editNickname() {
   const uid = currentUser.value?.uid
@@ -239,13 +249,11 @@ function goTo(url: string) {
 }
 
 function doLogout() {
-  uni.showModal({
-    title: '确认退出',
-    content: '退出后需要重新登录',
-    success: (res) => {
-      if (res.confirm) logout()
-    },
-  })
+  showLogoutConfirm.value = true
+}
+
+function handleLogoutConfirm() {
+  logout()
 }
 </script>
 

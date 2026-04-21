@@ -39,7 +39,7 @@
     />
 
     <!-- 推荐模板 -->
-    <view class="template-section">
+    <view v-if="availableTemplates.length > 0" class="template-section">
       <text class="template-section__label">推荐模板</text>
       <view v-for="(tpl, idx) in availableTemplates" :key="idx" class="template-card">
         <view class="template-card__content">
@@ -48,7 +48,6 @@
         </view>
         <button class="template-card__btn" @click="enableTemplate(tpl)">+ 启用</button>
       </view>
-      <text v-if="availableTemplates.length === 0" class="template-section__empty">所有模板已启用</text>
     </view>
 
     <!-- 删除确认 -->
@@ -336,14 +335,6 @@ async function confirmDelete() {
     color: var(--text-3);
     letter-spacing: 0.5px;
     padding: 0 4px 10px;
-    display: block;
-  }
-
-  &__empty {
-    font-size: 13px;
-    color: var(--text-4);
-    text-align: center;
-    padding: 16px 0;
     display: block;
   }
 }

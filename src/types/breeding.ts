@@ -26,6 +26,7 @@ export interface BreedingCycle extends BaseDocument {
   sire_name?: string          // 冗余
   status: CycleStatus
   // cycle_number 动态计算，不存储
+  cycle_number?: number
 }
 
 // 繁育记录
@@ -57,4 +58,21 @@ export interface Litter extends BaseDocument {
   weaned_at?: number | null
   created_by: string
   // litter_number 动态计算，不存储
+}
+
+export interface BreedingCycleExpense extends BaseDocument {
+  total_amount: number
+  category?: string
+  notes?: string
+  date: number
+  linked_cycle_id?: string | null
+  source_type?: string | null
+  source_record_id?: string | null
+}
+
+export interface BreedingCycleDetailResponse {
+  cycle: BreedingCycle
+  records: BreedingRecord[]
+  litter: Litter | null
+  expenses: BreedingCycleExpense[]
 }

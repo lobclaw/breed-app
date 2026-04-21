@@ -507,6 +507,90 @@ describe('health-service', () => {
         name: '已完成2/2次',
       })
     })
+
+    it('应返回全部用药记录并按状态优先级排序', async () => {
+      const now = new Date('2026-04-21T10:00:00+08:00').getTime()
+      vi.spyOn(Date, 'now').mockReturnValue(now)
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+      seedCollection('medication_tasks', [{
+        _id: 'med_active_1',
+        dog_id: 'dog_1',
+        dog_name: '花花',
+        family_id: familyId,
+        drug_name: '阿莫西林',
+        dosage: '1',
+        dosage_unit: 'tablet',
+        method: '口服',
+        frequency: 2,
+        duration_days: 5,
+        actual_start_date: new Date('2026-04-20T09:00:00+08:00').getTime(),
+        status: '进行中',
+        daily_doses: { 1: 2, 2: 1 },
+        created_at: now,
+        updated_at: now,
+      }, {
+        _id: 'med_completed_1',
+        dog_id: 'dog_1',
+        dog_name: '花花',
+        family_id: familyId,
+        drug_name: '头孢',
+        frequency: 1,
+        duration_days: 3,
+        actual_start_date: new Date('2026-04-18T09:00:00+08:00').getTime(),
+        status: '已完成',
+        daily_doses: { 1: 1, 2: 1, 3: 1 },
+        created_at: now,
+        updated_at: now,
+      }, {
+        _id: 'med_overdue_1',
+        dog_id: 'dog_1',
+        dog_name: '花花',
+        family_id: familyId,
+        drug_name: '益生菌',
+        frequency: 1,
+        duration_days: 3,
+        actual_start_date: new Date('2026-04-10T09:00:00+08:00').getTime(),
+        status: '进行中',
+        daily_doses: { 1: 1 },
+        created_at: now,
+        updated_at: now,
+      }, {
+        _id: 'med_cancelled_1',
+        dog_id: 'dog_1',
+        dog_name: '花花',
+        family_id: familyId,
+        drug_name: '止咳糖浆',
+        frequency: 1,
+        duration_days: 5,
+        actual_start_date: new Date('2026-04-21T09:00:00+08:00').getTime(),
+        status: '已取消',
+        daily_doses: {},
+        created_at: now,
+        updated_at: now,
+      }])
+
+      const result = await healthService.getMedicationHistory.call(ctx, 'dog_1')
+
+      expect(result.data.map((item: any) => item._id)).toEqual([
+        'med_active_1',
+        'med_completed_1',
+        'med_overdue_1',
+        'med_cancelled_1',
+      ])
+      expect(result.data.map((item: any) => item.status)).toEqual([
+        'active',
+        'completed',
+        'completed',
+        'cancelled',
+      ])
+      expect(result.data[0].progress).toEqual({ current: 2, total: 5 })
+      expect(result.data[1].progress).toBeNull()
+      expect(result.data[3].progress).toBeNull()
+
+      const { data: overdueTask } = await db.collection('medication_tasks').doc('med_overdue_1').get()
+      expect(overdueTask[0].status).toBe('已完成')
+    })
   })
 
   describe('费用创建', () => {

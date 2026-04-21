@@ -127,7 +127,7 @@ function buildListMedicationStatus(tasks = []) {
   if (!tasks.length) return []
   return [{
     type: '用药中',
-    label: tasks.length === 1 ? '用药中' : `用药中·${tasks.length}项`,
+    label: '用药中',
     count: tasks.length,
     taskId: tasks[0]?._id,
   }]
@@ -158,6 +158,10 @@ function getMedicationTaskProgress(task, nowTs = Date.now()) {
 function isMedicationTaskActiveForDetail(task, nowTs = Date.now()) {
   const { currentDay, totalDays } = getMedicationTaskProgress(task, nowTs)
   return currentDay >= 1 && currentDay <= totalDays
+}
+
+function getActiveMedicationTasks(tasks = [], nowTs = Date.now()) {
+  return (tasks || []).filter(task => isMedicationTaskActiveForDetail(task, nowTs))
 }
 
 function getMedicationCompletionSummary(task) {
@@ -223,6 +227,7 @@ module.exports = {
    * 集合级查询（非逐犬），30-50犬毫秒级完成
    */
   async getDogListWithStatus(filters = {}) {
+    const now = Date.now()
     const where = {
       family_id: this.familyId,
       deleted_at: null,
@@ -291,6 +296,7 @@ module.exports = {
 
     const medicationMap = {}
     for (const task of medTasks) {
+      if (!isMedicationTaskActiveForDetail(task, now)) continue
       const dogId = task.dog_id
       if (!medicationMap[dogId]) medicationMap[dogId] = []
       medicationMap[dogId].push(task)
@@ -380,7 +386,7 @@ module.exports = {
     statuses.push(...buildDetailIllnessStatuses(activeIllnesses))
 
     // 用药状态（按药名去重，取进度最新的）
-    const medTasks = (medTasksRes.data || []).filter(task => isMedicationTaskActiveForDetail(task, now))
+    const medTasks = getActiveMedicationTasks(medTasksRes.data || [], now)
     const medDrugMap = {}
     for (const task of medTasks) {
       const drug = task.drug_name || task.details?.drug_name || '用药'

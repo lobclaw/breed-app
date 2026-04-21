@@ -59,6 +59,14 @@
 
     <!-- 警告文字 -->
     <text class="warning-text">备份文件包含所有犬只、记录、财务数据，请妥善保管</text>
+
+    <BModal
+      v-model:visible="showRepairConfirm"
+      title="数据修复"
+      content="将检查并修复数据不一致问题，是否继续？"
+      confirmText="开始修复"
+      @confirm="handleRepairConfirm"
+    />
   </view>
 </template>
 
@@ -67,11 +75,13 @@ import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
+import BModal from '@/components/layout/BModal.vue'
 
 const exporting = ref(false)
 const exportProgress = ref(0)
 const lastBackupDate = ref('')
 const autoBackup = ref(true)
+const showRepairConfirm = ref(false)
 
 const { run: getBackupInfo } = useCloudCall<{ data: { last_backup?: number; auto_backup?: boolean } }>('family-service', 'getBackupInfo')
 const { run: exportData } = useCloudCall<{ data: { url: string } }>('family-service', 'exportData', {
@@ -152,15 +162,11 @@ function startExport() {
 }
 
 function startRepair() {
-  uni.showModal({
-    title: '数据修复',
-    content: '将检查并修复数据不一致问题，是否继续？',
-    success: (res) => {
-      if (res.confirm) {
-        uni.showToast({ title: '修复中...', icon: 'loading' })
-      }
-    },
-  })
+  showRepairConfirm.value = true
+}
+
+function handleRepairConfirm() {
+  uni.showToast({ title: '修复中...', icon: 'loading' })
 }
 
 function goToRecycleBin() {
