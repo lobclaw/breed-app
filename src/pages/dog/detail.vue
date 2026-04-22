@@ -294,7 +294,22 @@
             <text class="breeding-active-cycle__sub">{{ activeCycleSummary.subtitle }}</text>
 
             <view v-if="activeCycleDetailLoading" class="breeding-active-cycle__loading">
-              <text class="breeding-active-cycle__loading-text">正在加载当前周期摘要...</text>
+              <view class="breeding-active-cycle__skeleton">
+                <view
+                  v-for="index in 3"
+                  :key="`active-cycle-skeleton-${index}`"
+                  class="breeding-active-cycle__skeleton-item"
+                >
+                  <view class="breeding-active-cycle__skeleton-rail">
+                    <view class="breeding-active-cycle__skeleton-dot breeding-active-cycle__skeleton-shimmer" />
+                    <view v-if="index < 3" class="breeding-active-cycle__skeleton-line breeding-active-cycle__skeleton-shimmer" />
+                  </view>
+                  <view class="breeding-active-cycle__skeleton-copy">
+                    <view class="breeding-active-cycle__skeleton-title breeding-active-cycle__skeleton-shimmer" />
+                    <view class="breeding-active-cycle__skeleton-sub breeding-active-cycle__skeleton-shimmer" />
+                  </view>
+                </view>
+              </view>
             </view>
 
             <view v-else-if="activeCycleSummary.timeline.length > 0" class="breeding-active-cycle__timeline">
@@ -2891,11 +2906,69 @@ onShow(() => {
 .breeding-active-cycle__loading {
   padding: 14px 0 6px;
 }
-.breeding-active-cycle__loading-text,
+.breeding-active-cycle__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.breeding-active-cycle__skeleton-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.breeding-active-cycle__skeleton-rail {
+  width: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+.breeding-active-cycle__skeleton-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.breeding-active-cycle__skeleton-line {
+  width: 2px;
+  height: 32px;
+  border-radius: 999px;
+  margin-top: 4px;
+}
+.breeding-active-cycle__skeleton-copy {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 1px;
+}
+.breeding-active-cycle__skeleton-title {
+  width: 46%;
+  height: 12px;
+  border-radius: 999px;
+}
+.breeding-active-cycle__skeleton-sub {
+  width: 74%;
+  height: 10px;
+  border-radius: 999px;
+}
+.breeding-active-cycle__skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--card-dim) 25%,
+    rgba(255, 255, 255, 0.22) 50%,
+    var(--card-dim) 75%
+  );
+  background-size: 200% 100%;
+  animation: active-cycle-skeleton-shimmer 1.5s infinite;
+}
 .breeding-active-cycle__empty-text,
 .breeding-active-cycle__footer-text {
   font-size: 12px;
   color: var(--text-3);
+}
+@keyframes active-cycle-skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 .breeding-active-cycle__timeline {
   margin-top: 12px;

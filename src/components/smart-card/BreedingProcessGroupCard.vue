@@ -1,7 +1,7 @@
 <template>
   <view class="group-card">
     <view
-      v-for="item in items"
+      v-for="item in visibleItems"
       :key="item.id"
       class="group-row"
       :class="{ 'group-row--passed': item.milestone.suggestionStatus === 'window_passed' }"
@@ -85,11 +85,19 @@
         </view>
       </view>
     </view>
+    <view
+      v-if="hiddenCount > 0"
+      class="group-expand"
+      @click.stop="toggleExpanded"
+    >
+      <text class="group-expand__text">{{ expandText }}</text>
+      <text class="material-icons-round group-expand__icon">{{ expanded ? 'expand_less' : 'expand_more' }}</text>
+    </view>
   </view>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import { deriveBreedingMilestoneViewModel } from '@/utils/breedingMilestone'
@@ -107,9 +115,30 @@ import {
 } from '@/utils/homeHeatObservation'
 
 const props = defineProps<{ group: any }>()
+const expanded = ref(false)
 
-const items = computed(() => {
-  return (props.group?.cards || []).map((card: any) => {
+watch(() => props.group?.key, () => {
+  expanded.value = false
+}, { immediate: true })
+
+watch(() => props.group?.hiddenCount, (hiddenCount) => {
+  if (!hiddenCount) {
+    expanded.value = false
+  }
+})
+
+const allCards = computed(() => props.group?.cards || [])
+const collapsedCards = computed(() => {
+  const visibleCards = props.group?.visibleCards
+  if (Array.isArray(visibleCards) && visibleCards.length > 0) return visibleCards
+  return allCards.value.slice(0, 2)
+})
+const hiddenCount = computed(() => props.group?.hiddenCount || 0)
+const displayCards = computed(() => (expanded.value ? allCards.value : collapsedCards.value))
+const expandText = computed(() => (expanded.value ? '收起' : `还有 ${hiddenCount.value} 条，展开`))
+
+const visibleItems = computed(() => {
+  return displayCards.value.map((card: any) => {
     const task = card?.tasks?.[0] || {}
     const milestone = deriveBreedingMilestoneViewModel(task)
     return {
@@ -128,6 +157,10 @@ const items = computed(() => {
     }
   })
 })
+
+function toggleExpanded() {
+  expanded.value = !expanded.value
+}
 
 const typeMap: Record<string, string> = {
   vaccination: '/pages/record/health-vaccination',
@@ -418,6 +451,28 @@ function goPreLabor(card: any) {
 .group-secondary-action__text {
   font-size: 12px;
   font-weight: 700;
+  color: var(--text-3);
+}
+
+.group-expand {
+  position: relative;
+  z-index: 1;
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border-top: 1px solid rgba(216, 203, 189, 0.18);
+}
+
+.group-expand__text {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-3);
+}
+
+.group-expand__icon {
+  font-size: 14px;
   color: var(--text-3);
 }
 </style>

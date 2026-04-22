@@ -31,4 +31,11 @@ describe('dog add/edit page source contract', () => {
     expect(source).toContain('const dogData = {')
     expect(source).toContain('role: form.role')
   })
+
+  it('新建犬只成功后应把 targetDogId 写入 submit feedback 以便列表页返回承接', () => {
+    expect(source).toContain("const createdDogId = res?.data?._id || ''")
+    expect(source).toContain("targetDogId: createdDogId || undefined")
+    expect(source).toContain("targetRoute: feedbackTargetRoute || undefined")
+    expect(source).toContain("message: '已创建犬只'")
+  })
 })

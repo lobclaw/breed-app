@@ -214,6 +214,7 @@ const { currentFamily, loadFamily } = useAuth()
 
 const isEdit = ref(false)
 let editDogId = ''
+let feedbackTargetRoute = ''
 
 const form = reactive({
   name: '',
@@ -389,15 +390,26 @@ async function submit() {
         role: form.role,
       }
       const res = await createDog(dogData)
+      const createdDogId = res?.data?._id || ''
       // 新增到缓存
-      if (res?.data?._id) {
-        dogStore.addDog({ _id: res.data._id, ...dogData } as any)
+      if (createdDogId) {
+        dogStore.addDog({ _id: createdDogId, ...dogData } as any)
       }
+
+      submitState.value = 'success'
+      queueSubmitFeedback({
+        message: '已创建犬只',
+        targetDogId: createdDogId || undefined,
+        targetRoute: feedbackTargetRoute || undefined,
+      })
+      await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)
+      uni.navigateBack()
+      return
     }
 
     submitState.value = 'success'
     queueSubmitFeedback({
-      message: isEdit.value ? '已保存犬只信息' : '已创建犬只',
+      message: '已保存犬只信息',
     })
     await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)
     uni.navigateBack()
@@ -409,6 +421,7 @@ async function submit() {
 }
 
 onLoad(async (query) => {
+  feedbackTargetRoute = typeof query?.targetRoute === 'string' ? decodeURIComponent(query.targetRoute) : ''
   if (query?.id) {
     isEdit.value = true
     editDogId = query.id

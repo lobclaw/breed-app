@@ -73,6 +73,7 @@
     <BModal
       v-model:visible="showNameModal"
       title="修改犬舍名称"
+      :manualClose="true"
       @confirm="onNameConfirm"
     >
       <view class="custom-input-wrap">
@@ -120,6 +121,7 @@ const confirmTitle = ref('')
 const confirmContent = ref('')
 const confirmText = ref('确定')
 const confirmDanger = ref(false)
+const updatingFamilyName = ref(false)
 let confirmAction: (() => Promise<void>) | null = null
 
 const { run: updateRole } = useCloudCall('family-service', 'updateMemberRole', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
@@ -148,9 +150,35 @@ function editFamilyName() {
 }
 
 async function onNameConfirm() {
-  if (nameInput.value.trim()) {
-    await doUpdateFamilyName(nameInput.value.trim())
+  if (updatingFamilyName.value) return
+
+  const nextName = nameInput.value.trim()
+  if (!nextName) return
+
+  const previousName = currentFamily.value?.name || ''
+  if (nextName === previousName) {
+    showNameModal.value = false
+    return
+  }
+
+  if (!currentFamily.value) {
+    showNameModal.value = false
+    await doUpdateFamilyName(nextName)
     await loadFamily()
+    return
+  }
+
+  currentFamily.value.name = nextName
+  showNameModal.value = false
+  updatingFamilyName.value = true
+
+  try {
+    await doUpdateFamilyName(nextName)
+    await loadFamily()
+  } catch {
+    currentFamily.value.name = previousName
+  } finally {
+    updatingFamilyName.value = false
   }
 }
 

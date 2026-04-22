@@ -6,6 +6,7 @@ export type HomeFeedbackSection = 'overdue' | 'breeding' | 'reminders' | 'therap
 export interface SubmitFeedbackPayload {
   message: string
   targetRoute?: string
+  targetDogId?: string
   homeSection?: HomeFeedbackSection
   homeAnchorKey?: string
   completedTaskIds?: string[]

@@ -2,8 +2,52 @@
   <view class="page">
     <BPageHeader :title="pageTitle" />
 
-    <view v-if="loading" class="loading-state">
-      <text class="loading-text">加载中...</text>
+    <view v-if="loading" class="health-form-skeleton">
+      <view
+        v-for="(block, index) in skeletonBlocks"
+        :key="`${block.kind}-${index}`"
+        class="field-group health-form-skeleton__group"
+      >
+        <view class="health-form-skeleton__label" :class="{ 'health-form-skeleton__label--short': block.labelWidth === 'short' }" />
+
+        <template v-if="block.kind === 'picker' || block.kind === 'input' || block.kind === 'display'">
+          <view class="health-form-skeleton__control health-form-skeleton__shimmer" />
+        </template>
+
+        <template v-else-if="block.kind === 'choice'">
+          <view class="health-form-skeleton__choice-row" :class="{ 'health-form-skeleton__choice-row--grid': block.grid }">
+            <view
+              v-for="option in block.count || 3"
+              :key="option"
+              class="health-form-skeleton__choice health-form-skeleton__shimmer"
+            />
+          </view>
+        </template>
+
+        <template v-else-if="block.kind === 'options-card'">
+          <view class="health-form-skeleton__panel">
+            <view class="health-form-skeleton__control health-form-skeleton__shimmer" />
+            <view class="health-form-skeleton__toggle-row">
+              <view class="health-form-skeleton__toggle-copy">
+                <view class="health-form-skeleton__panel-line health-form-skeleton__panel-line--label health-form-skeleton__shimmer" />
+                <view class="health-form-skeleton__panel-line health-form-skeleton__panel-line--sub health-form-skeleton__shimmer" />
+              </view>
+              <view class="health-form-skeleton__toggle health-form-skeleton__shimmer" />
+            </view>
+            <view class="health-form-skeleton__toggle-row">
+              <view class="health-form-skeleton__toggle-copy">
+                <view class="health-form-skeleton__panel-line health-form-skeleton__panel-line--label health-form-skeleton__shimmer" />
+                <view class="health-form-skeleton__panel-line health-form-skeleton__panel-line--sub health-form-skeleton__shimmer" />
+              </view>
+              <view class="health-form-skeleton__toggle health-form-skeleton__shimmer" />
+            </view>
+          </view>
+        </template>
+
+        <template v-else-if="block.kind === 'textarea'">
+          <view class="health-form-skeleton__textarea health-form-skeleton__shimmer" />
+        </template>
+      </view>
     </view>
 
     <view v-else class="form-body">
@@ -197,7 +241,9 @@
     </view>
 
     <view class="fixed-bottom">
+      <view v-if="loading" class="health-form-skeleton__submit health-form-skeleton__shimmer" />
       <BSubmitButton
+        v-else
         :loading="submitState === 'submitting'"
         :success="submitState === 'success'"
         :disabled="!canSubmit || submitState === 'submitting'"
@@ -457,6 +503,48 @@ const canSubmit = computed(() => {
   if (resolvedType.value === 'vaccination') return !!details.vaccine_type
   if (resolvedType.value === 'deworming') return !!details.deworming_type
   return !!details.condition
+})
+
+type HealthSkeletonBlockKind = 'picker' | 'choice' | 'options-card' | 'input' | 'textarea' | 'display'
+
+interface HealthSkeletonBlock {
+  kind: HealthSkeletonBlockKind
+  count?: number
+  grid?: boolean
+  labelWidth?: 'default' | 'short'
+}
+
+const skeletonBlocks = computed<HealthSkeletonBlock[]>(() => {
+  const blocks: HealthSkeletonBlock[] = []
+
+  if (!isEdit.value) {
+    blocks.push({ kind: 'picker' })
+  } else {
+    blocks.push({ kind: 'display', labelWidth: 'short' })
+  }
+
+  if (resolvedType.value === 'vaccination') {
+    blocks.push({ kind: 'choice', count: 5, grid: true })
+  } else if (resolvedType.value === 'deworming') {
+    blocks.push(
+      { kind: 'choice', count: 3 },
+      { kind: 'choice', count: 4, grid: true },
+    )
+  } else if (resolvedType.value === 'illness') {
+    blocks.push(
+      { kind: 'choice', count: 5, grid: true },
+      { kind: 'choice', count: 3 },
+    )
+  }
+
+  blocks.push({ kind: 'options-card' })
+
+  if (resolvedType.value === 'illness') {
+    blocks.push({ kind: 'choice', count: 4 })
+  }
+
+  blocks.push({ kind: 'input' }, { kind: 'textarea' })
+  return blocks
 })
 
 const { run: updateFamilySettings } = useCloudCall('family-service', 'updateSettings')
@@ -990,15 +1078,127 @@ onMounted(async () => {
 </script>
 
 <style lang="scss" scoped>
-.loading-state {
+.health-form-skeleton {
+  padding: 0 var(--space-page);
   display: flex;
-  justify-content: center;
-  padding: 60px 0;
+  flex-direction: column;
+  gap: 16px;
 }
 
-.loading-text {
-  font-size: 14px;
-  color: var(--text-3);
+.health-form-skeleton__group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.health-form-skeleton__label {
+  width: 84px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--card-dim);
+}
+
+.health-form-skeleton__label--short {
+  width: 62px;
+}
+
+.health-form-skeleton__control,
+.health-form-skeleton__choice,
+.health-form-skeleton__panel,
+.health-form-skeleton__panel-line,
+.health-form-skeleton__toggle,
+.health-form-skeleton__textarea,
+.health-form-skeleton__submit {
+  background: linear-gradient(
+    90deg,
+    var(--card-dim) 25%,
+    rgba(255, 255, 255, 0.22) 50%,
+    var(--card-dim) 75%
+  );
+  background-size: 200% 100%;
+  animation: health-record-skeleton-shimmer 1.5s infinite;
+}
+
+.health-form-skeleton__control {
+  height: 48px;
+  border-radius: 14px;
+}
+
+.health-form-skeleton__choice-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.health-form-skeleton__choice-row--grid .health-form-skeleton__choice {
+  width: calc(50% - 4px);
+}
+
+.health-form-skeleton__choice {
+  min-width: 76px;
+  width: calc(33.333% - 6px);
+  height: 40px;
+  border-radius: 999px;
+}
+
+.health-form-skeleton__panel {
+  border-radius: 16px;
+  background-color: var(--card);
+  padding: 14px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.health-form-skeleton__toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.health-form-skeleton__toggle-copy {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.health-form-skeleton__panel-line {
+  height: 10px;
+  border-radius: 999px;
+}
+
+.health-form-skeleton__panel-line--label {
+  width: 38%;
+}
+
+.health-form-skeleton__panel-line--sub {
+  width: 56%;
+}
+
+.health-form-skeleton__toggle {
+  width: 52px;
+  height: 30px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.health-form-skeleton__textarea {
+  height: 104px;
+  border-radius: 16px;
+}
+
+.health-form-skeleton__submit {
+  width: 100%;
+  height: 52px;
+  border-radius: 999px;
+}
+
+@keyframes health-record-skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 
 .type-display {

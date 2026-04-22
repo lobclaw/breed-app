@@ -520,8 +520,8 @@ const HOME_SUBMIT_TOAST_DURATION_MS = 1800
 // 选中日期（0点 timestamp）
 const selectedDate = ref(startOfDay(Date.now()))
 const isSelectedToday = computed(() => selectedDate.value === startOfDay(Date.now()))
-const todayWorkbench = computed(() => buildHomeWorkbench(cards.value, { visibleRowLimit: 4 }))
-const dayWorkbench = computed(() => buildHomeWorkbench(dayCards.value, { visibleRowLimit: 4 }))
+const todayWorkbench = computed(() => buildHomeWorkbench(cards.value, { visibleRowLimit: 2 }))
+const dayWorkbench = computed(() => buildHomeWorkbench(dayCards.value, { visibleRowLimit: 2 }))
 const breedingGroups = computed(() => mapWorkbenchGroupsToCards(todayWorkbench.value.sections.breeding.groups))
 const breedingCardsCount = computed(() => breedingGroups.value.reduce((sum, group) => sum + group.cards.length, 0))
 const dayBreedingGroups = computed(() => mapWorkbenchGroupsToCards(dayWorkbench.value.sections.breeding.groups))
@@ -603,12 +603,20 @@ const summaryPills = computed(() => [
     pillClass: 'pill-plum',
   },
 ])
-function mapWorkbenchGroupsToCards(groups: Array<{ key: string; title: string; rows: Array<{ sourceCard?: any }> }> = []) {
+function mapWorkbenchGroupsToCards(groups: Array<{
+  key: string
+  title: string
+  rows: Array<{ sourceCard?: any }>
+  visibleRows?: Array<{ sourceCard?: any }>
+  hiddenCount?: number
+}> = []) {
   return groups
     .map(group => ({
       key: group.key,
       title: group.title,
       cards: uniqueSourceCards(group.rows || []),
+      visibleCards: uniqueSourceCards(group.visibleRows || []),
+      hiddenCount: group.hiddenCount || 0,
     }))
     .filter(group => group.cards.length > 0)
 }

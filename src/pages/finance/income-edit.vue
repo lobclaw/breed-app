@@ -2,8 +2,44 @@
   <view class="page">
     <BPageHeader title="编辑收入" />
 
-    <view v-if="loading" class="loading-state">
-      <text class="loading-text">加载中...</text>
+    <view v-if="loading" class="finance-income-skeleton">
+      <view class="finance-income-skeleton__amount">
+        <view class="finance-income-skeleton__amount-line finance-income-skeleton__shimmer" />
+        <view class="finance-income-skeleton__amount-underline finance-income-skeleton__shimmer" />
+      </view>
+
+      <view class="finance-income-skeleton__row finance-income-skeleton__row--single">
+        <view class="finance-income-skeleton__label finance-income-skeleton__shimmer" />
+        <view class="finance-income-skeleton__value finance-income-skeleton__value--tag finance-income-skeleton__shimmer" />
+      </view>
+
+      <view class="finance-income-skeleton__section">
+        <view class="finance-income-skeleton__row finance-income-skeleton__row--single">
+          <view class="finance-income-skeleton__label finance-income-skeleton__shimmer" />
+          <view class="finance-income-skeleton__value finance-income-skeleton__value--date finance-income-skeleton__shimmer" />
+        </view>
+        <view class="finance-income-skeleton__chips">
+          <view v-for="chip in 3" :key="chip" class="finance-income-skeleton__chip finance-income-skeleton__shimmer" />
+        </view>
+      </view>
+
+      <view class="finance-income-skeleton__row finance-income-skeleton__row--single">
+        <view class="finance-income-skeleton__label finance-income-skeleton__shimmer" />
+        <view class="finance-income-skeleton__value finance-income-skeleton__value--link finance-income-skeleton__shimmer" />
+      </view>
+
+      <view class="finance-income-skeleton__row finance-income-skeleton__row--single">
+        <view class="finance-income-skeleton__value finance-income-skeleton__value--full finance-income-skeleton__shimmer" />
+      </view>
+
+      <view class="finance-income-skeleton__photos">
+        <view v-for="photo in 2" :key="photo" class="finance-income-skeleton__photo finance-income-skeleton__shimmer" />
+      </view>
+
+      <view class="finance-income-skeleton__note">
+        <view class="finance-income-skeleton__label finance-income-skeleton__shimmer" />
+        <view class="finance-income-skeleton__textarea finance-income-skeleton__shimmer" />
+      </view>
     </view>
 
     <view v-else class="form-body">
@@ -110,7 +146,9 @@
 
     <!-- 固定底部按钮 -->
     <view class="fixed-bottom">
+      <view v-if="loading" class="finance-income-skeleton__submit finance-income-skeleton__shimmer" />
       <BSubmitButton
+        v-else
         :loading="submitting"
         :disabled="!canSubmit || submitting"
         @click="submit"
@@ -298,16 +336,129 @@ onLoad((query) => {
 </script>
 
 <style lang="scss" scoped>
-
-.loading-state {
-  display: flex;
-  justify-content: center;
-  padding: 60px 0;
+.finance-income-skeleton {
+  padding: 8px 24px 24px;
 }
 
-.loading-text {
-  font-size: 14px;
-  color: var(--text-3);
+.finance-income-skeleton__shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--card-dim) 25%,
+    rgba(255, 255, 255, 0.22) 50%,
+    var(--card-dim) 75%
+  );
+  background-size: 200% 100%;
+  animation: finance-income-edit-skeleton-shimmer 1.5s infinite;
+}
+
+.finance-income-skeleton__amount {
+  padding: 16px 0 20px;
+}
+
+.finance-income-skeleton__amount-line {
+  width: 54%;
+  height: 34px;
+  border-radius: 12px;
+}
+
+.finance-income-skeleton__amount-underline {
+  width: 100%;
+  height: 2px;
+  margin-top: 8px;
+  border-radius: 999px;
+}
+
+.finance-income-skeleton__section {
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.finance-income-skeleton__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.finance-income-skeleton__row--single {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.finance-income-skeleton__label {
+  width: 48px;
+  height: 12px;
+  border-radius: 999px;
+}
+
+.finance-income-skeleton__value {
+  height: 32px;
+  border-radius: 14px;
+}
+
+.finance-income-skeleton__value--tag {
+  width: 120px;
+}
+
+.finance-income-skeleton__value--date {
+  width: 132px;
+}
+
+.finance-income-skeleton__value--link {
+  width: 148px;
+}
+
+.finance-income-skeleton__value--full {
+  width: 176px;
+}
+
+.finance-income-skeleton__chips {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.finance-income-skeleton__chip {
+  width: 48px;
+  height: 24px;
+  border-radius: 999px;
+}
+
+.finance-income-skeleton__photos {
+  display: flex;
+  gap: 8px;
+  padding: 10px 0 4px;
+}
+
+.finance-income-skeleton__photo {
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+}
+
+.finance-income-skeleton__note {
+  padding: 14px 0 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.finance-income-skeleton__textarea {
+  width: 100%;
+  height: 96px;
+  border-radius: 16px;
+}
+
+.finance-income-skeleton__submit {
+  width: 100%;
+  height: 52px;
+  border-radius: 999px;
+}
+
+@keyframes finance-income-edit-skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 
 .form-body {

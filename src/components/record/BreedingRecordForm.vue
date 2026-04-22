@@ -2,8 +2,78 @@
   <view class="page" :class="{ 'heat-observation-page': breedingType === 'heat_observation' }">
     <BPageHeader :title="pageTitle" :subtitle="pageSubtitle" />
 
-    <view v-if="loading" class="loading-state">
-      <text class="loading-text">加载中...</text>
+    <view v-if="loading" class="record-form-skeleton" :class="{ 'record-form-skeleton--heat-observation': breedingType === 'heat_observation' }">
+      <view
+        v-for="(block, index) in skeletonBlocks"
+        :key="`${block.kind}-${index}`"
+        class="field-group record-form-skeleton__group"
+      >
+        <view class="record-form-skeleton__label" :class="{ 'record-form-skeleton__label--short': block.labelWidth === 'short' }" />
+
+        <template v-if="block.kind === 'picker' || block.kind === 'display' || block.kind === 'input'">
+          <view class="record-form-skeleton__control record-form-skeleton__shimmer" />
+        </template>
+
+        <template v-else-if="block.kind === 'date'">
+          <view class="record-form-skeleton__control record-form-skeleton__shimmer" />
+          <view class="record-form-skeleton__chip-row">
+            <view v-for="chip in 3" :key="chip" class="record-form-skeleton__chip record-form-skeleton__shimmer" />
+          </view>
+        </template>
+
+        <template v-else-if="block.kind === 'inline'">
+          <view class="record-form-skeleton__inline-row">
+            <view v-for="cell in 2" :key="cell" class="record-form-skeleton__inline-cell record-form-skeleton__shimmer" />
+          </view>
+        </template>
+
+        <template v-else-if="block.kind === 'choice'">
+          <view class="record-form-skeleton__choice-row" :class="{ 'record-form-skeleton__choice-row--grid': block.grid }">
+            <view
+              v-for="option in block.count || 3"
+              :key="option"
+              class="record-form-skeleton__choice record-form-skeleton__shimmer"
+            />
+          </view>
+        </template>
+
+        <template v-else-if="block.kind === 'symptoms'">
+          <view class="record-form-skeleton__symptom-grid">
+            <view v-for="option in 4" :key="option" class="record-form-skeleton__symptom record-form-skeleton__shimmer" />
+          </view>
+        </template>
+
+        <template v-else-if="block.kind === 'auto-card'">
+          <view class="record-form-skeleton__panel">
+            <view v-for="row in 2" :key="row" class="record-form-skeleton__panel-row">
+              <view class="record-form-skeleton__panel-icon record-form-skeleton__shimmer" />
+              <view class="record-form-skeleton__panel-copy">
+                <view class="record-form-skeleton__panel-line record-form-skeleton__panel-line--label record-form-skeleton__shimmer" />
+                <view class="record-form-skeleton__panel-line record-form-skeleton__panel-line--value record-form-skeleton__shimmer" />
+              </view>
+            </view>
+            <view class="record-form-skeleton__panel-hint record-form-skeleton__shimmer" />
+          </view>
+        </template>
+
+        <template v-else-if="block.kind === 'textarea'">
+          <view class="record-form-skeleton__textarea record-form-skeleton__shimmer" />
+        </template>
+
+        <template v-else-if="block.kind === 'extra'">
+          <view class="record-form-skeleton__panel record-form-skeleton__panel--extra">
+            <view class="record-form-skeleton__toggle-row">
+              <view class="record-form-skeleton__toggle-copy">
+                <view class="record-form-skeleton__panel-line record-form-skeleton__panel-line--label record-form-skeleton__shimmer" />
+                <view class="record-form-skeleton__panel-line record-form-skeleton__panel-line--sub record-form-skeleton__shimmer" />
+              </view>
+              <view class="record-form-skeleton__toggle record-form-skeleton__shimmer" />
+            </view>
+            <view class="record-form-skeleton__panel-line record-form-skeleton__panel-line--full record-form-skeleton__shimmer" />
+            <view class="record-form-skeleton__textarea record-form-skeleton__textarea--compact record-form-skeleton__shimmer" />
+          </view>
+        </template>
+      </view>
     </view>
 
     <view v-else class="form-body" :class="{ 'heat-observation__content': breedingType === 'heat_observation' }">
@@ -353,7 +423,11 @@
     </view>
 
     <view class="fixed-bottom" :class="{ 'fixed-bottom--heat-observation': breedingType === 'heat_observation' }">
+      <view v-if="loading" class="record-form-skeleton__submit-wrap">
+        <view class="record-form-skeleton__submit record-form-skeleton__shimmer" />
+      </view>
       <BSubmitButton
+        v-else
         :loading="submitState === 'submitting'"
         :success="submitState === 'success'"
         :disabled="!canSubmit || submitState === 'submitting'"
@@ -361,9 +435,13 @@
       >
         {{ submitButtonText }}
       </BSubmitButton>
-      <view v-if="breedingType === 'heat_observation'" class="heat-observation__time" @click="pickTime">
+      <view v-if="!loading && breedingType === 'heat_observation'" class="heat-observation__time" @click="pickTime">
         <text class="material-icons-round" style="font-size: 14px; color: var(--text-3);">schedule</text>
         <text class="heat-observation__time-text">{{ displayTime }}</text>
+      </view>
+      <view v-else-if="loading && breedingType === 'heat_observation'" class="record-form-skeleton__time">
+        <view class="record-form-skeleton__time-dot record-form-skeleton__shimmer" />
+        <view class="record-form-skeleton__time-line record-form-skeleton__shimmer" />
       </view>
     </view>
   </view>
@@ -596,6 +674,84 @@ const canSubmit = computed(() => {
   if (breedingType.value === 'mating') return !!selectedSire.value
   if (breedingType.value === 'abnormal_termination') return !!details.termination_type
   return true
+})
+
+type BreedingSkeletonBlockKind =
+  | 'picker'
+  | 'date'
+  | 'inline'
+  | 'choice'
+  | 'display'
+  | 'auto-card'
+  | 'textarea'
+  | 'extra'
+  | 'input'
+  | 'symptoms'
+
+interface BreedingSkeletonBlock {
+  kind: BreedingSkeletonBlockKind
+  count?: number
+  grid?: boolean
+  labelWidth?: 'default' | 'short'
+}
+
+const skeletonBlocks = computed<BreedingSkeletonBlock[]>(() => {
+  const blocks: BreedingSkeletonBlock[] = []
+
+  if (isEdit.value) {
+    blocks.push({ kind: 'display', labelWidth: 'short' })
+  }
+
+  if (breedingType.value === 'heat_observation') {
+    return [
+      ...blocks,
+      { kind: 'picker' },
+      { kind: 'choice', count: 3 },
+      { kind: 'choice', count: 4, grid: true },
+      { kind: 'symptoms' },
+      { kind: 'textarea' },
+    ]
+  }
+
+  blocks.push({ kind: 'picker' }, { kind: 'date' })
+
+  if (breedingType.value === 'follicle_check') {
+    blocks.push(
+      { kind: 'inline' },
+      { kind: 'inline' },
+      { kind: 'choice', count: 4 },
+    )
+  } else if (breedingType.value === 'mating') {
+    blocks.push(
+      { kind: 'picker' },
+      { kind: 'choice', count: 2 },
+      { kind: 'display' },
+      { kind: 'auto-card' },
+    )
+  } else if (breedingType.value === 'pregnancy_check') {
+    blocks.push(
+      { kind: 'choice', count: 2 },
+      { kind: 'input' },
+    )
+  } else if (breedingType.value === 'prenatal_check') {
+    blocks.push({ kind: 'textarea' })
+  } else if (breedingType.value === 'pre_labor') {
+    blocks.push(
+      { kind: 'input' },
+      { kind: 'choice', count: 2 },
+      { kind: 'input' },
+      { kind: 'input' },
+    )
+  } else if (breedingType.value === 'abnormal_termination') {
+    blocks.push({ kind: 'choice', count: 4, grid: true })
+  }
+
+  if (showCostField.value) {
+    blocks.push({ kind: 'input' })
+  }
+
+  blocks.push({ kind: 'textarea' }, { kind: 'extra' })
+  return blocks
 })
 
 const { run: fetchTask } = useCloudCall('task-service', 'getTask')
@@ -1068,15 +1224,232 @@ watch(
 </script>
 
 <style lang="scss" scoped>
-.loading-state {
+.record-form-skeleton {
+  padding: 0 var(--space-page);
   display: flex;
-  justify-content: center;
-  padding: 60px 0;
+  flex-direction: column;
+  gap: 16px;
 }
 
-.loading-text {
-  font-size: 14px;
-  color: var(--text-3);
+.record-form-skeleton__group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.record-form-skeleton__label {
+  width: 84px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--card-dim);
+}
+
+.record-form-skeleton__label--short {
+  width: 62px;
+}
+
+.record-form-skeleton__control,
+.record-form-skeleton__inline-cell,
+.record-form-skeleton__choice,
+.record-form-skeleton__panel,
+.record-form-skeleton__textarea,
+.record-form-skeleton__submit,
+.record-form-skeleton__time-dot,
+.record-form-skeleton__time-line,
+.record-form-skeleton__toggle,
+.record-form-skeleton__symptom,
+.record-form-skeleton__chip,
+.record-form-skeleton__panel-icon,
+.record-form-skeleton__panel-line {
+  background: linear-gradient(
+    90deg,
+    var(--card-dim) 25%,
+    rgba(255, 255, 255, 0.22) 50%,
+    var(--card-dim) 75%
+  );
+  background-size: 200% 100%;
+  animation: breeding-record-skeleton-shimmer 1.5s infinite;
+}
+
+.record-form-skeleton__control {
+  height: 48px;
+  border-radius: 14px;
+}
+
+.record-form-skeleton__chip-row {
+  display: flex;
+  gap: 8px;
+}
+
+.record-form-skeleton__chip {
+  width: 56px;
+  height: 28px;
+  border-radius: 999px;
+}
+
+.record-form-skeleton__inline-row {
+  display: flex;
+  gap: 10px;
+}
+
+.record-form-skeleton__inline-cell {
+  flex: 1;
+  height: 48px;
+  border-radius: 14px;
+}
+
+.record-form-skeleton__choice-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.record-form-skeleton__choice-row--grid .record-form-skeleton__choice {
+  width: calc(50% - 4px);
+}
+
+.record-form-skeleton__choice {
+  min-width: 78px;
+  width: calc(33.333% - 6px);
+  height: 40px;
+  border-radius: 999px;
+}
+
+.record-form-skeleton__symptom-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.record-form-skeleton__symptom {
+  height: 48px;
+  border-radius: 14px;
+}
+
+.record-form-skeleton__panel {
+  border-radius: 16px;
+  background-color: var(--card);
+  padding: 14px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.record-form-skeleton__panel--extra {
+  gap: 14px;
+}
+
+.record-form-skeleton__panel-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.record-form-skeleton__panel-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.record-form-skeleton__panel-copy {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.record-form-skeleton__panel-line {
+  height: 10px;
+  border-radius: 999px;
+}
+
+.record-form-skeleton__panel-line--label {
+  width: 34%;
+}
+
+.record-form-skeleton__panel-line--value {
+  width: 58%;
+}
+
+.record-form-skeleton__panel-line--sub {
+  width: 46%;
+}
+
+.record-form-skeleton__panel-line--full {
+  width: 100%;
+}
+
+.record-form-skeleton__panel-hint {
+  width: 42%;
+  height: 10px;
+  border-radius: 999px;
+}
+
+.record-form-skeleton__textarea {
+  height: 104px;
+  border-radius: 16px;
+}
+
+.record-form-skeleton__textarea--compact {
+  height: 82px;
+}
+
+.record-form-skeleton__toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.record-form-skeleton__toggle-copy {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.record-form-skeleton__toggle {
+  width: 52px;
+  height: 30px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.record-form-skeleton__submit-wrap {
+  width: 100%;
+}
+
+.record-form-skeleton__submit {
+  width: 100%;
+  height: 52px;
+  border-radius: 999px;
+}
+
+.record-form-skeleton__time {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.record-form-skeleton__time-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+}
+
+.record-form-skeleton__time-line {
+  width: 54px;
+  height: 12px;
+  border-radius: 999px;
+}
+
+@keyframes breeding-record-skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 
 .type-display {

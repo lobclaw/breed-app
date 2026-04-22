@@ -155,6 +155,7 @@
     <BModal
       v-model:visible="showNicknameModal"
       title="修改昵称"
+      :manualClose="true"
       @confirm="onNicknameConfirm"
     >
       <view class="custom-input-wrap">
@@ -225,24 +226,61 @@ async function loadStats() {
 
 onShow(() => loadStats())
 
-const { run: doUpdateNickname } = useCloudCall('family-service', 'updateNickname', { successMessage: '昵称已更新' })
+const { run: doUpdateNickname } = useCloudCall('family-service', 'updateNickname', {
+  successMode: 'silent',
+  throwOnError: true,
+})
 
 // 昵称编辑
 const showNicknameModal = ref(false)
 const nicknameInput = ref('')
 const showLogoutConfirm = ref(false)
+const updatingNickname = ref(false)
+
+function getCurrentMember() {
+  const uid = currentUser.value?.uid
+  if (!uid || !currentFamily.value) return null
+  return currentFamily.value.members.find(m => m.user_id === uid) || null
+}
 
 function editNickname() {
-  const uid = currentUser.value?.uid
-  const member = currentFamily.value?.members.find(m => m.user_id === uid)
+  const member = getCurrentMember()
   nicknameInput.value = member?.nickname || ''
   showNicknameModal.value = true
 }
 
 async function onNicknameConfirm() {
-  if (nicknameInput.value.trim()) {
-    await doUpdateNickname(nicknameInput.value.trim())
+  if (updatingNickname.value) return
+
+  const nextNickname = nicknameInput.value.trim()
+  if (!nextNickname) return
+
+  const member = getCurrentMember()
+  const previousNickname = member?.nickname || ''
+
+  if (nextNickname === previousNickname) {
+    showNicknameModal.value = false
+    return
+  }
+
+  if (!member) {
+    showNicknameModal.value = false
+    await doUpdateNickname(nextNickname)
     await loadFamily()
+    return
+  }
+
+  member.nickname = nextNickname
+  showNicknameModal.value = false
+  updatingNickname.value = true
+
+  try {
+    await doUpdateNickname(nextNickname)
+    await loadFamily()
+  } catch {
+    member.nickname = previousNickname
+  } finally {
+    updatingNickname.value = false
   }
 }
 

@@ -33,8 +33,21 @@
     </view>
 
     <!-- 加载更多 -->
-    <view v-if="hasMore && logs.length" class="load-more" @click="loadMore">
-      <text>{{ loadingMore ? '加载中...' : '加载更多' }}</text>
+    <view v-if="hasMore && logs.length && !loadingMore" class="load-more" @click="loadMore">
+      <text>加载更多</text>
+    </view>
+
+    <view v-if="loadingMore && logs.length" class="log-list log-list--append">
+      <view v-for="index in 2" :key="`append-${index}`" class="log-item log-item--skeleton">
+        <view class="log-icon log-icon--skeleton log-skeleton__shimmer" />
+        <view class="log-content">
+          <view class="log-main log-main--skeleton">
+            <view class="log-skeleton__line log-skeleton__line--main log-skeleton__shimmer" />
+            <view class="log-skeleton__line log-skeleton__line--sub log-skeleton__shimmer" />
+          </view>
+          <view class="log-skeleton__line log-skeleton__line--time log-skeleton__shimmer" />
+        </view>
+      </view>
     </view>
 
     <!-- 空状态 -->
@@ -44,8 +57,17 @@
     </view>
 
     <!-- 加载状态 -->
-    <view v-if="loading && !logs.length" class="loading-state">
-      <text class="loading-text">加载中...</text>
+    <view v-if="loading && !logs.length" class="log-list">
+      <view v-for="index in 4" :key="`loading-${index}`" class="log-item log-item--skeleton">
+        <view class="log-icon log-icon--skeleton log-skeleton__shimmer" />
+        <view class="log-content">
+          <view class="log-main log-main--skeleton">
+            <view class="log-skeleton__line log-skeleton__line--main log-skeleton__shimmer" />
+            <view class="log-skeleton__line log-skeleton__line--sub log-skeleton__shimmer" />
+          </view>
+          <view class="log-skeleton__line log-skeleton__line--time log-skeleton__shimmer" />
+        </view>
+      </view>
     </view>
   </view>
 </template>
@@ -251,6 +273,10 @@ onLoad(() => {
   gap: 12px;
 }
 
+.log-item--skeleton {
+  pointer-events: none;
+}
+
 .log-icon {
   width: 36px;
   height: 36px;
@@ -278,6 +304,10 @@ onLoad(() => {
     background: var(--icon-red);
     .material-icons-round { color: var(--red); }
   }
+}
+
+.log-icon--skeleton {
+  border-radius: var(--radius-icon);
 }
 
 .log-content {
@@ -327,16 +357,48 @@ onLoad(() => {
   font-weight: 600;
   color: var(--text-3);
 }
-
-/* ---- Loading State ---- */
-.loading-state {
-  display: flex;
-  justify-content: center;
-  padding: 60px 0;
+.log-list--append {
+  padding-top: 0;
 }
 
-.loading-text {
-  font-size: 14px;
-  color: var(--text-3);
+.log-main--skeleton {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.log-skeleton__line {
+  border-radius: 999px;
+}
+
+.log-skeleton__line--main {
+  width: 72%;
+  height: 13px;
+}
+
+.log-skeleton__line--sub {
+  width: 44%;
+  height: 11px;
+}
+
+.log-skeleton__line--time {
+  width: 88px;
+  height: 10px;
+}
+
+.log-skeleton__shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--card-dim) 25%,
+    rgba(255, 255, 255, 0.22) 50%,
+    var(--card-dim) 75%
+  );
+  background-size: 200% 100%;
+  animation: operation-log-skeleton-shimmer 1.5s infinite;
+}
+
+@keyframes operation-log-skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 </style>

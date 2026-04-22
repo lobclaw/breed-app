@@ -23,6 +23,21 @@
               <text class="copy-text">复制邀请码</text>
             </view>
           </view>
+          <button
+            class="regen-action"
+            :class="{ 'regen-action--loading': generating }"
+            :disabled="generating"
+            @click="generate"
+          >
+            <view class="regen-action__icon">
+              <text class="material-icons-round" :class="{ 'regen-action__spin': generating }">autorenew</text>
+            </view>
+            <view class="regen-action__body">
+              <text class="regen-action__title">重新生成邀请码</text>
+              <text class="regen-action__subtitle">原邀请码会立即失效</text>
+            </view>
+            <text class="material-icons-round regen-action__arrow">chevron_right</text>
+          </button>
         </view>
 
         <!-- 有效期提示 -->
@@ -32,15 +47,14 @@
         </view>
 
         <!-- 生成按钮 -->
-        <BButton
-          color="primary"
-          size="large"
+        <BSubmitButton
+          v-if="!inviteCode"
           :loading="generating"
+          :disabled="generating"
           @click="generate"
-          style="width: 100%;"
         >
-          {{ inviteCode ? '重新生成' : '生成邀请码' }}
-        </BButton>
+          <text>生成邀请码</text>
+        </BSubmitButton>
       </view>
 
       <!-- 使用说明 -->
@@ -67,18 +81,24 @@
 import { ref } from 'vue'
 import { useCloudCall } from '@/composables/useCloudCall'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
-import BButton from '@/components/base/BButton.vue'
+import BSubmitButton from '@/components/base/BSubmitButton.vue'
 
 const inviteCode = ref('')
 const generating = ref(false)
 
-const { run: generateCode } = useCloudCall<{ data: { code: string } }>('family-service', 'generateInviteLink', { showLoading: true })
+const { run: generateCode } = useCloudCall<{ data: { code: string } }>('family-service', 'generateInviteLink', {
+  successMode: 'silent',
+})
 
 async function generate() {
+  if (generating.value) return
   generating.value = true
-  const res = await generateCode()
-  if (res?.data?.code) inviteCode.value = res.data.code
-  generating.value = false
+  try {
+    const res = await generateCode()
+    if (res?.data?.code) inviteCode.value = res.data.code
+  } finally {
+    generating.value = false
+  }
 }
 
 function copyCode() {
@@ -171,6 +191,88 @@ function copyCode() {
   font-size: 12px;
   font-weight: 600;
   color: var(--primary);
+}
+
+.regen-action {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  margin-top: 4px;
+  border: 1px solid rgba(233, 83, 132, 0.14);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 248, 244, 0.98) 100%),
+    rgba(255, 255, 255, 0.82);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 10px 24px rgba(233, 83, 132, 0.08);
+  text-align: left;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
+}
+
+.regen-action:active:not(:disabled) {
+  transform: scale(0.985);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    0 6px 16px rgba(233, 83, 132, 0.1);
+}
+
+.regen-action:disabled {
+  opacity: 0.6;
+}
+
+.regen-action__icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, rgba(233, 83, 132, 0.12) 0%, rgba(233, 83, 132, 0.05) 100%);
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.regen-action__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.regen-action__title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-1);
+  line-height: 1.3;
+}
+
+.regen-action__subtitle {
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.3;
+}
+
+.regen-action__arrow {
+  font-size: 18px;
+  color: rgba(233, 83, 132, 0.7);
+  flex-shrink: 0;
+}
+
+.regen-action__spin {
+  animation: regen-spin 0.9s linear infinite;
+}
+
+.regen-action--loading .regen-action__title {
+  color: var(--primary);
+}
+
+@keyframes regen-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 /* 提示 */

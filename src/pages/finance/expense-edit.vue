@@ -2,8 +2,44 @@
   <view class="page">
     <BPageHeader title="编辑支出" />
 
-    <view v-if="loading" class="loading-state">
-      <text class="loading-text">加载中...</text>
+    <view v-if="loading" class="finance-edit-skeleton">
+      <view class="finance-edit-skeleton__amount">
+        <view class="finance-edit-skeleton__amount-line finance-edit-skeleton__shimmer" />
+        <view class="finance-edit-skeleton__amount-underline finance-edit-skeleton__shimmer" />
+      </view>
+
+      <view class="finance-edit-skeleton__row finance-edit-skeleton__row--single">
+        <view class="finance-edit-skeleton__label finance-edit-skeleton__shimmer" />
+        <view class="finance-edit-skeleton__value finance-edit-skeleton__value--tag finance-edit-skeleton__shimmer" />
+      </view>
+
+      <view class="finance-edit-skeleton__section">
+        <view class="finance-edit-skeleton__row finance-edit-skeleton__row--single">
+          <view class="finance-edit-skeleton__label finance-edit-skeleton__shimmer" />
+          <view class="finance-edit-skeleton__value finance-edit-skeleton__value--date finance-edit-skeleton__shimmer" />
+        </view>
+        <view class="finance-edit-skeleton__chips">
+          <view v-for="chip in 3" :key="chip" class="finance-edit-skeleton__chip finance-edit-skeleton__shimmer" />
+        </view>
+      </view>
+
+      <view class="finance-edit-skeleton__row finance-edit-skeleton__row--single">
+        <view class="finance-edit-skeleton__label finance-edit-skeleton__shimmer" />
+        <view class="finance-edit-skeleton__value finance-edit-skeleton__value--link finance-edit-skeleton__shimmer" />
+      </view>
+
+      <view class="finance-edit-skeleton__row finance-edit-skeleton__row--single">
+        <view class="finance-edit-skeleton__value finance-edit-skeleton__value--full finance-edit-skeleton__shimmer" />
+      </view>
+
+      <view class="finance-edit-skeleton__photos">
+        <view v-for="photo in 2" :key="photo" class="finance-edit-skeleton__photo finance-edit-skeleton__shimmer" />
+      </view>
+
+      <view class="finance-edit-skeleton__note">
+        <view class="finance-edit-skeleton__label finance-edit-skeleton__shimmer" />
+        <view class="finance-edit-skeleton__textarea finance-edit-skeleton__shimmer" />
+      </view>
     </view>
 
     <view v-else class="form-body">
@@ -110,7 +146,9 @@
 
     <!-- 固定底部按钮 -->
     <view class="fixed-bottom">
+      <view v-if="loading" class="finance-edit-skeleton__submit finance-edit-skeleton__shimmer" />
       <BSubmitButton
+        v-else
         :loading="submitting"
         :disabled="!canSubmit || submitting"
         @click="submit"
@@ -437,16 +475,129 @@ onShow(() => {
 </script>
 
 <style lang="scss" scoped>
-
-.loading-state {
-  display: flex;
-  justify-content: center;
-  padding: 60px 0;
+.finance-edit-skeleton {
+  padding: 8px 24px 24px;
 }
 
-.loading-text {
-  font-size: 14px;
-  color: var(--text-3);
+.finance-edit-skeleton__shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--card-dim) 25%,
+    rgba(255, 255, 255, 0.22) 50%,
+    var(--card-dim) 75%
+  );
+  background-size: 200% 100%;
+  animation: finance-expense-edit-skeleton-shimmer 1.5s infinite;
+}
+
+.finance-edit-skeleton__amount {
+  padding: 16px 0 20px;
+}
+
+.finance-edit-skeleton__amount-line {
+  width: 58%;
+  height: 34px;
+  border-radius: 12px;
+}
+
+.finance-edit-skeleton__amount-underline {
+  width: 100%;
+  height: 2px;
+  margin-top: 8px;
+  border-radius: 999px;
+}
+
+.finance-edit-skeleton__section {
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.finance-edit-skeleton__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.finance-edit-skeleton__row--single {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.finance-edit-skeleton__label {
+  width: 48px;
+  height: 12px;
+  border-radius: 999px;
+}
+
+.finance-edit-skeleton__value {
+  height: 32px;
+  border-radius: 14px;
+}
+
+.finance-edit-skeleton__value--tag {
+  width: 128px;
+}
+
+.finance-edit-skeleton__value--date {
+  width: 132px;
+}
+
+.finance-edit-skeleton__value--link {
+  width: 156px;
+}
+
+.finance-edit-skeleton__value--full {
+  width: 176px;
+}
+
+.finance-edit-skeleton__chips {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.finance-edit-skeleton__chip {
+  width: 48px;
+  height: 24px;
+  border-radius: 999px;
+}
+
+.finance-edit-skeleton__photos {
+  display: flex;
+  gap: 8px;
+  padding: 10px 0 4px;
+}
+
+.finance-edit-skeleton__photo {
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+}
+
+.finance-edit-skeleton__note {
+  padding: 14px 0 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.finance-edit-skeleton__textarea {
+  width: 100%;
+  height: 96px;
+  border-radius: 16px;
+}
+
+.finance-edit-skeleton__submit {
+  width: 100%;
+  height: 52px;
+  border-radius: 999px;
+}
+
+@keyframes finance-expense-edit-skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 
 .form-body {

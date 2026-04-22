@@ -18,6 +18,8 @@
       </view>
     </view>
 
+    <BSubmitBanner :message="submitBannerMessage" />
+
     <view class="dog-list__search">
       <text class="dog-list__search-icon material-icons-round">search</text>
       <input
@@ -71,8 +73,9 @@
       <view
         v-for="dog in filteredDogs"
         :key="dog._id"
+        :id="dogCardId(dog._id)"
         class="dog-list__card"
-        :class="cardBarClass(dog)"
+        :class="[cardBarClass(dog), { 'dog-list__card--fresh': highlightedDogId === dog._id }]"
         @click="goToDetail(dog._id)"
       >
         <view class="dog-list__card-row">
@@ -223,13 +226,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, nextTick, reactive, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
+import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
 import BNavBar from '@/components/layout/BNavBar.vue'
 import BSheet from '@/components/layout/BSheet.vue'
+import { consumeSubmitFeedback } from '@/composables/useSubmitFeedback'
 import { useDogStore } from '@/stores/dogStore'
 import type { DeriveStatus, DeriveStatusType, DogDisposition, DogWithStatus } from '@/types/dog'
 import { buildCompactDeriveStatusTitle } from '@/utils/dogStatusCopy'
@@ -277,7 +282,13 @@ const loading = ref(true)
 const activeFilter = ref<QuickFilterValue>('all')
 const showFilterSheet = ref(false)
 const searchKeyword = ref('')
+const submitBannerMessage = ref('')
+const highlightedDogId = ref('')
 const dogStore = useDogStore()
+let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
+let highlightTimer: ReturnType<typeof setTimeout> | null = null
+let pendingFeedbackDogId = ''
+let pendingFeedbackHiddenMessage = ''
 
 const filterOptions: Array<{ label: string; value: QuickFilterValue }> = [
   { label: '全部', value: 'all' },
@@ -697,7 +708,74 @@ function goToDetail(dogId: string) {
 }
 
 function goToAdd() {
-  uni.navigateTo({ url: '/pages/dog/add' })
+  uni.navigateTo({ url: `/pages/dog/add?targetRoute=${encodeURIComponent('/pages/dog/list')}` })
+}
+
+function dogCardId(dogId: string) {
+  return `dog-card-${dogId}`
+}
+
+function showSubmitBanner(message: string) {
+  submitBannerMessage.value = message
+  if (submitBannerTimer) clearTimeout(submitBannerTimer)
+  submitBannerTimer = setTimeout(() => {
+    submitBannerMessage.value = ''
+  }, 2600)
+}
+
+function highlightDogOnce(dogId: string) {
+  highlightedDogId.value = dogId
+  if (highlightTimer) clearTimeout(highlightTimer)
+  highlightTimer = setTimeout(() => {
+    if (highlightedDogId.value === dogId) highlightedDogId.value = ''
+  }, 2600)
+}
+
+async function scrollToDogCard(dogId: string) {
+  await nextTick()
+  setTimeout(() => {
+    uni.pageScrollTo({
+      selector: `#${dogCardId(dogId)}`,
+      duration: 280,
+      offsetTop: 88,
+    })
+  }, 80)
+}
+
+async function tryRevealPendingDog() {
+  if (!pendingFeedbackDogId) return false
+
+  const visibleDog = filteredDogs.value.find(dog => dog._id === pendingFeedbackDogId)
+  if (visibleDog) {
+    highlightDogOnce(pendingFeedbackDogId)
+    await scrollToDogCard(pendingFeedbackDogId)
+    pendingFeedbackDogId = ''
+    pendingFeedbackHiddenMessage = ''
+    return true
+  }
+
+  const targetDog = dogs.value.find(dog => dog._id === pendingFeedbackDogId)
+  if (targetDog) {
+    if (pendingFeedbackHiddenMessage) showSubmitBanner(pendingFeedbackHiddenMessage)
+    pendingFeedbackDogId = ''
+    pendingFeedbackHiddenMessage = ''
+    return false
+  }
+
+  return false
+}
+
+async function applyDogListFeedback() {
+  const feedback = consumeSubmitFeedback('/pages/dog/list')
+  if (!feedback?.message) return
+
+  showSubmitBanner(feedback.message)
+
+  if (!feedback.targetDogId) return
+
+  pendingFeedbackDogId = feedback.targetDogId
+  pendingFeedbackHiddenMessage = `${feedback.message}，当前筛选下未显示`
+  await tryRevealPendingDog()
 }
 
 async function loadDogs() {
@@ -706,17 +784,19 @@ async function loadDogs() {
     loading.value = false
     dogStore.fetchFromServer().then(() => {
       dogs.value = dogStore.list
+      void tryRevealPendingDog()
     })
   } else {
     loading.value = true
     await dogStore.ensure()
     dogs.value = dogStore.list
     loading.value = false
+    await tryRevealPendingDog()
   }
 }
 
 onShow(() => {
-  loadDogs()
+  loadDogs().then(() => applyDogListFeedback())
 })
 </script>
 
@@ -834,6 +914,11 @@ onShow(() => {
     transform: scale(var(--primary-page-card-active-scale));
     box-shadow: var(--primary-page-card-shadow-active);
   }
+}
+
+.dog-list__card--fresh {
+  box-shadow: 0 0 0 2px rgba(234, 62, 119, 0.18), 0 8px 18px rgba(234, 62, 119, 0.08);
+  background: linear-gradient(135deg, rgba(255, 250, 252, 0.98), rgba(255, 246, 249, 0.94));
 }
 
 .dog-list__card::before {
