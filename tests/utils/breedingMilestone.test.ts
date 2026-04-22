@@ -22,6 +22,46 @@ describe('deriveBreedingMilestoneViewModel', () => {
     expect(viewModel.suggestionLabel).toBe('建议日期 4月18日')
   })
 
+  it('未成熟卵泡检查应保留建议卵泡检查并展示最近检查锚点', () => {
+    const heatDate = new Date('2026-04-10T00:00:00+08:00').getTime()
+    const latestFollicleDate = new Date('2026-04-16T00:00:00+08:00').getTime()
+    const dueDate = new Date('2026-04-17T00:00:00+08:00').getTime()
+    const viewModel = deriveBreedingMilestoneViewModel({
+      title: '小米 · 建议卵泡检查',
+      due_date: dueDate,
+      details: {
+        step_type: 'follicle_check',
+        heat_date: heatDate,
+        latest_follicle_check_date: latestFollicleDate,
+        follicle_result: '发育中',
+        abnormal_result: false,
+      },
+    }, now)
+
+    expect(viewModel.stageTitle).toBe('建议卵泡检查')
+    expect(viewModel.heatDayLabel).toBe('发情第 8 天')
+    expect(viewModel.stageDayLabel).toBe('卵泡检查后第 2 天')
+    expect(viewModel.referenceDateLabel).toBe('建议日期 · 4月17日')
+    expect(viewModel.alertLabel).toBe('')
+  })
+
+  it('发育不良的卵泡检查应返回异常强化文案', () => {
+    const viewModel = deriveBreedingMilestoneViewModel({
+      title: '小米 · 建议卵泡检查',
+      due_date: new Date('2026-04-18T00:00:00+08:00').getTime(),
+      details: {
+        step_type: 'follicle_check',
+        heat_date: new Date('2026-04-10T00:00:00+08:00').getTime(),
+        latest_follicle_check_date: new Date('2026-04-16T00:00:00+08:00').getTime(),
+        follicle_result: '发育不良',
+        abnormal_result: true,
+      },
+    }, now)
+
+    expect(viewModel.alertLabel).toBe('本次检查提示发育不良')
+    expect(viewModel.isAlertDanger).toBe(true)
+  })
+
   it('孕检应优先使用 expected_due_date 反推配种天数', () => {
     const expectedDueDate = new Date('2026-05-21T00:00:00+08:00').getTime()
     const dueDate = expectedDueDate - 34 * DAY_MS

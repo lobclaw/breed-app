@@ -22,7 +22,7 @@
         <text
           v-if="alertLabel"
           class="process-alert"
-          :class="`process-alert--${milestone.suggestionStatus}`"
+          :class="milestone.isAlertDanger ? 'process-alert--window_passed' : ''"
         >{{ alertLabel }}</text>
       </view>
       <view v-if="showSuggestionChip" class="process-chip" :class="`process-chip--${milestone.suggestionStatus}`">
@@ -78,19 +78,19 @@ const props = defineProps<{ card: any }>()
 
 const milestone = computed(() => deriveBreedingMilestoneViewModel(props.card?.tasks?.[0] || {}))
 const primaryLabel = computed(() => {
-  if (milestone.value.stepType === 'mating' && milestone.value.heatDayLabel) return milestone.value.heatDayLabel
+  if ((milestone.value.stepType === 'mating' || milestone.value.stepType === 'follicle_check') && milestone.value.heatDayLabel) {
+    return milestone.value.heatDayLabel
+  }
   if (milestone.value.stepType === 'weaning_confirm') return milestone.value.stageDayLabel
   return milestone.value.dayLabel
 })
 const secondaryLabel = computed(() => {
   if (milestone.value.stepType === 'weaning_confirm') return milestone.value.referenceDateLabel
   if (milestone.value.stepType === 'mating') return milestone.value.stageDayLabel
+  if (milestone.value.stepType === 'follicle_check' && milestone.value.stageDayLabel) return milestone.value.stageDayLabel
   return milestone.value.referenceDateLabel
 })
-const alertLabel = computed(() => {
-  if (milestone.value.stepType === 'mating') return milestone.value.passedWindowLabel
-  return milestone.value.suggestionStatus === 'window_passed' ? milestone.value.suggestionLabel : ''
-})
+const alertLabel = computed(() => milestone.value.alertLabel)
 const showSuggestionChip = computed(() => {
   return !(milestone.value.stepType === 'mating' && milestone.value.suggestionStatus === 'window_passed')
 })

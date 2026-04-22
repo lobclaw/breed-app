@@ -312,6 +312,127 @@ describe('breeding-service', () => {
       expect(nextMilestone?.status).toBe('pending')
     })
 
+    it('录入未成熟卵泡检查后应继续停留在建议卵泡检查', async () => {
+      const now = Date.now()
+      seedCollection('breeding_cycles', [{
+        _id: 'cycle_follicle_recheck',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        status: '发情中',
+        created_at: now - 5 * 86400000,
+        updated_at: now,
+      }])
+      seedCollection('breeding_records', [{
+        _id: 'record_heat_recheck',
+        type: 'heat',
+        cycle_id: 'cycle_follicle_recheck',
+        dog_id: 'dam_1',
+        family_id: familyId,
+        date: now - 5 * 86400000,
+        created_at: now - 5 * 86400000,
+        updated_at: now - 5 * 86400000,
+      }])
+      seedCollection('tasks', [{
+        _id: 'milestone_recheck',
+        family_id: familyId,
+        dog_id: 'dam_1',
+        dog_name: '花花',
+        cycle_id: 'cycle_follicle_recheck',
+        type: 'breeding_milestone',
+        title: '花花 · 建议卵泡检查',
+        due_date: now,
+        status: 'pending',
+        details: { step_type: 'follicle_check' },
+        created_at: now,
+        updated_at: now,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      await breedingService.addBreedingRecord.call(ctx, {
+        type: 'follicle_check',
+        dog_id: 'dam_1',
+        cycle_id: 'cycle_follicle_recheck',
+        date: now,
+        details: {
+          left_count: 2,
+          right_count: 1,
+          result: '发育中',
+        },
+      })
+
+      const { data: tasks } = await db.collection('tasks')
+        .where({ cycle_id: 'cycle_follicle_recheck' })
+        .get()
+
+      const currentMilestone = tasks.find(t => t.type === 'breeding_milestone' && t.status === 'pending')
+      expect(currentMilestone?.title).toBe('花花 · 建议卵泡检查')
+      expect(currentMilestone?.details?.step_type).toBe('follicle_check')
+      expect(currentMilestone?.due_date).toBe(now + 86400000)
+      expect(currentMilestone?.details?.latest_follicle_check_date).toBe(now)
+      expect(currentMilestone?.details?.follicle_result).toBe('发育中')
+      expect(currentMilestone?.details?.abnormal_result).toBe(false)
+    })
+
+    it('录入发育不良卵泡检查后应保留异常强化标记', async () => {
+      const now = Date.now()
+      seedCollection('breeding_cycles', [{
+        _id: 'cycle_follicle_abnormal',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        status: '发情中',
+        created_at: now - 3 * 86400000,
+        updated_at: now,
+      }])
+      seedCollection('breeding_records', [{
+        _id: 'record_heat_abnormal',
+        type: 'heat',
+        cycle_id: 'cycle_follicle_abnormal',
+        dog_id: 'dam_1',
+        family_id: familyId,
+        date: now - 3 * 86400000,
+        created_at: now - 3 * 86400000,
+        updated_at: now - 3 * 86400000,
+      }])
+      seedCollection('tasks', [{
+        _id: 'milestone_abnormal',
+        family_id: familyId,
+        dog_id: 'dam_1',
+        dog_name: '花花',
+        cycle_id: 'cycle_follicle_abnormal',
+        type: 'breeding_milestone',
+        title: '花花 · 建议卵泡检查',
+        due_date: now,
+        status: 'pending',
+        details: { step_type: 'follicle_check' },
+        created_at: now,
+        updated_at: now,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      await breedingService.addBreedingRecord.call(ctx, {
+        type: 'follicle_check',
+        dog_id: 'dam_1',
+        cycle_id: 'cycle_follicle_abnormal',
+        date: now,
+        details: {
+          left_count: 1,
+          right_count: 0,
+          result: '发育不良',
+        },
+      })
+
+      const { data: tasks } = await db.collection('tasks')
+        .where({ cycle_id: 'cycle_follicle_abnormal', type: 'breeding_milestone', status: 'pending' })
+        .get()
+
+      expect(tasks).toHaveLength(1)
+      expect(tasks[0].details?.step_type).toBe('follicle_check')
+      expect(tasks[0].details?.abnormal_result).toBe(true)
+      expect(tasks[0].details?.follicle_result).toBe('发育不良')
+    })
+
     it('录入发情观察时应写入繁育记录但不推进主链', async () => {
       const now = Date.now()
       seedCollection('breeding_cycles', [{
@@ -795,6 +916,90 @@ describe('breeding-service', () => {
       expect(records).toHaveLength(1)
       expect(records[0].details?.mating_number).toBe(2)
       expect(records[0].details?.method).toBe('自然交配')
+    })
+
+    it('编辑最近一次卵泡检查结果时应重算当前主链节点', async () => {
+      const now = Date.now()
+      seedCollection('dogs', [{
+        _id: 'dam_1',
+        name: '花花',
+        family_id: familyId,
+        deleted_at: null,
+      }])
+      seedCollection('breeding_cycles', [{
+        _id: 'cycle_follicle_edit',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        status: '发情中',
+        created_at: now - 6 * 86400000,
+        updated_at: now,
+      }])
+      seedCollection('breeding_records', [
+        {
+          _id: 'record_heat_edit',
+          type: 'heat',
+          cycle_id: 'cycle_follicle_edit',
+          dog_id: 'dam_1',
+          family_id: familyId,
+          date: now - 6 * 86400000,
+          created_at: now - 6 * 86400000,
+          updated_at: now - 6 * 86400000,
+        },
+        {
+          _id: 'record_follicle_edit',
+          type: 'follicle_check',
+          cycle_id: 'cycle_follicle_edit',
+          dog_id: 'dam_1',
+          family_id: familyId,
+          date: now - 86400000,
+          details: {
+            left_count: 2,
+            right_count: 2,
+            result: '已成熟',
+          },
+          created_at: now - 86400000,
+          updated_at: now - 86400000,
+        },
+      ])
+      seedCollection('tasks', [{
+        _id: 'task_follicle_edit',
+        family_id: familyId,
+        dog_id: 'dam_1',
+        dog_name: '花花',
+        cycle_id: 'cycle_follicle_edit',
+        type: 'breeding_milestone',
+        title: '花花 · 配种',
+        due_date: now - 86400000,
+        status: 'pending',
+        details: {
+          step_type: 'mating',
+          follicle_check_date: now - 86400000,
+          heat_date: now - 6 * 86400000,
+        },
+        created_at: now - 86400000,
+        updated_at: now - 86400000,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      await breedingService.updateBreedingRecord.call(ctx, {
+        id: 'record_follicle_edit',
+        details: {
+          left_count: 2,
+          right_count: 2,
+          result: '发育中',
+        },
+      })
+
+      const { data: tasks } = await db.collection('tasks')
+        .where({ cycle_id: 'cycle_follicle_edit', type: 'breeding_milestone' })
+        .get()
+
+      const pendingMilestone = tasks.find(task => task.status === 'pending')
+      expect(pendingMilestone?.title).toBe('花花 · 建议卵泡检查')
+      expect(pendingMilestone?.details?.step_type).toBe('follicle_check')
+      expect(pendingMilestone?.details?.follicle_result).toBe('发育中')
+      expect(pendingMilestone?.details?.latest_follicle_check_date).toBe(now - 86400000)
     })
   })
 

@@ -15,6 +15,8 @@ const dbCmd = db.command
 
 // 一天的毫秒数
 const DAY_MS = 86400000
+const FOLLICLE_READY_RESULT = '已成熟'
+const FOLLICLE_ABNORMAL_RESULT = '发育不良'
 const DEFAULT_NOTIFICATION_SETTINGS = {
   push_enabled: true,
   morning_summary_enabled: true,
@@ -141,6 +143,52 @@ function getTaskPriority(task, todayStartMs, todayEndMs) {
   return 'upcoming'
 }
 
+function getBreedingMilestoneIdentity(task) {
+  if (task?.type !== 'breeding_milestone') return ''
+  if (task.litter_id) return `breeding_milestone:litter:${task.litter_id}`
+  if (task.cycle_id) return `breeding_milestone:cycle:${task.cycle_id}`
+  return ''
+}
+
+function shouldPreferBreedingMilestone(candidate, current) {
+  const candidateUpdated = candidate?.updated_at || candidate?.created_at || 0
+  const currentUpdated = current?.updated_at || current?.created_at || 0
+  if (candidateUpdated !== currentUpdated) return candidateUpdated > currentUpdated
+
+  const candidateDueDate = candidate?.due_date || 0
+  const currentDueDate = current?.due_date || 0
+  if (candidateDueDate !== currentDueDate) return candidateDueDate > currentDueDate
+
+  return `${candidate?._id || ''}` > `${current?._id || ''}`
+}
+
+function dedupeBreedingMilestones(tasks = []) {
+  const deduped = []
+  const indexMap = new Map()
+
+  for (const task of tasks) {
+    const identity = getBreedingMilestoneIdentity(task)
+    if (!identity) {
+      deduped.push(task)
+      continue
+    }
+
+    if (!indexMap.has(identity)) {
+      indexMap.set(identity, deduped.length)
+      deduped.push(task)
+      continue
+    }
+
+    const existingIndex = indexMap.get(identity)
+    const existingTask = deduped[existingIndex]
+    if (shouldPreferBreedingMilestone(task, existingTask)) {
+      deduped[existingIndex] = task
+    }
+  }
+
+  return deduped
+}
+
 function mergeNotificationSettings(settings = {}) {
   const safeSettings = settings && typeof settings === 'object' ? settings : {}
 
@@ -187,6 +235,18 @@ function computeMedItemsForBeijingDay(activeMedications, targetDate) {
       isDoneToday: todayDoses >= frequency,
     }
   }).filter(Boolean)
+}
+
+function getFollicleResult(details = {}) {
+  return typeof details?.result === 'string' ? details.result : ''
+}
+
+function isFollicleReady(details = {}) {
+  return getFollicleResult(details) === FOLLICLE_READY_RESULT
+}
+
+function isFollicleAbnormal(details = {}) {
+  return getFollicleResult(details) === FOLLICLE_ABNORMAL_RESULT
 }
 
 function buildMorningSummaryPayload(family, pendingTasks, activeMedications, now = Date.now()) {
@@ -315,21 +375,37 @@ async function ensureEstrusCycleMilestones(familyId, now = Date.now()) {
     const heatDate = heatRecord?.date || cycle.start_date || cycle.created_at || now
 
     const taskPayload = latestFollicleRecord
-      ? {
-          title: `${cycle.dam_name} · 配种`,
-          due_date: latestFollicleRecord.date || now,
-          details: {
-            step_type: 'mating',
-            follicle_check_date: latestFollicleRecord.date || null,
-            heat_date: heatDate,
-          },
-        }
+      ? (isFollicleReady(latestFollicleRecord.details)
+        ? {
+            title: `${cycle.dam_name} · 配种`,
+            due_date: latestFollicleRecord.date || now,
+            details: {
+              step_type: 'mating',
+              follicle_check_date: latestFollicleRecord.date || null,
+              heat_date: heatDate,
+              follicle_result: getFollicleResult(latestFollicleRecord.details) || null,
+            },
+          }
+        : {
+            title: `${cycle.dam_name} · 建议卵泡检查`,
+            due_date: (latestFollicleRecord.date || now) + DAY_MS,
+            details: {
+              step_type: 'follicle_check',
+              heat_date: heatDate,
+              follicle_result: getFollicleResult(latestFollicleRecord.details) || null,
+              latest_follicle_check_date: latestFollicleRecord.date || null,
+              abnormal_result: isFollicleAbnormal(latestFollicleRecord.details),
+            },
+          })
       : {
           title: `${cycle.dam_name} · 建议卵泡检查`,
           due_date: heatDate + 10 * DAY_MS,
           details: {
             step_type: 'follicle_check',
             heat_date: heatDate,
+            follicle_result: null,
+            latest_follicle_check_date: null,
+            abnormal_result: false,
           },
         }
 
@@ -845,6 +921,7 @@ module.exports = {
         existingTaskIds.add(task._id)
       }
     }
+    const normalizedPendingTasks = dedupeBreedingMilestones(pendingTasks)
     const todayCompletedTasks = completedRes.data
     const activeIllnesses = illnessRes.data || []
     const activeMedications = medRes.data || []
@@ -863,7 +940,7 @@ module.exports = {
       }
     }
 
-    for (const task of pendingTasks) {
+    for (const task of normalizedPendingTasks) {
       task.priority = getTaskPriority(task, todayStart.getTime(), todayEnd.getTime())
       task._completed = false
     }
@@ -873,7 +950,7 @@ module.exports = {
     }
 
     const medItems = computeMedItemsForDay(activeMedications, Date.now())
-    const sectioned = buildSectionedCards(pendingTasks, todayCompletedTasks, activeIllnesses, medItems)
+    const sectioned = buildSectionedCards(normalizedPendingTasks, todayCompletedTasks, activeIllnesses, medItems)
     const allCards = sectioned.cards
 
     // 计算 本周 和 30天 的 pending 任务数
@@ -929,7 +1006,7 @@ module.exports = {
           status: 'pending',
           due_date: dbCmd.gte(startDate).and(dbCmd.lte(endDate)),
         })
-        .field({ due_date: true })
+        .field({ _id: true, type: true, cycle_id: true, litter_id: true, due_date: true, created_at: true, updated_at: true })
         .get(),
       db.collection('medication_tasks')
         .where({ family_id: familyId, status: '进行中' })
@@ -938,7 +1015,7 @@ module.exports = {
 
     // 按天聚合
     const counts = {}
-    for (const task of tasks) {
+    for (const task of dedupeBreedingMilestones(tasks)) {
       const d = new Date(task.due_date)
       d.setHours(0, 0, 0, 0)
       const key = d.getTime()
@@ -980,7 +1057,7 @@ module.exports = {
         .get(),
     ])
 
-    const tasks = taskRes.data
+    const tasks = dedupeBreedingMilestones(taskRes.data || [])
     const activeIllnesses = illnessRes.data || []
     const activeMedications = medRes.data || []
 

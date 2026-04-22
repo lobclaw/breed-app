@@ -40,7 +40,7 @@
         <text
           v-if="item.alertLabel"
           class="group-copy group-copy--alert"
-          :class="{ 'group-copy--alert-passed': item.milestone.suggestionStatus === 'window_passed' }"
+          :class="{ 'group-copy--alert-passed': item.milestone.isAlertDanger }"
         >
           {{ item.alertLabel }}
         </text>
@@ -194,7 +194,7 @@ function buildStageTag(stageTitle: string) {
 }
 
 function buildPrimaryLabel(milestone: ReturnType<typeof deriveBreedingMilestoneViewModel>) {
-  if (milestone.stepType === 'mating' && milestone.heatDayLabel) {
+  if ((milestone.stepType === 'mating' || milestone.stepType === 'follicle_check') && milestone.heatDayLabel) {
     return milestone.heatDayLabel
   }
   if (milestone.stepType === 'weaning_confirm') {
@@ -207,6 +207,9 @@ function buildSecondaryLabel(milestone: ReturnType<typeof deriveBreedingMileston
   if (milestone.stepType === 'mating') {
     return milestone.stageDayLabel
   }
+  if (milestone.stepType === 'follicle_check' && milestone.stageDayLabel) {
+    return milestone.stageDayLabel
+  }
   if (milestone.stepType === 'weaning_confirm') {
     return milestone.referenceDateLabel
   }
@@ -217,11 +220,10 @@ function buildSecondaryLabel(milestone: ReturnType<typeof deriveBreedingMileston
 }
 
 function buildAlertLabel(milestone: ReturnType<typeof deriveBreedingMilestoneViewModel>) {
-  if (milestone.stepType === 'mating') {
-    return milestone.passedWindowLabel
-  }
-  if (milestone.suggestionStatus === 'window_passed') {
-    return milestone.suggestionLabel
+  if (milestone.alertLabel) return milestone.alertLabel
+  if (milestone.stepType === 'follicle_check' && milestone.stageDayLabel) {
+    if (milestone.suggestionStatus === 'window_due') return milestone.suggestionLabel
+    return milestone.referenceDateLabel.replace('建议日期 · ', '建议')
   }
   return ''
 }

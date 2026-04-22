@@ -14,6 +14,8 @@ export interface BreedingMilestoneViewModel {
   heatDayLabel: string
   stageDayLabel: string
   passedWindowLabel: string
+  alertLabel: string
+  isAlertDanger: boolean
 }
 
 interface BreedingMilestoneTaskLike {
@@ -34,7 +36,11 @@ const STEP_META: Record<string, StepMeta> = {
     stageTitle: '建议卵泡检查',
     anchorLabel: '发情',
     actionLabel: '检查',
-    getAnchorDate: (task) => (typeof task.due_date === 'number' ? task.due_date - 10 * DAY_MS : null),
+    getAnchorDate: (task) => {
+      const heatDate = getNumber(task.details?.heat_date)
+      if (heatDate) return heatDate
+      return typeof task.due_date === 'number' ? task.due_date - 10 * DAY_MS : null
+    },
   },
   mating: {
     stageTitle: '配种',
@@ -108,6 +114,8 @@ export function deriveBreedingMilestoneViewModel(
     heatDayLabel: buildHeatDayLabel(task, now),
     stageDayLabel: buildStageDayLabel(stepType, task, daysFromAnchor, now),
     passedWindowLabel: buildPassedWindowLabel(stepType, suggestionStatus, dueDate, now),
+    alertLabel: buildAlertLabel(stepType, task, suggestionStatus, dueDate, now),
+    isAlertDanger: isDangerAlert(stepType, task, suggestionStatus),
   }
 }
 
@@ -186,6 +194,14 @@ function buildStageDayLabel(
   daysFromAnchor: number | null,
   now: number,
 ): string {
+  if (stepType === 'follicle_check') {
+    const latestFollicleDate = getNumber(task.details?.latest_follicle_check_date)
+    if (!latestFollicleDate) return ''
+
+    const delta = Math.max(1, Math.floor((startOfDay(now) - startOfDay(latestFollicleDate)) / DAY_MS) + 1)
+    return `卵泡检查后第 ${delta} 天`
+  }
+
   if (stepType === 'mating') {
     const follicleDate = getNumber(task.details?.follicle_check_date)
     const delta = typeof follicleDate === 'number'
@@ -223,6 +239,37 @@ function buildPassedWindowLabel(
   if (stepType === 'birth') return `预产期已过 ${passedDays} 天`
   if (stepType === 'weaning_confirm') return `预计断奶日已过 ${passedDays} 天`
   return `建议日期已过 ${passedDays} 天`
+}
+
+function buildAlertLabel(
+  stepType: string,
+  task: BreedingMilestoneTaskLike,
+  suggestionStatus: BreedingMilestoneSuggestionStatus,
+  dueDate: number | null,
+  now: number,
+) {
+  if (stepType === 'follicle_check' && task.details?.abnormal_result) {
+    return '本次检查提示发育不良'
+  }
+
+  if (stepType === 'mating') {
+    return buildPassedWindowLabel(stepType, suggestionStatus, dueDate, now)
+  }
+
+  if (suggestionStatus === 'window_passed') {
+    return buildSuggestionLabel(stepType, suggestionStatus, dueDate, STEP_META[stepType]?.actionLabel || '处理', now)
+  }
+
+  return ''
+}
+
+function isDangerAlert(
+  stepType: string,
+  task: BreedingMilestoneTaskLike,
+  suggestionStatus: BreedingMilestoneSuggestionStatus,
+) {
+  return (stepType === 'follicle_check' && !!task.details?.abnormal_result)
+    || suggestionStatus === 'window_passed'
 }
 
 function getFallbackStageTitle(title?: string): string {

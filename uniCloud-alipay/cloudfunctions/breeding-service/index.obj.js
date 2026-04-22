@@ -47,6 +47,9 @@ const BREEDING_RECORD_LABEL_MAP = {
   abnormal_termination: '异常终止记录',
 }
 
+const FOLLICLE_READY_RESULT = '已成熟'
+const FOLLICLE_ABNORMAL_RESULT = '发育不良'
+
 async function logBreedingOperation({ familyId, actorUserId, actionType, targetType, targetId, targetName, summary, meta = null }) {
   await safeWriteOperationLog({
     familyId,
@@ -294,6 +297,127 @@ async function getLatestMatingRecord(cycleId, familyId) {
   return matingRecords?.[0] || null
 }
 
+function getFollicleResult(details = {}) {
+  return typeof details?.result === 'string' ? details.result : ''
+}
+
+function isFollicleReady(details = {}) {
+  return getFollicleResult(details) === FOLLICLE_READY_RESULT
+}
+
+function isFollicleAbnormal(details = {}) {
+  return getFollicleResult(details) === FOLLICLE_ABNORMAL_RESULT
+}
+
+async function hasMatingRecord(cycleId, familyId) {
+  if (!cycleId) return false
+
+  const { total } = await db.collection('breeding_records')
+    .where({
+      cycle_id: cycleId,
+      family_id: familyId,
+      type: 'mating',
+    })
+    .count()
+
+  return (total || 0) > 0
+}
+
+async function getLatestFollicleCheckRecord(cycleId, familyId) {
+  if (!cycleId) return null
+
+  const { data: follicleRecords } = await db.collection('breeding_records')
+    .where({
+      cycle_id: cycleId,
+      family_id: familyId,
+      type: 'follicle_check',
+    })
+    .get()
+
+  return (follicleRecords || [])
+    .slice()
+    .sort((a, b) => {
+      const dateDiff = (b?.date || 0) - (a?.date || 0)
+      if (dateDiff !== 0) return dateDiff
+      const updatedDiff = (b?.updated_at || b?.created_at || 0) - (a?.updated_at || a?.created_at || 0)
+      if (updatedDiff !== 0) return updatedDiff
+      return `${b?._id || ''}`.localeCompare(`${a?._id || ''}`)
+    })[0] || null
+}
+
+async function getCycleById(cycleId, familyId) {
+  if (!cycleId) return null
+
+  const { data: cycles } = await db.collection('breeding_cycles')
+    .where({ _id: cycleId, family_id: familyId })
+    .limit(1)
+    .get()
+
+  return cycles?.[0] || null
+}
+
+async function syncEstrusCycleMilestone(familyId, cycleId, dog, sourceRecordId = null) {
+  if (!cycleId || !dog?._id) return
+
+  const cycle = await getCycleById(cycleId, familyId)
+  if (!cycle || cycle.status !== '发情中') return
+  if (await hasMatingRecord(cycleId, familyId)) return
+
+  const now = Date.now()
+  const heatDate = await getCycleHeatDate(cycleId, familyId) || cycle.start_date || cycle.created_at || now
+  const latestFollicleRecord = await getLatestFollicleCheckRecord(cycleId, familyId)
+
+  await clearPendingBreedingMilestones(familyId, { cycleId })
+
+  if (latestFollicleRecord) {
+    const follicleResult = getFollicleResult(latestFollicleRecord.details)
+    if (isFollicleReady(latestFollicleRecord.details)) {
+      await createBreedingMilestoneTask(familyId, dog, {
+        cycleId,
+        title: `${dog.name} · 配种`,
+        dueDate: latestFollicleRecord.date || now,
+        sourceRecordId: sourceRecordId || latestFollicleRecord._id || null,
+        details: {
+          step_type: 'mating',
+          follicle_check_date: latestFollicleRecord.date || null,
+          heat_date: heatDate,
+          follicle_result: follicleResult || null,
+        },
+      })
+      return
+    }
+
+    await createBreedingMilestoneTask(familyId, dog, {
+      cycleId,
+      title: `${dog.name} · 建议卵泡检查`,
+      dueDate: (latestFollicleRecord.date || now) + 86400000,
+      sourceRecordId: sourceRecordId || latestFollicleRecord._id || null,
+      details: {
+        step_type: 'follicle_check',
+        heat_date: heatDate,
+        follicle_result: follicleResult || null,
+        latest_follicle_check_date: latestFollicleRecord.date || null,
+        abnormal_result: isFollicleAbnormal(latestFollicleRecord.details),
+      },
+    })
+    return
+  }
+
+  await createBreedingMilestoneTask(familyId, dog, {
+    cycleId,
+    title: `${dog.name} · 建议卵泡检查`,
+    dueDate: heatDate + 10 * 86400000,
+    sourceRecordId,
+    details: {
+      step_type: 'follicle_check',
+      heat_date: heatDate,
+      follicle_result: null,
+      latest_follicle_check_date: null,
+      abnormal_result: false,
+    },
+  })
+}
+
 async function syncExtraArrangementTask(familyId, dog, cycleId, sourceRecordId, extraArrangement) {
   const now = Date.now()
   const { data: existingTasks } = await db.collection('tasks').where({
@@ -362,33 +486,11 @@ async function generateTasks(familyId, type, data, cycleId, dog, recordId) {
   }
 
   if (type === 'follicle_check') {
-    await clearPendingBreedingMilestones(familyId, { cycleId })
-    const heatDate = await getCycleHeatDate(cycleId, familyId)
-    await createBreedingMilestoneTask(familyId, dog, {
-      cycleId,
-      title: `${dog.name} · 配种`,
-      dueDate: data.date,
-      sourceRecordId: recordId,
-      details: {
-        step_type: 'mating',
-        follicle_check_date: data.date,
-        heat_date: heatDate,
-      },
-    })
+    await syncEstrusCycleMilestone(familyId, cycleId, dog, recordId)
   }
 
   if (type === 'heat') {
-    await clearPendingBreedingMilestones(familyId, { cycleId })
-    await createBreedingMilestoneTask(familyId, dog, {
-      cycleId,
-      title: `${dog.name} · 建议卵泡检查`,
-      dueDate: data.date + 10 * 86400000,
-      sourceRecordId: recordId,
-      details: {
-        step_type: 'follicle_check',
-        heat_date: data.date,
-      },
-    })
+    await syncEstrusCycleMilestone(familyId, cycleId, dog, recordId)
   }
 
   if (type === 'pregnancy_check' && isPregnancyConfirmed(data.details)) {
@@ -1482,11 +1584,14 @@ module.exports = {
     const record = records[0]
     const now = Date.now()
     const updateData = { updated_at: now }
+    let nextDate = record.date
     if (date !== undefined) updateData.date = date
+    if (date !== undefined) nextDate = date
     if (cost !== undefined) updateData.cost = cost
     if (notes !== undefined) updateData.notes = notes
+    let nextDetails = record.details || {}
     if (details !== undefined) {
-      const nextDetails = {
+      nextDetails = {
         ...(details || {}),
       }
 
@@ -1499,6 +1604,20 @@ module.exports = {
     }
 
     await db.collection('breeding_records').doc(id).update(updateData)
+
+    if (record.type === 'follicle_check') {
+      const latestFollicleRecord = await getLatestFollicleCheckRecord(record.cycle_id, this.familyId)
+      const isEditedLatestRecord = latestFollicleRecord?._id === id
+      if (isEditedLatestRecord) {
+        const { data: dogs } = await db.collection('dogs')
+          .where({ _id: record.dog_id, family_id: this.familyId, deleted_at: null })
+          .limit(1)
+          .get()
+        if (dogs && dogs.length > 0) {
+          await syncEstrusCycleMilestone(this.familyId, record.cycle_id, dogs[0], id)
+        }
+      }
+    }
 
     if (record.type !== 'heat_observation' && extra_arrangement !== undefined) {
       const { data: dogs } = await db.collection('dogs')
@@ -1524,7 +1643,7 @@ module.exports = {
       targetId: id,
       targetName: record.dog_name || record.dog_id || id,
       summary: `更新了 ${record.dog_name || '未命名犬只'} 的${BREEDING_RECORD_LABEL_MAP[record.type] || '繁育记录'}`,
-      meta: { type: record.type },
+      meta: { type: record.type, date: nextDate, result: getFollicleResult(nextDetails) || null },
     })
 
     return { message: '已更新' }

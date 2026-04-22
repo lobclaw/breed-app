@@ -141,6 +141,111 @@ describe('task-service', () => {
       expect(tasks[0].details?.step_type).toBe('follicle_check')
       expect(tasks[0].source_record_id).toBe('record_heat_missing')
     })
+
+    it('应根据最近一次卵泡检查结果补生成正确的首页流程卡', async () => {
+      const now = Date.now()
+      seedCollection('breeding_cycles', [{
+        _id: 'cycle_follicle_missing',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        status: '发情中',
+        created_at: now - 4 * DAY_MS,
+        updated_at: now,
+      }])
+      seedCollection('breeding_records', [
+        {
+          _id: 'record_heat_cycle',
+          cycle_id: 'cycle_follicle_missing',
+          dog_id: 'dam_1',
+          family_id: familyId,
+          type: 'heat',
+          date: now - 4 * DAY_MS,
+          created_at: now - 4 * DAY_MS,
+          updated_at: now - 4 * DAY_MS,
+        },
+        {
+          _id: 'record_follicle_cycle',
+          cycle_id: 'cycle_follicle_missing',
+          dog_id: 'dam_1',
+          family_id: familyId,
+          type: 'follicle_check',
+          date: now - DAY_MS,
+          details: { result: '发育中' },
+          created_at: now - DAY_MS,
+          updated_at: now - DAY_MS,
+        },
+      ])
+      seedCollection('tasks', [])
+      seedCollection('health_records', [])
+      seedCollection('medication_tasks', [])
+
+      const ctx = createCloudObjectContext({ familyId })
+      const res = await taskService.getHomeCards.call(ctx)
+
+      expect(res.data.sections.workflow).toHaveLength(1)
+
+      const { data: tasks } = await db.collection('tasks')
+        .where({ cycle_id: 'cycle_follicle_missing', type: 'breeding_milestone' })
+        .get()
+
+      expect(tasks).toHaveLength(1)
+      expect(tasks[0].details?.step_type).toBe('follicle_check')
+      expect(tasks[0].details?.follicle_result).toBe('发育中')
+      expect(tasks[0].details?.latest_follicle_check_date).toBe(now - DAY_MS)
+      expect(tasks[0].due_date).toBe(now)
+    })
+
+    it('应为发育不良的卵泡检查补生成异常强化标记', async () => {
+      const now = Date.now()
+      seedCollection('breeding_cycles', [{
+        _id: 'cycle_follicle_abnormal_missing',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        status: '发情中',
+        created_at: now - 3 * DAY_MS,
+        updated_at: now,
+      }])
+      seedCollection('breeding_records', [
+        {
+          _id: 'record_heat_abnormal_cycle',
+          cycle_id: 'cycle_follicle_abnormal_missing',
+          dog_id: 'dam_1',
+          family_id: familyId,
+          type: 'heat',
+          date: now - 3 * DAY_MS,
+          created_at: now - 3 * DAY_MS,
+          updated_at: now - 3 * DAY_MS,
+        },
+        {
+          _id: 'record_follicle_abnormal_cycle',
+          cycle_id: 'cycle_follicle_abnormal_missing',
+          dog_id: 'dam_1',
+          family_id: familyId,
+          type: 'follicle_check',
+          date: now,
+          details: { result: '发育不良' },
+          created_at: now,
+          updated_at: now,
+        },
+      ])
+      seedCollection('tasks', [])
+      seedCollection('health_records', [])
+      seedCollection('medication_tasks', [])
+
+      const ctx = createCloudObjectContext({ familyId })
+      await taskService.getHomeCards.call(ctx)
+
+      const { data: tasks } = await db.collection('tasks')
+        .where({ cycle_id: 'cycle_follicle_abnormal_missing', type: 'breeding_milestone' })
+        .get()
+
+      expect(tasks).toHaveLength(1)
+      expect(tasks[0].details?.step_type).toBe('follicle_check')
+      expect(tasks[0].details?.abnormal_result).toBe(true)
+      expect(tasks[0].details?.follicle_result).toBe('发育不良')
+    })
   })
 
   describe('completeTask 完成任务', () => {
@@ -826,6 +931,57 @@ describe('task-service', () => {
       expect(res.data.sections.workflow[0].priority).toBe('upcoming')
       expect(res.data.sections.workflow[0].domain).toBe('breeding')
       expect(res.data.cards.some((card: any) => card.tasks?.[0]?.title?.includes('卵泡'))).toBe(true)
+    })
+
+    it('同一周期残留重复繁育里程碑时，首页与红点都应按单条流程卡展示', async () => {
+      const now = Date.now()
+      const todayStart = new Date(now)
+      todayStart.setHours(0, 0, 0, 0)
+
+      seedCollection('tasks', [
+        {
+          _id: 'flow_duplicate_old',
+          family_id: familyId,
+          dog_id: 'dog_1',
+          dog_name: '花花',
+          cycle_id: 'cycle_duplicate_1',
+          type: 'breeding_milestone',
+          title: '花花 · 建议卵泡检查',
+          details: { step_type: 'follicle_check' },
+          status: 'pending',
+          due_date: todayStart.getTime() + 10 * DAY_MS,
+          created_at: now - 2000,
+          updated_at: now - 2000,
+        },
+        {
+          _id: 'flow_duplicate_new',
+          family_id: familyId,
+          dog_id: 'dog_1',
+          dog_name: '花花',
+          cycle_id: 'cycle_duplicate_1',
+          type: 'breeding_milestone',
+          title: '花花 · 建议卵泡检查',
+          details: { step_type: 'follicle_check' },
+          status: 'pending',
+          due_date: todayStart.getTime() + 10 * DAY_MS,
+          created_at: now - 1000,
+          updated_at: now - 1000,
+        },
+      ])
+      seedCollection('health_records', [])
+      seedCollection('medication_tasks', [])
+
+      const targetDay = todayStart.getTime() + 10 * DAY_MS
+      const ctx = createCloudObjectContext({ familyId })
+      const homeRes = await taskService.getHomeCards.call(ctx)
+      const dateCountRes = await taskService.getDateCounts.call(ctx, targetDay, targetDay + DAY_MS - 1)
+      const weekRes = await taskService.getWeekCards.call(ctx, targetDay, targetDay + DAY_MS - 1)
+
+      expect(homeRes.data.sections.workflow).toHaveLength(1)
+      expect(homeRes.data.sections.workflow[0].tasks[0]._id).toBe('flow_duplicate_new')
+      expect(dateCountRes.data[targetDay]).toBe(1)
+      expect(weekRes.data[targetDay].sections.workflow).toHaveLength(1)
+      expect(weekRes.data[targetDay].sections.workflow[0].tasks[0]._id).toBe('flow_duplicate_new')
     })
 
     it('超过建议日期的繁育节点仍应留在繁育区，不进入逾期区', async () => {
