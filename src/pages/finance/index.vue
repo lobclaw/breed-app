@@ -245,7 +245,7 @@
               >
                 <view class="grouped-category-card__head">
                   <view class="grouped-category-card__title-wrap">
-                    <view class="grouped-category-card__dot" :class="`grouped-category-card__dot--${group.key}`" />
+                    <view class="grouped-category-card__dot" :style="{ background: getExpenseCategoryGroupColor(group.key) }" />
                     <text class="grouped-category-card__title">{{ group.label }}</text>
                   </view>
                   <text
@@ -422,16 +422,16 @@ import BLitterSelector from '@/components/form/BLitterSelector.vue'
 import BCycleSelector from '@/components/form/BCycleSelector.vue'
 import {
   DEFAULT_EXPENSE_CATEGORIES,
-  EXPENSE_CATEGORY_GROUPS,
+  buildExpenseCategoryGroups,
   FINANCE_DATE_RANGE_OPTIONS,
   FINANCE_SORT_OPTIONS,
   INCOME_TYPES,
-  getExpenseCategoryGroupKey,
+  getExpenseCategoryGroupColor,
   getExpenseCategoryGroupLabel,
   groupExpenseCategories,
-  normalizeExpenseCategoryGroupKey,
+  normalizeExpenseCategories,
 } from '@/constants/financeCategories'
-import type { ExpenseCategory, ExpenseCategoryGroupKey } from '@/types/finance'
+import type { ExpenseCategory, ExpenseCategoryGroup, ExpenseCategoryGroupKey } from '@/types/finance'
 
 type FinanceFilterType = '' | 'income' | 'expense'
 type FinanceDateRangeValue = typeof FINANCE_DATE_RANGE_OPTIONS[number]['value']
@@ -464,7 +464,6 @@ const typeFilters: Array<{ label: string; value: FinanceFilterType }> = [
 const dateRangeOptions = FINANCE_DATE_RANGE_OPTIONS
 const sortOptions = FINANCE_SORT_OPTIONS
 const incomeTypeOptions = [...INCOME_TYPES]
-const expenseGroupOptions = [...EXPENSE_CATEGORY_GROUPS]
 
 const transactions = ref<any[]>([])
 const loading = ref(false)
@@ -474,7 +473,9 @@ const showDogPicker = ref(false)
 const showLitterPicker = ref(false)
 const showCyclePicker = ref(false)
 const currentMonth = ref(new Date())
-const categories = ref<ExpenseCategory[]>(DEFAULT_EXPENSE_CATEGORIES.map(item => ({ ...item })))
+const expenseGroups = ref<ExpenseCategoryGroup[]>(buildExpenseCategoryGroups())
+const categories = ref<ExpenseCategory[]>(normalizeExpenseCategories(DEFAULT_EXPENSE_CATEGORIES, expenseGroups.value))
+const expenseGroupOptions = computed(() => expenseGroups.value)
 
 const summary = reactive({
   totalIncome: 0,
@@ -521,33 +522,12 @@ function uniqStrings(values: string[] = []) {
   return Array.from(new Set(values.filter(Boolean)))
 }
 
-function normalizeCategories(rawCategories: any[]) {
-  const merged = new Map<string, ExpenseCategory>()
-  for (const item of DEFAULT_EXPENSE_CATEGORIES) {
-    merged.set(item.name, { ...item })
-  }
-  for (const item of rawCategories || []) {
-    if (!item) continue
-    const name = typeof item === 'string' ? item : item.name
-    if (!name) continue
-    const parentGroup = typeof item === 'string'
-      ? 'other'
-      : normalizeExpenseCategoryGroupKey(item.parent_group || getExpenseCategoryGroupKey(name))
-    merged.set(name, {
-      name,
-      parent_group: parentGroup,
-      is_default: !!merged.get(name)?.is_default,
-    })
-  }
-  return Array.from(merged.values())
-}
-
 function normalizeFilters(input: FinanceFilterState): FinanceFilterState {
   const next = {
     ...input,
     selectedIncomeTypes: uniqStrings(input.selectedIncomeTypes).filter(type => incomeTypeOptions.includes(type as any)),
     selectedExpenseGroups: uniqStrings(input.selectedExpenseGroups).filter((group): group is ExpenseCategoryGroupKey => {
-      return expenseGroupOptions.some(item => item.key === group)
+      return expenseGroups.value.some(item => item.key === group)
     }),
     selectedExpenseCategories: uniqStrings(input.selectedExpenseCategories),
     selectedDogIds: uniqStrings(input.selectedDogIds),
@@ -593,7 +573,7 @@ function normalizeFilters(input: FinanceFilterState): FinanceFilterState {
   return next
 }
 
-const groupedExpenseCategories = computed(() => groupExpenseCategories(categories.value))
+const groupedExpenseCategories = computed(() => groupExpenseCategories(categories.value, expenseGroups.value))
 
 const monthNavigationDisabled = computed(() => appliedFilters.dateRange === 'custom')
 
@@ -698,6 +678,7 @@ const canApplyDraftFilters = computed(() => {
 const { run: fetchTransactions } = useCloudCall<{ data: any[] }>('finance-service', 'getTransactionList')
 const { run: fetchSummary } = useCloudCall<{ data: any }>('finance-service', 'getFinancialSummary')
 const { run: fetchCategories } = useCloudCall<{ data: ExpenseCategory[] }>('finance-service', 'getExpenseCategories')
+const { run: fetchExpenseGroups } = useCloudCall<{ data: ExpenseCategoryGroup[] }>('finance-service', 'getExpenseCategoryGroups')
 
 function buildQueryPayload(filters: FinanceFilterState) {
   const payload: Record<string, any> = {
@@ -809,7 +790,12 @@ function getFlowIconColor(tx: any): 'red' | 'amber' | 'green' | 'blue' | 'plum' 
 }
 
 function getFlowSubTitle(tx: any) {
-  if (tx._txType === 'expense') return tx.category_group_label || getExpenseCategoryGroupLabel(getExpenseCategoryGroupKey(tx.category))
+  if (tx._txType === 'expense') {
+    return tx.category_group_label || getExpenseCategoryGroupLabel(
+      categories.value.find(item => item.name === tx.category)?.parent_group,
+      expenseGroups.value,
+    )
+  }
   return tx.dog_name || '收入记录'
 }
 
@@ -828,12 +814,12 @@ function getFlowMeta(tx: any) {
 }
 
 async function loadCategories() {
-  const res = await fetchCategories()
-  if (res?.data?.length) {
-    categories.value = normalizeCategories(res.data)
-  } else {
-    categories.value = normalizeCategories(DEFAULT_EXPENSE_CATEGORIES)
-  }
+  const [groupRes, categoryRes] = await Promise.all([
+    fetchExpenseGroups(),
+    fetchCategories(),
+  ])
+  expenseGroups.value = buildExpenseCategoryGroups(groupRes?.data || [])
+  categories.value = normalizeExpenseCategories(categoryRes?.data || [], expenseGroups.value)
 }
 
 async function loadPage() {
@@ -1029,6 +1015,7 @@ function goToTxDetail(tx: any) {
 
 onShow(async () => {
   await loadCategories()
+  Object.assign(appliedFilters, normalizeFilters(appliedFilters))
   syncDraftWithApplied()
   await loadPage()
 })

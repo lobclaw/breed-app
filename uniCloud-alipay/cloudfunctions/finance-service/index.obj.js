@@ -27,12 +27,12 @@ async function logFinanceOperation({ familyId, actorUserId, actionType, domain =
   })
 }
 
-const EXPENSE_CATEGORY_GROUPS = [
-  { key: 'feeding', label: '喂养营养' },
-  { key: 'health', label: '医疗健康' },
-  { key: 'breeding', label: '繁育投入' },
-  { key: 'operations', label: '日常运营' },
-  { key: 'other', label: '其他' },
+const PRESET_EXPENSE_CATEGORY_GROUPS = [
+  { key: 'feeding', label: '喂养营养', is_default: true },
+  { key: 'health', label: '医疗健康', is_default: true },
+  { key: 'breeding', label: '繁育投入', is_default: true },
+  { key: 'operations', label: '日常运营', is_default: true },
+  { key: 'other', label: '其他', is_default: true },
 ]
 
 const DEFAULT_EXPENSE_CATEGORY_ITEMS = [
@@ -50,14 +50,59 @@ const DEFAULT_EXPENSE_CATEGORY_ITEMS = [
 const DEFAULT_EXPENSE_CATEGORIES = DEFAULT_EXPENSE_CATEGORY_ITEMS.map(item => item.name)
 
 function normalizeExpenseCategoryGroupKey(groupKey) {
-  return EXPENSE_CATEGORY_GROUPS.some(item => item.key === groupKey) ? groupKey : 'other'
+  return groupKey && PRESET_EXPENSE_CATEGORY_GROUPS.some(item => item.key === groupKey) ? groupKey : 'other'
 }
 
-function getExpenseCategoryGroupLabel(groupKey) {
-  return EXPENSE_CATEGORY_GROUPS.find(item => item.key === groupKey)?.label || '其他'
+function createExpenseCategoryGroupKey() {
+  return `custom_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
 }
 
-function normalizeCustomExpenseCategories(rawCategories = []) {
+function normalizeCustomExpenseCategoryGroups(rawGroups = []) {
+  return (rawGroups || [])
+    .map((item) => {
+      if (!item?.key || !item?.label) return null
+      const key = String(item.key).trim()
+      const label = String(item.label).trim()
+      if (!key || !label) return null
+      return {
+        key,
+        label,
+        is_default: false,
+      }
+    })
+    .filter(Boolean)
+    .filter((item, index, list) => list.findIndex(group => group.key === item.key) === index)
+}
+
+function buildExpenseCategoryGroups(customGroups = []) {
+  const presetKeys = new Set(PRESET_EXPENSE_CATEGORY_GROUPS.map(item => item.key))
+  const normalizedCustomGroups = normalizeCustomExpenseCategoryGroups(customGroups)
+    .filter(item => !presetKeys.has(item.key))
+
+  return [
+    ...PRESET_EXPENSE_CATEGORY_GROUPS,
+    ...normalizedCustomGroups,
+  ]
+}
+
+function getExpenseCategoryGroupMap(customGroups = []) {
+  return buildExpenseCategoryGroups(customGroups).reduce((map, item) => {
+    map[item.key] = item
+    return map
+  }, {})
+}
+
+function normalizeRuntimeExpenseCategoryGroupKey(groupKey, groupMap = {}) {
+  return groupMap[groupKey] ? groupKey : 'other'
+}
+
+function getExpenseCategoryGroupLabel(groupKey, groupMap = null) {
+  if (groupMap) return groupMap[groupKey]?.label || '其他'
+  return PRESET_EXPENSE_CATEGORY_GROUPS.find(item => item.key === groupKey)?.label || '其他'
+}
+
+function normalizeCustomExpenseCategories(rawCategories = [], customGroups = []) {
+  const groupMap = getExpenseCategoryGroupMap(customGroups)
   return (rawCategories || [])
     .map((item) => {
       if (!item) return null
@@ -70,21 +115,24 @@ function normalizeCustomExpenseCategories(rawCategories = []) {
       if (!item.name || !String(item.name).trim()) return null
       return {
         name: String(item.name).trim(),
-        parent_group: normalizeExpenseCategoryGroupKey(item.parent_group),
+        parent_group: normalizeRuntimeExpenseCategoryGroupKey(
+          item.parent_group || normalizeExpenseCategoryGroupKey(item.parent_group),
+          groupMap,
+        ),
       }
     })
     .filter(Boolean)
 }
 
-function buildExpenseCategoryOptions(customCategories = []) {
+function buildExpenseCategoryOptions(customCategories = [], customGroups = []) {
   return [
     ...DEFAULT_EXPENSE_CATEGORY_ITEMS,
-    ...normalizeCustomExpenseCategories(customCategories).map(item => ({ ...item, is_default: false })),
+    ...normalizeCustomExpenseCategories(customCategories, customGroups).map(item => ({ ...item, is_default: false })),
   ]
 }
 
-function getExpenseCategoryMetaMap(customCategories = []) {
-  return buildExpenseCategoryOptions(customCategories).reduce((map, item) => {
+function getExpenseCategoryMetaMap(customCategories = [], customGroups = []) {
+  return buildExpenseCategoryOptions(customCategories, customGroups).reduce((map, item) => {
     map[item.name] = item
     return map
   }, {})
@@ -105,11 +153,12 @@ function normalizeStringArray(rawValue) {
 }
 
 function normalizeFinanceFilters(filters = {}) {
+  const expenseCategoryGroups = normalizeStringArray(filters.expenseCategoryGroups)
   const type = filters.type || ''
   const normalized = {
     type,
     incomeTypes: normalizeStringArray(filters.incomeTypes),
-    expenseCategoryGroups: normalizeStringArray(filters.expenseCategoryGroups).map(normalizeExpenseCategoryGroupKey),
+    expenseCategoryGroups,
     expenseCategories: normalizeStringArray(filters.expenseCategories || filters.subCategory || filters.category),
     dogIds: normalizeStringArray(filters.dogIds || filters.dogId),
     litterIds: normalizeStringArray(filters.litterIds || filters.litterId),
@@ -566,7 +615,9 @@ module.exports = {
       .get()
     const family = familyData[0] || familyData || {}
     const customCategories = family.settings?.custom_expense_categories || []
-    const categoryMetaMap = getExpenseCategoryMetaMap(customCategories)
+    const customGroups = family.settings?.custom_expense_category_groups || []
+    const categoryMetaMap = getExpenseCategoryMetaMap(customCategories, customGroups)
+    const groupMap = getExpenseCategoryGroupMap(customGroups)
 
     const { startDate, endDate } = resolveDateRange(filters)
     const dateFilter = dbCmd.gte(startDate).and(dbCmd.lt(endDate))
@@ -595,6 +646,7 @@ module.exports = {
         _txType: 'expense',
         category_group_label: getExpenseCategoryGroupLabel(
           getExpenseCategoryGroupKeyByName(expense.category, categoryMetaMap),
+          groupMap,
         ),
       })),
       ...incomeResult.data
@@ -638,7 +690,12 @@ module.exports = {
 
     const expense = expenses[0]
     const family = familyResult.data?.[0] || familyResult.data || {}
-    const categoryMetaMap = getExpenseCategoryMetaMap(family.settings?.custom_expense_categories || [])
+    const customGroups = family.settings?.custom_expense_category_groups || []
+    const categoryMetaMap = getExpenseCategoryMetaMap(
+      family.settings?.custom_expense_categories || [],
+      customGroups,
+    )
+    const groupMap = getExpenseCategoryGroupMap(customGroups)
     const linkedDogs = await fetchDogsByIds(this.familyId, expense.linked_dog_ids || [])
 
     let linkedRef = ''
@@ -659,6 +716,7 @@ module.exports = {
         source: expense.source_type,
         category_group_label: getExpenseCategoryGroupLabel(
           getExpenseCategoryGroupKeyByName(expense.category, categoryMetaMap),
+          groupMap,
         ),
         created_by_name: getCreatorDisplayName(family.members, expense.created_by),
         linked_dogs: linkedDogs,
@@ -778,7 +836,9 @@ module.exports = {
       .get()
     const family = familyData[0] || familyData || {}
     const customCategories = family.settings?.custom_expense_categories || []
-    const categoryMetaMap = getExpenseCategoryMetaMap(customCategories)
+    const customGroups = family.settings?.custom_expense_category_groups || []
+    const categoryMetaMap = getExpenseCategoryMetaMap(customCategories, customGroups)
+    const groupMap = getExpenseCategoryGroupMap(customGroups)
 
     const { startDate, endDate } = resolveDateRange({
       ...(typeof params === 'object' ? params : {}),
@@ -824,6 +884,7 @@ module.exports = {
     for (const e of filteredExpenses) {
       const groupLabel = getExpenseCategoryGroupLabel(
         getExpenseCategoryGroupKeyByName(e.category, categoryMetaMap),
+        groupMap,
       )
       categoryBreakdown[groupLabel] = (categoryBreakdown[groupLabel] || 0) + (e.total_amount || 0)
     }
@@ -1583,9 +1644,146 @@ module.exports = {
       .get()
 
     const family = data[0] || data
-    const categories = buildExpenseCategoryOptions(family.settings?.custom_expense_categories || [])
+    const categories = buildExpenseCategoryOptions(
+      family.settings?.custom_expense_categories || [],
+      family.settings?.custom_expense_category_groups || [],
+    )
 
     return { data: categories }
+  },
+
+  /**
+   * 获取支出分组（预设 + 自定义）
+   */
+  async getExpenseCategoryGroups() {
+    const { data } = await db.collection('families')
+      .doc(this.familyId)
+      .field({ settings: true })
+      .get()
+
+    const family = data[0] || data
+
+    return {
+      data: buildExpenseCategoryGroups(family.settings?.custom_expense_category_groups || []),
+    }
+  },
+
+  /**
+   * 新增自定义支出分组
+   */
+  async addExpenseCategoryGroup({ label } = {}) {
+    if (!label || !label.trim()) throw new Error('请填写分组名称')
+    label = label.trim()
+
+    const { data } = await db.collection('families').doc(this.familyId).field({ settings: true }).get()
+    const family = data[0] || data
+    const customGroups = normalizeCustomExpenseCategoryGroups(family.settings?.custom_expense_category_groups || [])
+    const allGroups = buildExpenseCategoryGroups(customGroups)
+
+    if (allGroups.some(item => item.label === label)) throw new Error('分组名称已存在')
+
+    const nextGroup = {
+      key: createExpenseCategoryGroupKey(),
+      label,
+    }
+
+    await db.collection('families').doc(this.familyId).update({
+      'settings.custom_expense_category_groups': [
+        ...customGroups,
+        nextGroup,
+      ],
+    })
+
+    await logFinanceOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'create',
+      targetType: 'expense_category_group',
+      targetId: nextGroup.key,
+      targetName: label,
+      summary: `新增了支出分组 ${label}`,
+    })
+
+    return { data: { ...nextGroup, is_default: false }, message: '已添加' }
+  },
+
+  /**
+   * 更新自定义支出分组
+   */
+  async updateExpenseCategoryGroup({ key, label } = {}) {
+    if (!key || !label || !label.trim()) throw new Error('参数不完整')
+    label = label.trim()
+
+    if (PRESET_EXPENSE_CATEGORY_GROUPS.some(item => item.key === key)) throw new Error('预设分组不可编辑')
+
+    const { data } = await db.collection('families').doc(this.familyId).field({ settings: true }).get()
+    const family = data[0] || data
+    const customGroups = normalizeCustomExpenseCategoryGroups(family.settings?.custom_expense_category_groups || [])
+    const current = customGroups.find(item => item.key === key)
+
+    if (!current) throw new Error('分组不存在')
+    if (customGroups.some(item => item.key !== key && item.label === label)) throw new Error('分组名称已存在')
+    if (PRESET_EXPENSE_CATEGORY_GROUPS.some(item => item.label === label)) throw new Error('分组名称与预设分组重复')
+    if (current.label === label) return { message: '无变化' }
+
+    const updatedGroups = customGroups.map((item) => (
+      item.key === key
+        ? { ...item, label }
+        : item
+    ))
+
+    await db.collection('families').doc(this.familyId).update({
+      'settings.custom_expense_category_groups': updatedGroups,
+    })
+
+    await logFinanceOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'update',
+      targetType: 'expense_category_group',
+      targetId: key,
+      targetName: label,
+      summary: `将支出分组 ${current.label} 更新为 ${label}`,
+    })
+
+    return { message: '已更新' }
+  },
+
+  /**
+   * 删除自定义支出分组
+   */
+  async removeExpenseCategoryGroup({ key } = {}) {
+    if (!key) throw new Error('请指定分组')
+
+    if (PRESET_EXPENSE_CATEGORY_GROUPS.some(item => item.key === key)) throw new Error('预设分组不可删除')
+
+    const { data } = await db.collection('families').doc(this.familyId).field({ settings: true }).get()
+    const family = data[0] || data
+    const customGroups = normalizeCustomExpenseCategoryGroups(family.settings?.custom_expense_category_groups || [])
+    const customCategories = normalizeCustomExpenseCategories(
+      family.settings?.custom_expense_categories || [],
+      customGroups,
+    )
+    const current = customGroups.find(item => item.key === key)
+
+    if (!current) throw new Error('分组不存在')
+    if (customCategories.some(item => item.parent_group === key)) throw new Error('请先迁移或删除该分组下的分类')
+
+    await db.collection('families').doc(this.familyId).update({
+      'settings.custom_expense_category_groups': customGroups.filter(item => item.key !== key),
+    })
+
+    await logFinanceOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'delete',
+      targetType: 'expense_category_group',
+      targetId: key,
+      targetName: current.label,
+      summary: `删除了支出分组 ${current.label}`,
+    })
+
+    return { message: '已删除' }
   },
 
   /**
@@ -1594,13 +1792,15 @@ module.exports = {
   async addExpenseCategory({ name, parentGroup } = {}) {
     if (!name || !name.trim()) throw new Error('请填写分类名称')
     name = name.trim()
-    const normalizedParentGroup = normalizeExpenseCategoryGroupKey(parentGroup)
 
     if (DEFAULT_EXPENSE_CATEGORIES.includes(name)) throw new Error('该分类名称与预设分类重复')
 
     const { data } = await db.collection('families').doc(this.familyId).field({ settings: true }).get()
     const family = data[0] || data
-    const custom = normalizeCustomExpenseCategories(family.settings?.custom_expense_categories || [])
+    const customGroups = normalizeCustomExpenseCategoryGroups(family.settings?.custom_expense_category_groups || [])
+    const groupMap = getExpenseCategoryGroupMap(customGroups)
+    const normalizedParentGroup = normalizeRuntimeExpenseCategoryGroupKey(parentGroup, groupMap)
+    const custom = normalizeCustomExpenseCategories(family.settings?.custom_expense_categories || [], customGroups)
 
     if (custom.some(item => item.name === name)) throw new Error('分类名称已存在')
 
@@ -1637,13 +1837,15 @@ module.exports = {
 
     const { data } = await db.collection('families').doc(this.familyId).field({ settings: true }).get()
     const family = data[0] || data
-    const custom = normalizeCustomExpenseCategories(family.settings?.custom_expense_categories || [])
+    const customGroups = normalizeCustomExpenseCategoryGroups(family.settings?.custom_expense_category_groups || [])
+    const groupMap = getExpenseCategoryGroupMap(customGroups)
+    const custom = normalizeCustomExpenseCategories(family.settings?.custom_expense_categories || [], customGroups)
 
     const current = custom.find(item => item.name === oldName)
     if (!current) throw new Error('分类不存在')
     if (oldName !== newName && custom.some(item => item.name === newName)) throw new Error('新名称已存在')
 
-    const normalizedParentGroup = normalizeExpenseCategoryGroupKey(parentGroup || current.parent_group)
+    const normalizedParentGroup = normalizeRuntimeExpenseCategoryGroupKey(parentGroup || current.parent_group, groupMap)
     if (newName === oldName && normalizedParentGroup === current.parent_group) return { message: '无变化' }
     const updated = custom.map((item) => (
       item.name === oldName
@@ -1687,7 +1889,8 @@ module.exports = {
 
     const { data } = await db.collection('families').doc(this.familyId).field({ settings: true }).get()
     const family = data[0] || data
-    const custom = normalizeCustomExpenseCategories(family.settings?.custom_expense_categories || [])
+    const customGroups = normalizeCustomExpenseCategoryGroups(family.settings?.custom_expense_category_groups || [])
+    const custom = normalizeCustomExpenseCategories(family.settings?.custom_expense_categories || [], customGroups)
 
     if (!custom.some(item => item.name === name)) throw new Error('分类不存在')
 

@@ -5,8 +5,96 @@
   + D-6 ~ D-14 状态变更弹窗/Sheet
 -->
 <template>
-  <!-- 加载骨架屏 -->
-  <BSkeleton v-if="loading" :rows="3" :avatar="true" />
+  <!-- 首屏拟真骨架 -->
+  <view v-if="pageLoadStage === 'bootstrapping'" class="dog-detail dog-detail--skeleton">
+    <view class="dog-detail__topbar dog-detail__topbar--skeleton">
+      <view class="dog-detail__topbar-skeleton-circle dog-detail__skeleton-shimmer" />
+      <view class="dog-detail__topbar-skeleton-title dog-detail__skeleton-shimmer" />
+      <view class="dog-detail__topbar-skeleton-cta dog-detail__skeleton-shimmer" />
+      <view class="dog-detail__topbar-skeleton-circle dog-detail__skeleton-shimmer" />
+    </view>
+
+    <view class="dog-detail__hero dog-detail__hero--skeleton">
+      <view class="dog-detail__hero-avatar dog-detail__hero-avatar--primary dog-detail__skeleton-shimmer" />
+      <view class="dog-detail__hero-info">
+        <view class="dog-detail__hero-skeleton-name dog-detail__skeleton-shimmer" />
+        <view class="dog-detail__hero-skeleton-sub dog-detail__skeleton-shimmer" />
+        <view class="dog-detail__hero-skeleton-tags">
+          <view class="dog-detail__hero-skeleton-tag dog-detail__skeleton-shimmer" />
+          <view class="dog-detail__hero-skeleton-tag dog-detail__hero-skeleton-tag--short dog-detail__skeleton-shimmer" />
+          <view class="dog-detail__hero-skeleton-tag dog-detail__hero-skeleton-tag--static dog-detail__skeleton-shimmer" />
+        </view>
+      </view>
+    </view>
+
+    <view class="dog-detail__stats">
+      <view v-for="item in 3" :key="item" class="dog-detail__stat-item">
+        <view class="dog-detail__stat-icon-skeleton dog-detail__skeleton-shimmer" />
+        <view class="dog-detail__stat-value-skeleton dog-detail__skeleton-shimmer" />
+        <view class="dog-detail__stat-label-skeleton dog-detail__skeleton-shimmer" />
+      </view>
+    </view>
+
+    <view class="dog-detail__tab-bar dog-detail__tab-bar--skeleton">
+      <view v-for="tab in 4" :key="tab" class="dog-detail__tab-item dog-detail__tab-item--skeleton">
+        <view class="dog-detail__tab-label-skeleton dog-detail__skeleton-shimmer" />
+      </view>
+    </view>
+
+    <view class="dog-detail__tab-content">
+      <view class="dog-detail__pane">
+        <view class="dog-detail__section">
+          <view class="dog-detail__sec dog-detail__sec--rose">
+            <text class="dog-detail__sec-text">当前状态</text>
+          </view>
+          <view class="dog-detail__status-merged dog-detail__status-merged--skeleton">
+            <view class="dog-detail__status-row dog-detail__status-row--skeleton">
+              <view class="dog-detail__st-header">
+                <view class="dog-detail__st-left">
+                  <view class="dog-detail__st-icon dog-detail__st-icon--skeleton dog-detail__skeleton-shimmer" />
+                  <view class="dog-detail__st-body">
+                    <view class="dog-detail__st-title-skeleton dog-detail__skeleton-shimmer" />
+                    <view class="dog-detail__st-sub-skeleton dog-detail__skeleton-shimmer" />
+                  </view>
+                </view>
+                <view class="dog-detail__st-chevron-skeleton dog-detail__skeleton-shimmer" />
+              </view>
+              <view class="dog-detail__st-progress-track">
+                <view class="dog-detail__st-progress-fill dog-detail__st-progress-fill--skeleton dog-detail__skeleton-shimmer" />
+              </view>
+            </view>
+          </view>
+        </view>
+
+        <view class="dog-detail__section">
+          <view class="dog-detail__sec dog-detail__sec--green">
+            <text class="dog-detail__sec-text">最近健康记录</text>
+          </view>
+          <view class="dog-detail__rec-list dog-detail__rec-list--skeleton">
+            <view v-for="record in 2" :key="record" class="dog-detail__rec-item dog-detail__rec-item--skeleton">
+              <view class="dog-detail__rec-icon dog-detail__rec-icon--skeleton dog-detail__skeleton-shimmer" />
+              <view class="dog-detail__rec-body">
+                <view class="dog-detail__rec-title-skeleton dog-detail__skeleton-shimmer" />
+                <view class="dog-detail__rec-sub-skeleton dog-detail__skeleton-shimmer" />
+              </view>
+              <view class="dog-detail__rec-tag-skeleton dog-detail__skeleton-shimmer" />
+              <view class="dog-detail__rec-chevron-skeleton dog-detail__skeleton-shimmer" />
+            </view>
+          </view>
+        </view>
+
+        <view class="dog-detail__section">
+          <view class="dog-detail__collapse-head dog-detail__collapse-head--skeleton">
+            <view class="dog-detail__collapse-head-text">
+              <view class="dog-detail__collapse-icon-skeleton dog-detail__skeleton-shimmer" />
+              <view class="dog-detail__collapse-title-skeleton dog-detail__skeleton-shimmer" />
+            </view>
+            <view class="dog-detail__collapse-arrow-skeleton dog-detail__skeleton-shimmer" />
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
 
   <!-- 主内容 -->
   <view class="dog-detail" v-else-if="dog">
@@ -77,7 +165,8 @@
       </view>
       <view class="dog-detail__stat-item">
         <text class="material-icons-round dog-detail__stat-icon">{{ tertiaryStatIcon }}</text>
-        <text class="dog-detail__stat-value">{{ tertiaryStatValue }}</text>
+        <view v-if="showTertiaryStatSkeleton" class="dog-detail__stat-value-skeleton dog-detail__skeleton-shimmer" />
+        <text v-else class="dog-detail__stat-value">{{ tertiaryStatValue }}</text>
         <text class="dog-detail__stat-label">{{ tertiaryStatLabel }}</text>
       </view>
     </view>
@@ -102,7 +191,7 @@
       <view v-if="activeTab === 'overview'" class="dog-detail__pane">
 
         <!-- 当前状态 -->
-        <view v-if="statuses.length > 0" class="dog-detail__section">
+        <view v-if="statuses.length > 0" class="dog-detail__section" :class="{ 'dog-detail__section--hydrating': overviewHydrating }">
           <view class="dog-detail__sec dog-detail__sec--rose">
             <text class="dog-detail__sec-text">当前状态</text>
           </view>
@@ -156,7 +245,18 @@
             <text class="dog-detail__sec-link" @click="activeTab = 'health'">查看全部</text>
           </view>
 
-          <view v-if="healthRecords.length > 0" class="dog-detail__rec-list">
+          <view v-if="!healthRecordsLoaded" class="dog-detail__rec-list dog-detail__rec-list--skeleton">
+            <view v-for="record in 2" :key="record" class="dog-detail__rec-item dog-detail__rec-item--skeleton">
+              <view class="dog-detail__rec-icon dog-detail__rec-icon--skeleton dog-detail__skeleton-shimmer" />
+              <view class="dog-detail__rec-body">
+                <view class="dog-detail__rec-title-skeleton dog-detail__skeleton-shimmer" />
+                <view class="dog-detail__rec-sub-skeleton dog-detail__skeleton-shimmer" />
+              </view>
+              <view class="dog-detail__rec-tag-skeleton dog-detail__skeleton-shimmer" />
+              <view class="dog-detail__rec-chevron-skeleton dog-detail__skeleton-shimmer" />
+            </view>
+          </view>
+          <view v-else-if="healthRecords.length > 0" class="dog-detail__rec-list">
             <view
               v-for="record in healthRecords.slice(0, 3)"
               :key="record._id || record.id"
@@ -248,6 +348,10 @@
 
       <!-- ========== 繁育 Tab ========== -->
       <view v-if="activeTab === 'breeding'" class="dog-detail__pane">
+        <view v-if="!breedingTabLoaded" class="dog-detail__tab-loading">
+          <BSkeleton :rows="3" />
+        </view>
+        <template v-else>
         <!-- 发情中快捷操作 -->
         <view v-if="isInEstrus" class="breeding-estrus-banner">
           <view class="breeding-estrus-banner__info">
@@ -425,10 +529,15 @@
             </view>
           </view>
         </view>
+        </template>
       </view>
 
       <!-- ========== 健康 Tab ========== -->
       <view v-if="activeTab === 'health'" class="dog-detail__pane">
+        <view v-if="!healthTabLoaded" class="dog-detail__tab-loading">
+          <BSkeleton :rows="3" />
+        </view>
+        <template v-else>
         <!-- 体重快捷操作 -->
         <view class="dog-detail__weight-actions">
           <view class="dog-detail__weight-btn" @click="openWeightEntry">
@@ -563,10 +672,15 @@
             </view>
           </view>
         </view>
+        </template>
       </view>
 
       <!-- ========== 财务 Tab ========== -->
       <view v-if="activeTab === 'finance'" class="dog-detail__pane">
+        <view v-if="!financeLoaded" class="dog-detail__tab-loading">
+          <BSkeleton :rows="3" />
+        </view>
+        <template v-else>
         <!-- 快捷操作 -->
         <view class="dog-detail__finance-links">
           <view class="dog-detail__finance-link" @click="goToExpenseAdd()">
@@ -627,6 +741,7 @@
             </view>
           </view>
         </view>
+        </template>
       </view>
     </view>
 
@@ -1114,7 +1229,12 @@ const cycles = ref<any[]>([])
 const healthRecords = ref<any[]>([])
 const medicationRecords = ref<any[]>([])
 const activeTab = ref('overview')
-const loading = ref(true)
+const pageLoadStage = ref<'bootstrapping' | 'ready'>('bootstrapping')
+const healthRecordsLoaded = ref(false)
+const medicationHistoryLoaded = ref(false)
+const financeLoaded = ref(false)
+const cyclesLoaded = ref(false)
+const littersLoaded = ref(false)
 const showMore = ref(false)
 const showAddRecordSheet = ref(false)
 const infoExpanded = ref(false)
@@ -1147,6 +1267,10 @@ const tabs = computed(() => {
 })
 
 const isPuppyDetail = computed(() => dog.value?.role === '幼崽')
+const showTertiaryStatSkeleton = computed(() => !isPuppyDetail.value && !cyclesLoaded.value)
+const overviewHydrating = computed(() => !!dog.value && (!healthRecordsLoaded.value || showTertiaryStatSkeleton.value))
+const breedingTabLoaded = computed(() => cyclesLoaded.value && littersLoaded.value)
+const healthTabLoaded = computed(() => healthRecordsLoaded.value && medicationHistoryLoaded.value)
 
 const tertiaryStatIcon = computed(() => isPuppyDetail.value ? 'route' : 'child_friendly')
 const tertiaryStatValue = computed(() => isPuppyDetail.value ? (dog.value?.disposition || '在养') : `${cycles.value.length}窝`)
@@ -2127,6 +2251,44 @@ async function doDelete() {
 
 // ==================== 数据加载 ====================
 
+function resetSectionLoadingState(isPuppy = false) {
+  healthRecordsLoaded.value = false
+  medicationHistoryLoaded.value = false
+  financeLoaded.value = false
+  cyclesLoaded.value = isPuppy
+  littersLoaded.value = isPuppy
+}
+
+function syncActiveCycleSummary({
+  isPuppy,
+  nextCycles,
+  refreshBreedingSummary,
+}: {
+  isPuppy: boolean
+  nextCycles: any[]
+  refreshBreedingSummary: boolean
+}) {
+  const nextActiveCycleId = isPuppy
+    ? ''
+    : nextCycles.find((cycle: any) => !TERMINAL_CYCLE_STATUSES.includes(cycle.status))?._id || ''
+
+  if (!nextActiveCycleId || isPuppy) {
+    activeCycleSummaryDetail.value = null
+    return nextActiveCycleId
+  }
+
+  if (refreshBreedingSummary) {
+    const nextCache = { ...activeCycleSummaryCache.value }
+    delete nextCache[nextActiveCycleId]
+    activeCycleSummaryCache.value = nextCache
+    activeCycleSummaryDetail.value = null
+    return nextActiveCycleId
+  }
+
+  activeCycleSummaryDetail.value = activeCycleSummaryCache.value[nextActiveCycleId] || null
+  return nextActiveCycleId
+}
+
 async function loadData({
   silent = false,
   shouldCleanup = false,
@@ -2137,10 +2299,10 @@ async function loadData({
   refreshBreedingSummary?: boolean
 } = {}) {
   const loadToken = ++latestLoadToken
-  const showSkeleton = !silent && !hasLoadedOnce
+  const showBootstrapSkeleton = !silent && !hasLoadedOnce
 
-  if (showSkeleton) {
-    loading.value = true
+  if (showBootstrapSkeleton) {
+    pageLoadStage.value = 'bootstrapping'
   }
 
   try {
@@ -2161,60 +2323,124 @@ async function loadData({
     }
 
     const isPuppy = detailRes?.data?.role === '幼崽'
-    const [healthRes, medicationRes, financeRes, cyclesRes, littersRes] = await Promise.all([
-      fetchHealth(dogId),
-      fetchMedicationHistory(dogId),
-      fetchDogFinance(dogId),
-      isPuppy ? Promise.resolve(null) : fetchCycles(dogId),
-      isPuppy ? Promise.resolve(null) : fetchLitters(dogId),
-    ])
+    if (showBootstrapSkeleton) {
+      resetSectionLoadingState(isPuppy)
+      pageLoadStage.value = 'ready'
+    }
 
-    if (loadToken !== latestLoadToken) return
+    hasLoadedOnce = true
 
     if (isPuppy) {
       cycles.value = []
       litters.value = []
       activeCycleSummaryDetail.value = null
-    } else {
-      if (cyclesRes?.data) {
-        cycles.value = cyclesRes.data
-      }
-      if (littersRes?.data) {
-        litters.value = littersRes.data
-      }
-    }
-    if (healthRes?.data) {
-      healthRecords.value = healthRes.data
-    }
-    if (medicationRes?.data) {
-      medicationRecords.value = medicationRes.data
-    }
-    if (financeRes?.data) {
-      dogFinance.value = financeRes.data
     }
 
-    const nextActiveCycleId = isPuppy
-      ? ''
-      : (cyclesRes?.data || []).find((cycle: any) => !TERMINAL_CYCLE_STATUSES.includes(cycle.status))?._id || ''
-    if (!nextActiveCycleId || isPuppy) {
-      activeCycleSummaryDetail.value = null
-    } else if (refreshBreedingSummary) {
-      const nextCache = { ...activeCycleSummaryCache.value }
-      delete nextCache[nextActiveCycleId]
-      activeCycleSummaryCache.value = nextCache
-      activeCycleSummaryDetail.value = null
-    } else {
-      activeCycleSummaryDetail.value = activeCycleSummaryCache.value[nextActiveCycleId] || null
-    }
+    const healthPromise = fetchHealth(dogId)
+      .then((healthRes) => {
+        if (loadToken !== latestLoadToken) return
+        healthRecords.value = healthRes?.data || []
+      })
+      .catch(() => {
+        if (loadToken !== latestLoadToken) return
+        healthRecords.value = []
+      })
+      .finally(() => {
+        if (loadToken === latestLoadToken) {
+          healthRecordsLoaded.value = true
+        }
+      })
 
-    if (!isPuppy && refreshBreedingSummary && activeTab.value === 'breeding' && nextActiveCycleId) {
-      await ensureActiveCycleSummary(true)
-    }
+    const medicationPromise = fetchMedicationHistory(dogId)
+      .then((medicationRes) => {
+        if (loadToken !== latestLoadToken) return
+        medicationRecords.value = medicationRes?.data || []
+      })
+      .catch(() => {
+        if (loadToken !== latestLoadToken) return
+        medicationRecords.value = []
+      })
+      .finally(() => {
+        if (loadToken === latestLoadToken) {
+          medicationHistoryLoaded.value = true
+        }
+      })
 
-    hasLoadedOnce = true
+    const financePromise = fetchDogFinance(dogId)
+      .then((financeRes) => {
+        if (loadToken !== latestLoadToken) return
+        dogFinance.value = financeRes?.data || null
+      })
+      .catch(() => {
+        if (loadToken !== latestLoadToken) return
+        dogFinance.value = null
+      })
+      .finally(() => {
+        if (loadToken === latestLoadToken) {
+          financeLoaded.value = true
+        }
+      })
+
+    const cyclesPromise = isPuppy
+      ? Promise.resolve()
+      : fetchCycles(dogId)
+          .then(async (cyclesRes) => {
+            if (loadToken !== latestLoadToken) return
+
+            const nextCycles = cyclesRes?.data || []
+            cycles.value = nextCycles
+            const nextActiveCycleId = syncActiveCycleSummary({
+              isPuppy,
+              nextCycles,
+              refreshBreedingSummary,
+            })
+
+            if (refreshBreedingSummary && activeTab.value === 'breeding' && nextActiveCycleId) {
+              await ensureActiveCycleSummary(true)
+            }
+          })
+          .catch(() => {
+            if (loadToken !== latestLoadToken) return
+            cycles.value = []
+            syncActiveCycleSummary({
+              isPuppy,
+              nextCycles: [],
+              refreshBreedingSummary,
+            })
+          })
+          .finally(() => {
+            if (loadToken === latestLoadToken) {
+              cyclesLoaded.value = true
+            }
+          })
+
+    const littersPromise = isPuppy
+      ? Promise.resolve()
+      : fetchLitters(dogId)
+          .then((littersRes) => {
+            if (loadToken !== latestLoadToken) return
+            litters.value = littersRes?.data || []
+          })
+          .catch(() => {
+            if (loadToken !== latestLoadToken) return
+            litters.value = []
+          })
+          .finally(() => {
+            if (loadToken === latestLoadToken) {
+              littersLoaded.value = true
+            }
+          })
+
+    await Promise.all([
+      healthPromise,
+      medicationPromise,
+      financePromise,
+      cyclesPromise,
+      littersPromise,
+    ])
   } finally {
-    if (showSkeleton && loadToken === latestLoadToken) {
-      loading.value = false
+    if (showBootstrapSkeleton && loadToken === latestLoadToken) {
+      pageLoadStage.value = 'ready'
     }
   }
 }
@@ -2245,7 +2471,7 @@ onLoad((query) => {
   if (dogId) {
     loadData({ shouldCleanup: true })
   } else {
-    loading.value = false
+    pageLoadStage.value = 'ready'
   }
 })
 
@@ -2271,6 +2497,23 @@ onShow(() => {
   display: flex;
   flex-direction: column;
 }
+.dog-detail--skeleton {
+  overflow: hidden;
+}
+.dog-detail__skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--card-dim) 25%,
+    rgba(255, 255, 255, 0.24) 50%,
+    var(--card-dim) 75%
+  );
+  background-size: 200% 100%;
+  animation: dog-detail-skeleton-shimmer 1.5s infinite;
+}
+@keyframes dog-detail-skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
 
 /* ==================== 顶部导航栏 ==================== */
 .dog-detail__topbar {
@@ -2278,6 +2521,30 @@ onShow(() => {
   align-items: center;
   padding: 6px 16px;
   gap: 6px;
+  flex-shrink: 0;
+}
+.dog-detail__topbar--skeleton {
+  .dog-detail__topbar-skeleton-title {
+    flex: 1;
+  }
+}
+.dog-detail__topbar-skeleton-circle,
+.dog-detail__topbar-skeleton-title,
+.dog-detail__topbar-skeleton-cta {
+  border-radius: 999px;
+}
+.dog-detail__topbar-skeleton-circle {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+}
+.dog-detail__topbar-skeleton-title {
+  height: 14px;
+  max-width: 148px;
+}
+.dog-detail__topbar-skeleton-cta {
+  width: 92px;
+  height: 36px;
   flex-shrink: 0;
 }
 .dog-detail__back-btn {
@@ -2352,6 +2619,13 @@ onShow(() => {
   padding: 4px var(--space-page) 14px;
   flex-shrink: 0;
 }
+.dog-detail__hero--skeleton {
+  .dog-detail__hero-info {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+}
 .dog-detail__hero-avatar {
   width: 56px;
   height: 56px;
@@ -2375,6 +2649,34 @@ onShow(() => {
 .dog-detail__hero-info {
   flex: 1;
   min-width: 0;
+}
+.dog-detail__hero-skeleton-name,
+.dog-detail__hero-skeleton-sub,
+.dog-detail__hero-skeleton-tag {
+  border-radius: 999px;
+}
+.dog-detail__hero-skeleton-name {
+  width: 44%;
+  height: 18px;
+}
+.dog-detail__hero-skeleton-sub {
+  width: 66%;
+  height: 12px;
+}
+.dog-detail__hero-skeleton-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.dog-detail__hero-skeleton-tag {
+  width: 74px;
+  height: 24px;
+}
+.dog-detail__hero-skeleton-tag--short {
+  width: 58px;
+}
+.dog-detail__hero-skeleton-tag--static {
+  width: 48px;
 }
 .dog-detail__hero-name {
   display: block;
@@ -2475,6 +2777,15 @@ onShow(() => {
   font-size: 15px;
   color: var(--text-3);
 }
+.dog-detail__stat-icon-skeleton,
+.dog-detail__stat-value-skeleton,
+.dog-detail__stat-label-skeleton {
+  border-radius: 999px;
+}
+.dog-detail__stat-icon-skeleton {
+  width: 16px;
+  height: 16px;
+}
 .dog-detail__stat-value {
   font-family: var(--font-display);
   font-size: 15px;
@@ -2482,10 +2793,18 @@ onShow(() => {
   color: var(--text-1);
   line-height: 1.3;
 }
+.dog-detail__stat-value-skeleton {
+  width: 40px;
+  height: 16px;
+}
 .dog-detail__stat-label {
   font-size: 10px;
   font-weight: 600;
   color: var(--text-3);
+}
+.dog-detail__stat-label-skeleton {
+  width: 24px;
+  height: 10px;
 }
 
 /* ==================== Tab 栏 ==================== */
@@ -2505,10 +2824,22 @@ onShow(() => {
   transition: color 0.15s ease;
   -webkit-tap-highlight-color: transparent;
 }
+.dog-detail__tab-item--skeleton {
+  cursor: default;
+}
+.dog-detail__tab-item--skeleton::after {
+  display: none;
+}
 .dog-detail__tab-label {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-3);
+}
+.dog-detail__tab-label-skeleton {
+  width: 42px;
+  height: 12px;
+  border-radius: 999px;
+  margin: 0 auto;
 }
 .dog-detail__tab-item--active .dog-detail__tab-label {
   color: var(--primary);
@@ -2540,6 +2871,12 @@ onShow(() => {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+.dog-detail__section--hydrating {
+  transition: opacity 0.18s ease;
+}
+.dog-detail__tab-loading {
+  padding-top: 2px;
 }
 
 /* ==================== Section 标签 ==================== */
@@ -2618,6 +2955,9 @@ onShow(() => {
   }
   & > * { position: relative; z-index: 1; }
 }
+.dog-detail__status-merged--skeleton::before {
+  background: linear-gradient(135deg, rgba(255, 240, 242, 0.78) 0%, transparent 34%);
+}
 .dog-detail__status-row {
   padding: 14px 16px 13px 18px;
   display: flex;
@@ -2628,6 +2968,11 @@ onShow(() => {
   border-left: 3.5px solid transparent;
   &:active { background: rgba(234, 62, 119, 0.03); }
   & + & { border-top: 1px solid rgba(216, 203, 189, 0.18); }
+}
+.dog-detail__status-row--skeleton {
+  cursor: default;
+  border-left-color: rgba(234, 62, 119, 0.22);
+  &:active { background: transparent; }
 }
 .dog-detail__status-row--rose { border-left-color: var(--rose); }
 .dog-detail__status-row--plum { border-left-color: var(--plum); }
@@ -2661,6 +3006,9 @@ onShow(() => {
   flex-shrink: 0;
   .material-icons-round { font-family: 'Material Icons Round'; font-size: 18px; }
 }
+.dog-detail__st-icon--skeleton {
+  background: none;
+}
 .dog-detail__st-icon--rose { background: var(--icon-rose); .material-icons-round { color: var(--rose); } }
 .dog-detail__st-icon--plum { background: var(--icon-plum); .material-icons-round { color: var(--plum); } }
 .dog-detail__st-icon--red { background: var(--icon-red); .material-icons-round { color: var(--red); } }
@@ -2680,12 +3028,32 @@ onShow(() => {
   color: var(--text-1);
   line-height: 1.25;
 }
+.dog-detail__st-title-skeleton,
+.dog-detail__st-sub-skeleton,
+.dog-detail__st-chevron-skeleton {
+  border-radius: 999px;
+}
+.dog-detail__st-title-skeleton {
+  width: 112px;
+  max-width: 46vw;
+  height: 13px;
+}
 .dog-detail__st-sub {
   display: block;
   font-size: 12px;
   font-weight: 500;
   color: var(--text-2);
   line-height: 1.35;
+}
+.dog-detail__st-sub-skeleton {
+  width: 148px;
+  max-width: 62vw;
+  height: 11px;
+}
+.dog-detail__st-chevron-skeleton {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
 }
 .dog-detail__st-chevron {
   font-family: 'Material Icons Round';
@@ -2701,6 +3069,9 @@ onShow(() => {
   box-shadow: var(--shadow);
   overflow: hidden;
 }
+.dog-detail__rec-list--skeleton {
+  overflow: hidden;
+}
 .dog-detail__rec-item {
   display: flex;
   align-items: center;
@@ -2711,6 +3082,10 @@ onShow(() => {
   &:active { background: rgba(234, 62, 119, 0.03); }
   & + & { border-top: 1px solid rgba(216, 203, 189, 0.12); }
 }
+.dog-detail__rec-item--skeleton {
+  cursor: default;
+  &:active { background: transparent; }
+}
 .dog-detail__rec-icon {
   width: 34px;
   height: 34px;
@@ -2720,6 +3095,9 @@ onShow(() => {
   justify-content: center;
   flex-shrink: 0;
   .material-icons-round { font-family: 'Material Icons Round'; font-size: 17px; }
+}
+.dog-detail__rec-icon--skeleton {
+  background: none;
 }
 .dog-detail__rec-icon--blue { background: var(--icon-blue); .material-icons-round { color: var(--blue); } }
 .dog-detail__rec-icon--teal { background: var(--icon-teal); .material-icons-round { color: var(--teal); } }
@@ -2744,6 +3122,17 @@ onShow(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.dog-detail__rec-title-skeleton,
+.dog-detail__rec-sub-skeleton,
+.dog-detail__rec-tag-skeleton,
+.dog-detail__rec-chevron-skeleton {
+  border-radius: 999px;
+}
+.dog-detail__rec-title-skeleton {
+  width: 120px;
+  max-width: 52vw;
+  height: 12px;
+}
 .dog-detail__rec-sub {
   font-size: 11px;
   font-weight: 500;
@@ -2751,14 +3140,29 @@ onShow(() => {
   margin-top: 2px;
   display: block;
 }
+.dog-detail__rec-sub-skeleton {
+  width: 72px;
+  height: 10px;
+  margin-top: 4px;
+}
 .dog-detail__rec-chevron {
   font-family: 'Material Icons Round';
   color: var(--text-4);
   font-size: 18px;
 }
+.dog-detail__rec-chevron-skeleton {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
 .dog-detail__rec-tag {
   padding: 3px 8px;
   border-radius: var(--radius-tag);
+}
+.dog-detail__rec-tag-skeleton {
+  width: 46px;
+  height: 22px;
+  flex-shrink: 0;
 }
 .dog-detail__rec-tag-text {
   font-size: 11px;
@@ -3121,6 +3525,10 @@ onShow(() => {
   -webkit-tap-highlight-color: transparent;
   &:active { transform: scale(0.98); }
 }
+.dog-detail__collapse-head--skeleton {
+  cursor: default;
+  &:active { transform: none; }
+}
 .dog-detail__collapse-head--open {
   border-radius: var(--radius-row) var(--radius-row) 0 0;
   box-shadow: none;
@@ -3134,11 +3542,28 @@ onShow(() => {
   color: var(--text-2);
   .material-icons-round { font-family: 'Material Icons Round'; font-size: 18px; color: var(--text-3); }
 }
+.dog-detail__collapse-icon-skeleton,
+.dog-detail__collapse-title-skeleton,
+.dog-detail__collapse-arrow-skeleton {
+  border-radius: 999px;
+}
+.dog-detail__collapse-icon-skeleton {
+  width: 18px;
+  height: 18px;
+}
+.dog-detail__collapse-title-skeleton {
+  width: 72px;
+  height: 12px;
+}
 .dog-detail__collapse-arrow {
   font-family: 'Material Icons Round';
   color: var(--text-4);
   font-size: 20px;
   transition: transform 0.2s ease;
+}
+.dog-detail__collapse-arrow-skeleton {
+  width: 18px;
+  height: 18px;
 }
 .dog-detail__collapse-head--open .dog-detail__collapse-arrow {
   transform: rotate(180deg);
@@ -3812,6 +4237,7 @@ onShow(() => {
   height: 100%;
   border-radius: 3px;
   transition: width 0.4s ease;
+  &--skeleton { width: 48%; }
   &--rose { background: linear-gradient(90deg, var(--rose), var(--amber)); }
   &--plum { background: linear-gradient(90deg, var(--plum), var(--rose)); }
   &--red { background: linear-gradient(90deg, var(--red), #f08e8e); }

@@ -195,6 +195,7 @@ import { ref, reactive, computed } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
+import { DEFAULT_EXPENSE_CATEGORIES, normalizeExpenseCategories } from '@/constants/financeCategories'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BExpenseCategorySheet from '@/components/form/BExpenseCategorySheet.vue'
@@ -202,6 +203,7 @@ import BFinanceLinkSheet from '@/components/form/BFinanceLinkSheet.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 import BLitterSelector from '@/components/form/BLitterSelector.vue'
 import BCycleSelector from '@/components/form/BCycleSelector.vue'
+import type { ExpenseCategory } from '@/types/finance'
 
 let expenseId = ''
 
@@ -223,9 +225,8 @@ const form = reactive({
   notes: '',
 })
 
-const DEFAULT_EXPENSE_CATEGORIES = ['食品', '营养品', '消耗品', '日常用品', '固定开销', '交通', '医疗', '配种费', '其他']
-const customCategories = ref<string[]>([])
-const categories = computed(() => [...DEFAULT_EXPENSE_CATEGORIES, ...customCategories.value])
+const expenseCategoryOptions = ref<ExpenseCategory[]>(normalizeExpenseCategories(DEFAULT_EXPENSE_CATEGORIES))
+const categories = computed(() => expenseCategoryOptions.value.map(item => item.name))
 const recentCategories = ref<string[]>([])
 const linkedDogs = ref<any[]>([])
 const linkedLitter = ref<any | null>(null)
@@ -370,7 +371,7 @@ const { run: getExpense } = useCloudCall('finance-service', 'getExpenseDetail', 
   showLoading: false,
 })
 
-const { run: fetchCategories } = useCloudCall<{ data: Array<{ name: string; is_default: boolean }> }>('finance-service', 'getExpenseCategories', {
+const { run: fetchCategories } = useCloudCall<{ data: ExpenseCategory[] }>('finance-service', 'getExpenseCategories', {
   showLoading: false,
 })
 
@@ -382,9 +383,7 @@ const { run: updateExpense } = useCloudCall('finance-service', 'updateExpense', 
 
 async function refreshCategoryOptions() {
   const catRes = await fetchCategories()
-  if (catRes?.data) {
-    customCategories.value = catRes.data.filter(item => !item.is_default).map(item => item.name)
-  }
+  expenseCategoryOptions.value = normalizeExpenseCategories(catRes?.data || [])
   syncRecentCategories()
 }
 
@@ -395,10 +394,8 @@ async function loadExpense(id: string) {
       fetchCategories(),
       getExpense({ id }),
     ])
-    if (catRes?.data) {
-      customCategories.value = catRes.data.filter(item => !item.is_default).map(item => item.name)
-      syncRecentCategories()
-    }
+    expenseCategoryOptions.value = normalizeExpenseCategories(catRes?.data || [])
+    syncRecentCategories()
     if (res?.data) {
       const data = res.data as any
       amountInput.value = String(data.total_amount || '')

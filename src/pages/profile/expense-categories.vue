@@ -2,7 +2,7 @@
   <view class="page">
     <BPageHeader title="支出分类管理">
       <template #right>
-        <view class="header-add" @click="openSheet()">
+        <view class="header-add" @click="showCreateSheet = true">
           <text class="material-icons-round" style="font-size: 18px;">add</text>
           <text class="header-add__text">新建</text>
         </view>
@@ -12,72 +12,134 @@
     <view v-if="loading" class="group-list">
       <view v-for="i in 3" :key="i" class="group-card group-card--skeleton">
         <view class="sk sk-title" />
-        <view v-for="j in 3" :key="j" class="group-row group-row--skeleton">
+        <view v-for="j in 2" :key="j" class="group-row group-row--skeleton">
           <view class="sk sk-name" />
           <view class="sk sk-icon" />
         </view>
       </view>
     </view>
 
-    <view v-else-if="groupedCategories.length > 0" class="group-list">
+    <view v-else class="group-list">
       <view v-for="group in groupedCategories" :key="group.key" class="group-card">
         <view class="group-card__header">
-          <text class="group-card__title">{{ group.label }}</text>
-          <text class="group-card__count">{{ group.items.length }}项</text>
+          <view class="group-card__title-wrap">
+            <view class="group-card__dot" :style="{ background: getExpenseCategoryGroupColor(group.key) }" />
+            <view class="group-card__copy">
+              <text class="group-card__title">{{ group.label }}</text>
+              <text class="group-card__count">{{ group.items.length }}项</text>
+            </view>
+          </view>
+
+          <view class="group-card__actions">
+            <view v-if="group.is_default" class="group-card__lock">
+              <text class="material-icons-round" style="font-size: 14px; color: var(--text-4);">lock</text>
+            </view>
+            <template v-else>
+              <text class="material-icons-round group-card__action" @click="openGroupSheet(group)">edit</text>
+              <text class="material-icons-round group-card__action" @click="askDelete('group', group)">delete_outline</text>
+            </template>
+          </view>
         </view>
 
-        <view
-          v-for="cat in group.items"
-          :key="cat.name"
-          class="group-row"
-        >
-          <view class="group-row__left">
-            <view class="group-row__dot" :class="`group-row__dot--${group.key}`" />
-            <view class="group-row__info">
-              <text class="group-row__name">{{ cat.name }}</text>
-              <text class="group-row__meta">{{ cat.is_default ? '预设分类' : '自定义分类' }}</text>
+        <template v-if="group.items.length">
+          <view
+            v-for="cat in group.items"
+            :key="cat.name"
+            class="group-row"
+          >
+            <view class="group-row__left">
+              <view class="group-row__dot" :style="{ background: getExpenseCategoryGroupColor(group.key) }" />
+              <view class="group-row__info">
+                <text class="group-row__name">{{ cat.name }}</text>
+                <text class="group-row__meta">{{ cat.is_default ? '预设分类' : '自定义分类' }}</text>
+              </view>
+              <view v-if="cat.is_default" class="group-row__lock">
+                <text class="material-icons-round" style="font-size: 12px; color: var(--text-4);">lock</text>
+              </view>
             </view>
-            <view v-if="cat.is_default" class="group-row__lock">
-              <text class="material-icons-round" style="font-size: 12px; color: var(--text-4);">lock</text>
-            </view>
-          </view>
 
-          <view class="group-row__actions">
-            <text
-              class="material-icons-round group-row__edit"
-              :class="{ 'group-row__action--disabled': cat.is_default }"
-              @click="!cat.is_default && openSheet(cat)"
-            >edit</text>
-            <text
-              class="material-icons-round group-row__delete"
-              :class="{ 'group-row__action--disabled': cat.is_default }"
-              @click="!cat.is_default && askDelete(cat.name)"
-            >delete_outline</text>
+            <view class="group-row__actions">
+              <text
+                class="material-icons-round group-row__edit"
+                :class="{ 'group-row__action--disabled': cat.is_default }"
+                @click="!cat.is_default && openCategorySheet(cat)"
+              >edit</text>
+              <text
+                class="material-icons-round group-row__delete"
+                :class="{ 'group-row__action--disabled': cat.is_default }"
+                @click="!cat.is_default && askDelete('category', cat)"
+              >delete_outline</text>
+            </view>
           </view>
+        </template>
+
+        <view v-else class="group-card__empty">
+          <text>该分组下暂无分类</text>
         </view>
       </view>
     </view>
 
-    <BEmpty
-      v-else
-      icon="category"
-      title="暂无支出分类"
-      description="添加自定义支出分类"
-      actionText="新建分类"
-      @action="openSheet()"
-    />
+    <text class="hint-text">预设分组和预设分类不可编辑或删除；删除自定义分组前需先迁移或删除其下分类</text>
 
-    <text v-if="!loading && groupedCategories.length > 0" class="hint-text">预设分类不可编辑或删除；自定义分类必须归属于一个用途分组</text>
+    <BSheet v-model:visible="showCreateSheet" title="新建内容" height="auto">
+      <view class="create-sheet">
+        <view class="create-item" @click="openGroupSheet()">
+          <view class="create-item__icon">
+            <text class="material-icons-round" style="font-size: 18px; color: var(--primary);">folder</text>
+          </view>
+          <view class="create-item__copy">
+            <text class="create-item__title">新建分组</text>
+            <text class="create-item__desc">先创建一级支出分组，再往下挂分类</text>
+          </view>
+          <text class="material-icons-round create-item__arrow">chevron_right</text>
+        </view>
 
-    <BSheet v-model:visible="showSheet" :title="editingName ? '编辑分类' : '新建分类'" height="auto">
+        <view class="create-item" @click="openCategorySheet()">
+          <view class="create-item__icon">
+            <text class="material-icons-round" style="font-size: 18px; color: var(--primary);">category</text>
+          </view>
+          <view class="create-item__copy">
+            <text class="create-item__title">新建分类</text>
+            <text class="create-item__desc">创建实际记账使用的二级分类</text>
+          </view>
+          <text class="material-icons-round create-item__arrow">chevron_right</text>
+        </view>
+      </view>
+    </BSheet>
+
+    <BSheet v-model:visible="showGroupSheet" :title="editingGroupKey ? '编辑分组' : '新建分组'" height="auto">
+      <view class="sheet-form">
+        <view class="field-group">
+          <text class="field-label">分组名称</text>
+          <input
+            v-model="groupFormLabel"
+            class="form-input"
+            placeholder="如：美容护理"
+            :focus="showGroupSheet"
+          />
+        </view>
+
+        <view class="sheet-actions">
+          <BSubmitButton
+            :disabled="!groupFormLabel.trim() || groupSubmitting"
+            :loading="groupSubmitting"
+            @click="saveGroup"
+          >
+            {{ editingGroupKey ? '保存修改' : '新建分组' }}
+          </BSubmitButton>
+        </view>
+      </view>
+    </BSheet>
+
+    <BSheet v-model:visible="showCategorySheet" :title="editingCategoryName ? '编辑分类' : '新建分类'" height="auto">
       <view class="sheet-form">
         <view class="field-group">
           <text class="field-label">分类名称</text>
           <input
-            v-model="formName"
+            v-model="categoryFormName"
             class="form-input"
             placeholder="如：玩具、美容"
-            :focus="showSheet"
+            :focus="showCategorySheet"
           />
         </view>
 
@@ -85,11 +147,11 @@
           <text class="field-label">所属分组</text>
           <view class="group-pills">
             <view
-              v-for="group in EXPENSE_CATEGORY_GROUPS"
+              v-for="group in groups"
               :key="group.key"
               class="group-pill"
-              :class="{ 'group-pill--active': formParentGroup === group.key }"
-              @click="formParentGroup = group.key"
+              :class="{ 'group-pill--active': categoryFormParentGroup === group.key }"
+              @click="categoryFormParentGroup = group.key"
             >
               <text>{{ group.label }}</text>
             </view>
@@ -97,8 +159,12 @@
         </view>
 
         <view class="sheet-actions">
-          <BSubmitButton :disabled="!formName.trim() || !formParentGroup" @click="saveCat">
-            {{ editingName ? '保存修改' : '新建分类' }}
+          <BSubmitButton
+            :disabled="!categoryFormName.trim() || !categoryFormParentGroup || categorySubmitting"
+            :loading="categorySubmitting"
+            @click="saveCategory"
+          >
+            {{ editingCategoryName ? '保存修改' : '新建分类' }}
           </BSubmitButton>
         </view>
       </view>
@@ -106,8 +172,8 @@
 
     <BDeleteConfirm
       v-model:visible="showDeleteConfirm"
-      title="删除分类"
-      :content="`删除「${deletingName}」后不可恢复，历史账单中该分类名称保持不变`"
+      :title="deleteTargetType === 'group' ? '删除分组' : '删除分类'"
+      :content="deleteConfirmContent"
       @confirm="confirmDelete"
     />
   </view>
@@ -119,149 +185,195 @@ import { onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
-import BEmpty from '@/components/feedback/BEmpty.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import BDeleteConfirm from '@/components/layout/BDeleteConfirm.vue'
 import {
-  DEFAULT_EXPENSE_CATEGORIES,
-  EXPENSE_CATEGORY_GROUPS,
-  getExpenseCategoryGroupKey,
+  buildExpenseCategoryGroups,
+  getExpenseCategoryGroupColor,
   groupExpenseCategories,
-  normalizeExpenseCategoryGroupKey,
+  normalizeExpenseCategories,
 } from '@/constants/financeCategories'
-import type { ExpenseCategory, ExpenseCategoryGroupKey } from '@/types/finance'
+import type { ExpenseCategory, ExpenseCategoryGroup } from '@/types/finance'
 
-const CACHE_KEY = 'expense_categories_cache'
+const CATEGORY_CACHE_KEY = 'expense_categories_cache'
+const GROUP_CACHE_KEY = 'expense_category_groups_cache'
 
-function normalizeCategories(rawCategories: any[]) {
-  const merged = new Map<string, ExpenseCategory>()
-  for (const item of DEFAULT_EXPENSE_CATEGORIES) {
-    merged.set(item.name, { ...item })
-  }
-  for (const item of rawCategories || []) {
-    if (!item) continue
-    const name = typeof item === 'string' ? item : item.name
-    if (!name) continue
-    const parentGroup = typeof item === 'string'
-      ? 'other'
-      : normalizeExpenseCategoryGroupKey(item.parent_group || getExpenseCategoryGroupKey(name))
-    merged.set(name, {
-      name,
-      parent_group: parentGroup,
-      is_default: !!merged.get(name)?.is_default,
-    })
-  }
-  return Array.from(merged.values())
-}
-
-function readCache(): ExpenseCategory[] {
+function readCategoryCache() {
   try {
-    return normalizeCategories(JSON.parse(uni.getStorageSync(CACHE_KEY) || '[]'))
+    return JSON.parse(uni.getStorageSync(CATEGORY_CACHE_KEY) || '[]')
   } catch {
-    return normalizeCategories(DEFAULT_EXPENSE_CATEGORIES)
+    return []
   }
 }
 
-function saveCache(data: ExpenseCategory[]) {
+function readGroupCache() {
   try {
-    uni.setStorageSync(CACHE_KEY, JSON.stringify(data))
+    return JSON.parse(uni.getStorageSync(GROUP_CACHE_KEY) || '[]')
+  } catch {
+    return []
+  }
+}
+
+function saveCategoryCache(data: ExpenseCategory[]) {
+  try {
+    uni.setStorageSync(CATEGORY_CACHE_KEY, JSON.stringify(data))
   } catch {
     // ignore
   }
 }
 
-const categories = ref<ExpenseCategory[]>(readCache())
-const groupedCategories = computed(() => groupExpenseCategories(categories.value))
-const loading = ref(categories.value.length === 0)
-const showSheet = ref(false)
-const formName = ref('')
-const formParentGroup = ref<ExpenseCategoryGroupKey>('other')
-const editingName = ref('')
+function saveGroupCache(data: ExpenseCategoryGroup[]) {
+  try {
+    uni.setStorageSync(GROUP_CACHE_KEY, JSON.stringify(data))
+  } catch {
+    // ignore
+  }
+}
+
+const groups = ref<ExpenseCategoryGroup[]>(buildExpenseCategoryGroups(readGroupCache()))
+const categories = ref<ExpenseCategory[]>(normalizeExpenseCategories(readCategoryCache(), groups.value))
+const groupedCategories = computed(() => groupExpenseCategories(categories.value, groups.value, true))
+const loading = ref(true)
+
+const showCreateSheet = ref(false)
+const showGroupSheet = ref(false)
+const showCategorySheet = ref(false)
 const showDeleteConfirm = ref(false)
-const deletingName = ref('')
+
+const editingGroupKey = ref('')
+const groupFormLabel = ref('')
+const groupSubmitting = ref(false)
+
+const editingCategoryName = ref('')
+const categoryFormName = ref('')
+const categoryFormParentGroup = ref('other')
+const categorySubmitting = ref(false)
+
+const deleteTargetType = ref<'group' | 'category'>('category')
+const deletingKey = ref('')
+const deletingLabel = ref('')
+const deleteSubmitting = ref(false)
+
+const deleteConfirmContent = computed(() => {
+  if (deleteTargetType.value === 'group') {
+    return `删除分组「${deletingLabel.value}」后不可恢复；若分组下仍有分类会被阻止删除`
+  }
+  return `删除分类「${deletingLabel.value}」后不可恢复，历史账单中该分类名称保持不变`
+})
 
 const { run: fetchCategories } = useCloudCall<{ data: ExpenseCategory[] }>('finance-service', 'getExpenseCategories')
+const { run: fetchGroups } = useCloudCall<{ data: ExpenseCategoryGroup[] }>('finance-service', 'getExpenseCategoryGroups')
 const { run: addCategory } = useCloudCall('finance-service', 'addExpenseCategory', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 const { run: updateCategory } = useCloudCall('finance-service', 'updateExpenseCategory', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 const { run: deleteCategory } = useCloudCall('finance-service', 'removeExpenseCategory', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
+const { run: addGroup } = useCloudCall<{ data: ExpenseCategoryGroup }>('finance-service', 'addExpenseCategoryGroup', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
+const { run: updateGroup } = useCloudCall('finance-service', 'updateExpenseCategoryGroup', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
+const { run: deleteGroup } = useCloudCall('finance-service', 'removeExpenseCategoryGroup', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 
 async function load() {
-  const res = await fetchCategories()
-  if (res?.data) {
-    categories.value = normalizeCategories(res.data)
-    saveCache(categories.value)
+  try {
+    const [groupRes, categoryRes] = await Promise.all([
+      fetchGroups(),
+      fetchCategories(),
+    ])
+
+    groups.value = buildExpenseCategoryGroups(groupRes?.data || [])
+    categories.value = normalizeExpenseCategories(categoryRes?.data || [], groups.value)
+    saveGroupCache(groups.value)
+    saveCategoryCache(categories.value)
+  } catch {
+    uni.showToast({ title: '加载失败，请稍后重试', icon: 'none' })
+  } finally {
+    loading.value = false
   }
-  loading.value = false
 }
 
-function openSheet(cat?: ExpenseCategory) {
-  editingName.value = cat ? cat.name : ''
-  formName.value = cat ? cat.name : ''
-  formParentGroup.value = cat?.parent_group || 'other'
-  showSheet.value = true
+function openGroupSheet(group?: ExpenseCategoryGroup) {
+  showCreateSheet.value = false
+  editingGroupKey.value = group?.key || ''
+  groupFormLabel.value = group?.label || ''
+  showGroupSheet.value = true
 }
 
-function saveCat() {
-  const name = formName.value.trim()
-  if (!name || !formParentGroup.value) return
+function openCategorySheet(category?: ExpenseCategory) {
+  showCreateSheet.value = false
+  editingCategoryName.value = category?.name || ''
+  categoryFormName.value = category?.name || ''
+  categoryFormParentGroup.value = category?.parent_group || 'other'
+  showCategorySheet.value = true
+}
 
-  showSheet.value = false
+async function saveGroup() {
+  const label = groupFormLabel.value.trim()
+  if (!label) return
 
-  if (editingName.value) {
-    const idx = categories.value.findIndex(item => item.name === editingName.value)
-    const prev = [...categories.value]
-    if (idx !== -1) {
-      const updated = [...categories.value]
-      updated[idx] = {
-        ...updated[idx],
-        name,
-        parent_group: formParentGroup.value,
-      }
-      categories.value = normalizeCategories(updated)
-      saveCache(categories.value)
+  groupSubmitting.value = true
+  try {
+    if (editingGroupKey.value) {
+      await updateGroup({ key: editingGroupKey.value, label })
+    } else {
+      await addGroup({ label })
     }
-    updateCategory({
-      oldName: editingName.value,
-      newName: name,
-      parentGroup: formParentGroup.value,
-    }).catch(() => {
-      categories.value = prev
-      saveCache(prev)
-      uni.showToast({ title: '更新失败，请重试', icon: 'none' })
-    })
-    return
+    showGroupSheet.value = false
+    await load()
+  } catch (error: any) {
+    uni.showToast({ title: error?.message || '保存失败，请重试', icon: 'none' })
+  } finally {
+    groupSubmitting.value = false
   }
-
-  const newCategory: ExpenseCategory = {
-    name,
-    parent_group: formParentGroup.value,
-    is_default: false,
-  }
-  const prev = [...categories.value]
-  categories.value = normalizeCategories([...categories.value, newCategory])
-  saveCache(categories.value)
-  addCategory({ name, parentGroup: formParentGroup.value }).catch(() => {
-    categories.value = prev
-    saveCache(prev)
-    uni.showToast({ title: '添加失败，请重试', icon: 'none' })
-  })
 }
 
-function askDelete(name: string) {
-  deletingName.value = name
+async function saveCategory() {
+  const name = categoryFormName.value.trim()
+  if (!name || !categoryFormParentGroup.value) return
+
+  categorySubmitting.value = true
+  try {
+    if (editingCategoryName.value) {
+      await updateCategory({
+        oldName: editingCategoryName.value,
+        newName: name,
+        parentGroup: categoryFormParentGroup.value,
+      })
+    } else {
+      await addCategory({
+        name,
+        parentGroup: categoryFormParentGroup.value,
+      })
+    }
+    showCategorySheet.value = false
+    await load()
+  } catch (error: any) {
+    uni.showToast({ title: error?.message || '保存失败，请重试', icon: 'none' })
+  } finally {
+    categorySubmitting.value = false
+  }
+}
+
+function askDelete(type: 'group' | 'category', target: ExpenseCategoryGroup | ExpenseCategory) {
+  deleteTargetType.value = type
+  deletingKey.value = type === 'group' ? (target as ExpenseCategoryGroup).key : (target as ExpenseCategory).name
+  deletingLabel.value = type === 'group' ? (target as ExpenseCategoryGroup).label : (target as ExpenseCategory).name
   showDeleteConfirm.value = true
 }
 
-function confirmDelete() {
-  const prev = [...categories.value]
-  categories.value = categories.value.filter(item => item.name !== deletingName.value)
-  saveCache(categories.value)
-  showDeleteConfirm.value = false
-  deleteCategory({ name: deletingName.value }).catch(() => {
-    categories.value = prev
-    saveCache(prev)
-    uni.showToast({ title: '删除失败，请重试', icon: 'none' })
-  })
+async function confirmDelete() {
+  if (deleteSubmitting.value) return
+
+  deleteSubmitting.value = true
+  try {
+    if (deleteTargetType.value === 'group') {
+      await deleteGroup({ key: deletingKey.value })
+    } else {
+      await deleteCategory({ name: deletingKey.value })
+    }
+    showDeleteConfirm.value = false
+    await load()
+  } catch (error: any) {
+    uni.showToast({ title: error?.message || '删除失败，请重试', icon: 'none' })
+  } finally {
+    deleteSubmitting.value = false
+  }
 }
 
 onShow(() => load())
@@ -287,10 +399,31 @@ onShow(() => load())
 
   &__header {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
     gap: 12px;
     margin-bottom: 10px;
+  }
+
+  &__title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  &__dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  &__copy {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
   }
 
   &__title {
@@ -302,6 +435,30 @@ onShow(() => load())
   &__count {
     font-size: 12px;
     font-weight: 700;
+    color: var(--text-3);
+  }
+
+  &__actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  &__action {
+    font-size: 20px;
+    color: var(--text-3);
+  }
+
+  &__lock {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 20px;
+  }
+
+  &__empty {
+    padding: 10px 0 4px;
+    font-size: 12px;
     color: var(--text-3);
   }
 }
@@ -335,12 +492,6 @@ onShow(() => load())
     height: 10px;
     border-radius: 50%;
     flex-shrink: 0;
-
-    &--feeding { background: #f59a3f; }
-    &--health { background: #e56767; }
-    &--breeding { background: #d68ae8; }
-    &--operations { background: #5d9ce8; }
-    &--other { background: #9b8f86; }
   }
 
   &__info {
@@ -384,6 +535,57 @@ onShow(() => load())
   }
 }
 
+.create-sheet {
+  padding: 0 var(--space-page) var(--space-page);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.create-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 18px;
+  background: var(--card-dim);
+
+  &__icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 14px;
+    background: var(--primary-soft);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  &__copy {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  &__title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-1);
+  }
+
+  &__desc {
+    font-size: 12px;
+    color: var(--text-3);
+  }
+
+  &__arrow {
+    font-size: 18px;
+    color: var(--text-4);
+  }
+}
+
 .sheet-form {
   padding: 0 var(--space-page) var(--space-page);
 }
@@ -424,21 +626,6 @@ onShow(() => load())
 
 .sheet-actions {
   margin-top: 8px;
-}
-
-.submit-btn {
-  width: 100%;
-  height: 44px;
-  border-radius: 14px;
-  border: none;
-  background: var(--primary);
-  color: #fff;
-  font-size: 14px;
-  font-weight: 700;
-
-  &[disabled] {
-    opacity: 0.45;
-  }
 }
 
 .hint-text {

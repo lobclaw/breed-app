@@ -373,12 +373,20 @@
 - `name`
 - `parent_group`
 
+其中 `families.settings.custom_expense_category_groups` 结构为：
+
+- `key`
+- `label`
+
 规则：
 
 - 通知设置统一存放在 `families.settings`
 - `morning_summary_time` 使用北京时间 `HH:MM` 字符串
 - `notification_types.overdue` 固定为 `true`
+- 自定义支出分组统一存放在 `custom_expense_category_groups`
+- 自定义支出分组使用 `{ key, label }`；`key` 由服务端生成且不可变，`label` 可编辑
 - 自定义支出分类必须带 `parent_group`
+- `custom_expense_categories.parent_group` 引用支出分组 `key`
 - 历史字符串数组格式兼容读取，但写回时统一升级为对象数组
 - 未识别或缺失分组的历史分类默认归到 `其他`
 

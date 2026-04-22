@@ -71,3 +71,9 @@ export interface ExpenseCategory {
   parent_group: ExpenseCategoryGroupKey
   is_default?: boolean
 }
+
+export interface ExpenseCategoryGroup {
+  key: ExpenseCategoryGroupKey
+  label: string
+  is_default?: boolean
+}

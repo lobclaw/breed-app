@@ -168,6 +168,7 @@ import { ref, computed } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
+import { DEFAULT_EXPENSE_CATEGORIES, normalizeExpenseCategories } from '@/constants/financeCategories'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BExpenseCategorySheet from '@/components/form/BExpenseCategorySheet.vue'
@@ -176,6 +177,7 @@ import BFinanceLinkSheet from '@/components/form/BFinanceLinkSheet.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 import BLitterSelector from '@/components/form/BLitterSelector.vue'
 import BCycleSelector from '@/components/form/BCycleSelector.vue'
+import type { ExpenseCategory } from '@/types/finance'
 
 // 模式：支出 / 收入
 const mode = ref<'expense' | 'income'>('expense')
@@ -194,9 +196,8 @@ const RECENT_INCOME_TYPE_KEY = 'finance_recent_income_types'
 
 // 支出分类
 const expenseCategory = ref('食品')
-const DEFAULT_EXPENSE_CATEGORIES = ['食品', '营养品', '消耗品', '日常用品', '固定开销', '交通', '医疗', '配种费', '其他']
-const customExpenseCategories = ref<string[]>([])
-const expenseCategories = computed(() => [...DEFAULT_EXPENSE_CATEGORIES, ...customExpenseCategories.value])
+const expenseCategoryOptions = ref<ExpenseCategory[]>(normalizeExpenseCategories(DEFAULT_EXPENSE_CATEGORIES))
+const expenseCategories = computed(() => expenseCategoryOptions.value.map(item => item.name))
 const recentExpenseCategories = ref<string[]>([])
 const expenseCategoryIcons: Record<string, string> = {
   '食品': 'restaurant', '营养品': 'medication', '消耗品': 'shopping_bag',
@@ -418,16 +419,14 @@ const { run: addIncome } = useCloudCall('finance-service', 'addIncome', {
   throwOnError: true,
 })
 
-const { run: fetchCategories } = useCloudCall<{ data: Array<{ name: string; is_default: boolean }> }>('finance-service', 'getExpenseCategories')
+const { run: fetchCategories } = useCloudCall<{ data: ExpenseCategory[] }>('finance-service', 'getExpenseCategories')
 const { run: fetchDogDetail } = useCloudCall<{ data: any }>('dog-service', 'getDogDetail', {
   showLoading: false,
 })
 
 async function loadCategories() {
   const res = await fetchCategories()
-  if (res?.data) {
-    customExpenseCategories.value = res.data.filter(item => !item.is_default).map(item => item.name)
-  }
+  expenseCategoryOptions.value = normalizeExpenseCategories(res?.data || [])
   syncRecentExpenseCategories()
   syncRecentIncomeTypes()
 }

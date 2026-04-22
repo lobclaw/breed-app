@@ -103,8 +103,10 @@ describe('dog detail breeding tab source contract', () => {
     expect(source).toContain('refreshBreedingSummary')
     expect(source).toContain("refreshBreedingSummary: activeTab.value === 'breeding'")
     expect(source).toContain("const isPuppy = detailRes?.data?.role === '幼崽'")
-    expect(source).toContain("isPuppy ? Promise.resolve(null) : fetchCycles(dogId)")
-    expect(source).toContain("isPuppy ? Promise.resolve(null) : fetchLitters(dogId)")
+    expect(source).toContain('const cyclesPromise = isPuppy')
+    expect(source).toContain('const littersPromise = isPuppy')
+    expect(source).toContain('fetchCycles(dogId)')
+    expect(source).toContain('fetchLitters(dogId)')
     expect(source).toContain("if (detailRes.data.role === '幼崽' && activeTab.value === 'breeding') {")
   })
 

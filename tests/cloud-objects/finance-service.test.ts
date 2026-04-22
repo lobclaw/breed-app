@@ -66,6 +66,159 @@ describe('finance-service', () => {
     ])
   })
 
+  it('新增自定义分组时应写入 custom_expense_category_groups', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+    const result = await financeService.addExpenseCategoryGroup.call(ctx, {
+      label: '美容护理',
+    })
+
+    const { data } = await db.collection('families').doc(familyId).get()
+    expect(result.data).toMatchObject({
+      label: '美容护理',
+      is_default: false,
+    })
+    expect(result.data.key).toMatch(/^custom_/)
+    expect(data[0].settings.custom_expense_category_groups).toEqual([
+      {
+        key: result.data.key,
+        label: '美容护理',
+      },
+    ])
+  })
+
+  it('自定义分类可挂到自定义分组', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+    seedCollection('families', [{
+      _id: familyId,
+      name: '测试犬舍',
+      settings: {
+        custom_expense_category_groups: [{ key: 'beauty', label: '美容护理' }],
+        custom_expense_categories: [],
+      },
+    }])
+
+    await financeService.addExpenseCategory.call(ctx, {
+      name: '洗护',
+      parentGroup: 'beauty',
+    })
+
+    const result = await financeService.getExpenseCategories.call(ctx)
+    expect(result.data.find((item: any) => item.name === '洗护')).toMatchObject({
+      name: '洗护',
+      parent_group: 'beauty',
+      is_default: false,
+    })
+  })
+
+  it('自定义分组改名后应保留 key 并用于统计展示', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+    seedCollection('families', [{
+      _id: familyId,
+      name: '测试犬舍',
+      settings: {
+        custom_expense_category_groups: [{ key: 'beauty', label: '美容护理' }],
+        custom_expense_categories: [{ name: '洗护', parent_group: 'beauty' }],
+      },
+    }])
+    seedCollection('expenses', [{
+      _id: 'exp_beauty',
+      family_id: familyId,
+      category: '洗护',
+      total_amount: 180,
+      deleted_at: null,
+      date: aprilTs,
+    }])
+
+    await financeService.updateExpenseCategoryGroup.call(ctx, {
+      key: 'beauty',
+      label: '洗护美容',
+    })
+
+    const groups = await financeService.getExpenseCategoryGroups.call(ctx)
+    const summary = await financeService.getFinancialSummary.call(ctx, {
+      period: 'monthly',
+      year: 2026,
+      month: 4,
+      expenseCategoryGroups: ['beauty'],
+    })
+
+    expect(groups.data.find((item: any) => item.key === 'beauty')).toMatchObject({
+      key: 'beauty',
+      label: '洗护美容',
+      is_default: false,
+    })
+    expect(summary.data.categoryBreakdown).toEqual({
+      洗护美容: 180,
+    })
+  })
+
+  it('删除仍挂载分类的自定义分组时应被拒绝，清空后可删除', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+    seedCollection('families', [{
+      _id: familyId,
+      name: '测试犬舍',
+      settings: {
+        custom_expense_category_groups: [{ key: 'beauty', label: '美容护理' }],
+        custom_expense_categories: [{ name: '洗护', parent_group: 'beauty' }],
+      },
+    }])
+
+    await expect(financeService.removeExpenseCategoryGroup.call(ctx, {
+      key: 'beauty',
+    })).rejects.toThrow('请先迁移或删除该分组下的分类')
+
+    await financeService.removeExpenseCategory.call(ctx, { name: '洗护' })
+    await financeService.removeExpenseCategoryGroup.call(ctx, { key: 'beauty' })
+
+    const { data } = await db.collection('families').doc(familyId).get()
+    expect(data[0].settings.custom_expense_category_groups).toEqual([])
+  })
+
+  it('支出分组筛选应支持自定义分组 key', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+    seedCollection('families', [{
+      _id: familyId,
+      name: '测试犬舍',
+      settings: {
+        custom_expense_category_groups: [{ key: 'beauty', label: '美容护理' }],
+        custom_expense_categories: [{ name: '洗护', parent_group: 'beauty' }],
+      },
+    }])
+    seedCollection('expenses', [
+      {
+        _id: 'exp_beauty',
+        family_id: familyId,
+        category: '洗护',
+        total_amount: 180,
+        deleted_at: null,
+        date: aprilTs,
+      },
+      {
+        _id: 'exp_food',
+        family_id: familyId,
+        category: '食品',
+        total_amount: 90,
+        deleted_at: null,
+        date: aprilTs,
+      },
+    ])
+
+    const result = await financeService.getTransactionList.call(ctx, {
+      type: 'expense',
+      expenseCategoryGroups: ['beauty'],
+      year: 2026,
+      month: 4,
+    })
+
+    expect(result.data.map((item: any) => item._id)).toEqual(['exp_beauty'])
+    expect(result.data[0].category_group_label).toBe('美容护理')
+  })
+
   it('全部类型下可同时筛收入分类与支出分组/分类', async () => {
     const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
 
