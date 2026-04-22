@@ -79,6 +79,15 @@ export function buildHomeWorkbench(
   }
 }
 
+export function getHomeCardSectionKey(card: HomeCard): WorkbenchSectionKey {
+  return resolveSectionKey(card)
+}
+
+export function getHomeCardGroupKey(card: HomeCard): string {
+  const sectionKey = resolveSectionKey(card)
+  return resolveCardGroupKey(card, sectionKey)
+}
+
 function createSectionBuilders(): Record<WorkbenchSectionKey, ReturnType<typeof createSectionBuilder>> {
   return WORKBENCH_SECTION_ORDER.reduce((acc, key) => {
     acc[key] = createSectionBuilder(key)

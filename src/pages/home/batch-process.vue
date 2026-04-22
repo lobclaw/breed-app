@@ -121,13 +121,12 @@
 
     <!-- 底部固定操作栏 -->
     <view v-if="!loading && taskGroups.length > 0" class="fixed-bottom">
-      <button
-        class="submit-btn"
+      <BSubmitButton
         :disabled="selected.size === 0"
         @click="batchComplete"
       >
         确认完成 ({{ selected.size }}只)
-      </button>
+      </BSubmitButton>
     </view>
   </view>
 </template>
@@ -136,6 +135,7 @@
 import { ref, reactive, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
+import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'

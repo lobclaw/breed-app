@@ -76,9 +76,9 @@
         <text class="dog-detail__stat-label">体重</text>
       </view>
       <view class="dog-detail__stat-item">
-        <text class="material-icons-round dog-detail__stat-icon">child_friendly</text>
-        <text class="dog-detail__stat-value">{{ cycles.length }}窝</text>
-        <text class="dog-detail__stat-label">繁育</text>
+        <text class="material-icons-round dog-detail__stat-icon">{{ tertiaryStatIcon }}</text>
+        <text class="dog-detail__stat-value">{{ tertiaryStatValue }}</text>
+        <text class="dog-detail__stat-label">{{ tertiaryStatLabel }}</text>
       </view>
     </view>
 
@@ -968,14 +968,15 @@
         </view>
 
         <view class="weight-entry__actions">
-          <button
-            class="submit-btn weight-entry__save-btn"
-            :class="{ 'submit-btn--success': weightSubmitState === 'success' }"
-            :disabled="weightSubmitState !== 'idle'"
+          <BSubmitButton
+            class="weight-entry__save-btn"
+            :loading="weightSubmitState === 'submitting'"
+            :success="weightSubmitState === 'success'"
+            :disabled="weightSubmitState === 'submitting' || !canSubmitWeight"
             @click="saveWeight"
           >
             {{ weightSaveButtonText }}
-          </button>
+          </BSubmitButton>
         </view>
       </view>
     </BSheet>
@@ -1068,18 +1069,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { onLoad, onPageScroll, onShow } from '@dcloudio/uni-app'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
+import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import BModal from '@/components/layout/BModal.vue'
 import BDeleteConfirm from '@/components/layout/BDeleteConfirm.vue'
 import BAddRecordSheet from '@/components/record/BAddRecordSheet.vue'
 import { useCloudCall } from '@/composables/useCloudCall'
-import { consumeSubmitFeedback } from '@/composables/useSubmitFeedback'
+import { consumeSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
 import { useDogStore } from '@/stores/dogStore'
 import type { Dog, DeriveStatus } from '@/types/dog'
 import { buildMedicationDetailUrl, resolveDogDetailStatusRoute } from '@/utils/dogDetailNavigation'
@@ -1112,12 +1114,28 @@ let hasLoadedOnce = false
 let latestLoadToken = 0
 let latestActiveCycleSummaryToken = 0
 
-const tabs = [
-  { key: 'overview', label: '概览' },
-  { key: 'breeding', label: '繁育' },
-  { key: 'health', label: '健康' },
-  { key: 'finance', label: '财务' },
-]
+const tabs = computed(() => {
+  if (dog.value?.role === '幼崽') {
+    return [
+      { key: 'overview', label: '概览' },
+      { key: 'health', label: '健康' },
+      { key: 'finance', label: '财务' },
+    ]
+  }
+
+  return [
+    { key: 'overview', label: '概览' },
+    { key: 'breeding', label: '繁育' },
+    { key: 'health', label: '健康' },
+    { key: 'finance', label: '财务' },
+  ]
+})
+
+const isPuppyDetail = computed(() => dog.value?.role === '幼崽')
+
+const tertiaryStatIcon = computed(() => isPuppyDetail.value ? 'route' : 'child_friendly')
+const tertiaryStatValue = computed(() => isPuppyDetail.value ? (dog.value?.disposition || '在养') : `${cycles.value.length}窝`)
+const tertiaryStatLabel = computed(() => isPuppyDetail.value ? '去向' : '繁育')
 
 // 状态 → 功能色映射
 const statusColorMap: Record<string, 'amber' | 'rose' | 'green' | 'red' | 'plum'> = {
@@ -1623,7 +1641,10 @@ function editDog() {
   uni.navigateTo({ url: `/pages/dog/add?id=${dogId}` })
 }
 
-const addRecordGroups = computed(() => createAllAddRecordGroups({ includeBreedingHint: !!activeCycle.value?._id }))
+const addRecordGroups = computed(() => createAllAddRecordGroups({
+  includeBreedingHint: !!activeCycle.value?._id,
+  allowBreeding: dog.value?.role !== '幼崽',
+}))
 
 function addRecord() {
   showAddRecordSheet.value = true
@@ -1636,6 +1657,13 @@ function navigateToRecord(item: AddRecordItem) {
   }
 
   showAddRecordSheet.value = false
+  if (item.page === 'batch-weight' || item.url === '/pages/health/batch-weight') {
+    nextTick(() => {
+      openWeightEntry()
+    })
+    return
+  }
+
   const dogName = encodeURIComponent(dog.value?.name || '')
   const cycleQuery = item.kind === 'breeding' && activeCycle.value?._id ? `&cycleId=${activeCycle.value._id}` : ''
   const damNameQuery = item.url === '/pages/breeding/birth-wizard'
@@ -1919,6 +1947,10 @@ const weightSaveButtonText = computed(() => {
   if (weightSubmitState.value === 'success') return '已保存'
   return '保存'
 })
+const canSubmitWeight = computed(() => {
+  const kg = parseFloat(weightInput.value)
+  return Number.isFinite(kg) && kg > 0 && !!weightDateStr.value
+})
 
 const { run: addWeightRecord } = useCloudCall('health-service', 'addWeightRecord', {
   successMode: 'silent',
@@ -1975,7 +2007,7 @@ async function saveWeight() {
 
     weightSubmitState.value = 'success'
     showSubmitBanner('已保存体重')
-    await new Promise(resolve => setTimeout(resolve, 180))
+    await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)
     showWeightEntry.value = false
     weightSubmitState.value = 'idle'
     loadData({ silent: true })
@@ -2101,23 +2133,40 @@ async function loadData({
       await cleanupDuplicateIllnesses({ dog_id: dogId }).catch(() => {})
     }
 
-    const [detailRes, cyclesRes, healthRes, medicationRes, littersRes, financeRes] = await Promise.all([
-      fetchDetail(dogId),
-      fetchCycles(dogId),
-      fetchHealth(dogId),
-      fetchMedicationHistory(dogId),
-      fetchLitters(dogId),
-      fetchDogFinance(dogId),
-    ])
+    const detailRes = await fetchDetail(dogId)
 
     if (loadToken !== latestLoadToken) return
 
     if (detailRes?.data) {
       dog.value = detailRes.data
       statuses.value = detailRes.data.statuses || []
+      if (detailRes.data.role === '幼崽' && activeTab.value === 'breeding') {
+        activeTab.value = 'overview'
+      }
     }
-    if (cyclesRes?.data) {
-      cycles.value = cyclesRes.data
+
+    const isPuppy = detailRes?.data?.role === '幼崽'
+    const [healthRes, medicationRes, financeRes, cyclesRes, littersRes] = await Promise.all([
+      fetchHealth(dogId),
+      fetchMedicationHistory(dogId),
+      fetchDogFinance(dogId),
+      isPuppy ? Promise.resolve(null) : fetchCycles(dogId),
+      isPuppy ? Promise.resolve(null) : fetchLitters(dogId),
+    ])
+
+    if (loadToken !== latestLoadToken) return
+
+    if (isPuppy) {
+      cycles.value = []
+      litters.value = []
+      activeCycleSummaryDetail.value = null
+    } else {
+      if (cyclesRes?.data) {
+        cycles.value = cyclesRes.data
+      }
+      if (littersRes?.data) {
+        litters.value = littersRes.data
+      }
     }
     if (healthRes?.data) {
       healthRecords.value = healthRes.data
@@ -2125,15 +2174,14 @@ async function loadData({
     if (medicationRes?.data) {
       medicationRecords.value = medicationRes.data
     }
-    if (littersRes?.data) {
-      litters.value = littersRes.data
-    }
     if (financeRes?.data) {
       dogFinance.value = financeRes.data
     }
 
-    const nextActiveCycleId = (cyclesRes?.data || []).find((cycle: any) => !TERMINAL_CYCLE_STATUSES.includes(cycle.status))?._id || ''
-    if (!nextActiveCycleId) {
+    const nextActiveCycleId = isPuppy
+      ? ''
+      : (cyclesRes?.data || []).find((cycle: any) => !TERMINAL_CYCLE_STATUSES.includes(cycle.status))?._id || ''
+    if (!nextActiveCycleId || isPuppy) {
       activeCycleSummaryDetail.value = null
     } else if (refreshBreedingSummary) {
       const nextCache = { ...activeCycleSummaryCache.value }
@@ -2144,7 +2192,7 @@ async function loadData({
       activeCycleSummaryDetail.value = activeCycleSummaryCache.value[nextActiveCycleId] || null
     }
 
-    if (refreshBreedingSummary && activeTab.value === 'breeding' && nextActiveCycleId) {
+    if (!isPuppy && refreshBreedingSummary && activeTab.value === 'breeding' && nextActiveCycleId) {
       await ensureActiveCycleSummary(true)
     }
 
@@ -2168,6 +2216,12 @@ watch([activeTab, activeCycleId], async ([tab, cycleId], [, previousCycleId]) =>
 
   if (tab === 'breeding') {
     await ensureActiveCycleSummary()
+  }
+})
+
+watch(tabs, (nextTabs) => {
+  if (!nextTabs.some(tab => tab.key === activeTab.value)) {
+    activeTab.value = 'overview'
   }
 })
 

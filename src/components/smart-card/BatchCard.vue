@@ -22,16 +22,16 @@
     <!-- Checkbox 列表 -->
     <view class="checkbox-list">
       <view
-        v-for="dog in visibleDogs"
-        :key="dog.dogId"
+        v-for="(dog, index) in visibleDogs"
+        :key="getDogKey(dog, index)"
         class="checkbox-item"
-        :class="{ 'checkbox-item--checked': dog.completed || checkedDogs.has(dog.dogId) }"
+        :class="{ 'checkbox-item--checked': isDogDone(dog) }"
         @click="toggleDog(dog)"
       >
-        <view class="cb-box" :class="(dog.completed || checkedDogs.has(dog.dogId)) ? 'cb-box--done' : 'cb-box--empty'">
-          <text v-if="dog.completed || checkedDogs.has(dog.dogId)" class="cb-check">✓</text>
+        <view class="cb-box" :class="isDogDone(dog) ? 'cb-box--done' : 'cb-box--empty'">
+          <text v-if="isDogDone(dog)" class="cb-check">✓</text>
         </view>
-        <text class="cb-label">{{ dog.dogName }}</text>
+        <text class="cb-label">{{ dog.dogName || dog.dog_name }}</text>
       </view>
       <view v-if="hiddenDogCount > 0" class="dog-expand" @click.stop="dogsExpanded = !dogsExpanded">
         <text class="dog-expand-text">{{ dogExpandText }}</text>
@@ -62,8 +62,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useDogStore } from '@/stores/dogStore'
+import { getBatchCardDogId, resolveBatchCardProgress } from '@/utils/batchCardProgress'
 import { getHealthTypeTone } from '@/utils/themeSemantics'
 
 const dogStore = useDogStore()
@@ -83,12 +84,15 @@ const acting = ref(false)
 const dogsExpanded = ref(false)
 
 function toggleDog(dog: any) {
-  if (dog.completed || checkedDogs.value.has(dog.dogId)) return
-  const task = props.card.tasks?.find((t: any) => t.dog_id === dog.dogId || t.dogId === dog.dogId)
+  const dogId = getBatchCardDogId(dog)
+  if (!dogId || isDogDone(dog)) return
+  const task = props.card.tasks?.find((t: any) => t.dog_id === dogId || t.dogId === dogId)
   if (!task) return
-  checkedDogs.value.add(dog.dogId)
+  const nextCheckedDogs = new Set(checkedDogs.value)
+  nextCheckedDogs.add(dogId)
+  checkedDogs.value = nextCheckedDogs
   // 检查是否全部完成（后端已完成 + 本地勾选）
-  const allDone = allDogs.value.every((d: any) => d.completed || checkedDogs.value.has(d.dogId))
+  const allDone = resolveBatchCardProgress(allDogs.value, nextCheckedDogs).allDone
   emit('complete', task._id, allDone ? 'batch-auto' : 'batch-auto-partial')
 }
 
@@ -129,14 +133,15 @@ function batchPostpone() {
 }
 
 const allDogs = computed(() => props.card.dogs || [])
+const progressState = computed(() => resolveBatchCardProgress(allDogs.value, checkedDogs.value))
 const hiddenDogCount = computed(() => Math.max(0, allDogs.value.length - DOG_COMPACT_LIMIT))
 const dogExpandText = computed(() => (dogsExpanded.value ? '收起' : `还有 ${hiddenDogCount.value} 只，展开`))
 const visibleDogs = computed(() => {
   if (dogsExpanded.value) return allDogs.value
   return allDogs.value.slice(0, DOG_COMPACT_LIMIT)
 })
-const totalDogs = computed(() => allDogs.value.length)
-const doneCount = computed(() => checkedDogs.value.size)
+const totalDogs = computed(() => progressState.value.totalDogs)
+const doneCount = computed(() => progressState.value.doneCount)
 const firstTaskType = computed(() => props.card.tasks?.[0]?.type || '')
 const cardTone = computed(() => {
   if (props.card.priority === 'overdue') return getHealthTypeTone(firstTaskType.value, 'overdue')
@@ -149,6 +154,17 @@ const progressPct = computed(() => {
   if (!totalDogs.value) return 0
   return Math.round((doneCount.value / totalDogs.value) * 100)
 })
+
+watch(allDogs, (dogs) => {
+  const normalized = resolveBatchCardProgress(dogs, checkedDogs.value).checkedDogIds
+  if (!areSetsEqual(normalized, checkedDogs.value)) {
+    checkedDogs.value = new Set(normalized)
+  }
+  if (dogsExpanded.value && dogs.length <= DOG_COMPACT_LIMIT) {
+    dogsExpanded.value = false
+  }
+}, { immediate: true })
+
 const progressFillStyle = computed(() => {
   const colorMap: Record<string, string> = {
     red: 'var(--red)',
@@ -164,15 +180,36 @@ const progressFillStyle = computed(() => {
   }
 })
 
+function isDogDone(dog: any) {
+  if (dog?.completed) return true
+  const dogId = getBatchCardDogId(dog)
+  return !!dogId && progressState.value.checkedDogIds.has(dogId)
+}
+
+function getDogKey(dog: any, index: number) {
+  return getBatchCardDogId(dog) || dog?.dogName || dog?.dog_name || `dog-${index}`
+}
+
+function areSetsEqual(left: Set<string>, right: Set<string>) {
+  if (left.size !== right.size) return false
+  for (const value of left) {
+    if (!right.has(value)) return false
+  }
+  return true
+}
+
 function batchComplete() {
   if (acting.value) return
   acting.value = true
 
   const taskIds = props.card.tasks.filter((t: any) => t.status === 'pending').map((t: any) => t._id)
   // 批量完成时直接全勾，强调“整张卡已完成”，避免逐个勾选拖慢退场
+  const nextCheckedDogs = new Set(checkedDogs.value)
   ;(props.card.dogs || []).forEach((dog: any) => {
-    if (!dog.completed) checkedDogs.value.add(dog.dogId)
+    const dogId = getBatchCardDogId(dog)
+    if (!dog.completed && dogId) nextCheckedDogs.add(dogId)
   })
+  checkedDogs.value = nextCheckedDogs
   emit('batch-complete', { taskIds, autoRecord: true })
 }
 

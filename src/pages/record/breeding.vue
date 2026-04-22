@@ -451,15 +451,14 @@
       </view>
 
       <!-- 提交按钮 -->
-      <button
-        class="submit-btn"
+      <BSubmitButton
         :loading="submitState === 'submitting'"
-        :class="{ 'submit-btn--success': submitState === 'success' }"
+        :success="submitState === 'success'"
         :disabled="!canSubmit || submitState === 'submitting'"
         @click="submit"
       >
         {{ submitButtonText }}
-      </button>
+      </BSubmitButton>
     </view>
 
   </view>
@@ -469,7 +468,8 @@
 import { ref, reactive, computed, watch } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
-import { buildRecordFeedbackMessage, queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
+import { buildRecordFeedbackMessage, queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
+import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 
@@ -670,8 +670,9 @@ async function submit() {
       submitState.value = 'success'
       queueSubmitFeedback({
         message: buildRecordFeedbackMessage(1),
+        homeSection: 'breeding',
       })
-      await wait(140)
+      await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)
       uni.navigateBack()
     }
   } catch {

@@ -110,14 +110,13 @@
 
     <!-- 固定底部按钮 -->
     <view class="fixed-bottom">
-      <button
-        class="submit-btn"
+      <BSubmitButton
         :loading="submitting"
         :disabled="!canSubmit || submitting"
         @click="submit"
       >
         保存修改
-      </button>
+      </BSubmitButton>
     </view>
 
     <!-- 分类选择面板 -->
@@ -140,7 +139,8 @@
 import { ref, reactive, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
-import { queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
+import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
+import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BIncomeTypeSheet from '@/components/form/BIncomeTypeSheet.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
@@ -278,7 +278,7 @@ async function submit() {
     if (res) {
       saveRecentIncomeType(form.type)
       queueSubmitFeedback({ message: '已更新收入记录' })
-      await wait(140)
+      await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)
       uni.navigateBack()
     }
   } finally {

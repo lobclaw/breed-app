@@ -76,8 +76,8 @@
       </view>
 
       <!-- 创建信息 -->
-      <view class="created-info">
-        <text>创建人: {{ record.created_by_name || '系统' }} · {{ formatDateTime(record.created_at) }}</text>
+      <view v-if="record.source === 'auto' || record.created_by_name" class="created-info">
+        <text>创建人: {{ record.source === 'auto' ? '系统' : record.created_by_name }} · {{ formatDateTime(record.created_at) }}</text>
       </view>
 
       <!-- 自动生成提示 -->
@@ -121,7 +121,7 @@
 import { ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
-import { consumeSubmitFeedback, queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
+import { consumeSubmitFeedback, queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
 import BCard from '@/components/base/BCard.vue'
@@ -197,7 +197,7 @@ async function handleDeleteConfirm() {
   const result = await deleteRecord(recordId)
   if (result) {
     queueSubmitFeedback({ message: '已删除支出记录' })
-    await wait(140)
+    await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)
     uni.navigateBack()
   }
 }

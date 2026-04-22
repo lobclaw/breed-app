@@ -79,7 +79,7 @@
           <input v-model="form.notes" class="form-input" placeholder="用法用量等" />
         </view>
         <view class="sheet-actions">
-          <button class="submit-btn" :disabled="!canSave" @click="saveProtocol">保存方案</button>
+          <BSubmitButton :disabled="!canSave" @click="saveProtocol">保存方案</BSubmitButton>
         </view>
       </view>
     </BSheet>
@@ -98,6 +98,7 @@
 import { ref, reactive, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import BDeleteConfirm from '@/components/layout/BDeleteConfirm.vue'

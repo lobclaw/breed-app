@@ -291,15 +291,14 @@
 
       <!-- 提交按钮 -->
       <view class="submit-area">
-        <button
-          class="submit-btn"
+        <BSubmitButton
           :loading="submitState === 'submitting'"
-          :class="{ 'submit-btn--success': submitState === 'success' }"
+          :success="submitState === 'success'"
           :disabled="!canSubmit || submitState === 'submitting'"
           @click="submit"
         >
           {{ submitButtonText }}
-        </button>
+        </BSubmitButton>
       </view>
     </view>
 
@@ -364,7 +363,8 @@
 import { ref, reactive, computed, watch } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
-import { buildRecordFeedbackMessage, queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
+import { buildRecordFeedbackMessage, queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
+import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import BModal from '@/components/layout/BModal.vue'
@@ -518,12 +518,13 @@ async function submit() {
       submitState.value = 'success'
       queueSubmitFeedback({
         message: buildRecordFeedbackMessage(1),
+        homeSection: 'reminders',
       })
       // 如果是驱虫类型且有药品信息，提示保存为方案
       if (form.type === 'deworming' && details.drug_name) {
         offerSaveAsProtocol()
       } else {
-        await wait(140)
+        await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)
         uni.navigateBack()
       }
     }
@@ -603,7 +604,7 @@ async function doSaveProtocol() {
     notes: form.notes || null,
   })
   showSaveProtocol.value = false
-  await wait(140)
+  await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)
   uni.navigateBack()
 }
 

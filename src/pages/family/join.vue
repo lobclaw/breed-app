@@ -64,7 +64,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useCloudCall } from '@/composables/useCloudCall'
-import { queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
+import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BButton from '@/components/base/BButton.vue'
 
@@ -86,7 +86,7 @@ async function doJoin() {
         message: `已加入「${res.data.familyName}」`,
         targetRoute: '/pages/home/index',
       })
-      await wait(140)
+      await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)
       uni.switchTab({ url: '/pages/home/index' })
     }
   } finally {

@@ -140,7 +140,7 @@
 import { ref, computed, watch } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
-import { queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
+import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 
@@ -305,8 +305,12 @@ async function handleSave() {
       notes: notes.value || null,
     })
     if (res) {
-      queueSubmitFeedback({ message: '已保存临产监测' })
-      await wait(140)
+      queueSubmitFeedback({
+        message: '已保存临产监测',
+        homeSection: 'breeding',
+        homeAnchorKey: 'breeding-step:birth',
+      })
+      await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)
       uni.navigateBack({ delta: 1 })
     }
   } finally {

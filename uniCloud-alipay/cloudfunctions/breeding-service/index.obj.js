@@ -508,6 +508,152 @@ async function getFamilySettings(familyId) {
   }
 }
 
+async function getDogById(familyId, dogId) {
+  const { data: dogs } = await db.collection('dogs')
+    .where({ _id: dogId, family_id: familyId, deleted_at: null })
+    .get()
+
+  if (!dogs || dogs.length === 0) throw new Error('犬只不存在')
+  return dogs[0]
+}
+
+async function addBreedingRecordCore({
+  familyId,
+  uid,
+  data,
+  dog,
+  rejectActiveCycleForHeat = false,
+}) {
+  const now = Date.now()
+  const activeCycleStatuses = data.type === 'heat_observation'
+    ? ['发情中']
+    : ['发情中', '怀孕中']
+
+  // 查找或创建繁育周期
+  let cycleId = data.cycle_id
+  if (!cycleId) {
+    const { data: activeCycles } = await db.collection('breeding_cycles')
+      .where({ dam_id: data.dog_id, status: dbCmd.in(activeCycleStatuses), family_id: familyId })
+      .orderBy('created_at', 'desc')
+      .limit(1)
+      .get()
+
+    if (activeCycles && activeCycles.length > 0) {
+      if (rejectActiveCycleForHeat && data.type === 'heat') {
+        throw new Error('当前已有进行中的繁育周期，请前往当前周期继续记录')
+      }
+      cycleId = activeCycles[0]._id
+    } else if (CYCLE_TRIGGER_TYPES.includes(data.type)) {
+      const cycleData = {
+        dam_id: data.dog_id,
+        dam_name: dog.name,
+        sire_id: null,
+        sire_name: null,
+        family_id: familyId,
+        status: '发情中',
+        created_at: now,
+        updated_at: now,
+      }
+      const { id } = await db.collection('breeding_cycles').add(cycleData)
+      cycleId = id
+    } else {
+      throw new Error('没有进行中的繁育周期，请先录入发情或配种记录')
+    }
+  }
+
+  if (data.type === 'heat_observation') {
+    const { data: cycles } = await db.collection('breeding_cycles')
+      .where({ _id: cycleId, family_id: familyId })
+      .limit(1)
+      .get()
+    if (!cycles || cycles.length === 0) throw new Error('繁育周期不存在')
+    if (cycles[0].status !== '发情中') {
+      throw new Error('当前不在发情中，无法记录发情观察')
+    }
+  }
+
+  const normalizedDetails = {
+    ...(data.details || {}),
+  }
+  if (data.type === 'mating') {
+    const preview = await getNextMatingNumberPreview(familyId, {
+      dogId: data.dog_id,
+      cycleId,
+    })
+    normalizedDetails.mating_number = preview.mating_number
+  }
+  data.details = normalizedDetails
+
+  validateDetails(data.type, normalizedDetails)
+
+  const recordData = {
+    type: data.type,
+    cycle_id: cycleId,
+    dog_id: data.dog_id,
+    family_id: familyId,
+    date: data.date,
+    cost: data.cost || null,
+    notes: data.notes || null,
+    details: normalizedDetails,
+    created_by: uid,
+    created_at: now,
+    updated_at: now,
+  }
+  const { id: recordId } = await db.collection('breeding_records').add(recordData)
+
+  let newStatus = STATUS_TRANSITIONS[data.type]
+  if (data.type === 'pregnancy_check' && isPregnancyRejected(data.details)) {
+    newStatus = '失败'
+  }
+  if (newStatus) {
+    const updateData = { status: newStatus, updated_at: now }
+
+    if (data.type === 'mating') {
+      updateData.mated_at = data.date
+      if (data.details?.sire_id) {
+        updateData.sire_id = data.details.sire_id
+        updateData.sire_name = data.details.sire_name || null
+      }
+    }
+
+    await db.collection('breeding_cycles').doc(cycleId).update(updateData)
+  }
+
+  if (data.type === 'pregnancy_check') {
+    if (isPregnancyRejected(data.details)) {
+      await clearPendingBreedingMilestones(familyId, { cycleId })
+    } else if (isPregnancyConfirmed(data.details)) {
+      await clearPendingBreedingMilestones(familyId, { cycleId })
+    }
+  }
+
+  if (data.type === 'abnormal_termination') {
+    await clearPendingBreedingMilestones(familyId, { cycleId })
+  }
+
+  await generateTasks(familyId, data.type, data, cycleId, dog, recordId)
+
+  if (data.extra_arrangement?.kind && data.extra_arrangement?.due_date) {
+    await createExtraArrangementTask(
+      familyId,
+      dog,
+      cycleId,
+      recordId,
+      data.extra_arrangement
+    )
+  }
+
+  if (data.type !== 'heat_observation' && data.cost && data.cost > 0) {
+    await createExpense(familyId, uid, data, dog, cycleId, recordId)
+  }
+
+  if (data.type !== 'heat_observation') {
+    await postWriteVerify(recordId, 'breeding_records')
+  }
+
+  return { recordId, cycleId }
+}
+
 module.exports = {
   _before: async function() {
     const { uid, familyId, role } = await verifyAndGetFamily(this.getUniIdToken(), this.getClientInfo())
@@ -544,150 +690,78 @@ module.exports = {
     if (!data.dog_id) throw new Error('请选择犬只')
     if (!data.date) throw new Error('请选择日期')
 
-    const now = Date.now()
     const familyId = this.familyId
+    const dog = await getDogById(familyId, data.dog_id)
+    const result = await addBreedingRecordCore({
+      familyId,
+      uid: this.uid,
+      data,
+      dog,
+    })
+    return { data: result }
+  },
 
-    // 校验犬只存在
+  async batchAddBreedingRecords(data) {
+    if (!data.type) throw new Error('请选择记录类型')
+    if (data.type !== 'heat') throw new Error('当前仅支持批量录入发情记录')
+    if (!data.date) throw new Error('请选择日期')
+    if (!data.dog_ids || !Array.isArray(data.dog_ids) || data.dog_ids.length === 0) {
+      throw new Error('请选择犬只')
+    }
+
+    const familyId = this.familyId
+    const dogIds = [...new Set(data.dog_ids.filter(Boolean))]
     const { data: dogs } = await db.collection('dogs')
-      .where({ _id: data.dog_id, family_id: familyId, deleted_at: null })
+      .where({ _id: dbCmd.in(dogIds), family_id: familyId, deleted_at: null })
       .get()
-    if (!dogs || dogs.length === 0) throw new Error('犬只不存在')
-    const dog = dogs[0]
 
-    const activeCycleStatuses = data.type === 'heat_observation'
-      ? ['发情中']
-      : ['发情中', '怀孕中']
+    if (!dogs || dogs.length !== dogIds.length) {
+      throw new Error('部分犬只不存在或不属于当前家庭')
+    }
 
-    // 查找或创建繁育周期
-    let cycleId = data.cycle_id
-    if (!cycleId) {
-      // 查找进行中的周期
-      const { data: activeCycles } = await db.collection('breeding_cycles')
-        .where({ dam_id: data.dog_id, status: dbCmd.in(activeCycleStatuses), family_id: familyId })
-        .orderBy('created_at', 'desc')
-        .limit(1)
-        .get()
+    const dogMap = new Map(dogs.map(dog => [dog._id, dog]))
+    const records = []
+    const failed = []
 
-      if (activeCycles && activeCycles.length > 0) {
-        cycleId = activeCycles[0]._id
-      } else if (CYCLE_TRIGGER_TYPES.includes(data.type)) {
-        // 自动创建新周期
-        const cycleData = {
-          dam_id: data.dog_id,
-          dam_name: dog.name,
-          sire_id: null,
-          sire_name: null,
-          family_id: familyId,
-          status: '发情中',
-          created_at: now,
-          updated_at: now,
-        }
-        const { id } = await db.collection('breeding_cycles').add(cycleData)
-        cycleId = id
-      } else {
-        throw new Error('没有进行中的繁育周期，请先录入发情或配种记录')
+    for (const dogId of dogIds) {
+      const dog = dogMap.get(dogId)
+      if (!dog) continue
+
+      try {
+        const result = await addBreedingRecordCore({
+          familyId,
+          uid: this.uid,
+          dog,
+          data: {
+            type: 'heat',
+            dog_id: dogId,
+            date: data.date,
+            notes: data.notes || null,
+            details: { ...(data.details || {}) },
+            extra_arrangement: data.extra_arrangement,
+          },
+          rejectActiveCycleForHeat: true,
+        })
+        records.push({
+          dog_id: dogId,
+          recordId: result.recordId,
+          cycleId: result.cycleId,
+        })
+      } catch (error) {
+        failed.push({
+          dog_id: dogId,
+          reason: error?.message || '保存失败',
+        })
       }
     }
 
-    if (data.type === 'heat_observation') {
-      const { data: cycles } = await db.collection('breeding_cycles')
-        .where({ _id: cycleId, family_id: familyId })
-        .limit(1)
-        .get()
-      if (!cycles || cycles.length === 0) throw new Error('繁育周期不存在')
-      if (cycles[0].status !== '发情中') {
-        throw new Error('当前不在发情中，无法记录发情观察')
-      }
+    return {
+      data: {
+        count: records.length,
+        records,
+        failed,
+      },
     }
-
-    const normalizedDetails = {
-      ...(data.details || {}),
-    }
-    if (data.type === 'mating') {
-      const preview = await getNextMatingNumberPreview(familyId, {
-        dogId: data.dog_id,
-        cycleId,
-      })
-      normalizedDetails.mating_number = preview.mating_number
-    }
-    data.details = normalizedDetails
-
-    // 类型特有字段校验
-    validateDetails(data.type, normalizedDetails)
-
-    // 创建繁育记录
-    const recordData = {
-      type: data.type,
-      cycle_id: cycleId,
-      dog_id: data.dog_id,
-      family_id: familyId,
-      date: data.date,
-      cost: data.cost || null,
-      notes: data.notes || null,
-      details: normalizedDetails,
-      created_by: this.uid,
-      created_at: now,
-      updated_at: now,
-    }
-    const { id: recordId } = await db.collection('breeding_records').add(recordData)
-
-    // 状态转换
-    let newStatus = STATUS_TRANSITIONS[data.type]
-    if (data.type === 'pregnancy_check' && isPregnancyRejected(data.details)) {
-      newStatus = '失败'
-    }
-    if (newStatus) {
-      const updateData = { status: newStatus, updated_at: now }
-
-      // 配种时更新种公信息 + 记录配种日期（用于孕期进度计算）
-      if (data.type === 'mating') {
-        updateData.mated_at = data.date
-        if (data.details?.sire_id) {
-          updateData.sire_id = data.details.sire_id
-          updateData.sire_name = data.details.sire_name || null
-        }
-      }
-
-      await db.collection('breeding_cycles').doc(cycleId).update(updateData)
-    }
-
-    if (data.type === 'pregnancy_check') {
-      if (isPregnancyRejected(data.details)) {
-        await clearPendingBreedingMilestones(familyId, { cycleId })
-      } else if (isPregnancyConfirmed(data.details)) {
-        await clearPendingBreedingMilestones(familyId, { cycleId })
-      }
-    }
-
-    if (data.type === 'abnormal_termination') {
-      await clearPendingBreedingMilestones(familyId, { cycleId })
-    }
-
-    // 生成流程任务
-    await generateTasks(familyId, data.type, data, cycleId, dog, recordId)
-
-    // 同次提交可选创建额外安排（仅挂周期，不影响主流程）
-    if (data.extra_arrangement?.kind && data.extra_arrangement?.due_date) {
-      await createExtraArrangementTask(
-        familyId,
-        dog,
-        cycleId,
-        recordId,
-        data.extra_arrangement
-      )
-    }
-
-    // 如有费用 → 创建 expense（发情观察不联动费用）
-    if (data.type !== 'heat_observation' && data.cost && data.cost > 0) {
-      await createExpense(familyId, this.uid, data, dog, cycleId, recordId)
-    }
-
-    // 写入后校验（三层保障第二层），补充观察不要求关联任务
-    if (data.type !== 'heat_observation') {
-      await postWriteVerify(recordId, 'breeding_records')
-    }
-
-    return { data: { recordId, cycleId } }
   },
 
   /**
@@ -1084,9 +1158,32 @@ module.exports = {
     // 给每个窝带上幼崽列表
     for (const litter of litters) {
       const { data: puppies } = await db.collection('dogs')
-        .where({ origin_litter_id: litter._id, deleted_at: null })
-        .field({ _id: true, name: true, gender: true })
+        .where({ origin_litter_id: litter._id, family_id: this.familyId, deleted_at: null })
+        .field({ _id: true, name: true, gender: true, latest_weight: true })
         .get()
+
+      for (const puppy of puppies) {
+        const { data: weightHistory } = await db.collection('dog_weights')
+          .where({ dog_id: puppy._id, family_id: this.familyId })
+          .orderBy('date', 'desc')
+          .orderBy('created_at', 'desc')
+          .limit(3)
+          .get()
+
+        const normalizedHistory = (weightHistory || [])
+          .slice()
+          .reverse()
+          .map(item => ({
+            weight: item.weight,
+            date: item.date,
+          }))
+        const latestRecord = weightHistory && weightHistory.length > 0 ? weightHistory[0] : null
+
+        puppy.last_weight = latestRecord?.weight || puppy.latest_weight || null
+        puppy.last_weight_at = latestRecord?.date || null
+        puppy.weight_history = normalizedHistory
+      }
+
       litter.puppies = puppies
     }
 

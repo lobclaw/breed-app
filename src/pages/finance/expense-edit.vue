@@ -110,14 +110,13 @@
 
     <!-- 固定底部按钮 -->
     <view class="fixed-bottom">
-      <button
-        class="submit-btn"
+      <BSubmitButton
         :loading="submitting"
         :disabled="!canSubmit || submitting"
         @click="submit"
       >
         保存修改
-      </button>
+      </BSubmitButton>
     </view>
 
     <BExpenseCategorySheet
@@ -157,7 +156,8 @@
 import { ref, reactive, computed } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
-import { queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
+import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
+import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BExpenseCategorySheet from '@/components/form/BExpenseCategorySheet.vue'
 import BFinanceLinkSheet from '@/components/form/BFinanceLinkSheet.vue'
@@ -414,7 +414,7 @@ async function submit() {
     if (res) {
       saveRecentExpenseCategory(form.category)
       queueSubmitFeedback({ message: '已更新支出记录' })
-      await wait(140)
+      await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)
       uni.navigateBack()
     }
   } finally {

@@ -1,8 +1,13 @@
 const STORAGE_KEY = 'submit_feedback_v1'
+export const SUBMIT_SUCCESS_FEEDBACK_DELAY_MS = 520
+
+export type HomeFeedbackSection = 'overdue' | 'breeding' | 'reminders' | 'therapy'
 
 export interface SubmitFeedbackPayload {
   message: string
   targetRoute?: string
+  homeSection?: HomeFeedbackSection
+  homeAnchorKey?: string
   completedTaskIds?: string[]
   suppressTaskIds?: string[]
   removeBatchCard?: boolean

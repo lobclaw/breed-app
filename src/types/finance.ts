@@ -25,6 +25,7 @@ export interface Expense extends BaseDocument, SoftDeletable {
   litter_number?: number      // 冗余
   notes?: string
   created_by: string
+  created_by_name?: string
 }
 
 // 收入类型
@@ -40,6 +41,7 @@ export interface Income extends BaseDocument, SoftDeletable {
   dog_name?: string           // 冗余
   notes?: string
   created_by: string
+  created_by_name?: string
 }
 
 // 销售记录

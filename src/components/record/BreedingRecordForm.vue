@@ -99,7 +99,26 @@
       <template v-else>
         <view class="field-group">
           <view class="field-label"><text>选择种母</text></view>
-          <BDogPicker v-model="selectedDog" roleFilter="种狗" genderFilter="母" title="选择种母" :readonly="dogLocked" />
+          <BDogPicker
+            v-if="isHeatMultiCreate"
+            v-model="selectedDogs"
+            :multiple="true"
+            roleFilter="种狗"
+            genderFilter="母"
+            title="选择种母"
+            placeholder="点击选择种母"
+            :exclude-ids="excludedHeatDogIds"
+            empty-title="暂无可录入的种母"
+            :empty-description="heatDogPickerEmptyDescription"
+          />
+          <BDogPicker
+            v-else
+            v-model="selectedDog"
+            roleFilter="种狗"
+            genderFilter="母"
+            title="选择种母"
+            :readonly="dogLocked"
+          />
         </view>
 
         <view class="field-group">
@@ -334,15 +353,14 @@
     </view>
 
     <view class="fixed-bottom" :class="{ 'fixed-bottom--heat-observation': breedingType === 'heat_observation' }">
-      <button
-        class="submit-btn"
+      <BSubmitButton
         :loading="submitState === 'submitting'"
-        :class="{ 'submit-btn--success': submitState === 'success' }"
+        :success="submitState === 'success'"
         :disabled="!canSubmit || submitState === 'submitting'"
         @click="submit"
       >
         {{ submitButtonText }}
-      </button>
+      </BSubmitButton>
       <view v-if="breedingType === 'heat_observation'" class="heat-observation__time" @click="pickTime">
         <text class="material-icons-round" style="font-size: 14px; color: var(--text-3);">schedule</text>
         <text class="heat-observation__time-text">{{ displayTime }}</text>
@@ -355,9 +373,11 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useCloudCall } from '@/composables/useCloudCall'
 import { useRecordSubmitState } from '@/composables/useRecordSubmitState'
-import { buildRecordFeedbackMessage, queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
+import { buildRecordFeedbackMessage, queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
 import { resolveBreedingRouteQuery } from '@/utils/recordFormRoutes'
 import { getDefaultExtraArrangementDate, type ExtraArrangementKind } from '@/utils/breedingExtraArrangement'
+import { useDogStore } from '@/stores/dogStore'
+import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 import BExtraArrangementSection from '@/components/form/BExtraArrangementSection.vue'
 import BImageUpload from '@/components/form/BImageUpload.vue'
@@ -415,6 +435,7 @@ const createTitles: Record<BreedingRecordType, string> = {
 const loading = ref(false)
 const currentRecord = ref<any>(null)
 const selectedDog = ref<any>(null)
+const selectedDogs = ref<any[]>([])
 const selectedSire = ref<any>(null)
 const dogLocked = ref(false)
 const cycleId = ref('')
@@ -442,6 +463,8 @@ const terminationTypes = ['流产', '死胎', '医疗终止', '确认未怀孕']
 const vulvaOptions = ['硬/肿胀', '开始软化', '明显松软']
 const dischargeOptions = ['鲜红较多', '暗红减少', '淡粉/草黄色', '接近透明']
 const symptoms = ['主动靠近公犬', '接受爬跨', '翘尾侧偏', '频繁排尿', '舔舐外阴增多']
+const blockedHeatStatuses = new Set(['发情中', '怀孕中', '哺乳中'])
+const dogStore = useDogStore()
 
 const pageTitle = computed(() => {
   if (isEdit.value) return breedingType.value === 'heat_observation' ? '编辑发情观察' : '编辑繁育记录'
@@ -456,6 +479,24 @@ const typeLabel = computed(() => {
 const pageSubtitle = computed(() => {
   if (breedingType.value !== 'heat_observation' || !selectedDog.value) return ''
   return `${selectedDog.value.gender || ''} · ${selectedDog.value.role || ''}`
+})
+
+const isHeatMultiCreate = computed(() => !isEdit.value && breedingType.value === 'heat' && !dogLocked.value)
+
+const excludedHeatDogIds = computed(() => {
+  if (!isHeatMultiCreate.value) return []
+  return dogStore.list
+    .filter((dog: any) => dog.role === '种狗' && dog.gender === '母')
+    .filter((dog: any) => Array.isArray(dog.statuses) && dog.statuses.some((status: any) => blockedHeatStatuses.has(status.type)))
+    .map((dog: any) => dog._id)
+})
+
+const heatDogPickerEmptyDescription = computed(() => {
+  const allDams = dogStore.list.filter((dog: any) => dog.role === '种狗' && dog.gender === '母')
+  if (allDams.length > 0 && excludedHeatDogIds.value.length >= allDams.length) {
+    return '发情中、怀孕中、哺乳中的犬只已自动隐藏'
+  }
+  return '没有符合条件的种母'
 })
 
 const submitIdleLabel = computed(() => isEdit.value ? '保存修改' : '保存记录')
@@ -547,6 +588,9 @@ const canSubmit = computed(() => {
   if (breedingType.value === 'heat_observation') {
     return !!selectedDog.value && !!vulvaStatus.value && !!dischargeStatus.value
   }
+  if (isHeatMultiCreate.value) {
+    return selectedDogs.value.length > 0 && !!date.value
+  }
   if (!selectedDog.value || !date.value) return false
   if (breedingType.value === 'follicle_check') return !!details.left_count
   if (breedingType.value === 'mating') return !!selectedSire.value
@@ -561,6 +605,11 @@ const { run: completeTask } = useCloudCall('task-service', 'completeTask', {
   throwOnError: true,
 })
 const { run: addRecord } = useCloudCall('breeding-service', 'addBreedingRecord', {
+  successMode: 'silent',
+  loadingMode: 'local',
+  throwOnError: true,
+})
+const { run: batchAddRecords } = useCloudCall('breeding-service', 'batchAddBreedingRecords', {
   successMode: 'silent',
   loadingMode: 'local',
   throwOnError: true,
@@ -580,6 +629,7 @@ const { run: getNextMatingNumber } = useCloudCall('breeding-service', 'getNextMa
 function resetDetails() {
   currentRecord.value = null
   selectedDog.value = null
+  selectedDogs.value = []
   selectedSire.value = null
   dogLocked.value = false
   cycleId.value = ''
@@ -713,6 +763,26 @@ function getCostValue() {
   return cost && cost > 0 ? cost : null
 }
 
+function buildHeatBatchFeedbackMessage(savedCount: number, failedCount: number) {
+  if (failedCount > 0) return `已保存 ${savedCount} 条记录，${failedCount} 只未保存`
+  return buildRecordFeedbackMessage(savedCount)
+}
+
+function getBreedingHomeAnchorKey(type: BreedingRecordType, detailPayload: Record<string, any>) {
+  if (type === 'heat') return 'breeding-step:follicle_check'
+  if (type === 'follicle_check') return 'breeding-step:mating'
+  if (type === 'mating') return 'breeding-step:pregnancy_check'
+  if (type === 'pregnancy_check') return detailPayload.confirmed === '是' ? 'breeding-step:birth' : ''
+  if (type === 'prenatal_check' || type === 'pre_labor') return 'breeding-step:birth'
+  return ''
+}
+
+function resolveBreedingHomeAnchorKey(detailPayload: Record<string, any>) {
+  const type = breedingType.value
+  if (!type) return ''
+  return getBreedingHomeAnchorKey(type, detailPayload)
+}
+
 function applyTaskPrefill(task: any) {
   if (!task) return
 
@@ -778,6 +848,10 @@ async function loadCreateState() {
     recordTime.value = new Date()
   } else {
     setDateChip('today')
+  }
+
+  if (breedingType.value === 'heat' && !dogLocked.value) {
+    await dogStore.ensure().catch(() => {})
   }
 
   if (prefillTaskId.value) {
@@ -847,6 +921,38 @@ async function loadEditState() {
 }
 
 async function submitCreate() {
+  if (isHeatMultiCreate.value) {
+    const detailPayload = buildDetails()
+    const result = await batchAddRecords({
+      dog_ids: selectedDogs.value.map((dog: any) => dog._id),
+      type: 'heat',
+      date: date.value,
+      notes: notes.value || null,
+      details: detailPayload,
+      extra_arrangement: extraArrangementPayload.value,
+    })
+    const records = result?.data?.records || []
+    const failed = result?.data?.failed || []
+
+    if (records.length === 0) {
+      const reason = failed[0]?.reason || '未保存任何记录'
+      uni.showToast({ title: reason, icon: 'none' })
+      throw new Error(reason)
+    }
+
+    markSuccess()
+    queueSubmitFeedback({
+      message: buildHeatBatchFeedbackMessage(records.length, failed.length),
+      homeSection: 'breeding',
+      homeAnchorKey: getBreedingHomeAnchorKey('heat', detailPayload),
+      refreshHome: true,
+    })
+    await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)
+    uni.navigateBack({ delta: 1 })
+    return result
+  }
+
+  const detailPayload = buildDetails()
   const payload: Record<string, any> = {
     type: breedingType.value,
     dog_id: selectedDog.value?._id || '',
@@ -856,11 +962,11 @@ async function submitCreate() {
 
   if (breedingType.value === 'heat_observation') {
     payload.date = recordTime.value.getTime()
-    payload.details = buildDetails()
+    payload.details = detailPayload
   } else {
     payload.date = date.value
     payload.cost = getCostValue()
-    payload.details = buildDetails()
+    payload.details = detailPayload
     payload.extra_arrangement = extraArrangementPayload.value
   }
 
@@ -877,22 +983,25 @@ async function submitCreate() {
     const completedTaskIds = prefillTaskId.value ? [prefillTaskId.value] : []
     queueSubmitFeedback({
       message: buildRecordFeedbackMessage(1, prefillTaskId.value ? 1 : 0),
+      homeSection: 'breeding',
+      homeAnchorKey: resolveBreedingHomeAnchorKey(detailPayload),
       completedTaskIds,
       suppressTaskIds: completedTaskIds,
       refreshHome: true,
     })
   }
 
-  await wait(140)
+  await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)
   uni.navigateBack({ delta: 1 })
   return result
 }
 
 async function submitEdit() {
+  const detailPayload = buildDetails()
   const payload: Record<string, any> = {
     id: props.recordId,
     notes: notes.value || null,
-    details: buildDetails(),
+    details: detailPayload,
   }
 
   if (breedingType.value === 'heat_observation') {
@@ -908,9 +1017,11 @@ async function submitEdit() {
   markSuccess()
   queueSubmitFeedback({
     message: breedingType.value === 'heat_observation' ? '已更新观察记录' : '已更新繁育记录',
+    homeSection: breedingType.value === 'heat_observation' ? undefined : 'breeding',
+    homeAnchorKey: breedingType.value === 'heat_observation' ? undefined : resolveBreedingHomeAnchorKey(detailPayload),
     refreshHome: breedingType.value !== 'heat_observation',
   })
-  await wait(140)
+  await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)
   uni.navigateBack({ delta: 1 })
 }
 

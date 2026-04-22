@@ -12,30 +12,49 @@
     update:visible — 关闭面板
 -->
 <template>
-  <BSheet v-model:visible="sheetVisible" title="选择窝" height="50%">
+  <BSheet v-model:visible="sheetVisible" title="选择窝" height="62%">
+    <view class="b-litter-selector__search">
+      <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">search</text>
+      <input
+        v-model="searchKeyword"
+        class="b-litter-selector__search-input"
+        placeholder="搜索母犬名或窝号..."
+        confirm-type="search"
+      />
+      <text
+        v-if="searchKeyword"
+        class="material-icons-round b-litter-selector__search-clear"
+        @click="searchKeyword = ''"
+      >close</text>
+    </view>
+
     <!-- 加载态 -->
     <BSkeleton v-if="loading" :rows="3" />
 
     <!-- 空状态 -->
     <BEmpty
-      v-else-if="!litters.length"
-      icon="child_friendly"
-      title="暂无窝记录"
-      description="当前没有活跃的窝次数据"
+      v-else-if="!filteredLitters.length"
+      :icon="searchKeyword ? 'search_off' : 'child_friendly'"
+      :title="searchKeyword ? '没有匹配的窝' : emptyTitle"
+      :description="searchKeyword ? '换个关键词试试，或清空搜索查看全部窝次' : emptyDescription"
     />
 
     <!-- 列表 -->
     <view v-else class="b-litter-selector">
       <view
-        v-for="litter in litters"
+        v-for="litter in filteredLitters"
         :key="litter._id"
         class="b-litter-selector__item"
+        :class="{ 'b-litter-selector__item--active': isSelected(litter._id) }"
         @click="handleSelect(litter)"
       >
+        <view class="b-litter-selector__avatar">
+          <BEntityIcon kind="litter" :size="18" color="#fff" />
+        </view>
         <view class="b-litter-selector__info">
-          <text class="b-litter-selector__title">{{ litter.damName || '未知母犬' }}</text>
+          <text class="b-litter-selector__title">{{ formatLitterTitle(litter) }}</text>
           <text class="b-litter-selector__meta">
-            第{{ litter.litterNumber || '?' }}窝 · {{ formatDate(litter.birthDate) }} · {{ litter.puppyCount || 0 }}只
+            出生日期 {{ formatDate(litter.birthDate) }} · 存活 {{ litter.aliveCount || litter.puppyCount || 0 }}/{{ litter.totalCount || litter.puppyCount || 0 }}
           </text>
         </view>
         <view
@@ -56,6 +75,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { useCloudCall } from '@/composables/useCloudCall'
+import BEntityIcon from '../base/BEntityIcon.vue'
 import BSheet from '../layout/BSheet.vue'
 import BSkeleton from '../feedback/BSkeleton.vue'
 import BEmpty from '../feedback/BEmpty.vue'
@@ -66,15 +86,22 @@ interface Litter {
   litterNumber?: number
   birthDate?: number
   puppyCount?: number
+  aliveCount?: number
+  totalCount?: number
   [key: string]: any
 }
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   visible: boolean
   familyId?: string
   multiple?: boolean
   selectedIds?: string[]
-}>()
+  activeOnly?: boolean
+}>(), {
+  multiple: false,
+  selectedIds: () => [],
+  activeOnly: false,
+})
 
 const emit = defineEmits<{
   'update:visible': [value: boolean]
@@ -91,32 +118,57 @@ const loading = ref(false)
 const litters = ref<Litter[]>([])
 const selected = ref('')
 const selectedIdsState = ref<string[]>([])
+const searchKeyword = ref('')
 
 const { run: fetchAllLitters } = useCloudCall<{ data: any[] }>('breeding-service', 'getAllLitters')
+const { run: fetchActiveLitters } = useCloudCall<{ data: any[] }>('breeding-service', 'getActiveLitters')
+
+const filteredLitters = computed(() => {
+  if (!searchKeyword.value.trim()) return litters.value
+  const keyword = searchKeyword.value.trim().toLowerCase()
+  return litters.value.filter((litter) => {
+    const title = formatLitterTitle(litter).toLowerCase()
+    const keywords = [
+      litter.damName || '',
+      title,
+      litter.litterNumber ? `第${litter.litterNumber}窝` : '',
+      litter.litterNumber ? `${litter.litterNumber}窝` : '',
+    ]
+    return keywords.some(item => item.toLowerCase().includes(keyword))
+  })
+})
+
+const emptyTitle = computed(() => props.activeOnly ? '暂无活跃窝记录' : '暂无窝记录')
+const emptyDescription = computed(() => (
+  props.activeOnly ? '当前没有未断奶的窝次数据' : '当前没有可选择的窝次数据'
+))
 
 watch(() => props.visible, async (val) => {
   if (val) {
     selectedIdsState.value = [...(props.selectedIds || [])]
+    selected.value = props.selectedIds?.[0] || ''
+    searchKeyword.value = ''
     await fetchLitters()
   }
 })
 
 watch(() => props.selectedIds, (val) => {
-  if (props.multiple) {
-    selectedIdsState.value = [...(val || [])]
-  }
+  selectedIdsState.value = [...(val || [])]
+  selected.value = val?.[0] || ''
 }, { deep: true })
 
 async function fetchLitters() {
   loading.value = true
   try {
-    const res = await fetchAllLitters()
+    const res = props.activeOnly ? await fetchActiveLitters() : await fetchAllLitters()
     litters.value = (res?.data || []).map((item: any) => ({
       _id: item._id,
       damName: item.dam_name,
       litterNumber: item.litter_number,
       birthDate: item.birth_date,
-      puppyCount: item.total_born,
+      puppyCount: (item.puppies || []).length || item.born_alive || item.total_born,
+      aliveCount: item.born_alive || (item.puppies || []).length || item.total_born,
+      totalCount: item.total_born || item.born_alive || (item.puppies || []).length,
       ...item,
     }))
   } catch (e) {
@@ -154,24 +206,79 @@ function formatDate(ts?: number): string {
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
 }
+
+function formatLitterTitle(litter: Litter): string {
+  const damName = litter.damName || '未知母犬'
+  return `${damName}${litter.litterNumber ? `第${litter.litterNumber}窝` : '窝'}`
+}
 </script>
 
 <style lang="scss" scoped>
+.b-litter-selector__search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 14px;
+  background: var(--card-dim);
+  border-radius: 20px;
+  margin-bottom: 12px;
+}
+
+.b-litter-selector__search-input {
+  flex: 1;
+  height: 40px;
+  line-height: 40px;
+  font-size: 13px;
+  color: var(--text-1);
+  background: transparent;
+  border: none;
+  outline: none;
+}
+
+.b-litter-selector__search-clear {
+  font-size: 18px;
+  color: var(--text-3);
+  padding: 2px;
+}
+
 .b-litter-selector {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 10px;
 
   &__item {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 14px 0;
-    border-bottom: 1px solid rgba(216, 203, 189, 0.15);
-    transition: all 0.12s ease;
+    padding: 14px;
+    border-radius: 18px;
+    background: rgba(255, 252, 249, 0.96);
+    border: 1px solid rgba(216, 203, 189, 0.26);
+    box-shadow: 0 8px 20px rgba(77, 52, 31, 0.04);
+    transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
 
-    &:last-child { border-bottom: none; }
-    &:active { opacity: 0.7; }
+    &:active {
+      opacity: 0.92;
+      transform: scale(0.985);
+    }
+  }
+
+  &__item--active {
+    border-color: rgba(234, 62, 119, 0.28);
+    background: linear-gradient(180deg, rgba(255, 250, 252, 0.98), rgba(255, 244, 247, 0.95));
+    box-shadow: 0 10px 22px rgba(234, 62, 119, 0.08);
+  }
+
+  &__avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 14px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, var(--rose) 0%, #c5527a 100%);
   }
 
   &__info {

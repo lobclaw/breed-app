@@ -7,6 +7,7 @@
     size — small / medium / large（默认 medium）
     loading — 加载中状态
     disabled — 禁用状态
+    fullWidth — 宽度撑满容器
 -->
 <template>
   <button
@@ -15,13 +16,19 @@
       `b-btn--${variant}`,
       `b-btn--${size}`,
       `b-btn--${color}`,
-      { 'b-btn--loading': loading, 'b-btn--disabled': disabled },
+      {
+        'b-btn--loading': loading,
+        'b-btn--disabled': disabled,
+        'b-btn--block': fullWidth,
+      },
     ]"
     :disabled="disabled || loading"
     @click="$emit('click')"
   >
-    <text v-if="loading" class="b-btn__spinner">...</text>
-    <slot v-else />
+    <view class="b-btn__content">
+      <text v-if="loading" class="material-icons-round b-btn__state-icon b-btn__state-icon--spin">autorenew</text>
+      <slot />
+    </view>
   </button>
 </template>
 
@@ -32,12 +39,14 @@ withDefaults(defineProps<{
   size?: 'small' | 'medium' | 'large'
   loading?: boolean
   disabled?: boolean
+  fullWidth?: boolean
 }>(), {
   variant: 'filled',
   color: 'primary',
   size: 'medium',
   loading: false,
   disabled: false,
+  fullWidth: false,
 })
 
 defineEmits<{ click: [] }>()
@@ -59,6 +68,10 @@ defineEmits<{ click: [] }>()
   &:active:not(.b-btn--disabled) {
     transform: scale(0.94);
     opacity: 0.85;
+  }
+
+  &--block {
+    width: 100%;
   }
 
   /* 尺寸 */
@@ -92,9 +105,27 @@ defineEmits<{ click: [] }>()
     cursor: not-allowed;
   }
 
-  /* 加载 */
-  &__spinner {
-    letter-spacing: 2px;
+  &__content {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 0;
   }
+
+  &__state-icon {
+    font-size: 18px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  &__state-icon--spin {
+    animation: b-btn-spin 0.9s linear infinite;
+  }
+}
+
+@keyframes b-btn-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 </style>

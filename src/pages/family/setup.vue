@@ -58,7 +58,7 @@
 import { ref, computed } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import { useCloudCall } from '@/composables/useCloudCall'
-import { queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
+import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
 import BButton from '@/components/base/BButton.vue'
 
 const { createFamily } = useAuth()
@@ -84,7 +84,7 @@ async function create() {
         message: '已加入家庭',
         targetRoute: '/pages/home/index',
       })
-      await wait(140)
+      await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)
       uni.reLaunch({ url: '/pages/home/index' })
     } else {
       await createFamily(familyName.value.trim())
@@ -92,7 +92,7 @@ async function create() {
         message: '已创建家庭',
         targetRoute: '/pages/home/index',
       })
-      await wait(140)
+      await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)
       uni.reLaunch({ url: '/pages/home/index' })
     }
   } catch (e: any) {

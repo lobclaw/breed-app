@@ -69,6 +69,21 @@ describe('dog detail breeding tab source contract', () => {
     expect(source).toContain('summaryResult')
   })
 
+  it('应让幼崽详情隐藏繁育能力面，但保留来源窝追溯', () => {
+    expect(source).toContain(`const tabs = computed(() => {
+  if (dog.value?.role === '幼崽') {
+    return [
+      { key: 'overview', label: '概览' },
+      { key: 'health', label: '健康' },
+      { key: 'finance', label: '财务' },
+    ]`)
+    expect(source).toContain("const tertiaryStatValue = computed(() => isPuppyDetail.value ? (dog.value?.disposition || '在养') : `${cycles.value.length}窝`)")
+    expect(source).toContain("const tertiaryStatLabel = computed(() => isPuppyDetail.value ? '去向' : '繁育')")
+    expect(source).toContain("allowBreeding: dog.value?.role !== '幼崽'")
+    expect(source).toContain("v-if=\"dog.origin_litter_id\"")
+    expect(source).toContain('来源窝')
+  })
+
   it('应让时间线节点顶部对齐，并仅为当前/下一步保留特殊标题色', () => {
     expect(source).toContain('align-items: flex-start;')
     expect(source).toContain('justify-content: flex-start;')
@@ -87,6 +102,10 @@ describe('dog detail breeding tab source contract', () => {
     expect(source).toContain("if (tab === 'breeding')")
     expect(source).toContain('refreshBreedingSummary')
     expect(source).toContain("refreshBreedingSummary: activeTab.value === 'breeding'")
+    expect(source).toContain("const isPuppy = detailRes?.data?.role === '幼崽'")
+    expect(source).toContain("isPuppy ? Promise.resolve(null) : fetchCycles(dogId)")
+    expect(source).toContain("isPuppy ? Promise.resolve(null) : fetchLitters(dogId)")
+    expect(source).toContain("if (detailRes.data.role === '幼崽' && activeTab.value === 'breeding') {")
   })
 
   it('应让哺乳状态可点击进入周期详情，并展示副文案与窝信息', () => {

@@ -219,6 +219,12 @@ function getIdArg(input, key) {
   return input[key] || input.id || ''
 }
 
+function getCreatorDisplayName(members = [], createdBy) {
+  if (!createdBy) return ''
+  const member = (members || []).find(item => item.user_id === createdBy && item.status === 'active')
+  return member?.nickname || createdBy
+}
+
 function buildExpenseName(expense, fallback = '费用') {
   return expense.notes || expense.category || fallback
 }
@@ -584,7 +590,7 @@ module.exports = {
         .get(),
       db.collection('families')
         .doc(this.familyId)
-        .field({ settings: true })
+        .field({ settings: true, members: true })
         .get(),
     ])
     const expenses = expenseResult.data
@@ -614,6 +620,7 @@ module.exports = {
         category_group_label: getExpenseCategoryGroupLabel(
           getExpenseCategoryGroupKeyByName(expense.category, categoryMetaMap),
         ),
+        created_by_name: getCreatorDisplayName(family.members, expense.created_by),
         linked_dogs: linkedDogs,
         linked_ref: linkedRef,
       },
@@ -627,16 +634,25 @@ module.exports = {
     const incomeId = getIdArg(id, 'id')
     if (!incomeId) throw new Error('缺少记录 ID')
 
-    const { data: incomes } = await db.collection('incomes')
-      .where({ _id: incomeId, family_id: this.familyId, deleted_at: null })
-      .get()
+    const [incomeResult, familyResult] = await Promise.all([
+      db.collection('incomes')
+        .where({ _id: incomeId, family_id: this.familyId, deleted_at: null })
+        .get(),
+      db.collection('families')
+        .doc(this.familyId)
+        .field({ members: true })
+        .get(),
+    ])
+    const incomes = incomeResult.data
     if (!incomes || incomes.length === 0) throw new Error('记录不存在')
 
     const income = incomes[0]
+    const family = familyResult.data?.[0] || familyResult.data || {}
 
     return {
       data: {
         ...income,
+        created_by_name: getCreatorDisplayName(family.members, income.created_by),
         type_label: income.type || '其他',
         linked_dog_name: income.dog_name || '',
         sale_id: income.source_sale_id || '',

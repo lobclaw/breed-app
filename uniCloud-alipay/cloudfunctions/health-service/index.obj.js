@@ -1439,6 +1439,23 @@ module.exports = {
       })
     }
 
+    // 同步刷新最新体重，保持与单犬录入口径一致
+    for (const dogId of dogIds) {
+      const { data: latest } = await db.collection('dog_weights')
+        .where({ dog_id: dogId, family_id: familyId })
+        .orderBy('date', 'desc')
+        .orderBy('created_at', 'desc')
+        .limit(1)
+        .get()
+
+      if (latest?.[0]?.weight) {
+        await db.collection('dogs').doc(dogId).update({
+          latest_weight: latest[0].weight,
+          updated_at: now,
+        })
+      }
+    }
+
     return { data: { count: weights.length } }
   },
 

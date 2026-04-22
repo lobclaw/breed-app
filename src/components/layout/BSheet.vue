@@ -7,8 +7,8 @@
     height — 面板高度（默认 auto）
 -->
 <template>
-  <view v-if="visible" class="b-sheet" @click.self="close">
-    <view class="b-sheet__mask" @click="close" @touchmove.prevent />
+  <view v-if="renderVisible" class="b-sheet" @click.self="close">
+    <view class="b-sheet__mask" :class="{ 'b-sheet__mask--open': animOpen }" @click="close" @touchmove.prevent />
     <view class="b-sheet__panel" :class="{ 'b-sheet__panel--open': animOpen }" :style="panelStyle">
       <!-- 把手 -->
       <view class="b-sheet__handle">
@@ -30,7 +30,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 
 const props = withDefaults(defineProps<{
   visible: boolean
@@ -44,6 +44,15 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{ 'update:visible': [value: boolean] }>()
 
 const animOpen = ref(false)
+const renderVisible = ref(props.visible)
+const SHEET_ANIMATION_MS = 250
+let closeTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearCloseTimer() {
+  if (!closeTimer) return
+  clearTimeout(closeTimer)
+  closeTimer = null
+}
 
 function lockScroll(lock: boolean) {
   // #ifdef H5
@@ -54,15 +63,35 @@ function lockScroll(lock: boolean) {
   // #endif
 }
 
+function openSheet() {
+  clearCloseTimer()
+  renderVisible.value = true
+  lockScroll(true)
+  nextTick(() => {
+    animOpen.value = true
+  })
+}
+
+function closeSheet() {
+  animOpen.value = false
+  clearCloseTimer()
+  closeTimer = setTimeout(() => {
+    renderVisible.value = false
+    lockScroll(false)
+    closeTimer = null
+  }, SHEET_ANIMATION_MS)
+}
+
 watch(() => props.visible, (val) => {
   if (val) {
-    lockScroll(true)
-    nextTick(() => { animOpen.value = true })
+    openSheet()
+  } else if (renderVisible.value) {
+    closeSheet()
   } else {
     animOpen.value = false
     lockScroll(false)
   }
-})
+}, { immediate: true })
 
 const panelStyle = computed(() => {
   if (props.height === 'auto') return {}
@@ -70,9 +99,15 @@ const panelStyle = computed(() => {
 })
 
 function close() {
+  if (!renderVisible.value) return
   animOpen.value = false
-  setTimeout(() => emit('update:visible', false), 250)
+  emit('update:visible', false)
 }
+
+onBeforeUnmount(() => {
+  clearCloseTimer()
+  lockScroll(false)
+})
 </script>
 
 <style lang="scss" scoped>
@@ -91,6 +126,12 @@ function close() {
     right: 0;
     bottom: 0;
     background: var(--mask);
+    opacity: 0;
+    transition: opacity 0.25s ease;
+
+    &--open {
+      opacity: 1;
+    }
   }
 
   &__panel {
@@ -103,10 +144,15 @@ function close() {
     max-height: 85vh;
     display: flex;
     flex-direction: column;
-    transform: translateY(100%);
-    transition: transform 0.25s ease;
+    transform: translateY(28px) scale(0.98);
+    transform-origin: center bottom;
+    opacity: 0;
+    transition: transform 0.25s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.25s ease;
 
-    &--open { transform: translateY(0); }
+    &--open {
+      transform: translateY(0) scale(1);
+      opacity: 1;
+    }
   }
 
   &__handle {

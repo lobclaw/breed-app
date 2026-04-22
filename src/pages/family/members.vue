@@ -61,10 +61,10 @@
 
       <!-- 底部邀请按钮 -->
       <view class="action-area">
-        <button class="submit-btn" @click="goToInvite">
+        <BSubmitButton @click="goToInvite">
           <text class="material-icons-round" style="font-size: 18px; margin-right: 6px;">person_add</text>
           <text>邀请新成员</text>
-        </button>
+        </BSubmitButton>
       </view>
       <text class="hint-text">生成邀请链接，对方点击后加入犬舍</text>
     </template>
@@ -99,6 +99,7 @@
 import { ref, computed } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import { useCloudCall } from '@/composables/useCloudCall'
+import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BTag from '@/components/base/BTag.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'

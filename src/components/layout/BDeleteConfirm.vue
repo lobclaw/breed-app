@@ -12,8 +12,8 @@
     update:visible — v-model 绑定
 -->
 <template>
-  <view v-if="visible" class="b-delete-confirm">
-    <view class="b-delete-confirm__mask" @click="cancel" @touchmove.prevent />
+  <view v-if="renderVisible" class="b-delete-confirm">
+    <view class="b-delete-confirm__mask" :class="{ 'b-delete-confirm__mask--open': animOpen }" @click="cancel" @touchmove.prevent />
     <view class="b-delete-confirm__panel" :class="{ 'b-delete-confirm__panel--open': animOpen }">
       <!-- 警告图标 -->
       <view class="b-delete-confirm__icon-wrap">
@@ -42,7 +42,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, onBeforeUnmount } from 'vue'
 
 const props = withDefaults(defineProps<{
   visible: boolean
@@ -62,24 +62,56 @@ const emit = defineEmits<{
 }>()
 
 const animOpen = ref(false)
+const renderVisible = ref(props.visible)
+const DELETE_CONFIRM_ANIMATION_MS = 200
+let closeTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearCloseTimer() {
+  if (!closeTimer) return
+  clearTimeout(closeTimer)
+  closeTimer = null
+}
+
+function openDialog() {
+  clearCloseTimer()
+  renderVisible.value = true
+  nextTick(() => { animOpen.value = true })
+}
+
+function closeDialog() {
+  animOpen.value = false
+  clearCloseTimer()
+  closeTimer = setTimeout(() => {
+    renderVisible.value = false
+    closeTimer = null
+  }, DELETE_CONFIRM_ANIMATION_MS)
+}
 
 watch(() => props.visible, (val) => {
-  if (val) nextTick(() => { animOpen.value = true })
-  else animOpen.value = false
-})
+  if (val) {
+    openDialog()
+  } else if (renderVisible.value) {
+    closeDialog()
+  } else {
+    animOpen.value = false
+  }
+}, { immediate: true })
 
 function cancel() {
+  if (!renderVisible.value) return
   animOpen.value = false
-  setTimeout(() => {
-    emit('update:visible', false)
-    emit('cancel')
-  }, 200)
+  emit('update:visible', false)
+  emit('cancel')
 }
 
 function doConfirm() {
   emit('confirm')
   emit('update:visible', false)
 }
+
+onBeforeUnmount(() => {
+  clearCloseTimer()
+})
 </script>
 
 <style lang="scss" scoped>
@@ -101,6 +133,12 @@ function doConfirm() {
     right: 0;
     bottom: 0;
     background: var(--mask);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+
+    &--open {
+      opacity: 1;
+    }
   }
 
   &__panel {
@@ -110,12 +148,13 @@ function doConfirm() {
     padding: 24px;
     width: 80%;
     max-width: 320px;
-    transform: scale(0.9);
+    transform: translateY(16px) scale(0.94);
+    transform-origin: center center;
     opacity: 0;
-    transition: transform 0.2s ease, opacity 0.2s ease;
+    transition: transform 0.2s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s ease;
 
     &--open {
-      transform: scale(1);
+      transform: translateY(0) scale(1);
       opacity: 1;
     }
   }

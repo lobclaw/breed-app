@@ -394,7 +394,7 @@ function showSubmitBanner(message: string) {
 async function markTodayComplete() {
   const result = await completeDay([taskId])
   if (result) {
-    queueSubmitFeedback({ message: '已完成今日用药' })
+    queueSubmitFeedback({ message: '已完成今日用药', homeSection: 'therapy' })
     showSubmitBanner('已完成今日用药')
     await loadTask()
   }
@@ -413,7 +413,7 @@ function confirmEndEarly() {
 async function handleCancelConfirm() {
   const result = await cancelTask(taskId)
   if (result) {
-    queueSubmitFeedback({ message: '已取消用药任务' })
+    queueSubmitFeedback({ message: '已取消用药任务', homeSection: 'therapy' })
     showSubmitBanner('已取消用药任务')
     await loadTask()
   }

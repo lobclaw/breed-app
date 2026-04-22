@@ -44,6 +44,24 @@ describe('breeding-service', () => {
         deleted_at: null,
       },
       {
+        _id: 'dam_2',
+        name: '小雪',
+        gender: '母',
+        role: '种狗',
+        disposition: '在养',
+        family_id: familyId,
+        deleted_at: null,
+      },
+      {
+        _id: 'dam_3',
+        name: '奶糖',
+        gender: '母',
+        role: '种狗',
+        disposition: '在养',
+        family_id: familyId,
+        deleted_at: null,
+      },
+      {
         _id: 'sire_1',
         name: '大白',
         gender: '公',
@@ -527,6 +545,91 @@ describe('breeding-service', () => {
 
       expect(tasks).toHaveLength(2)
       expect(new Set(tasks.map(t => t.source_record_id)).size).toBe(2)
+    })
+  })
+
+  describe('批量录入发情记录', () => {
+    it('应为多只种母分别创建发情记录、周期和卵泡节点', async () => {
+      const now = Date.now()
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      const res = await breedingService.batchAddBreedingRecords.call(ctx, {
+        type: 'heat',
+        dog_ids: ['dam_1', 'dam_2'],
+        date: now,
+        notes: '批量录入发情',
+        details: { start_date: now },
+        extra_arrangement: {
+          kind: 'contact_doctor',
+          due_date: now + 2 * 86400000,
+          notes: '后天复查',
+        },
+      })
+
+      expect(res.data.count).toBe(2)
+      expect(res.data.failed).toHaveLength(0)
+      expect(res.data.records).toHaveLength(2)
+
+      const { data: records } = await db.collection('breeding_records')
+        .where({ family_id: familyId, type: 'heat' })
+        .get()
+      expect(records).toHaveLength(2)
+      expect(records.map(r => r.dog_id).sort()).toEqual(['dam_1', 'dam_2'])
+
+      const { data: cycles } = await db.collection('breeding_cycles')
+        .where({ family_id: familyId, status: '发情中' })
+        .get()
+      expect(cycles).toHaveLength(2)
+      expect(cycles.map(c => c.dam_id).sort()).toEqual(['dam_1', 'dam_2'])
+
+      const { data: milestoneTasks } = await db.collection('tasks')
+        .where({ family_id: familyId, type: 'breeding_milestone' })
+        .get()
+      expect(milestoneTasks).toHaveLength(2)
+      expect(milestoneTasks.every(task => task.details?.step_type === 'follicle_check')).toBe(true)
+
+      const { data: extraTasks } = await db.collection('tasks')
+        .where({ family_id: familyId, type: 'breeding_extra_arrangement' })
+        .get()
+      expect(extraTasks).toHaveLength(2)
+      expect(extraTasks.every(task => task.details?.kind === 'contact_doctor')).toBe(true)
+    })
+
+    it('已有进行中周期时应跳过该犬并继续保存其他犬', async () => {
+      const now = Date.now()
+      seedCollection('breeding_cycles', [{
+        _id: 'cycle_active_1',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        status: '发情中',
+        created_at: now,
+        updated_at: now,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      const res = await breedingService.batchAddBreedingRecords.call(ctx, {
+        type: 'heat',
+        dog_ids: ['dam_1', 'dam_2'],
+        date: now,
+        notes: '批量录入发情',
+        details: { start_date: now },
+      })
+
+      expect(res.data.count).toBe(1)
+      expect(res.data.records).toHaveLength(1)
+      expect(res.data.records[0].dog_id).toBe('dam_2')
+      expect(res.data.failed).toEqual([
+        {
+          dog_id: 'dam_1',
+          reason: '当前已有进行中的繁育周期，请前往当前周期继续记录',
+        },
+      ])
+
+      const { data: records } = await db.collection('breeding_records')
+        .where({ family_id: familyId, type: 'heat' })
+        .get()
+      expect(records).toHaveLength(1)
+      expect(records[0].dog_id).toBe('dam_2')
     })
   })
 

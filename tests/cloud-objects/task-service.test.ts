@@ -96,6 +96,46 @@ describe('task-service', () => {
 
       expect(data).toHaveLength(0)
     })
+
+    it('应为缺少流程任务的发情周期即时补生成首页流程卡', async () => {
+      const now = Date.now()
+      seedCollection('breeding_cycles', [{
+        _id: 'cycle_heat_missing',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        status: '发情中',
+        created_at: now - 2 * DAY_MS,
+        updated_at: now,
+      }])
+      seedCollection('breeding_records', [{
+        _id: 'record_heat_missing',
+        cycle_id: 'cycle_heat_missing',
+        dog_id: 'dam_1',
+        family_id: familyId,
+        type: 'heat',
+        date: now - 2 * DAY_MS,
+        details: { start_date: now - 2 * DAY_MS },
+        created_at: now - 2 * DAY_MS,
+        updated_at: now - 2 * DAY_MS,
+      }])
+      seedCollection('tasks', [])
+      seedCollection('health_records', [])
+      seedCollection('medication_tasks', [])
+
+      const ctx = createCloudObjectContext({ familyId })
+      const res = await taskService.getHomeCards.call(ctx)
+
+      expect(res.data.sections.workflow).toHaveLength(1)
+      expect(res.data.sections.workflow[0].domain).toBe('breeding')
+
+      const { data: tasks } = await db.collection('tasks')
+        .where({ cycle_id: 'cycle_heat_missing', type: 'breeding_milestone' })
+        .get()
+      expect(tasks).toHaveLength(1)
+      expect(tasks[0].details?.step_type).toBe('follicle_check')
+      expect(tasks[0].source_record_id).toBe('record_heat_missing')
+    })
   })
 
   describe('completeTask 完成任务', () => {

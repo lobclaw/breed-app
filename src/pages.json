@@ -345,7 +345,8 @@
 		{
 			"path": "pages/health/batch-weight",
 			"style": {
-				"navigationBarTitleText": "批量体重"
+				"navigationBarTitleText": "批量体重",
+				"navigationStyle": "custom"
 			}
 		},
 		{

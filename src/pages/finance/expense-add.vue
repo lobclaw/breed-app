@@ -109,15 +109,14 @@
 
     <!-- 固定底部按钮 -->
     <view class="fixed-bottom">
-      <button
-        class="submit-btn"
+      <BSubmitButton
         :loading="submitState === 'submitting'"
-        :class="{ 'submit-btn--success': submitState === 'success' }"
+        :success="submitState === 'success'"
         :disabled="!canSubmit || submitState === 'submitting'"
         @click="submit"
       >
         {{ submitButtonText }}
-      </button>
+      </BSubmitButton>
     </view>
 
     <BExpenseCategorySheet
@@ -168,7 +167,8 @@
 import { ref, computed } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
-import { queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
+import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
+import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BExpenseCategorySheet from '@/components/form/BExpenseCategorySheet.vue'
 import BIncomeTypeSheet from '@/components/form/BIncomeTypeSheet.vue'
@@ -468,7 +468,7 @@ async function submit() {
     if (res) {
       submitState.value = 'success'
       queueSubmitFeedback({ message: mode.value === 'expense' ? '已保存支出' : '已保存收入' })
-      await wait(140)
+      await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)
       uni.navigateBack()
     }
   } catch {

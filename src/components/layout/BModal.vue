@@ -12,8 +12,8 @@
     manualClose — 设为 true 时点确认不自动关闭，由父组件控制 visible
 -->
 <template>
-  <view v-if="visible" class="b-modal">
-    <view class="b-modal__mask" @click="cancel" @touchmove.prevent />
+  <view v-if="renderVisible" class="b-modal">
+    <view class="b-modal__mask" :class="{ 'b-modal__mask--open': animOpen }" @click="cancel" @touchmove.prevent />
     <view class="b-modal__panel" :class="{ 'b-modal__panel--open': animOpen }">
       <text class="b-modal__title">{{ title }}</text>
       <text v-if="content" class="b-modal__content">{{ content }}</text>
@@ -31,7 +31,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 
 const props = withDefaults(defineProps<{
   visible: boolean
@@ -56,6 +56,15 @@ const emit = defineEmits<{
 }>()
 
 const animOpen = ref(false)
+const renderVisible = ref(props.visible)
+const MODAL_ANIMATION_MS = 200
+let closeTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearCloseTimer() {
+  if (!closeTimer) return
+  clearTimeout(closeTimer)
+  closeTimer = null
+}
 
 function lockScroll(lock: boolean) {
   // #ifdef H5
@@ -63,25 +72,42 @@ function lockScroll(lock: boolean) {
   // #endif
 }
 
+function openModal() {
+  clearCloseTimer()
+  renderVisible.value = true
+  lockScroll(true)
+  nextTick(() => { animOpen.value = true })
+}
+
+function closeModal() {
+  animOpen.value = false
+  clearCloseTimer()
+  closeTimer = setTimeout(() => {
+    renderVisible.value = false
+    lockScroll(false)
+    closeTimer = null
+  }, MODAL_ANIMATION_MS)
+}
+
 watch(() => props.visible, (val) => {
   if (val) {
-    lockScroll(true)
-    nextTick(() => { animOpen.value = true })
+    openModal()
+  } else if (renderVisible.value) {
+    closeModal()
   } else {
     animOpen.value = false
     lockScroll(false)
   }
-})
+}, { immediate: true })
 
 const btnClass = computed(() => props.danger ? 'b-modal__btn--danger' : '')
 const btnTextClass = computed(() => props.danger ? 'b-modal__btn-text--danger' : '')
 
 function cancel() {
+  if (!renderVisible.value) return
   animOpen.value = false
-  setTimeout(() => {
-    emit('update:visible', false)
-    emit('cancel')
-  }, 200)
+  emit('update:visible', false)
+  emit('cancel')
 }
 
 function confirm() {
@@ -90,6 +116,11 @@ function confirm() {
     emit('update:visible', false)
   }
 }
+
+onBeforeUnmount(() => {
+  clearCloseTimer()
+  lockScroll(false)
+})
 </script>
 
 <style lang="scss" scoped>
@@ -111,6 +142,12 @@ function confirm() {
     right: 0;
     bottom: 0;
     background: var(--mask);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+
+    &--open {
+      opacity: 1;
+    }
   }
 
   &__panel {
@@ -120,12 +157,13 @@ function confirm() {
     padding: 24px;
     width: 80%;
     max-width: 320px;
-    transform: scale(0.9);
+    transform: translateY(16px) scale(0.94);
+    transform-origin: center center;
     opacity: 0;
-    transition: transform 0.2s ease, opacity 0.2s ease;
+    transition: transform 0.2s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s ease;
 
     &--open {
-      transform: scale(1);
+      transform: translateY(0) scale(1);
       opacity: 1;
     }
   }

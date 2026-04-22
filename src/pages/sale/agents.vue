@@ -60,9 +60,9 @@
           <input v-model="form.contact_info" class="form-input" placeholder="手机号/微信" />
         </view>
         <view class="sheet-actions">
-          <button class="submit-btn" :disabled="!form.name.trim()" @click="save">
+          <BSubmitButton :disabled="!form.name.trim()" @click="save">
             {{ editingId ? '保存修改' : '新建代理人' }}
-          </button>
+          </BSubmitButton>
         </view>
       </view>
     </BSheet>
@@ -81,6 +81,7 @@
 import { ref, reactive } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import BDeleteConfirm from '@/components/layout/BDeleteConfirm.vue'

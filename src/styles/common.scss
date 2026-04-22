@@ -525,8 +525,17 @@
   }
 
   &--success {
-    background: var(--green);
-    box-shadow: 0 4px 16px rgba(79, 170, 115, 0.22);
+    background: var(--primary);
+    box-shadow: 0 4px 16px rgba(234, 62, 119, 0.25);
+    opacity: 1;
+
+    &::before {
+      content: 'check';
+      font-family: 'Material Icons Round';
+      font-size: 18px;
+      line-height: 1;
+      margin-right: 4px;
+    }
   }
 }
 

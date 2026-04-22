@@ -119,15 +119,14 @@
     </view>
 
     <view class="fixed-bottom">
-      <button
-        class="submit-btn"
+      <BSubmitButton
         :loading="submitState === 'submitting'"
-        :class="{ 'submit-btn--success': submitState === 'success' }"
+        :success="submitState === 'success'"
         :disabled="!canSubmit || submitState === 'submitting'"
         @click="submit"
       >
         {{ submitButtonText }}
-      </button>
+      </BSubmitButton>
     </view>
 
     <BSheet v-model:visible="showProtocolPicker" title="选择用药方案">
@@ -260,10 +259,11 @@
 import { computed, onMounted, ref } from 'vue'
 import { useCloudCall } from '@/composables/useCloudCall'
 import { useRecordSubmitState } from '@/composables/useRecordSubmitState'
-import { buildTaskFeedbackMessage, queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
+import { buildTaskFeedbackMessage, queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
 import { resolveMedicationRouteQuery } from '@/utils/recordFormRoutes'
 import { formatMedicationDosage } from '@/utils/medicationDisplay'
 import { useProtocolStore, type MedicationProtocol } from '@/stores/protocolStore'
+import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSheet from '@/components/layout/BSheet.vue'
@@ -411,6 +411,8 @@ async function submit() {
     markSuccess()
     queueSubmitFeedback({
       message: buildTaskFeedbackMessage(created, skipped),
+      homeSection: 'therapy',
+      homeAnchorKey: 'medication-state:pending',
       createdDate: date.value,
       createdCount: created,
       skippedCount: skipped,
@@ -423,7 +425,7 @@ async function submit() {
       return
     }
 
-    await wait(140)
+    await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)
     uni.navigateBack()
   } catch {
     resetSubmitState()
@@ -491,7 +493,7 @@ async function doSaveProtocol() {
   })
   showNameModal.value = false
   protocolStore.reload()
-  await wait(140)
+  await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)
   uni.navigateBack()
 }
 

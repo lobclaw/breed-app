@@ -284,7 +284,7 @@
 import { ref, reactive, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
-import { queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
+import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
 
 let cycleId = ''
@@ -399,8 +399,10 @@ async function submit() {
       submitState.value = 'success'
       queueSubmitFeedback({
         message: '已保存生产记录',
+        homeSection: 'breeding',
+        homeAnchorKey: 'breeding-step:weaning_confirm',
       })
-      await wait(140)
+      await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)
       uni.navigateBack({ delta: 1 })
     }
   } catch {

@@ -403,7 +403,7 @@
 import { ref, computed } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
-import { consumeSubmitFeedback, queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
+import { consumeSubmitFeedback, queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
@@ -586,7 +586,7 @@ async function handleDeleteConfirm() {
   const result = await deleteRecord(recordId)
   if (result) {
     queueSubmitFeedback({ message: '已删除繁育记录' })
-    await wait(140)
+    await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)
     uni.navigateBack()
   }
 }

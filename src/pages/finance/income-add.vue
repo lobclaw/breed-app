@@ -92,15 +92,14 @@
 
     <!-- 固定底部按钮 -->
     <view class="fixed-bottom">
-      <button
-        class="submit-btn"
+      <BSubmitButton
         :loading="submitState === 'submitting'"
-        :class="{ 'submit-btn--success': submitState === 'success' }"
+        :success="submitState === 'success'"
         :disabled="!canSubmit || submitState === 'submitting'"
         @click="submit"
       >
         {{ submitButtonText }}
-      </button>
+      </BSubmitButton>
     </view>
 
     <!-- 分类选择面板 -->
@@ -122,7 +121,8 @@
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue'
 import { useCloudCall } from '@/composables/useCloudCall'
-import { queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
+import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
+import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BIncomeTypeSheet from '@/components/form/BIncomeTypeSheet.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
@@ -249,7 +249,7 @@ async function submit() {
       saveRecentIncomeType(form.type)
       submitState.value = 'success'
       queueSubmitFeedback({ message: '已保存收入' })
-      await wait(140)
+      await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)
       uni.navigateBack()
     }
   } catch {

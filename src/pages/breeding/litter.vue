@@ -13,6 +13,8 @@
         </template>
       </BPageHeader>
 
+      <BSubmitBanner :message="submitBannerMessage" />
+
       <view class="card-feed">
         <!-- 摘要信息卡 -->
         <view class="summary-card">
@@ -234,9 +236,9 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
-import { queueSubmitFeedback } from '@/composables/useSubmitFeedback'
+import { consumeSubmitFeedback, queueSubmitFeedback } from '@/composables/useSubmitFeedback'
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BCard from '@/components/base/BCard.vue'
@@ -245,6 +247,7 @@ import BButton from '@/components/base/BButton.vue'
 import BSectionLabel from '@/components/base/BSectionLabel.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
+import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import BModal from '@/components/layout/BModal.vue'
 
@@ -277,7 +280,9 @@ const editSingleLineValue = ref('')
 const promptSubmitting = ref(false)
 const showEditSheet = ref(false)
 const showWeaningConfirm = ref(false)
+const submitBannerMessage = ref('')
 let promptResolve: ((val: string) => Promise<void>) | null = null
+let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
 
 function openPrompt(
   mode: 'birth_date' | 'notes' | 'puppy_name',
@@ -396,6 +401,14 @@ function dispLabel(disposition: string) {
   return map[disposition] || '在养'
 }
 
+function showSubmitBanner(message: string) {
+  submitBannerMessage.value = message
+  if (submitBannerTimer) clearTimeout(submitBannerTimer)
+  submitBannerTimer = setTimeout(() => {
+    submitBannerMessage.value = ''
+  }, 2200)
+}
+
 async function loadData() {
   loading.value = true
   const res = await fetchDetail(litterId)
@@ -418,6 +431,7 @@ async function handleWeaningConfirm() {
       await completeTask(sourceTaskId)
       queueSubmitFeedback({
         message: '已确认断奶并处理待办',
+        homeSection: 'breeding',
         completedTaskIds: [sourceTaskId],
         suppressTaskIds: [sourceTaskId],
         refreshHome: true,
@@ -445,6 +459,16 @@ onLoad((query) => {
   litterId = query?.id || ''
   sourceTaskId = query?.taskId || ''
   if (litterId) loadData()
+})
+
+onShow(() => {
+  const feedback = consumeSubmitFeedback('/pages/breeding/litter')
+  if (feedback?.message) {
+    showSubmitBanner(feedback.message)
+  }
+  if (feedback && litterId) {
+    loadData()
+  }
 })
 </script>
 

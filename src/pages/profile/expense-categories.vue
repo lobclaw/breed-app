@@ -97,9 +97,9 @@
         </view>
 
         <view class="sheet-actions">
-          <button class="submit-btn" :disabled="!formName.trim() || !formParentGroup" @click="saveCat">
+          <BSubmitButton :disabled="!formName.trim() || !formParentGroup" @click="saveCat">
             {{ editingName ? '保存修改' : '新建分类' }}
-          </button>
+          </BSubmitButton>
         </view>
       </view>
     </BSheet>
@@ -117,6 +117,7 @@
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 import BSheet from '@/components/layout/BSheet.vue'

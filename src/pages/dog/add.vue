@@ -162,15 +162,14 @@
 
     <!-- 固定底部按钮 -->
     <view class="fixed-bottom">
-      <button
-        class="submit-btn"
+      <BSubmitButton
         :loading="submitState === 'submitting'"
-        :class="{ 'submit-btn--success': submitState === 'success' }"
+        :success="submitState === 'success'"
         :disabled="!canSubmit || submitState === 'submitting'"
         @click="submit"
       >
         {{ submitButtonText }}
-      </button>
+      </BSubmitButton>
     </view>
 
     <BModal
@@ -203,8 +202,9 @@
 import { ref, computed, reactive, watch } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
-import { queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
+import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
 import { useAuth } from '@/composables/useAuth'
+import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BModal from '@/components/layout/BModal.vue'
 import { useDogStore } from '@/stores/dogStore'
@@ -399,7 +399,7 @@ async function submit() {
     queueSubmitFeedback({
       message: isEdit.value ? '已保存犬只信息' : '已创建犬只',
     })
-    await wait(140)
+    await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)
     uni.navigateBack()
   } catch {
     submitState.value = 'idle'

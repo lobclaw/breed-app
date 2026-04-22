@@ -35,48 +35,73 @@
       @toggle-calendar="toggleCalendar"
     />
 
-    <BSubmitBanner :message="submitBannerMessage" />
+    <BSubmitToast
+      :message="submitToastMessage"
+      :dismissing="submitToastClosing"
+    />
 
     <!-- 智能卡片区 -->
-    <scroll-view scroll-y class="card-area" :scroll-into-view="scrollTarget">
+    <scroll-view scroll-y scroll-with-animation class="card-area" :scroll-top="cardAreaScrollTop" @scroll="onCardAreaScroll">
       <!-- ===== 今日模式：单列表（逾期在最上面，今日紧随其后） ===== -->
       <template v-if="viewMode === 'today'">
         <view v-if="cards.length > 0" id="section-today">
           <view v-for="section in todaySections" :key="section.key">
-            <view v-if="section.cards.length > 0" class="home-section" :id="`section-${section.key}`">
+            <view
+              v-if="section.cards.length > 0"
+              class="home-section"
+              :class="`home-section--${section.key}`"
+              :id="`section-${section.key}`"
+            >
               <view class="section-label">
                 <view class="section-dot" :style="{ background: section.dotColor }" />
                 <text class="section-text">{{ section.title }}</text>
                 <view class="section-badge"><text class="section-badge-text">{{ section.cards.length }}</text></view>
               </view>
               <view v-if="section.groups?.length" class="section-groups">
-                <view v-for="group in section.groups" :key="group.key" v-show="group.cards.length > 0" class="section-group">
+                <view
+                  v-for="group in section.groups"
+                  :key="group.key"
+                  v-show="group.cards.length > 0"
+                  class="section-group"
+                >
                   <view class="subsection-label">
                     <text class="subsection-text">{{ group.title }}</text>
                     <view class="subsection-badge"><text class="subsection-badge-text">{{ group.cards.length }}</text></view>
                   </view>
                   <BreedingProcessGroupCard v-if="isBreedingMilestoneGroup(group)" :group="group" />
                   <view v-else class="card-feed">
-                    <SmartCard
-                      v-for="card in group.cards" :key="card.id" :card="card"
-                      :completing="completingCards.has(card.id)"
-                      :completed="completedCards.has(card.id)"
-                      @complete="onComplete" @postpone="onPostpone"
-                      @batch-complete="onBatchComplete" @batch-skip="onBatchSkip" @batch-complete-med="onBatchCompleteMed"
-                      @action="onAction" @record-dose="onRecordDose"
-                    />
+                    <view
+                      v-for="card in group.cards"
+                      :key="card.id"
+                      class="home-card-anchor"
+                    >
+                      <SmartCard
+                        :card="card"
+                        :completing="completingCards.has(card.id)"
+                        :completed="completedCards.has(card.id)"
+                        @complete="onComplete" @postpone="onPostpone"
+                        @batch-complete="onBatchComplete" @batch-skip="onBatchSkip" @batch-complete-med="onBatchCompleteMed"
+                        @action="onAction" @record-dose="onRecordDose"
+                      />
+                    </view>
                   </view>
                 </view>
               </view>
               <view v-else class="card-feed">
-                <SmartCard
-                  v-for="card in section.cards" :key="card.id" :card="card"
-                  :completing="completingCards.has(card.id)"
-                  :completed="completedCards.has(card.id)"
-                  @complete="onComplete" @postpone="onPostpone"
-                  @batch-complete="onBatchComplete" @batch-skip="onBatchSkip" @batch-complete-med="onBatchCompleteMed"
-                  @action="onAction" @record-dose="onRecordDose"
-                />
+                <view
+                  v-for="card in section.cards"
+                  :key="card.id"
+                  class="home-card-anchor"
+                >
+                  <SmartCard
+                    :card="card"
+                    :completing="completingCards.has(card.id)"
+                    :completed="completedCards.has(card.id)"
+                    @complete="onComplete" @postpone="onPostpone"
+                    @batch-complete="onBatchComplete" @batch-skip="onBatchSkip" @batch-complete-med="onBatchCompleteMed"
+                    @action="onAction" @record-dose="onRecordDose"
+                  />
+                </view>
               </view>
             </view>
           </view>
@@ -100,40 +125,61 @@
             <view class="section-badge"><text class="section-badge-text">{{ dayCards.length }}</text></view>
           </view>
           <view v-for="section in daySections" :key="section.key">
-            <view v-if="section.cards.length > 0" class="home-section">
+            <view
+              v-if="section.cards.length > 0"
+              class="home-section"
+              :class="`home-section--${section.key}`"
+            >
               <view class="section-label section-label--nested">
                 <view class="section-dot" :style="{ background: section.dotColor }" />
                 <text class="section-text">{{ section.title }}</text>
                 <view class="section-badge"><text class="section-badge-text">{{ section.cards.length }}</text></view>
               </view>
               <view v-if="section.groups?.length" class="section-groups">
-                <view v-for="group in section.groups" :key="group.key" v-show="group.cards.length > 0" class="section-group">
+                <view
+                  v-for="group in section.groups"
+                  :key="group.key"
+                  v-show="group.cards.length > 0"
+                  class="section-group"
+                >
                   <view class="subsection-label">
                     <text class="subsection-text">{{ group.title }}</text>
                     <view class="subsection-badge"><text class="subsection-badge-text">{{ group.cards.length }}</text></view>
                   </view>
                   <BreedingProcessGroupCard v-if="isBreedingMilestoneGroup(group)" :group="group" />
                   <view v-else class="card-feed">
-                    <SmartCard
-                      v-for="card in group.cards" :key="card.id" :card="card"
-                      :completing="completingCards.has(card.id)"
-                      :completed="completedCards.has(card.id)"
-                      @complete="onComplete" @postpone="onPostpone"
-                      @batch-complete="onBatchComplete" @batch-skip="onBatchSkip" @batch-complete-med="onBatchCompleteMed"
-                      @action="onAction" @record-dose="onRecordDose"
-                    />
+                    <view
+                      v-for="card in group.cards"
+                      :key="card.id"
+                      class="home-card-anchor"
+                    >
+                      <SmartCard
+                        :card="card"
+                        :completing="completingCards.has(card.id)"
+                        :completed="completedCards.has(card.id)"
+                        @complete="onComplete" @postpone="onPostpone"
+                        @batch-complete="onBatchComplete" @batch-skip="onBatchSkip" @batch-complete-med="onBatchCompleteMed"
+                        @action="onAction" @record-dose="onRecordDose"
+                      />
+                    </view>
                   </view>
                 </view>
               </view>
               <view v-else class="card-feed">
-                <SmartCard
-                  v-for="card in section.cards" :key="card.id" :card="card"
-                  :completing="completingCards.has(card.id)"
-                  :completed="completedCards.has(card.id)"
-                  @complete="onComplete" @postpone="onPostpone"
-                  @batch-complete="onBatchComplete" @batch-skip="onBatchSkip" @batch-complete-med="onBatchCompleteMed"
-                  @action="onAction" @record-dose="onRecordDose"
-                />
+                <view
+                  v-for="card in section.cards"
+                  :key="card.id"
+                  class="home-card-anchor"
+                >
+                  <SmartCard
+                    :card="card"
+                    :completing="completingCards.has(card.id)"
+                    :completed="completedCards.has(card.id)"
+                    @complete="onComplete" @postpone="onPostpone"
+                    @batch-complete="onBatchComplete" @batch-skip="onBatchSkip" @batch-complete-med="onBatchCompleteMed"
+                    @action="onAction" @record-dose="onRecordDose"
+                  />
+                </view>
               </view>
             </view>
           </view>
@@ -428,7 +474,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, nextTick, getCurrentInstance } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import { useAuth } from '@/composables/useAuth'
@@ -437,7 +483,7 @@ import BreedingProcessGroupCard from '@/components/smart-card/BreedingProcessGro
 import SmartCard from '@/components/smart-card/SmartCard.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
-import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
+import BSubmitToast from '@/components/feedback/BSubmitToast.vue'
 import BNavBar from '@/components/layout/BNavBar.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
@@ -461,11 +507,15 @@ const dayCards = ref<any[]>([])
 const viewMode = ref<'today' | 'date'>('today')
 const hasCachedData = cards.value.length > 0
 const loading = ref(!hasCachedData)
-const scrollTarget = ref('')
+const cardAreaScrollTop = ref(0)
 const dayCounts = ref<Record<number, number>>({})
-const submitBannerMessage = ref('')
-let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
+const submitToastMessage = ref('')
+const submitToastClosing = ref(false)
+let submitToastTimer: ReturnType<typeof setTimeout> | null = null
+let submitToastHideTimer: ReturnType<typeof setTimeout> | null = null
 const suppressedTaskMap = ref<Record<string, number>>({})
+const pageInstance = getCurrentInstance()
+const HOME_SUBMIT_TOAST_DURATION_MS = 1800
 
 // 选中日期（0点 timestamp）
 const selectedDate = ref(startOfDay(Date.now()))
@@ -553,7 +603,6 @@ const summaryPills = computed(() => [
     pillClass: 'pill-plum',
   },
 ])
-
 function mapWorkbenchGroupsToCards(groups: Array<{ key: string; title: string; rows: Array<{ sourceCard?: any }> }> = []) {
   return groups
     .map(group => ({
@@ -719,9 +768,30 @@ type WeekCacheEntry = { cards: any[] }
 const weekCache = ref<Record<number, WeekCacheEntry>>({})
 let latestLoadToken = 0
 
+function onCardAreaScroll(event: any) {
+  cardAreaScrollTop.value = event?.detail?.scrollTop || 0
+}
+
 function scrollToSection(section: string) {
   const normalized = section === 'workflow' ? 'breeding' : section
-  scrollTarget.value = `section-${normalized}`
+  scrollToAnchor(`section-${normalized}`)
+}
+
+function scrollToAnchor(targetId: string) {
+  if (!targetId || !pageInstance) return
+  nextTick(() => {
+    setTimeout(() => {
+      const query = uni.createSelectorQuery().in(pageInstance)
+      query.select('.card-area').boundingClientRect()
+      query.select(`#${targetId}`).boundingClientRect()
+      query.exec((result) => {
+        const [scrollViewRect, targetRect] = result || []
+        if (!scrollViewRect || !targetRect) return
+        const nextTop = Math.max(0, cardAreaScrollTop.value + targetRect.top - scrollViewRect.top - 10)
+        cardAreaScrollTop.value = nextTop
+      })
+    }, 20)
+  })
 }
 
 /** 加载今日卡片（逾期+今日合并为单列表） */
@@ -813,12 +883,28 @@ function toggleCalendar() {
   uni.showToast({ title: '月历功能后续迭代', icon: 'none' })
 }
 
-function showSubmitBanner(message: string) {
-  submitBannerMessage.value = message
-  if (submitBannerTimer) clearTimeout(submitBannerTimer)
-  submitBannerTimer = setTimeout(() => {
-    submitBannerMessage.value = ''
-  }, 2200)
+function dismissSubmitToast() {
+  if (submitToastTimer) clearTimeout(submitToastTimer)
+  if (submitToastHideTimer) clearTimeout(submitToastHideTimer)
+  if (!submitToastMessage.value) {
+    submitToastClosing.value = false
+    return
+  }
+  submitToastClosing.value = true
+  submitToastHideTimer = setTimeout(() => {
+    submitToastMessage.value = ''
+    submitToastClosing.value = false
+  }, 220)
+}
+
+function showSubmitToast(message: string) {
+  submitToastMessage.value = message
+  submitToastClosing.value = false
+  if (submitToastTimer) clearTimeout(submitToastTimer)
+  if (submitToastHideTimer) clearTimeout(submitToastHideTimer)
+  submitToastTimer = setTimeout(() => {
+    dismissSubmitToast()
+  }, HOME_SUBMIT_TOAST_DURATION_MS)
 }
 
 function pruneSuppressedTasks() {
@@ -971,7 +1057,7 @@ async function onComplete(taskId: string, mode?: boolean | string) {
     return
   }
   if (mode === 'batch-auto') {
-    removeCardLocally(taskId)
+    removeCardLocally(taskId, true)
     doCompleteTask(taskId, true)
     return
   }
@@ -1353,7 +1439,7 @@ onShow(async () => {
   const feedback = consumeSubmitFeedback('/pages/home/index')
   if (feedback?.message) {
     applyHomeFeedback(feedback)
-    showSubmitBanner(feedback.message)
+    showSubmitToast(feedback.message)
   }
 
   // 确保家庭信息已加载
@@ -1478,6 +1564,8 @@ onShow(async () => {
   align-items: center;
   gap: 8px;
   padding: 8px 20px 10px;
+  border-radius: 16px;
+  transition: background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
 }
 .section-label--nested {
   padding-top: 2px;
@@ -1527,6 +1615,8 @@ onShow(async () => {
   align-items: center;
   gap: 8px;
   padding: 2px 20px 8px;
+  border-radius: 14px;
+  transition: background 0.18s ease, box-shadow 0.18s ease;
 }
 
 .subsection-text {
@@ -1562,6 +1652,11 @@ onShow(async () => {
   flex-direction: column;
   gap: 12px;
   margin-bottom: 10px;
+}
+
+.home-card-anchor {
+  border-radius: 20px;
+  transition: box-shadow 0.18s ease, transform 0.18s ease;
 }
 
 .home-section + .home-section {

@@ -63,14 +63,22 @@ const medicationItems: AddRecordItem[] = MEDICATION_RECORD_ITEMS.map(item => ({
   layout: item.layout,
 }))
 
-export function createAllAddRecordGroups({ includeBreedingHint = false } = {}): AddRecordGroup[] {
-  return [
-    {
+export function createAllAddRecordGroups({
+  includeBreedingHint = false,
+  allowBreeding = true,
+} = {}): AddRecordGroup[] {
+  const groups: AddRecordGroup[] = []
+
+  if (allowBreeding) {
+    groups.push({
       key: 'breeding',
       title: '繁育',
       hint: includeBreedingHint ? '将自动带入当前周期' : '',
       items: breedingItems,
-    },
+    })
+  }
+
+  groups.push(
     {
       key: 'health',
       title: '健康',
@@ -81,7 +89,9 @@ export function createAllAddRecordGroups({ includeBreedingHint = false } = {}): 
       title: '用药',
       items: medicationItems,
     },
-  ]
+  )
+
+  return groups
 }
 
 export function createCycleBreedingAddRecordGroups(status?: string): AddRecordGroup[] {

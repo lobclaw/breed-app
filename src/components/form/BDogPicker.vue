@@ -86,8 +86,8 @@
     <BEmpty
       v-else-if="!filteredDogs.length"
       icon="pets"
-      title="暂无犬只"
-      description="没有符合条件的犬只"
+      :title="emptyTitle"
+      :description="emptyDescription"
     />
 
     <!-- 列表 -->
@@ -159,6 +159,12 @@ const props = withDefaults(defineProps<{
   readonly?: boolean
   /** 空态占位文字 */
   placeholder?: string
+  /** 排除的犬只 ID */
+  excludeIds?: string[]
+  /** 空态标题 */
+  emptyTitle?: string
+  /** 空态描述 */
+  emptyDescription?: string
 }>(), {
   modelValue: undefined,
   visible: undefined,
@@ -170,6 +176,9 @@ const props = withDefaults(defineProps<{
   title: '选择犬只',
   placeholder: '点击选择犬只',
   readonly: false,
+  excludeIds: () => [],
+  emptyTitle: '暂无犬只',
+  emptyDescription: '没有符合条件的犬只',
 })
 
 const emit = defineEmits<{
@@ -256,9 +265,11 @@ const filteredDogs = computed(() => {
 })
 
 const visibleDogs = computed(() => (
-  props.includeExternalSires
-    ? dogs.value
-    : dogs.value.filter(d => d.role !== '外部种公')
+  (
+    props.includeExternalSires
+      ? dogs.value
+      : dogs.value.filter(d => d.role !== '外部种公')
+  ).filter(d => !props.excludeIds.includes(d._id))
 ))
 
 const dogStore = useDogStore()
@@ -586,6 +597,7 @@ function formatAge(birthTs?: number | null) {
 }
 
 .b-dog-picker__select-all {
+  margin-left: auto;
   flex-shrink: 0;
   font-size: 12px;
   font-weight: 600;

@@ -109,6 +109,93 @@ function getTaskPriority(task, todayStartMs, todayEndMs) {
   return 'upcoming'
 }
 
+async function ensureEstrusCycleMilestones(familyId, now = Date.now()) {
+  const { data: estrusCycles } = await db.collection('breeding_cycles')
+    .where({ family_id: familyId, status: '发情中' })
+    .get()
+
+  if (!estrusCycles || estrusCycles.length === 0) return []
+
+  const cycleIds = estrusCycles.map(cycle => cycle._id).filter(Boolean)
+  if (cycleIds.length === 0) return []
+
+  const [{ data: pendingTasks }, { data: records }] = await Promise.all([
+    db.collection('tasks')
+      .where({
+        family_id: familyId,
+        type: 'breeding_milestone',
+        status: 'pending',
+        cycle_id: dbCmd.in(cycleIds),
+      })
+      .get(),
+    db.collection('breeding_records')
+      .where({
+        family_id: familyId,
+        cycle_id: dbCmd.in(cycleIds),
+        type: dbCmd.in(['heat', 'follicle_check']),
+      })
+      .orderBy('date', 'asc')
+      .get(),
+  ])
+
+  const cyclesWithPendingTask = new Set((pendingTasks || []).map(task => task.cycle_id).filter(Boolean))
+  const recordMap = new Map()
+  for (const record of records || []) {
+    if (!recordMap.has(record.cycle_id)) recordMap.set(record.cycle_id, [])
+    recordMap.get(record.cycle_id).push(record)
+  }
+
+  const createdTaskIds = []
+  for (const cycle of estrusCycles) {
+    if (!cycle?._id || cyclesWithPendingTask.has(cycle._id)) continue
+
+    const cycleRecords = recordMap.get(cycle._id) || []
+    const heatRecord = cycleRecords.find(record => record.type === 'heat') || null
+    const follicleRecords = cycleRecords.filter(record => record.type === 'follicle_check')
+    const latestFollicleRecord = follicleRecords.length > 0 ? follicleRecords[follicleRecords.length - 1] : null
+    const heatDate = heatRecord?.date || cycle.start_date || cycle.created_at || now
+
+    const taskPayload = latestFollicleRecord
+      ? {
+          title: `${cycle.dam_name} · 配种`,
+          due_date: latestFollicleRecord.date || now,
+          details: {
+            step_type: 'mating',
+            follicle_check_date: latestFollicleRecord.date || null,
+            heat_date: heatDate,
+          },
+        }
+      : {
+          title: `${cycle.dam_name} · 建议卵泡检查`,
+          due_date: heatDate + 10 * DAY_MS,
+          details: {
+            step_type: 'follicle_check',
+            heat_date: heatDate,
+          },
+        }
+
+    const { id } = await db.collection('tasks').add({
+      card_type: 'individual',
+      dog_id: cycle.dam_id,
+      dog_name: cycle.dam_name,
+      cycle_id: cycle._id,
+      type: 'breeding_milestone',
+      status: 'pending',
+      priority: taskPayload.due_date <= now ? 'overdue' : 'upcoming',
+      source_record_id: latestFollicleRecord?._id || heatRecord?._id || null,
+      source_collection: 'breeding_records',
+      family_id: familyId,
+      postpone_count: 0,
+      created_at: now,
+      updated_at: now,
+      ...taskPayload,
+    })
+    createdTaskIds.push(id)
+  }
+
+  return createdTaskIds
+}
+
 function buildSectionedCards(pendingTasks, todayCompletedTasks, activeIllnesses, medItems) {
   const workflowPendingTasks = pendingTasks.filter(task => task.type === 'breeding_milestone')
   const workflowCompletedTasks = todayCompletedTasks.filter(task => task.type === 'breeding_milestone')
@@ -568,6 +655,8 @@ module.exports = {
     todayStart.setHours(0, 0, 0, 0)
     const todayEnd = new Date()
     todayEnd.setHours(23, 59, 59, 999)
+
+    await ensureEstrusCycleMilestones(familyId, Date.now())
 
     // 并行查询：首页到期任务 + 主流程任务（允许未来） + 今日已完成 + 当前生病犬只 + 进行中的用药
     const [pendingRes, workflowRes, completedRes, illnessRes, medRes] = await Promise.all([
@@ -1182,6 +1271,9 @@ module.exports = {
         default_deworming_interval_puppy: 14,
         default_deworming_interval_adult: 90,
       }
+
+      const estrusCreated = await ensureEstrusCycleMilestones(familyId, now)
+      auditCount += estrusCreated.length
 
       // 审计 1：检查怀孕中的周期是否有当前流程任务
       const { data: pregnantCycles } = await db.collection('breeding_cycles')

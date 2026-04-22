@@ -41,13 +41,12 @@
 
     <!-- 固定底部按钮 -->
     <view class="fixed-bottom">
-      <button
-        class="submit-btn"
+      <BSubmitButton
         :disabled="!selectedDog"
         :loading="submitState === 'submitting'"
-        :class="{ 'submit-btn--success': submitState === 'success' }"
+        :success="submitState === 'success'"
         @click="submit"
-      >{{ submitButtonText }}</button>
+      >{{ submitButtonText }}</BSubmitButton>
       <text class="submit-note">设定后犬只状态变为「待售」</text>
     </view>
 
@@ -57,7 +56,8 @@
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue'
 import { useCloudCall } from '@/composables/useCloudCall'
-import { queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
+import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
+import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 
@@ -94,7 +94,7 @@ async function submit() {
     if (res) {
       submitState.value = 'success'
       queueSubmitFeedback({ message: '已创建销售记录' })
-      await wait(140)
+      await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)
       uni.navigateBack()
     }
   } catch {

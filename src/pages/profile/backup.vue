@@ -24,10 +24,10 @@
 
     <!-- 操作按钮 -->
     <view class="backup-actions">
-      <button class="submit-btn" :loading="exporting" @click="startBackup">
+      <BSubmitButton :loading="exporting" @click="startBackup">
         <text v-if="!exporting" class="material-icons-round" style="font-size: 18px; color: #fff; margin-right: 6px;">backup</text>
         立即备份
-      </button>
+      </BSubmitButton>
 
       <button class="action-btn-ghost" @click="startExport">
         <text class="material-icons-round" style="font-size: 18px; color: var(--text-1); margin-right: 6px;">download</text>
@@ -74,6 +74,7 @@
 import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BModal from '@/components/layout/BModal.vue'
 

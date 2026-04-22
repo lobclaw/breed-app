@@ -197,15 +197,14 @@
     </view>
 
     <view class="fixed-bottom">
-      <button
-        class="submit-btn"
+      <BSubmitButton
         :loading="submitState === 'submitting'"
-        :class="{ 'submit-btn--success': submitState === 'success' }"
+        :success="submitState === 'success'"
         :disabled="!canSubmit || submitState === 'submitting'"
         @click="submit"
       >
         {{ submitButtonText }}
-      </button>
+      </BSubmitButton>
     </view>
 
     <BModal
@@ -261,10 +260,11 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useCloudCall } from '@/composables/useCloudCall'
 import { useAuth } from '@/composables/useAuth'
 import { useRecordSubmitState } from '@/composables/useRecordSubmitState'
-import { buildRecordFeedbackMessage, buildTaskFeedbackMessage, queueSubmitFeedback, wait } from '@/composables/useSubmitFeedback'
+import { buildRecordFeedbackMessage, buildTaskFeedbackMessage, queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
 import { resolveHealthCreateRouteQuery } from '@/utils/recordFormRoutes'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 import BFormOptions from '@/components/form/BFormOptions.vue'
+import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BModal from '@/components/layout/BModal.vue'
 
@@ -755,6 +755,18 @@ function buildDetails() {
   return built
 }
 
+function getHealthHomeAnchorKey(type: string, detailPayload: Record<string, any>, isTodo: boolean) {
+  if (type === 'illness') return 'health-illness:observation'
+  if (!isTodo) return ''
+  if (type === 'vaccination') {
+    return `health-subtype:vaccination:${detailPayload.vaccine_type || 'unknown'}`
+  }
+  if (type === 'deworming') {
+    return `health-subtype:deworming:${detailPayload.deworming_type || 'unknown'}:${detailPayload.drug_name || 'unknown'}`
+  }
+  return ''
+}
+
 async function handleDuplicateIllnessIfNeeded() {
   if (resolvedType.value !== 'illness') return false
 
@@ -821,6 +833,7 @@ function handleDuplicateIllnessConfirm() {
 
 async function submitCreateRecord() {
   const cost = costInput.value ? parseFloat(costInput.value) : null
+  const detailPayload = buildDetails()
 
   if (isTodo.value && resolvedType.value !== 'illness') {
     const result = await batchAddTask({
@@ -846,6 +859,8 @@ async function submitCreateRecord() {
     markSuccess()
     queueSubmitFeedback({
       message: buildTaskFeedbackMessage(created, skipped),
+      homeSection: 'reminders',
+      homeAnchorKey: getHealthHomeAnchorKey(resolvedType.value, detailPayload, true),
       createdDate: date.value,
       createdCount: created,
       skippedCount: skipped,
@@ -860,7 +875,7 @@ async function submitCreateRecord() {
     date: date.value,
     cost: cost && cost > 0 ? cost : null,
     notes: notes.value || null,
-    details: buildDetails(),
+    details: detailPayload,
   }
 
   if (resolvedType.value === 'illness') {
@@ -881,6 +896,8 @@ async function submitCreateRecord() {
   markSuccess()
   queueSubmitFeedback({
     message: buildRecordFeedbackMessage(selectedDogs.value.length, completedTasks.length),
+    homeSection: 'reminders',
+    homeAnchorKey: getHealthHomeAnchorKey(resolvedType.value, detailPayload, isTodo.value),
     completedTaskIds,
     suppressTaskIds,
     removeBatchCard: sourceTaskIds.value.length > 0
@@ -892,15 +909,20 @@ async function submitCreateRecord() {
 
 async function submitEditRecord() {
   const cost = costInput.value ? parseFloat(costInput.value) : null
+  const detailPayload = buildDetails()
   await updateRecord({
     id: props.recordId,
     date: date.value,
     cost: cost && cost > 0 ? cost : null,
     notes: notes.value || null,
-    details: buildDetails(),
+    details: detailPayload,
   })
   markSuccess()
-  queueSubmitFeedback({ message: '已更新健康记录' })
+  queueSubmitFeedback({
+    message: '已更新健康记录',
+    homeSection: 'reminders',
+    homeAnchorKey: getHealthHomeAnchorKey(resolvedType.value, detailPayload, isTodo.value),
+  })
 }
 
 async function submit() {
@@ -914,7 +936,7 @@ async function submit() {
 
     if (isEdit.value) {
       await submitEditRecord()
-      await wait(140)
+      await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)
       uni.navigateBack()
       return
     }
@@ -926,7 +948,7 @@ async function submit() {
       return
     }
 
-    await wait(140)
+    await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)
     uni.navigateBack()
   } catch {
     resetSubmitState()
@@ -949,7 +971,7 @@ function goToMedication() {
 
 function finishAndBack() {
   showMedPrompt.value = false
-  setTimeout(() => uni.navigateBack(), 140)
+  setTimeout(() => uni.navigateBack(), SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)
 }
 
 onMounted(async () => {
