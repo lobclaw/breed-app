@@ -2,7 +2,7 @@
  * task-service 云对象测试
  * 测试首页卡片、任务完成/推迟、审计、自动关闭
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import {
   resetDB,
   seedCollection,
@@ -17,6 +17,7 @@ const mockUniCloud = createMockUniCloud()
 process.env.NODE_ENV = 'test'
 const taskService = require('../../uniCloud-alipay/cloudfunctions/task-service/index.obj.js')
 const mergeTasks: (...args: any[]) => any = taskService._mergeTasks
+const buildMorningSummaryPayload: (...args: any[]) => any = taskService._buildMorningSummaryPayload
 
 describe('task-service', () => {
   const db = mockUniCloud.database()
@@ -35,6 +36,10 @@ describe('task-service', () => {
         default_deworming_interval_adult: 90,
       },
     }])
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
   describe('getHomeCards 首页卡片', () => {
@@ -1002,6 +1007,131 @@ describe('task-service', () => {
         .get()
       expect(afterAudit).toHaveLength(1)
       expect(afterAudit[0].title).toContain('断奶')
+    })
+  })
+
+  describe('晨间摘要通知设置', () => {
+    it('buildMorningSummaryPayload 应按通知类型过滤并按北京时间命中', () => {
+      const now = new Date('2026-04-22T09:00:00+08:00').getTime()
+      const dayStart = new Date('2026-04-22T00:00:00+08:00').getTime()
+
+      const family = {
+        settings: {
+          push_enabled: true,
+          morning_summary_enabled: true,
+          morning_summary_time: '09:00',
+          notification_types: {
+            breeding: true,
+            vaccination: false,
+            medication: true,
+            care_group: false,
+            overdue: true,
+          },
+        },
+      }
+
+      const tasks = [
+        { _id: 'overdue_1', status: 'pending', type: 'vaccination', due_date: dayStart - 1000 },
+        { _id: 'breed_1', status: 'pending', type: 'breeding_milestone', due_date: dayStart + 1000 },
+        { _id: 'vac_1', status: 'pending', type: 'vaccination', due_date: dayStart + 2000 },
+        { _id: 'care_1', status: 'pending', type: 'care_group', due_date: dayStart + 3000 },
+      ]
+
+      const activeMeds = [{
+        _id: 'med_1',
+        dog_id: 'dog_1',
+        dog_name: '奶盖',
+        actual_start_date: dayStart,
+        duration_days: 5,
+        frequency: 1,
+        daily_doses: {},
+      }]
+
+      const summary = buildMorningSummaryPayload(family, tasks, activeMeds, now)
+
+      expect(summary).toBeTruthy()
+      expect(summary.total).toBe(3)
+      expect(summary.parts).toEqual([
+        '1件逾期需处理',
+        '1项繁育提醒',
+        '1项今日用药',
+      ])
+      expect(summary.counts).toMatchObject({
+        overdue: 1,
+        breeding: 1,
+        vaccination: 1,
+        medication: 1,
+        care_group: 1,
+      })
+    })
+
+    it('_timing_morningSummary 仅处理命中当前 HH:MM 且开关开启的家庭', async () => {
+      const now = new Date('2026-04-22T09:00:00+08:00').getTime()
+      vi.spyOn(Date, 'now').mockReturnValue(now)
+
+      seedCollection('families', [
+        {
+          _id: 'fam_match',
+          name: '命中家庭',
+          members: [{ user_id: 'u1', status: 'active' }],
+          settings: {
+            push_enabled: true,
+            morning_summary_enabled: true,
+            morning_summary_time: '09:00',
+            notification_types: {
+              breeding: true,
+              vaccination: true,
+              medication: true,
+              care_group: true,
+              overdue: true,
+            },
+          },
+        },
+        {
+          _id: 'fam_off',
+          name: '关闭家庭',
+          members: [{ user_id: 'u2', status: 'active' }],
+          settings: {
+            push_enabled: false,
+            morning_summary_enabled: true,
+            morning_summary_time: '09:00',
+            notification_types: {
+              breeding: true,
+              vaccination: true,
+              medication: true,
+              care_group: true,
+              overdue: true,
+            },
+          },
+        },
+        {
+          _id: 'fam_other_time',
+          name: '其他时间家庭',
+          members: [{ user_id: 'u3', status: 'active' }],
+          settings: {
+            push_enabled: true,
+            morning_summary_enabled: true,
+            morning_summary_time: '08:00',
+            notification_types: {
+              breeding: true,
+              vaccination: true,
+              medication: true,
+              care_group: true,
+              overdue: true,
+            },
+          },
+        },
+      ])
+
+      seedCollection('tasks', [
+        { _id: 'task_match', family_id: 'fam_match', status: 'pending', type: 'breeding_milestone', due_date: now },
+        { _id: 'task_off', family_id: 'fam_off', status: 'pending', type: 'breeding_milestone', due_date: now },
+        { _id: 'task_other_time', family_id: 'fam_other_time', status: 'pending', type: 'breeding_milestone', due_date: now },
+      ])
+      seedCollection('medication_tasks', [])
+
+      const result = await taskService._timing_morningSummary.call(createCloudObjectContext({ methodName: '_timing_morningSummary' }))
+      expect(result.data.pushCount).toBe(1)
     })
   })
 })

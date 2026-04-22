@@ -1,0 +1,60 @@
+{
+  "bsonType": "object",
+  "required": ["family_id", "actor_user_id", "actor_name", "action_type", "domain", "target_type", "summary", "created_at"],
+  "permission": {
+    "read": "auth.uid != null",
+    "create": "auth.uid != null",
+    "update": "auth.uid != null",
+    "delete": "auth.uid != null"
+  },
+  "properties": {
+    "_id": {
+      "description": "操作日志 ID"
+    },
+    "family_id": {
+      "bsonType": "string",
+      "foreignKey": "families._id",
+      "description": "所属家庭 ID"
+    },
+    "actor_user_id": {
+      "bsonType": "string",
+      "description": "操作人用户 ID"
+    },
+    "actor_name": {
+      "bsonType": "string",
+      "description": "操作人显示名称"
+    },
+    "action_type": {
+      "bsonType": "string",
+      "description": "动作类型"
+    },
+    "domain": {
+      "bsonType": "string",
+      "description": "业务域"
+    },
+    "target_type": {
+      "bsonType": "string",
+      "description": "目标对象类型"
+    },
+    "target_id": {
+      "bsonType": "string",
+      "description": "目标对象 ID"
+    },
+    "target_name": {
+      "bsonType": "string",
+      "description": "目标对象名称"
+    },
+    "summary": {
+      "bsonType": "string",
+      "description": "日志摘要文案"
+    },
+    "meta": {
+      "bsonType": ["object", "null"],
+      "description": "结构化扩展信息"
+    },
+    "created_at": {
+      "bsonType": "number",
+      "description": "创建时间（时间戳毫秒）"
+    }
+  }
+}

@@ -6,7 +6,7 @@
     <view class="toggle-group">
       <text class="toggle-group__label">推送总开关</text>
       <view class="toggle-card">
-        <view class="option-row" @click="pushEnabled = !pushEnabled; saveSettings()">
+        <view class="option-row" @click="togglePushEnabled">
           <text class="option-row__text">接收推送通知</text>
           <view class="custom-toggle" :class="{ 'custom-toggle--on': pushEnabled }">
             <view class="custom-toggle__knob" />
@@ -38,7 +38,7 @@
     <view class="toggle-group">
       <text class="toggle-group__label">晨间摘要</text>
       <view class="toggle-card">
-        <view class="option-row" @click="summaryEnabled = !summaryEnabled; saveSettings()">
+        <view class="option-row" @click="toggleSummaryEnabled">
           <text class="option-row__text">每日晨间摘要</text>
           <view class="custom-toggle" :class="{ 'custom-toggle--on': summaryEnabled }">
             <view class="custom-toggle__knob" />
@@ -59,12 +59,24 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useCloudCall } from '@/composables/useCloudCall'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
+import type { FamilySettings, NotificationTypes } from '@/types/family'
+
+type NotificationTypeKey = keyof NotificationTypes
+
+interface NotificationTypeItem {
+  key: NotificationTypeKey
+  label: string
+  sub: string
+  enabled: boolean
+  disabled: boolean
+}
 
 const pushEnabled = ref(true)
 const summaryEnabled = ref(true)
-const summaryTime = ref('07:00')
+const summaryTime = ref('09:00')
+const saveToken = ref(0)
 
-const notifTypes = reactive([
+const notifTypes = reactive<NotificationTypeItem[]>([
   { key: 'breeding', label: '繁育节点提醒', sub: '配种 / 孕检 / 预产期', enabled: true, disabled: false },
   { key: 'vaccination', label: '疫苗/驱虫提醒', sub: '', enabled: true, disabled: false },
   { key: 'medication', label: '每日用药提醒', sub: '', enabled: true, disabled: false },
@@ -73,43 +85,111 @@ const notifTypes = reactive([
 ])
 
 const { run: updateSettings } = useCloudCall('family-service', 'updateSettings')
-const { run: getFamilyInfo } = useCloudCall<{ data: any }>('family-service', 'getFamilyInfo')
+const { run: getFamilyInfo } = useCloudCall<{ data: { settings?: FamilySettings } }>('family-service', 'getFamilyInfo')
+
+interface NotificationFormState {
+  pushEnabled: boolean
+  summaryEnabled: boolean
+  summaryTime: string
+  notificationTypes: NotificationTypes
+}
+
+function buildNotificationTypes(): NotificationTypes {
+  const types: NotificationTypes = {
+    breeding: true,
+    vaccination: true,
+    medication: true,
+    care_group: true,
+    overdue: true,
+  }
+
+  notifTypes.forEach((item) => {
+    if (item.key === 'overdue') {
+      types.overdue = true
+      return
+    }
+    types[item.key] = item.enabled
+  })
+
+  return types
+}
+
+function captureState(): NotificationFormState {
+  return {
+    pushEnabled: pushEnabled.value,
+    summaryEnabled: summaryEnabled.value,
+    summaryTime: summaryTime.value,
+    notificationTypes: { ...buildNotificationTypes() },
+  }
+}
+
+function applyState(state: NotificationFormState) {
+  pushEnabled.value = state.pushEnabled
+  summaryEnabled.value = state.summaryEnabled
+  summaryTime.value = state.summaryTime
+
+  notifTypes.forEach((item) => {
+    item.enabled = item.key === 'overdue'
+      ? true
+      : state.notificationTypes[item.key as NotificationTypeKey]
+  })
+}
 
 function onTimeChange(e: any) {
+  const prevState = captureState()
   summaryTime.value = e.detail.value
-  saveSettings()
+  saveSettings(prevState)
+}
+
+function togglePushEnabled() {
+  const prevState = captureState()
+  pushEnabled.value = !pushEnabled.value
+  saveSettings(prevState)
+}
+
+function toggleSummaryEnabled() {
+  const prevState = captureState()
+  summaryEnabled.value = !summaryEnabled.value
+  saveSettings(prevState)
 }
 
 function toggleType(key: string) {
+  const prevState = captureState()
   const item = notifTypes.find(n => n.key === key)
   if (item && !item.disabled) item.enabled = !item.enabled
-  saveSettings()
+  saveSettings(prevState)
 }
 
-async function saveSettings() {
-  const enabledTypes: Record<string, boolean> = {}
-  notifTypes.forEach(n => { enabledTypes[n.key] = n.enabled })
-  await updateSettings({
+async function saveSettings(prevState: NotificationFormState) {
+  const requestToken = ++saveToken.value
+  const res = await updateSettings({
     push_enabled: pushEnabled.value,
     morning_summary_enabled: summaryEnabled.value,
     morning_summary_time: summaryTime.value,
-    notification_types: enabledTypes,
+    notification_types: buildNotificationTypes(),
   })
+
+  if (!res && requestToken === saveToken.value) {
+    applyState(prevState)
+  }
 }
 
 onMounted(async () => {
   const res = await getFamilyInfo()
   if (res?.data?.settings) {
     const s = res.data.settings
-    if (s.push_enabled !== undefined) pushEnabled.value = s.push_enabled
-    if (s.morning_summary_enabled !== undefined) summaryEnabled.value = s.morning_summary_enabled
-    if (s.morning_summary_time) summaryTime.value = s.morning_summary_time
-    if (s.notification_types) {
-      Object.keys(s.notification_types).forEach(k => {
-        const found = notifTypes.find(n => n.key === k)
-        if (found) found.enabled = s.notification_types[k]
-      })
-    }
+    applyState({
+      pushEnabled: s.push_enabled ?? true,
+      summaryEnabled: s.morning_summary_enabled ?? true,
+      summaryTime: s.morning_summary_time || '09:00',
+      notificationTypes: {
+        breeding: s.notification_types?.breeding ?? true,
+        vaccination: s.notification_types?.vaccination ?? true,
+        medication: s.notification_types?.medication ?? true,
+        care_group: s.notification_types?.care_group ?? true,
+        overdue: true,
+      },
+    })
   }
 })
 </script>

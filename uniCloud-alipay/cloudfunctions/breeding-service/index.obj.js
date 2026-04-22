@@ -3,6 +3,12 @@
  * 管理繁育周期生命周期、8种记录类型、窝管理
  */
 const { verifyAndGetFamily, requireFamily, requireAdmin } = require('breed-auth/auth')
+let safeWriteOperationLog = async () => null
+try {
+  ;({ safeWriteOperationLog } = require('breed-auth/operation-log'))
+} catch (error) {
+  ;({ safeWriteOperationLog } = require('../common/breed-auth/operation-log'))
+}
 
 const db = uniCloud.database()
 const dbCmd = db.command
@@ -27,6 +33,32 @@ const EXTRA_ARRANGEMENT_TITLE_MAP = {
   recheck_observe: '复测观察',
   preparation: '准备事项',
   other: '其他安排',
+}
+
+const BREEDING_RECORD_LABEL_MAP = {
+  heat: '发情记录',
+  heat_observation: '发情观察',
+  follicle_check: '卵泡检查',
+  mating: '配种记录',
+  pregnancy_check: '孕检记录',
+  prenatal_check: '产检记录',
+  pre_labor: '临产记录',
+  birth: '生产记录',
+  abnormal_termination: '异常终止记录',
+}
+
+async function logBreedingOperation({ familyId, actorUserId, actionType, targetType, targetId, targetName, summary, meta = null }) {
+  await safeWriteOperationLog({
+    familyId,
+    actorUserId,
+    actionType,
+    domain: 'breeding',
+    targetType,
+    targetId,
+    targetName,
+    summary,
+    meta,
+  })
 }
 
 // ── 独立辅助函数（不能放在 module.exports 内，否则 _ 前缀会被 UniCloud 当作生命周期钩子）──
@@ -698,6 +730,16 @@ module.exports = {
       data,
       dog,
     })
+    await logBreedingOperation({
+      familyId,
+      actorUserId: this.uid,
+      actionType: 'create',
+      targetType: 'breeding_record',
+      targetId: result.recordId,
+      targetName: dog.name || '未命名犬只',
+      summary: `为 ${dog.name || '未命名犬只'} 新增了${BREEDING_RECORD_LABEL_MAP[data.type] || '繁育记录'}`,
+      meta: { type: data.type, cycleId: result.cycleId || data.cycle_id || '' },
+    })
     return { data: result }
   },
 
@@ -754,6 +796,17 @@ module.exports = {
         })
       }
     }
+
+    await logBreedingOperation({
+      familyId,
+      actorUserId: this.uid,
+      actionType: 'create',
+      targetType: 'breeding_record_batch',
+      targetId: `batch:${Date.now()}`,
+      targetName: `${records.length}条繁育记录`,
+      summary: `批量新增了 ${records.length} 条发情记录`,
+      meta: { count: records.length, failed: failed.length },
+    })
 
     return {
       data: {
@@ -909,6 +962,17 @@ module.exports = {
       status: 'pending',
     }).update({ status: 'cancelled', updated_at: Date.now() })
 
+    await logBreedingOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'status_change',
+      targetType: 'breeding_cycle',
+      targetId: cycleId,
+      targetName: cycle.dam_name || cycleId,
+      summary: `关闭了 ${cycle.dam_name || '未命名母犬'} 的繁育周期（${newStatus}）`,
+      meta: { status: newStatus },
+    })
+
     return { message: '周期已关闭' }
   },
 
@@ -952,7 +1016,7 @@ module.exports = {
       created_at: now,
       updated_at: now,
     }
-    await db.collection('breeding_records').add(birthRecordData)
+    const { id: birthRecordId } = await db.collection('breeding_records').add(birthRecordData)
 
     // 创建 Litter
     const litterData = {
@@ -1105,6 +1169,17 @@ module.exports = {
       })
     }
 
+    await logBreedingOperation({
+      familyId,
+      actorUserId: this.uid,
+      actionType: 'create',
+      targetType: 'litter',
+      targetId: litterId,
+      targetName: cycle.dam_name || '未命名母犬',
+      summary: `为 ${cycle.dam_name || '未命名母犬'} 录入了生产记录并创建新窝`,
+      meta: { litterId, birthRecordId, puppyCount: puppyIds.length },
+    })
+
     return {
       data: {
         litterId,
@@ -1227,6 +1302,17 @@ module.exports = {
 
     const { id } = await db.collection('dogs').add(dogData)
 
+    await logBreedingOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'create',
+      targetType: 'dog',
+      targetId: id,
+      targetName: dogData.name || '未命名幼崽',
+      summary: `向窝 ${litter.dam_name || litterId} 新增了幼崽 ${dogData.name || '未命名幼崽'}`,
+      meta: { litterId },
+    })
+
     return { data: { puppyId: id } }
   },
 
@@ -1268,6 +1354,16 @@ module.exports = {
 
     await db.collection('litters').doc(litterId).update(updateData)
 
+    await logBreedingOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'update',
+      targetType: 'litter',
+      targetId: litterId,
+      targetName: litters[0].dam_name || litterId,
+      summary: `更新了窝 ${litters[0].dam_name || litterId} 的信息`,
+    })
+
     return { message: '窝信息已更新' }
   },
 
@@ -1306,6 +1402,17 @@ module.exports = {
     }).update({
       birth_date: newBirthDate,
       updated_at: now,
+    })
+
+    await logBreedingOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'update',
+      targetType: 'litter',
+      targetId: litterId,
+      targetName: litter.dam_name || litterId,
+      summary: `更新了窝 ${litter.dam_name || litterId} 的生产日期`,
+      meta: { birthDate: newBirthDate },
     })
 
     return { message: '生产日期已更新' }
@@ -1409,6 +1516,17 @@ module.exports = {
       }
     }
 
+    await logBreedingOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'update',
+      targetType: 'breeding_record',
+      targetId: id,
+      targetName: record.dog_name || record.dog_id || id,
+      summary: `更新了 ${record.dog_name || '未命名犬只'} 的${BREEDING_RECORD_LABEL_MAP[record.type] || '繁育记录'}`,
+      meta: { type: record.type },
+    })
+
     return { message: '已更新' }
   },
 
@@ -1454,6 +1572,17 @@ module.exports = {
 
     await db.collection('breeding_records').doc(id).remove()
 
+    await logBreedingOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'delete',
+      targetType: 'breeding_record',
+      targetId: id,
+      targetName: record.dog_name || record.dog_id || id,
+      summary: `删除了 ${record.dog_name || '未命名犬只'} 的${BREEDING_RECORD_LABEL_MAP[record.type] || '繁育记录'}`,
+      meta: { type: record.type },
+    })
+
     return { message: '已删除' }
   },
 
@@ -1464,6 +1593,11 @@ module.exports = {
     if (!litterId) throw new Error('缺少窝 ID')
 
     const now = Date.now()
+    const { data: litters } = await db.collection('litters')
+      .where({ _id: litterId, family_id: this.familyId })
+      .limit(1)
+      .get()
+    const litter = litters?.[0] || {}
 
     await db.collection('litters')
       .where({ _id: litterId, family_id: this.familyId })
@@ -1476,6 +1610,16 @@ module.exports = {
       title: new RegExp('断奶'),
       status: 'pending',
     }).update({ status: 'completed', completed_by: this.uid, completed_at: now, updated_at: now })
+
+    await logBreedingOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'complete',
+      targetType: 'litter',
+      targetId: litterId,
+      targetName: litter.dam_name || litterId,
+      summary: `确认了窝 ${litter.dam_name || litterId} 已断奶`,
+    })
 
     return { message: '已确认断奶' }
   },

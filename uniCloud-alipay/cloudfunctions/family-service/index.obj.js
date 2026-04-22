@@ -3,9 +3,24 @@
  * 管理家庭创建、成员管理、设置
  */
 const { verifyAndGetFamily, requireAdmin, requireFamily } = require('breed-auth/auth')
+let safeWriteOperationLog = async () => null
+let isOperationLogCollectionMissingError = () => false
+try {
+  ;({ safeWriteOperationLog, isOperationLogCollectionMissingError } = require('breed-auth/operation-log'))
+} catch (error) {
+  ;({ safeWriteOperationLog, isOperationLogCollectionMissingError } = require('../common/breed-auth/operation-log'))
+}
 
 const db = uniCloud.database()
 const dbCmd = db.command
+
+const DEFAULT_NOTIFICATION_TYPES = {
+  breeding: true,
+  vaccination: true,
+  medication: true,
+  care_group: true,
+  overdue: true,
+}
 
 // 家庭设置默认值
 const DEFAULT_SETTINGS = {
@@ -14,11 +29,68 @@ const DEFAULT_SETTINGS = {
   default_vaccine_interval_adult: 365,
   default_deworming_interval_puppy: 14,
   default_deworming_interval_adult: 90,
-  morning_summary_time: '07:00',
+  push_enabled: true,
+  morning_summary_enabled: true,
+  morning_summary_time: '09:00',
+  notification_types: { ...DEFAULT_NOTIFICATION_TYPES },
   custom_vaccine_types: [],
   custom_deworming_drugs: { internal: [], external: [], combo: [] },
   custom_condition_types: [],
   custom_breed_types: [],
+}
+
+function mergeFamilySettings(settings = {}) {
+  const safeSettings = settings && typeof settings === 'object' ? settings : {}
+
+  return {
+    ...DEFAULT_SETTINGS,
+    ...safeSettings,
+    notification_types: {
+      ...DEFAULT_NOTIFICATION_TYPES,
+      ...(safeSettings.notification_types && typeof safeSettings.notification_types === 'object' ? safeSettings.notification_types : {}),
+      overdue: true,
+    },
+    custom_deworming_drugs: {
+      ...DEFAULT_SETTINGS.custom_deworming_drugs,
+      ...(safeSettings.custom_deworming_drugs && typeof safeSettings.custom_deworming_drugs === 'object' ? safeSettings.custom_deworming_drugs : {}),
+    },
+  }
+}
+
+function isValidTimeString(value) {
+  return typeof value === 'string' && /^([01]\d|2[0-3]):([0-5]\d)$/.test(value)
+}
+
+function normalizeNotificationTypes(input, currentSettings) {
+  const base = {
+    ...DEFAULT_NOTIFICATION_TYPES,
+    ...(currentSettings?.notification_types || {}),
+  }
+
+  if (input === undefined) {
+    return {
+      ...base,
+      overdue: true,
+    }
+  }
+
+  if (!input || typeof input !== 'object') {
+    throw new Error('提醒类型参数无效')
+  }
+
+  const normalized = { ...base }
+  for (const key of Object.keys(DEFAULT_NOTIFICATION_TYPES)) {
+    if (key === 'overdue') continue
+    if (input[key] !== undefined) {
+      if (typeof input[key] !== 'boolean') {
+        throw new Error('提醒类型参数无效')
+      }
+      normalized[key] = input[key]
+    }
+  }
+
+  normalized.overdue = true
+  return normalized
 }
 
 const RECYCLE_RETENTION_DAYS = 30
@@ -132,6 +204,24 @@ function parseRecycleItemInput(input) {
   return { id, type }
 }
 
+function normalizeOperationLogQuery(input = {}) {
+  const page = Math.max(1, Number(input.page) || 1)
+  const pageSize = Math.min(50, Math.max(1, Number(input.pageSize) || 20))
+  const actorUserId = typeof input.actorUserId === 'string' ? input.actorUserId.trim() : ''
+  const actionTypes = Array.isArray(input.actionTypes)
+    ? input.actionTypes.map(item => String(item || '').trim()).filter(Boolean)
+    : []
+
+  return {
+    start: Number(input.start) || 0,
+    end: Number(input.end) || Date.now(),
+    page,
+    pageSize,
+    actorUserId,
+    actionTypes,
+  }
+}
+
 module.exports = {
   _before: async function() {
     // createFamily 和 joinFamily 允许无家庭用户调用
@@ -185,6 +275,17 @@ module.exports = {
     }
 
     const { id } = await db.collection('families').add(familyData)
+    await safeWriteOperationLog({
+      familyId: id,
+      actorUserId: this.uid,
+      actionType: 'create',
+      domain: 'family',
+      targetType: 'family',
+      targetId: id,
+      targetName: familyData.name,
+      summary: `创建了家庭 ${familyData.name}`,
+      createdAt: now,
+    })
     return { data: { familyId: id } }
   },
 
@@ -205,7 +306,14 @@ module.exports = {
       throw new Error('家庭不存在')
     }
 
-    return { data: data[0] || data }
+    const family = data[0] || data
+
+    return {
+      data: {
+        ...family,
+        settings: mergeFamilySettings(family.settings),
+      },
+    }
   },
 
   /**
@@ -219,11 +327,44 @@ module.exports = {
       throw new Error('设置参数无效')
     }
 
+    const { data } = await db.collection('families')
+      .doc(this.familyId)
+      .field({ settings: true })
+      .get()
+
+    const family = data[0] || data
+    if (!family) {
+      throw new Error('家庭不存在')
+    }
+
+    const currentSettings = mergeFamilySettings(family.settings)
+
     // 只允许更新已知的设置字段
     const allowedKeys = Object.keys(DEFAULT_SETTINGS)
     const updateData = {}
     for (const key of allowedKeys) {
       if (settings[key] !== undefined) {
+        if (key === 'push_enabled' || key === 'morning_summary_enabled') {
+          if (typeof settings[key] !== 'boolean') {
+            throw new Error('设置参数无效')
+          }
+          updateData[`settings.${key}`] = settings[key]
+          continue
+        }
+
+        if (key === 'morning_summary_time') {
+          if (!isValidTimeString(settings[key])) {
+            throw new Error('推送时间格式无效')
+          }
+          updateData['settings.morning_summary_time'] = settings[key]
+          continue
+        }
+
+        if (key === 'notification_types') {
+          updateData['settings.notification_types'] = normalizeNotificationTypes(settings.notification_types, currentSettings)
+          continue
+        }
+
         updateData[`settings.${key}`] = settings[key]
       }
     }
@@ -237,6 +378,20 @@ module.exports = {
     await db.collection('families')
       .doc(this.familyId)
       .update(updateData)
+
+    await safeWriteOperationLog({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'update',
+      domain: 'family',
+      targetType: 'settings',
+      targetId: this.familyId,
+      targetName: '家庭设置',
+      summary: '更新了家庭设置',
+      meta: {
+        keys: Object.keys(updateData).filter(key => key !== 'updated_at'),
+      },
+    })
 
     return { message: '设置已更新' }
   },
@@ -252,12 +407,30 @@ module.exports = {
       throw new Error('请输入家庭名称')
     }
 
+    const { data: families } = await db.collection('families')
+      .doc(this.familyId)
+      .field({ name: true })
+      .get()
+    const family = families?.[0] || families || {}
+    const nextName = name.trim()
+
     await db.collection('families')
       .doc(this.familyId)
       .update({
-        name: name.trim(),
+        name: nextName,
         updated_at: Date.now(),
       })
+
+    await safeWriteOperationLog({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'update',
+      domain: 'family',
+      targetType: 'family',
+      targetId: this.familyId,
+      targetName: nextName,
+      summary: `将家庭名称从 ${family.name || '未命名家庭'} 更新为 ${nextName}`,
+    })
 
     return { message: '名称已更新' }
   },
@@ -286,6 +459,18 @@ module.exports = {
         updated_at: Date.now(),
       })
 
+    await safeWriteOperationLog({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'create',
+      domain: 'family',
+      targetType: 'care_rule',
+      targetId: `${this.familyId}:${careRule.status_trigger}:${careRule.task_description}`,
+      targetName: careRule.task_description,
+      summary: `添加了护理规则 ${careRule.task_description}`,
+      meta: careRule,
+    })
+
     return { message: '护理规则已添加' }
   },
 
@@ -311,6 +496,7 @@ module.exports = {
       throw new Error('规则不存在')
     }
 
+    const removedRule = family.care_rules[index]
     family.care_rules.splice(index, 1)
 
     await db.collection('families')
@@ -319,6 +505,18 @@ module.exports = {
         care_rules: family.care_rules,
         updated_at: Date.now(),
       })
+
+    await safeWriteOperationLog({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'delete',
+      domain: 'family',
+      targetType: 'care_rule',
+      targetId: `${this.familyId}:${index}`,
+      targetName: removedRule.task_description || '护理规则',
+      summary: `删除了护理规则 ${removedRule.task_description || ''}`.trim(),
+      meta: removedRule,
+    })
 
     return { message: '护理规则已删除' }
   },
@@ -343,6 +541,18 @@ module.exports = {
         updated_at: now,
       })
 
+    await safeWriteOperationLog({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'invite',
+      domain: 'family',
+      targetType: 'invite_code',
+      targetId: code,
+      targetName: code,
+      summary: `生成了邀请码 ${code}`,
+      createdAt: now,
+    })
+
     return { data: { code } }
   },
 
@@ -350,14 +560,17 @@ module.exports = {
    * 通过邀请码加入家庭
    */
   async joinFamily(inviteCode) {
-    if (!inviteCode) throw new Error('请输入邀请码')
+    const normalizedInviteCode = typeof inviteCode === 'string'
+      ? inviteCode.trim()
+      : String(inviteCode?.invite_code || inviteCode?.code || '').trim()
+    if (!normalizedInviteCode) throw new Error('请输入邀请码')
     if (this.familyId) throw new Error('您已加入家庭，V1 暂不支持多家庭')
 
     const now = Date.now()
 
     const { data: families } = await db.collection('families')
       .where({
-        invite_code: inviteCode.toUpperCase(),
+        invite_code: normalizedInviteCode.toUpperCase(),
         invite_expires: dbCmd.gt(now),
       })
       .limit(1)
@@ -391,6 +604,18 @@ module.exports = {
         updated_at: now,
       })
     }
+
+    await safeWriteOperationLog({
+      familyId: family._id,
+      actorUserId: this.uid,
+      actionType: 'join',
+      domain: 'family',
+      targetType: 'family_member',
+      targetId: this.uid,
+      targetName: family.name,
+      summary: `加入了家庭 ${family.name}`,
+      createdAt: now,
+    })
 
     return { data: { familyId: family._id, familyName: family.name } }
   },
@@ -435,11 +660,25 @@ module.exports = {
       throw new Error('仅创建者可设置管理员')
     }
 
+    const previousRole = member.role
     member.role = newRole
 
     await db.collection('families').doc(this.familyId).update({
       members: family.members,
       updated_at: now,
+    })
+
+    await safeWriteOperationLog({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'role_change',
+      domain: 'family',
+      targetType: 'family_member',
+      targetId: userId,
+      targetName: member.nickname || userId,
+      summary: `将成员 ${member.nickname || userId} 的角色从 ${previousRole} 改为 ${newRole}`,
+      meta: { previousRole, newRole },
+      createdAt: now,
     })
 
     return { message: '角色已更新' }
@@ -478,6 +717,18 @@ module.exports = {
       updated_at: now,
     })
 
+    await safeWriteOperationLog({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'delete',
+      domain: 'family',
+      targetType: 'family_member',
+      targetId: userId,
+      targetName: member.nickname || userId,
+      summary: `移除了成员 ${member.nickname || userId}`,
+      createdAt: now,
+    })
+
     return { message: '成员已移除' }
   },
 
@@ -499,11 +750,24 @@ module.exports = {
     const member = family.members.find(m => m.user_id === this.uid && m.status === 'active')
     if (!member) throw new Error('成员不存在')
 
-    member.nickname = nickname.trim()
+    const nextNickname = nickname.trim()
+    member.nickname = nextNickname
 
     await db.collection('families').doc(this.familyId).update({
       members: family.members,
       updated_at: Date.now(),
+    })
+
+    await safeWriteOperationLog({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actorName: nextNickname,
+      actionType: 'update',
+      domain: 'family',
+      targetType: 'family_member',
+      targetId: this.uid,
+      targetName: nextNickname,
+      summary: `将昵称更新为 ${nextNickname}`,
     })
 
     return { message: '昵称已更新' }
@@ -514,9 +778,52 @@ module.exports = {
   /**
    * 获取操作日志
    */
-  async getOperationLogs() {
-    // V1: 操作日志功能待后续实现
-    return { data: [] }
+  async getOperationLogs(input = {}) {
+    const query = normalizeOperationLogQuery(input)
+    const where = {
+      family_id: this.familyId,
+      created_at: dbCmd.gte(query.start).and(dbCmd.lte(query.end)),
+    }
+
+    if (query.actorUserId) {
+      where.actor_user_id = query.actorUserId
+    }
+
+    if (query.actionTypes.length > 0) {
+      where.action_type = dbCmd.in(query.actionTypes)
+    }
+
+    let logs = []
+    try {
+      const result = await db.collection('operation_logs')
+        .where(where)
+        .orderBy('created_at', 'desc')
+        .limit(1000)
+        .get()
+      logs = result.data || []
+    } catch (error) {
+      if (!isOperationLogCollectionMissingError(error)) {
+        throw error
+      }
+
+      console.warn('[operation-log] collection missing, return empty logs')
+      return {
+        list: [],
+        hasMore: false,
+        total: 0,
+      }
+    }
+
+    const sortedLogs = logs.sort((left, right) => (right.created_at || 0) - (left.created_at || 0))
+    const total = sortedLogs.length
+    const startIndex = (query.page - 1) * query.pageSize
+    const list = sortedLogs.slice(startIndex, startIndex + query.pageSize)
+
+    return {
+      list,
+      hasMore: startIndex + query.pageSize < total,
+      total,
+    }
   },
 
   /**
@@ -553,6 +860,17 @@ module.exports = {
       updated_at: Date.now(),
     })
 
+    await safeWriteOperationLog({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'restore',
+      domain: 'recycle',
+      targetType: type,
+      targetId: id,
+      targetName: config.name(doc),
+      summary: `恢复了回收站项目 ${config.typeLabel}：${config.name(doc)}`,
+    })
+
     return { message: '已恢复' }
   },
 
@@ -571,6 +889,17 @@ module.exports = {
     }
 
     await db.collection(config.collection).doc(id).remove()
+
+    await safeWriteOperationLog({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'delete',
+      domain: 'recycle',
+      targetType: type,
+      targetId: id,
+      targetName: config.name(doc),
+      summary: `永久删除了回收站项目 ${config.typeLabel}：${config.name(doc)}`,
+    })
 
     return { message: '已永久删除' }
   },

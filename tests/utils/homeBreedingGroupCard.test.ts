@@ -33,4 +33,14 @@ describe('home breeding group collapse', () => {
     expect(groupCardSource).not.toContain('setStorageSync')
     expect(groupCardSource).not.toContain('getStorageSync')
   })
+
+  it('繁育分组卡保留整卡处理，并为头像与犬名提供犬详情次入口', () => {
+    const groupCardSource = readFileSync(resolve(testDir, '../../src/components/smart-card/BreedingProcessGroupCard.vue'), 'utf8')
+
+    expect(groupCardSource).toContain('@click="goProcess(item.card)"')
+    expect(groupCardSource).toContain('@click.stop="goDogDetail(item.card)"')
+    expect(groupCardSource).toContain(":class=\"{ 'group-avatar--detail': !!item.card?.dogId }\"")
+    expect(groupCardSource).toContain(":class=\"{ 'group-name--detail': !!item.card?.dogId }\"")
+    expect(groupCardSource).toContain("uni.navigateTo({ url: `/pages/dog/detail?id=${card.dogId}` })")
+  })
 })

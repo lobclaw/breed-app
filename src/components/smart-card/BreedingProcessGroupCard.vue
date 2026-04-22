@@ -7,12 +7,22 @@
       :class="{ 'group-row--passed': item.milestone.suggestionStatus === 'window_passed' }"
       @click="goProcess(item.card)"
     >
-      <view class="group-avatar">
+      <view
+        class="group-avatar"
+        :class="{ 'group-avatar--detail': !!item.card?.dogId }"
+        @click.stop="goDogDetail(item.card)"
+      >
         <BEntityIcon :role="item.card?.role" color="var(--amber)" :size="16" />
       </view>
       <view class="group-main">
         <view class="group-name-row">
-          <text class="group-name">{{ item.card.dogName }}</text>
+          <text
+            class="group-name"
+            :class="{ 'group-name--detail': !!item.card?.dogId }"
+            @click.stop="goDogDetail(item.card)"
+          >
+            {{ item.card.dogName }}
+          </text>
           <view
             class="group-tag"
             :class="{ 'group-tag--passed': item.milestone.suggestionStatus === 'window_passed' }"
@@ -216,6 +226,11 @@ function buildAlertLabel(milestone: ReturnType<typeof deriveBreedingMilestoneVie
   return ''
 }
 
+function goDogDetail(card: any) {
+  if (!card?.dogId) return
+  uni.navigateTo({ url: `/pages/dog/detail?id=${card.dogId}` })
+}
+
 function goProcess(card: any) {
   const task = card?.tasks?.[0]
   if (!task) return
@@ -329,6 +344,15 @@ function goPreLabor(card: any) {
   flex-shrink: 0;
 }
 
+.group-avatar--detail {
+  transition: transform 0.12s ease, filter 0.12s ease;
+
+  &:active {
+    transform: scale(0.94);
+    filter: brightness(0.98);
+  }
+}
+
 .group-main {
   min-width: 0;
   flex: 1;
@@ -345,6 +369,14 @@ function goPreLabor(card: any) {
   font-weight: 800;
   color: var(--text-1);
   line-height: 1.2;
+}
+
+.group-name--detail {
+  transition: opacity 0.12s ease;
+
+  &:active {
+    opacity: 0.72;
+  }
 }
 
 .group-tag {

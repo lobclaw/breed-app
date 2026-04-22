@@ -3,6 +3,12 @@
  * 负责犬只 CRUD、状态派生、disposition 变更
  */
 const { verifyAndGetFamily, requireFamily, requireAdmin } = require('breed-auth/auth')
+let safeWriteOperationLog = async () => null
+try {
+  ;({ safeWriteOperationLog } = require('breed-auth/operation-log'))
+} catch (error) {
+  ;({ safeWriteOperationLog } = require('../common/breed-auth/operation-log'))
+}
 
 const db = uniCloud.database()
 const dbCmd = db.command
@@ -56,6 +62,20 @@ function buildLitterPupStats(litter, puppies = []) {
 function formatMedicationFrequency(frequency) {
   const count = Number(frequency) || 1
   return `每日${count}次`
+}
+
+async function logDogOperation({ familyId, actorUserId, actionType, targetId, targetName, summary, meta = null }) {
+  await safeWriteOperationLog({
+    familyId,
+    actorUserId,
+    actionType,
+    domain: 'dog',
+    targetType: 'dog',
+    targetId,
+    targetName,
+    summary,
+    meta,
+  })
 }
 
 function sortListStatuses(statuses = []) {
@@ -566,6 +586,19 @@ module.exports = {
       })
     }
 
+    await logDogOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'create',
+      targetId: id,
+      targetName: dogData.name || '未命名犬只',
+      summary: `新增了犬只 ${dogData.name || '未命名犬只'}`,
+      meta: {
+        role: dogData.role,
+        disposition: dogData.disposition,
+      },
+    })
+
     return { data: { _id: id } }
   },
 
@@ -595,6 +628,15 @@ module.exports = {
       .where({ _id: dogId, family_id: this.familyId })
       .update(updateFields)
 
+    await logDogOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'update',
+      targetId: dogId,
+      targetName: currentDog.name || '未命名犬只',
+      summary: `更新了犬只 ${currentDog.name || '未命名犬只'} 的档案信息`,
+    })
+
     return { message: '已更新' }
   },
 
@@ -607,6 +649,13 @@ module.exports = {
 
     const trimmedName = newName.trim()
     const now = Date.now()
+
+    const { data: dogs } = await db.collection('dogs')
+      .where({ _id: dogId, family_id: this.familyId })
+      .limit(1)
+      .get()
+    const dog = dogs?.[0]
+    if (!dog) throw new Error('犬只不存在')
 
     // 更新犬只名称
     await db.collection('dogs')
@@ -626,6 +675,15 @@ module.exports = {
     for (const update of updates) {
       try { await update } catch { /* 审计兜底 */ }
     }
+
+    await logDogOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'update',
+      targetId: dogId,
+      targetName: trimmedName,
+      summary: `将犬只 ${dog.name || dogId} 改名为 ${trimmedName}`,
+    })
 
     return { message: '名称已更新' }
   },
@@ -714,6 +772,16 @@ module.exports = {
       .where({ _id: dogId, family_id: this.familyId })
       .update(updateData)
 
+    await logDogOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'status_change',
+      targetId: dogId,
+      targetName: dog.name || '未命名犬只',
+      summary: `将犬只 ${dog.name || '未命名犬只'} 的去向更新为 ${newDisposition}`,
+      meta: { disposition: newDisposition },
+    })
+
     return { message: '去向已更新' }
   },
 
@@ -724,9 +792,24 @@ module.exports = {
     if (!dogId) throw new Error('缺少犬只 ID')
     requireAdmin(this.role)
 
+    const { data: dogs } = await db.collection('dogs')
+      .where({ _id: dogId, family_id: this.familyId })
+      .limit(1)
+      .get()
+    const dog = dogs?.[0] || {}
+
     await db.collection('dogs')
       .where({ _id: dogId, family_id: this.familyId })
       .update({ deleted_at: Date.now(), updated_at: Date.now() })
+
+    await logDogOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'delete',
+      targetId: dogId,
+      targetName: dog.name || '未命名犬只',
+      summary: `删除了犬只 ${dog.name || '未命名犬只'}`,
+    })
 
     return { message: '已删除（可在回收站恢复）' }
   },
@@ -738,9 +821,24 @@ module.exports = {
     if (!dogId) throw new Error('缺少犬只 ID')
     requireAdmin(this.role)
 
+    const { data: dogs } = await db.collection('dogs')
+      .where({ _id: dogId, family_id: this.familyId })
+      .limit(1)
+      .get()
+    const dog = dogs?.[0] || {}
+
     await db.collection('dogs')
       .where({ _id: dogId, family_id: this.familyId })
       .update({ deleted_at: null, updated_at: Date.now() })
+
+    await logDogOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'restore',
+      targetId: dogId,
+      targetName: dog.name || '未命名犬只',
+      summary: `恢复了犬只 ${dog.name || '未命名犬只'}`,
+    })
 
     return { message: '已恢复' }
   },
@@ -757,6 +855,8 @@ module.exports = {
 
     if (!dogs || dogs.length === 0) throw new Error('犬只不存在或不是幼崽')
 
+    const dog = dogs[0]
+
     await db.collection('dogs')
       .where({ _id: dogId, family_id: this.familyId })
       .update({
@@ -764,6 +864,16 @@ module.exports = {
         disposition: '在养',
         updated_at: Date.now(),
       })
+
+    await logDogOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'status_change',
+      targetId: dogId,
+      targetName: dog.name || '未命名犬只',
+      summary: `将幼崽 ${dog.name || '未命名犬只'} 升级为种狗`,
+      meta: { role: '种狗' },
+    })
 
     return { message: '已升级为种狗' }
   },

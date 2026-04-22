@@ -20,6 +20,7 @@
 - 产品阶段：Phase 1 功能与性能优化已完成，当前进入验收测试与首页工作台密度优化阶段
 - 当前里程碑：`首页工作台密度自适应优化`
 - 当前焦点：Phase 1 `Workbench Contract & Test Foundation`
+- 家庭协作域已接入 `操作日志` V1：页面路由保持 `/pages/profile/operation-log`，读取统一走 `family-service.getOperationLogs`
 - 固定路线：契约/测试底座 → 繁育步骤工作台 → 健康批量优先工作台 → 用药状态工作台 → 逾期/计数/防闪回校准 → 今日重点
 
 ## 开发约定
@@ -29,7 +30,10 @@
 - 数据模型变更先更新 `docs/design/01-data-model.md`，再改代码
 - 简单读取走 clientDB/JQL；多集合写入、状态推进、批量操作走云对象
 - 支持软删除的集合统一使用 `deleted_at`
+- 新增操作日志集合：`operation_logs`
 - 回收站当前纳入：`dogs`、`expenses`、`incomes`、`agents`、`medication_protocols`；统一由 `family-service` 聚合查询、恢复和永久删除
+- 通知设置统一存放在 `families.settings`：`push_enabled`、`morning_summary_enabled`、`morning_summary_time`、`notification_types`
+- 晨间摘要默认时间统一为 `09:00`；时间口径使用北京时间 `HH:MM`
 - 统计值实时查询计算，不做预存
 - 提交信息使用 conventional commits
 
@@ -47,6 +51,8 @@
 - 改首页相关功能前：先核对固定结构、红点口径、提交承接和防闪回规则
 - 改繁育、健康、用药流程前：先核对任务生成条件、状态推进和唯一性约束
 - 改回收站或软删除相关功能前：先核对回收站纳入范围、30 天倒计时口径，以及是否仍走 `family-service` 统一 facade
+- 改通知设置、晨间摘要或推送相关逻辑前：先核对是否仍写入 `families.settings`，以及是否按家庭北京时间 `HH:MM` 分钟级命中
+- 改家庭协作或关键写操作前：先核对是否需要补/改 `operation_logs` 记录；日志只记录“用户主动触发的顶层业务动作”，不展开内部连带写入
 - 改云对象或详情页刷新逻辑前：先检查多集合写入边界、timestamp 口径和重复请求风险
 - 改完后：验证是否破坏来源页承接、局部移除、suppression 和 latest token 保护
 
@@ -141,6 +147,7 @@
 - 疾病不整体并入用药；观察中或治疗中但未开药仍留在健康区
 - `medication_task` 即使未处理也留在 `今日用药`，不抬到逾期区
 - 繁育主链是推进器，不是批量任务池；额外安排属于繁育区独立子层，不混入健康提醒
+- 晨间摘要按家庭通知设置过滤：当前类型固定为 `breeding / vaccination / medication / care_group / overdue`，其中 `overdue` 不可关闭
 - 来源页提交成功后，先做前端本地承接，再做后台刷新
 - 批量卡返回后只能移除后端真实 `completedTasks`
 - 只有 `completedTasks.length === sourceTaskIds.length` 时整张批量卡才可消失
@@ -256,6 +263,7 @@
 
 - 云函数内禁止使用未定义常量
 - 毫秒常量直接写字面量 `86400000`，不要定义全局 `DAY_MS`
+- `operation_logs` 若尚未部署到云端，操作日志页必须静默降级为空列表，不得向前端抛出 `not found collection`
 - 详情页如果既要首屏加载又要子页返回刷新，必须避免 `onLoad` 和紧随其后的 `onShow` 双请求
 - 犬只详情页从子页返回时默认保留现有内容并静默后台刷新；只有首屏加载才进入整页骨架
 - 犬只详情页的静默刷新只在来源页有提交反馈时触发；实现时要保留 latest token / 请求令牌保护
@@ -266,6 +274,7 @@
 
 - V1 是单家庭模式；`_before` 拦截器默认从用户信息直接注入 `familyId`
 - V1 在线优先，不支持离线操作和冲突解决
+- `operation_logs` 需要随数据库 schema 一并部署后才会开始真实积累日志；未部署阶段页面只显示空态
 
 ## graphify
 

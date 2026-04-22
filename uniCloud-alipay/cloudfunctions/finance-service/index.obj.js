@@ -3,9 +3,29 @@
  * 管理费用/收入 CRUD、财务统计、销售流程
  */
 const { verifyAndGetFamily, requireFamily } = require('breed-auth/auth')
+let safeWriteOperationLog = async () => null
+try {
+  ;({ safeWriteOperationLog } = require('breed-auth/operation-log'))
+} catch (error) {
+  ;({ safeWriteOperationLog } = require('../common/breed-auth/operation-log'))
+}
 
 const db = uniCloud.database()
 const dbCmd = db.command
+
+async function logFinanceOperation({ familyId, actorUserId, actionType, domain = 'finance', targetType, targetId, targetName, summary, meta = null }) {
+  await safeWriteOperationLog({
+    familyId,
+    actorUserId,
+    actionType,
+    domain,
+    targetType,
+    targetId,
+    targetName,
+    summary,
+    meta,
+  })
+}
 
 const EXPENSE_CATEGORY_GROUPS = [
   { key: 'feeding', label: '喂养营养' },
@@ -449,6 +469,16 @@ module.exports = {
     }
 
     const { id } = await db.collection('expenses').add(expenseData)
+    await logFinanceOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'create',
+      targetType: 'expense',
+      targetId: id,
+      targetName: data.category,
+      summary: `新增了支出 ${data.category}`,
+      meta: { amount: data.total_amount },
+    })
     return { data: { expenseId: id } }
   },
 
@@ -477,6 +507,16 @@ module.exports = {
     }
 
     const { id } = await db.collection('incomes').add(incomeData)
+    await logFinanceOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'create',
+      targetType: 'income',
+      targetId: id,
+      targetName: data.type,
+      summary: `新增了收入 ${data.type}`,
+      meta: { amount: data.amount },
+    })
     return { data: { incomeId: id } }
   },
 
@@ -679,6 +719,16 @@ module.exports = {
       updated_at: Date.now(),
     })
 
+    await logFinanceOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'delete',
+      targetType: 'expense',
+      targetId: expenseId,
+      targetName: expenses[0].category || expenseId,
+      summary: `删除了支出 ${expenses[0].category || expenseId}`,
+    })
+
     return { message: '已删除' }
   },
 
@@ -698,6 +748,16 @@ module.exports = {
     await db.collection('incomes').doc(incomeId).update({
       deleted_at: Date.now(),
       updated_at: Date.now(),
+    })
+
+    await logFinanceOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'delete',
+      targetType: 'income',
+      targetId: incomeId,
+      targetName: incomes[0].type || incomeId,
+      summary: `删除了收入 ${incomes[0].type || incomeId}`,
     })
 
     return { message: '已删除' }
@@ -966,6 +1026,17 @@ module.exports = {
       updated_at: Date.now(),
     })
 
+    await logFinanceOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'update',
+      targetType: 'expense',
+      targetId: expenseId,
+      targetName: data.category,
+      summary: `更新了支出 ${data.category}`,
+      meta: { amount: data.total_amount },
+    })
+
     return { message: '已更新' }
   },
 
@@ -992,6 +1063,17 @@ module.exports = {
       date: data.date || incomes[0].date,
       notes: data.notes || null,
       updated_at: Date.now(),
+    })
+
+    await logFinanceOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'update',
+      targetType: 'income',
+      targetId: incomeId,
+      targetName: data.type,
+      summary: `更新了收入 ${data.type}`,
+      meta: { amount: data.amount },
     })
 
     return { message: '已更新' }
@@ -1115,6 +1197,17 @@ module.exports = {
       updated_at: now,
     })
 
+    await logFinanceOperation({
+      familyId,
+      actorUserId: this.uid,
+      actionType: 'create',
+      domain: 'sale',
+      targetType: 'sale_record',
+      targetId: id,
+      targetName: dog.name || '未命名犬只',
+      summary: `为 ${dog.name || '未命名犬只'} 创建了销售记录`,
+    })
+
     return { data: { saleId: id } }
   },
 
@@ -1150,6 +1243,18 @@ module.exports = {
     await db.collection('dogs').doc(sale.dog_id).update({
       disposition: '已预定',
       updated_at: now,
+    })
+
+    await logFinanceOperation({
+      familyId,
+      actorUserId: this.uid,
+      actionType: 'status_change',
+      domain: 'sale',
+      targetType: 'sale_record',
+      targetId: saleId,
+      targetName: sale.dog_name || saleId,
+      summary: `为 ${sale.dog_name || '未命名犬只'} 记录了定金并更新为已预定`,
+      meta: { depositAmount: data.deposit_amount },
     })
 
     return { message: '已收定金' }
@@ -1204,6 +1309,18 @@ module.exports = {
       disposition: '已售',
       disposition_date: data.date || now,
       updated_at: now,
+    })
+
+    await logFinanceOperation({
+      familyId,
+      actorUserId: this.uid,
+      actionType: 'complete',
+      domain: 'sale',
+      targetType: 'sale_record',
+      targetId: saleId,
+      targetName: sale.dog_name || saleId,
+      summary: `完成了 ${sale.dog_name || '未命名犬只'} 的销售`,
+      meta: { receivedAmount: data.received_amount },
     })
 
     return { message: '交易完成' }
@@ -1300,6 +1417,18 @@ module.exports = {
       throw new Error('当前状态不可取消')
     }
 
+    await logFinanceOperation({
+      familyId,
+      actorUserId: this.uid,
+      actionType: 'status_change',
+      domain: 'sale',
+      targetType: 'sale_record',
+      targetId: saleId,
+      targetName: sale.dog_name || saleId,
+      summary: `取消了 ${sale.dog_name || '未命名犬只'} 的销售流程`,
+      meta: { status: sale.status },
+    })
+
     return { message: '已取消' }
   },
 
@@ -1368,6 +1497,16 @@ module.exports = {
     }
 
     const { id } = await db.collection('agents').add(agentData)
+    await logFinanceOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'create',
+      domain: 'agent',
+      targetType: 'agent',
+      targetId: id,
+      targetName: data.name,
+      summary: `新增了代理人 ${data.name}`,
+    })
     return { data: { agentId: id } }
   },
 
@@ -1389,6 +1528,17 @@ module.exports = {
       updated_at: Date.now(),
     })
 
+    await logFinanceOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'update',
+      domain: 'agent',
+      targetType: 'agent',
+      targetId: id,
+      targetName: data.name,
+      summary: `更新了代理人 ${data.name}`,
+    })
+
     return { message: '已更新' }
   },
 
@@ -1406,6 +1556,17 @@ module.exports = {
     await db.collection('agents').doc(id).update({
       deleted_at: Date.now(),
       updated_at: Date.now(),
+    })
+
+    await logFinanceOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'delete',
+      domain: 'agent',
+      targetType: 'agent',
+      targetId: id,
+      targetName: agents[0].name || id,
+      summary: `删除了代理人 ${agents[0].name || id}`,
     })
 
     return { message: '已删除' }
@@ -1450,6 +1611,17 @@ module.exports = {
       ],
     })
 
+    await logFinanceOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'create',
+      targetType: 'expense_category',
+      targetId: name,
+      targetName: name,
+      summary: `新增了支出分类 ${name}`,
+      meta: { parentGroup: normalizedParentGroup },
+    })
+
     return { message: '已添加' }
   },
 
@@ -1491,6 +1663,17 @@ module.exports = {
       }).update({ category: newName })
     }
 
+    await logFinanceOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'update',
+      targetType: 'expense_category',
+      targetId: oldName,
+      targetName: newName,
+      summary: `将支出分类 ${oldName} 更新为 ${newName}`,
+      meta: { parentGroup: normalizedParentGroup },
+    })
+
     return { message: '已更新' }
   },
 
@@ -1510,6 +1693,16 @@ module.exports = {
 
     await db.collection('families').doc(this.familyId).update({
       'settings.custom_expense_categories': custom.filter(item => item.name !== name),
+    })
+
+    await logFinanceOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'delete',
+      targetType: 'expense_category',
+      targetId: name,
+      targetName: name,
+      summary: `删除了支出分类 ${name}`,
     })
 
     return { message: '已删除' }

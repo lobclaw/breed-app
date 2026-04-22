@@ -1153,10 +1153,10 @@ const tertiaryStatValue = computed(() => isPuppyDetail.value ? (dog.value?.dispo
 const tertiaryStatLabel = computed(() => isPuppyDetail.value ? '去向' : '繁育')
 
 // 状态 → 功能色映射
-const statusColorMap: Record<string, 'amber' | 'rose' | 'green' | 'red' | 'plum'> = {
+const statusColorMap: Record<string, 'amber' | 'rose' | 'red' | 'plum'> = {
   '发情中': getDogStatusTone('发情中').color as 'amber',
   '怀孕中': getDogStatusTone('怀孕中').color as 'rose',
-  '哺乳中': getDogStatusTone('哺乳中').color as 'green',
+  '哺乳中': getDogStatusTone('哺乳中').color as 'amber',
   '生病中': getDogStatusTone('生病中').color as 'red',
   '用药中': getDogStatusTone('用药中').color as 'plum',
 }

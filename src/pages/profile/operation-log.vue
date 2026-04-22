@@ -15,6 +15,15 @@
       </view>
     </view>
 
+    <view class="filter-bar filter-bar--secondary">
+      <view class="filter-chip filter-chip--ghost" @click="openMemberFilter">
+        <text>{{ activeMemberLabel }}</text>
+      </view>
+      <view class="filter-chip filter-chip--ghost" @click="openActionFilter">
+        <text>{{ activeActionLabel }}</text>
+      </view>
+    </view>
+
     <!-- 日志列表 -->
     <view v-if="logs.length" class="log-list">
       <view v-for="log in logs" :key="log._id" class="log-item">
@@ -22,11 +31,7 @@
           <text class="material-icons-round">{{ log.actionIcon }}</text>
         </view>
         <view class="log-content">
-          <view class="log-main">
-            <text class="log-operator">{{ log.operator_name }}</text>
-            <text class="log-action">{{ log.action_text }}</text>
-            <text class="log-target">{{ log.target_name }}</text>
-          </view>
+          <text class="log-summary">{{ log.summary }}</text>
           <text class="log-time">{{ log.time_text }}</text>
         </view>
       </view>
@@ -76,13 +81,15 @@
 import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 
 interface LogItem {
   _id: string
-  operator_name: string
-  action: string
-  action_text: string
+  actor_user_id: string
+  actor_name: string
+  action_type: string
+  summary: string
   target_name: string
   time_text: string
   actionClass: string
@@ -97,6 +104,10 @@ const logs = ref<LogItem[]>([])
 const hasMore = ref(false)
 const page = ref(1)
 const pageSize = 20
+const activeMemberId = ref('')
+const activeActionType = ref('')
+
+const { currentFamily } = useAuth()
 
 const filterOptions = [
   { label: '今天', value: 'today' },
@@ -105,16 +116,63 @@ const filterOptions = [
 ]
 
 const actionIcons: Record<string, string> = {
-  'create': 'add_circle',
-  'update': 'edit',
-  'delete': 'delete',
+  create: 'add_circle',
+  update: 'edit',
+  delete: 'delete',
+  complete: 'task_alt',
+  restore: 'restore_from_trash',
+  join: 'group_add',
+  invite: 'share',
+  role_change: 'swap_horiz',
+  status_change: 'flag',
+  postpone: 'event_repeat',
 }
 
 const actionClasses: Record<string, string> = {
-  'create': 'icon-green',
-  'update': 'icon-blue',
-  'delete': 'icon-red',
+  create: 'icon-green',
+  update: 'icon-blue',
+  delete: 'icon-red',
+  complete: 'icon-green',
+  restore: 'icon-teal',
+  join: 'icon-green',
+  invite: 'icon-amber',
+  role_change: 'icon-blue',
+  status_change: 'icon-amber',
+  postpone: 'icon-amber',
 }
+
+const actionFilterOptions = [
+  { label: '全部操作', value: '' },
+  { label: '新增', value: 'create' },
+  { label: '更新', value: 'update' },
+  { label: '删除', value: 'delete' },
+  { label: '完成', value: 'complete' },
+  { label: '恢复', value: 'restore' },
+  { label: '加入', value: 'join' },
+  { label: '邀请', value: 'invite' },
+  { label: '角色变更', value: 'role_change' },
+  { label: '状态变更', value: 'status_change' },
+  { label: '推迟', value: 'postpone' },
+]
+
+const memberFilterOptions = computed(() => {
+  const members = (currentFamily.value?.members || [])
+    .filter(member => member.status === 'active')
+    .map(member => ({
+      label: member.nickname || member.user_id,
+      value: member.user_id,
+    }))
+
+  return [{ label: '全部成员', value: '' }, ...members]
+})
+
+const activeMemberLabel = computed(() => {
+  return memberFilterOptions.value.find(item => item.value === activeMemberId.value)?.label || '全部成员'
+})
+
+const activeActionLabel = computed(() => {
+  return actionFilterOptions.find(item => item.value === activeActionType.value)?.label || '全部操作'
+})
 
 function getFilterRange(filter: string): { start: number; end: number } {
   const now = new Date()
@@ -153,12 +211,15 @@ function formatTime(timestamp: number): string {
 }
 
 function processLog(raw: any): LogItem {
-  const action = raw.action || 'update'
+  const action = raw.action_type || 'update'
   return {
     _id: raw._id,
-    operator_name: raw.operator_name || '未知用户',
-    action: action,
-    action_text: raw.action_text || action,
+    actor_user_id: raw.actor_user_id || '',
+    actor_name: raw.actor_name || '未知用户',
+    action_type: action,
+    summary: raw.summary
+      ? `${raw.actor_name || '未知用户'} ${raw.summary}`
+      : `${raw.actor_name || '未知用户'} ${raw.target_name || ''}`.trim(),
     target_name: raw.target_name || '',
     time_text: formatTime(raw.created_at),
     actionClass: actionClasses[action] || 'icon-blue',
@@ -187,6 +248,8 @@ async function loadLogs(reset = true) {
       end: range.end,
       page: page.value,
       pageSize,
+      actorUserId: activeMemberId.value || undefined,
+      actionTypes: activeActionType.value ? [activeActionType.value] : undefined,
     })
     if (res) {
       const data = res as any
@@ -196,7 +259,7 @@ async function loadLogs(reset = true) {
       } else {
         logs.value.push(...items)
       }
-      hasMore.value = items.length >= pageSize
+      hasMore.value = Boolean(data.hasMore)
     }
   } finally {
     loading.value = false
@@ -207,6 +270,26 @@ async function loadLogs(reset = true) {
 function setFilter(filter: string) {
   activeFilter.value = filter
   loadLogs(true)
+}
+
+function openMemberFilter() {
+  uni.showActionSheet({
+    itemList: memberFilterOptions.value.map(item => item.label),
+    success: ({ tapIndex }) => {
+      activeMemberId.value = memberFilterOptions.value[tapIndex]?.value || ''
+      loadLogs(true)
+    },
+  })
+}
+
+function openActionFilter() {
+  uni.showActionSheet({
+    itemList: actionFilterOptions.map(item => item.label),
+    success: ({ tapIndex }) => {
+      activeActionType.value = actionFilterOptions[tapIndex]?.value || ''
+      loadLogs(true)
+    },
+  })
 }
 
 function loadMore() {
@@ -234,6 +317,10 @@ onLoad(() => {
   padding: 4px var(--space-page) 16px;
 }
 
+.filter-bar--secondary {
+  padding-top: 0;
+}
+
 .filter-chip {
   padding: 6px 16px;
   border-radius: var(--radius-btn);
@@ -252,6 +339,11 @@ onLoad(() => {
     background: var(--primary);
     color: #fff;
     box-shadow: 0 2px 8px rgba(234, 62, 119, 0.25);
+  }
+
+  &--ghost {
+    background: var(--card-dim);
+    box-shadow: none;
   }
 }
 
@@ -304,6 +396,16 @@ onLoad(() => {
     background: var(--icon-red);
     .material-icons-round { color: var(--red); }
   }
+
+  &.icon-teal {
+    background: var(--icon-teal);
+    .material-icons-round { color: var(--teal); }
+  }
+
+  &.icon-amber {
+    background: var(--icon-amber);
+    .material-icons-round { color: var(--amber); }
+  }
 }
 
 .log-icon--skeleton {
@@ -317,30 +419,10 @@ onLoad(() => {
   gap: 4px;
 }
 
-.log-main {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-  line-height: 1.4;
-}
-
-.log-operator {
+.log-summary {
   font-size: 13px;
-  font-weight: 700;
+  line-height: 1.5;
   color: var(--text-1);
-}
-
-.log-action {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-2);
-}
-
-.log-target {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--primary);
 }
 
 .log-time {
@@ -362,6 +444,7 @@ onLoad(() => {
 }
 
 .log-main--skeleton {
+  display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 8px;

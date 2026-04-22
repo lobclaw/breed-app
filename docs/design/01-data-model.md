@@ -238,6 +238,33 @@
 
 规则：
 
+- 首页提醒、额外安排、主链里程碑与手动待办统一由该集合承载
+- 任务是否完成只表达“待处理事实”，不替代真实业务记录
+
+### 3.8 `operation_logs`
+
+用途：记录家庭内成员主动触发的关键顶层业务动作，供“操作日志”页统一查询。
+
+关键字段：
+
+- `family_id`
+- `actor_user_id`
+- `actor_name`
+- `action_type`
+- `domain`
+- `target_type`
+- `target_id`
+- `target_name`
+- `summary`
+- `meta`
+- `created_at`
+
+规则：
+
+- 只记录“用户主动发起的顶层业务动作”，不记录只读查询、定时任务和内部连带写入
+- 一次业务动作只记一条日志，不展开自动创建的收入、费用、任务、幼崽等副作用
+- `summary` 直接存储列表展示文案，前端不再二次拼装复杂语义
+- 日志默认长期保留，不纳入回收站
 - 首页固定按 `逾期 / 繁育 / 健康 / 用药` 分层消费任务
 - `medication_tasks` 不并回普通 `tasks` 模型
 
@@ -317,6 +344,30 @@
 - `dog_weights`：体重历史
 - `medication_protocols`：用药方案库
 
+其中 `families.settings` 至少包含：
+
+- `default_weaning_days`
+- `default_vaccine_interval_puppy`
+- `default_vaccine_interval_adult`
+- `default_deworming_interval_puppy`
+- `default_deworming_interval_adult`
+- `push_enabled`
+- `morning_summary_enabled`
+- `morning_summary_time`
+- `notification_types`
+- `custom_vaccine_types`
+- `custom_deworming_drugs`
+- `custom_condition_types`
+- `custom_breed_types`
+
+其中 `families.settings.notification_types` 结构为：
+
+- `breeding`
+- `vaccination`
+- `medication`
+- `care_group`
+- `overdue`
+
 其中 `families.settings.custom_expense_categories` 结构为：
 
 - `name`
@@ -324,6 +375,9 @@
 
 规则：
 
+- 通知设置统一存放在 `families.settings`
+- `morning_summary_time` 使用北京时间 `HH:MM` 字符串
+- `notification_types.overdue` 固定为 `true`
 - 自定义支出分类必须带 `parent_group`
 - 历史字符串数组格式兼容读取，但写回时统一升级为对象数组
 - 未识别或缺失分组的历史分类默认归到 `其他`

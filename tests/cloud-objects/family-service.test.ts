@@ -62,7 +62,7 @@ describe('family-service', () => {
           default_vaccine_interval: 21,
           default_deworming_interval_puppy: 14,
           default_deworming_interval_adult: 90,
-          morning_summary_time: '07:00',
+          morning_summary_time: '09:00',
         },
         created_at: now,
         updated_at: now,
@@ -93,8 +93,7 @@ describe('family-service', () => {
   })
 
   describe('getFamilyInfo', () => {
-    it('应返回家庭信息', async () => {
-      const familyId = 'fam_1'
+    it('应返回带默认通知设置的家庭信息', async () => {
       seedCollection('families', [{
         _id: familyId,
         name: '小白犬舍',
@@ -106,55 +105,119 @@ describe('family-service', () => {
         care_rules: [],
         settings: {
           default_weaning_days: 45,
-          default_vaccine_interval: 21,
+          default_vaccine_interval_puppy: 21,
+          default_vaccine_interval_adult: 365,
           default_deworming_interval_puppy: 14,
           default_deworming_interval_adult: 90,
-          morning_summary_time: '07:00',
+          morning_summary_time: '09:00',
         },
         created_at: 1000,
         updated_at: 1000,
       }])
 
-      const { data } = await db.collection('families').doc(familyId).get()
-      expect(data).toHaveLength(1)
-      expect(data[0].name).toBe('小白犬舍')
-      expect(data[0].members).toHaveLength(2)
+      const ctx = createCloudObjectContext({ familyId })
+      const result = await familyService.getFamilyInfo.call(ctx)
+
+      expect(result.data.name).toBe('小白犬舍')
+      expect(result.data.members).toHaveLength(2)
+      expect(result.data.settings.push_enabled).toBe(true)
+      expect(result.data.settings.morning_summary_enabled).toBe(true)
+      expect(result.data.settings.notification_types).toMatchObject({
+        breeding: true,
+        vaccination: true,
+        medication: true,
+        care_group: true,
+        overdue: true,
+      })
     })
   })
 
   describe('updateSettings', () => {
-    it('应更新指定的设置字段', async () => {
-      const familyId = 'fam_1'
+    it('应更新通知设置并强制 overdue 保持开启', async () => {
       seedCollection('families', [{
         _id: familyId,
         name: '测试犬舍',
         settings: {
           default_weaning_days: 45,
-          default_vaccine_interval: 21,
+          default_vaccine_interval_puppy: 21,
+          default_vaccine_interval_adult: 365,
           default_deworming_interval_puppy: 14,
           default_deworming_interval_adult: 90,
-          morning_summary_time: '07:00',
+          push_enabled: true,
+          morning_summary_enabled: true,
+          morning_summary_time: '09:00',
+          notification_types: {
+            breeding: true,
+            vaccination: true,
+            medication: true,
+            care_group: true,
+            overdue: true,
+          },
         },
         created_at: 1000,
         updated_at: 1000,
       }])
 
-      // 模拟更新
-      await db.collection('families').doc(familyId).update({
-        'settings.default_weaning_days': 50,
-        'settings.morning_summary_time': '08:00',
-        updated_at: Date.now(),
+      const ctx = createCloudObjectContext({ familyId, role: 'creator' })
+      await familyService.updateSettings.call(ctx, {
+        push_enabled: false,
+        morning_summary_enabled: false,
+        morning_summary_time: '08:15',
+        notification_types: {
+          breeding: false,
+          vaccination: false,
+          medication: true,
+          care_group: false,
+          overdue: false,
+        },
       })
 
       const { data } = await db.collection('families').doc(familyId).get()
-      expect(data[0].settings.default_weaning_days).toBe(50)
-      expect(data[0].settings.morning_summary_time).toBe('08:00')
-      // 未修改的字段保持不变
-      expect(data[0].settings.default_vaccine_interval).toBe(21)
+      expect(data[0].settings.push_enabled).toBe(false)
+      expect(data[0].settings.morning_summary_enabled).toBe(false)
+      expect(data[0].settings.morning_summary_time).toBe('08:15')
+      expect(data[0].settings.notification_types).toMatchObject({
+        breeding: false,
+        vaccination: false,
+        medication: true,
+        care_group: false,
+        overdue: true,
+      })
     })
 
     it('协助者不能更新设置', () => {
       expect(() => requireAdmin('helper')).toThrow('权限不足')
+    })
+
+    it('推送时间格式非法时应报错', async () => {
+      seedCollection('families', [{
+        _id: familyId,
+        name: '测试犬舍',
+        settings: {
+          default_weaning_days: 45,
+          default_vaccine_interval_puppy: 21,
+          default_vaccine_interval_adult: 365,
+          default_deworming_interval_puppy: 14,
+          default_deworming_interval_adult: 90,
+          push_enabled: true,
+          morning_summary_enabled: true,
+          morning_summary_time: '09:00',
+          notification_types: {
+            breeding: true,
+            vaccination: true,
+            medication: true,
+            care_group: true,
+            overdue: true,
+          },
+        },
+        created_at: 1000,
+        updated_at: 1000,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, role: 'creator' })
+      await expect(familyService.updateSettings.call(ctx, {
+        morning_summary_time: '25:61',
+      })).rejects.toThrow('推送时间格式无效')
     })
   })
 
@@ -421,6 +484,152 @@ describe('family-service', () => {
         .rejects.toThrow('回收站项目不存在')
       await expect(familyService.permanentDeleteItem.call(ctx, { id: 'dog_1', type: 'sale' }))
         .rejects.toThrow('不支持的回收站类型')
+    })
+  })
+
+  describe('operation logs', () => {
+    it('更新家庭名称后应写入一条操作日志', async () => {
+      seedCollection('families', [{
+        _id: familyId,
+        name: '旧犬舍',
+        creator_id: 'user_1',
+        members: [
+          { user_id: 'test_uid', role: 'creator', status: 'active', joined_at: 1000, nickname: '小林' },
+        ],
+        care_rules: [],
+        settings: {
+          default_weaning_days: 45,
+          default_vaccine_interval_puppy: 21,
+          default_vaccine_interval_adult: 365,
+          default_deworming_interval_puppy: 14,
+          default_deworming_interval_adult: 90,
+          morning_summary_time: '09:00',
+          custom_vaccine_types: [],
+          custom_deworming_drugs: { internal: [], external: [], combo: [] },
+          custom_condition_types: [],
+          custom_breed_types: [],
+        },
+        created_at: 1000,
+        updated_at: 1000,
+      }])
+      seedCollection('operation_logs', [])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'test_uid', role: 'creator' })
+      await familyService.updateFamilyName.call(ctx, '新犬舍')
+
+      const { data: logs } = await db.collection('operation_logs').where({ family_id: familyId }).get()
+      expect(logs).toHaveLength(1)
+      expect(logs[0]).toMatchObject({
+        action_type: 'update',
+        domain: 'family',
+        target_type: 'family',
+        target_name: '新犬舍',
+        actor_name: '小林',
+      })
+      expect(logs[0].summary).toContain('更新为 新犬舍')
+    })
+
+    it('获取操作日志时应支持成员和动作类型筛选', async () => {
+      seedCollection('operation_logs', [
+        {
+          _id: 'log_1',
+          family_id: familyId,
+          actor_user_id: 'user_1',
+          actor_name: '小林',
+          action_type: 'create',
+          domain: 'dog',
+          target_type: 'dog',
+          target_id: 'dog_1',
+          target_name: '糯米',
+          summary: '新增了犬只 糯米',
+          created_at: 3000,
+        },
+        {
+          _id: 'log_2',
+          family_id: familyId,
+          actor_user_id: 'user_2',
+          actor_name: '阿青',
+          action_type: 'delete',
+          domain: 'finance',
+          target_type: 'expense',
+          target_id: 'exp_1',
+          target_name: '医疗',
+          summary: '删除了支出 医疗',
+          created_at: 2000,
+        },
+        {
+          _id: 'log_3',
+          family_id: familyId,
+          actor_user_id: 'user_1',
+          actor_name: '小林',
+          action_type: 'create',
+          domain: 'task',
+          target_type: 'task',
+          target_id: 'task_1',
+          target_name: '首次疫苗',
+          summary: '创建了待办 首次疫苗',
+          created_at: 1000,
+        },
+      ])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'test_uid', role: 'creator' })
+      const result = await familyService.getOperationLogs.call(ctx, {
+        start: 0,
+        end: 4000,
+        page: 1,
+        pageSize: 20,
+        actorUserId: 'user_1',
+        actionTypes: ['create'],
+      })
+
+      expect(result.total).toBe(2)
+      expect(result.hasMore).toBe(false)
+      expect(result.list.map((item: any) => item._id)).toEqual(['log_1', 'log_3'])
+    })
+
+    it('operation_logs 集合缺失时应静默返回空列表', async () => {
+      const originalCollection = mockUniCloud.database().collection
+      const ctx = createCloudObjectContext({ familyId, uid: 'test_uid', role: 'creator' })
+
+      mockUniCloud.database().collection = (name: string) => {
+        if (name === 'operation_logs') {
+          return {
+            where() {
+              return {
+                orderBy() {
+                  return {
+                    limit() {
+                      return {
+                        async get() {
+                          throw new Error('not found collection')
+                        },
+                      }
+                    },
+                  }
+                },
+              }
+            },
+          }
+        }
+        return originalCollection(name)
+      }
+
+      try {
+        const result = await familyService.getOperationLogs.call(ctx, {
+          start: 0,
+          end: 4000,
+          page: 1,
+          pageSize: 20,
+        })
+
+        expect(result).toEqual({
+          list: [],
+          hasMore: false,
+          total: 0,
+        })
+      } finally {
+        mockUniCloud.database().collection = originalCollection
+      }
     })
   })
 })

@@ -25,6 +25,14 @@ export interface CareRule {
   frequency: string
 }
 
+export interface NotificationTypes {
+  breeding: boolean
+  vaccination: boolean
+  medication: boolean
+  care_group: boolean
+  overdue: true
+}
+
 // 家庭设置
 export interface FamilySettings {
   default_weaning_days: number
@@ -32,7 +40,10 @@ export interface FamilySettings {
   default_vaccine_interval_adult: number
   default_deworming_interval_puppy: number
   default_deworming_interval_adult: number
+  push_enabled: boolean
+  morning_summary_enabled: boolean
   morning_summary_time: string
+  notification_types: NotificationTypes
   custom_vaccine_types: string[]
   custom_deworming_drugs: {
     internal: string[]

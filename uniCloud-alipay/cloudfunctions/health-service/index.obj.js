@@ -3,10 +3,36 @@
  * 管理疫苗、驱虫、疾病记录、用药任务
  */
 const { verifyAndGetFamily, requireFamily } = require('breed-auth/auth')
+let safeWriteOperationLog = async () => null
+try {
+  ;({ safeWriteOperationLog } = require('breed-auth/operation-log'))
+} catch (error) {
+  ;({ safeWriteOperationLog } = require('../common/breed-auth/operation-log'))
+}
 
 const db = uniCloud.database()
 const dbCmd = db.command
 const DAY_MS = 86400000
+
+const HEALTH_RECORD_LABEL_MAP = {
+  vaccination: '疫苗记录',
+  deworming: '驱虫记录',
+  illness: '疾病记录',
+}
+
+async function logHealthOperation({ familyId, actorUserId, actionType, domain = 'health', targetType, targetId, targetName, summary, meta = null }) {
+  await safeWriteOperationLog({
+    familyId,
+    actorUserId,
+    actionType,
+    domain,
+    targetType,
+    targetId,
+    targetName,
+    summary,
+    meta,
+  })
+}
 
 // ── 内部辅助函数（不能放在 module.exports 内，否则 _ 前缀会被当作生命周期钩子） ──
 
@@ -679,6 +705,17 @@ module.exports = {
       await createExpense(familyId, this.uid, data, dog, recordId)
     }
 
+    await logHealthOperation({
+      familyId,
+      actorUserId: this.uid,
+      actionType: 'create',
+      targetType: 'health_record',
+      targetId: recordId,
+      targetName: dog.name || '未命名犬只',
+      summary: `为 ${dog.name || '未命名犬只'} 新增了${HEALTH_RECORD_LABEL_MAP[data.type] || '健康记录'}`,
+      meta: { type: data.type },
+    })
+
     return { data: { recordId, completedTasks } }
   },
 
@@ -759,6 +796,17 @@ module.exports = {
 
       return { recordId, dog_id: dog._id, completedTasks }
     }))
+
+    await logHealthOperation({
+      familyId,
+      actorUserId: uid,
+      actionType: 'create',
+      targetType: 'health_record_batch',
+      targetId: `batch:${Date.now()}`,
+      targetName: `${results.length}条健康记录`,
+      summary: `批量新增了 ${results.length} 条${HEALTH_RECORD_LABEL_MAP[data.type] || '健康记录'}`,
+      meta: { type: data.type, count: results.length },
+    })
 
     return {
       data: {
@@ -999,6 +1047,18 @@ module.exports = {
       return { medicationId, dog_id: dog._id }
     }))
 
+    await logHealthOperation({
+      familyId,
+      actorUserId: uid,
+      actionType: 'create',
+      domain: 'medication',
+      targetType: 'medication_task_batch',
+      targetId: `batch:${Date.now()}`,
+      targetName: data.drug_name,
+      summary: `批量开始了 ${results.length} 条 ${data.drug_name} 用药方案`,
+      meta: { count: results.length, drugName: data.drug_name },
+    })
+
     return { data: { count: results.length, medications: results } }
   },
 
@@ -1092,6 +1152,18 @@ module.exports = {
       }
     }
 
+    await logHealthOperation({
+      familyId,
+      actorUserId: this.uid,
+      actionType: 'create',
+      domain: 'medication',
+      targetType: 'medication_task',
+      targetId: medicationId,
+      targetName: dog.name || '未命名犬只',
+      summary: `为 ${dog.name || '未命名犬只'} 开始了 ${data.drug_name} 用药方案`,
+      meta: { drugName: data.drug_name },
+    })
+
     return { data: { medicationId } }
   },
 
@@ -1153,6 +1225,18 @@ module.exports = {
       }
     }
 
+    await logHealthOperation({
+      familyId,
+      actorUserId: this.uid,
+      actionType: 'complete',
+      domain: 'medication',
+      targetType: 'medication_task',
+      targetId: medicationTaskId,
+      targetName: med.dog_name || medicationTaskId,
+      summary: `记录了 ${med.dog_name || '未命名犬只'} 的 ${med.drug_name} 给药执行`,
+      meta: { drugName: med.drug_name, currentDay, dosesGiven: todayDoses },
+    })
+
     return { data: { doses_given: todayDoses, completed: todayComplete, allComplete } }
   },
 
@@ -1206,6 +1290,18 @@ module.exports = {
       }
     }
 
+    await logHealthOperation({
+      familyId,
+      actorUserId: this.uid,
+      actionType: 'complete',
+      domain: 'medication',
+      targetType: 'medication_task_batch',
+      targetId: `batch:${Date.now()}`,
+      targetName: `${meds.length}个用药方案`,
+      summary: `批量完成了 ${meds.length} 个今日用药`,
+      meta: { count: meds.length },
+    })
+
     return { data: { completed: meds.length } }
   },
 
@@ -1249,6 +1345,17 @@ module.exports = {
       }
     }
 
+    await logHealthOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'complete',
+      domain: 'medication',
+      targetType: 'task',
+      targetId: taskId,
+      targetName: task.title || taskId,
+      summary: `完成了今日用药任务 ${task.title || ''}`.trim(),
+    })
+
     return { message: '已标记完成' }
   },
 
@@ -1279,6 +1386,18 @@ module.exports = {
     }).update({
       status: 'cancelled',
       updated_at: now,
+    })
+
+    await logHealthOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'status_change',
+      domain: 'medication',
+      targetType: 'medication_task',
+      targetId: medicationTaskId,
+      targetName: meds[0].dog_name || medicationTaskId,
+      summary: `提前结束了 ${meds[0].dog_name || '未命名犬只'} 的 ${meds[0].drug_name} 用药方案`,
+      meta: { drugName: meds[0].drug_name },
     })
 
     return { message: '用药已提前结束' }
@@ -1379,6 +1498,18 @@ module.exports = {
       updated_at: now,
     })
 
+    await logHealthOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'create',
+      domain: 'medication',
+      targetType: 'medication_protocol',
+      targetId: id,
+      targetName: data.name,
+      summary: `新增了用药方案 ${data.name}`,
+      meta: { drugName: data.drug_name },
+    })
+
     return { data: { protocolId: id } }
   },
 
@@ -1395,6 +1526,17 @@ module.exports = {
 
     await db.collection('medication_protocols').doc(id).update({
       deleted_at: Date.now(),
+    })
+
+    await logHealthOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'delete',
+      domain: 'medication',
+      targetType: 'medication_protocol',
+      targetId: id,
+      targetName: protocols[0].name || id,
+      summary: `删除了用药方案 ${protocols[0].name || id}`,
     })
 
     return { message: '已删除' }
@@ -1455,6 +1597,17 @@ module.exports = {
         })
       }
     }
+
+    await logHealthOperation({
+      familyId,
+      actorUserId: this.uid,
+      actionType: 'create',
+      targetType: 'dog_weight_batch',
+      targetId: litterId,
+      targetName: `${weights.length}条体重记录`,
+      summary: `批量录入了 ${weights.length} 条幼崽体重`,
+      meta: { litterId, count: weights.length },
+    })
 
     return { data: { count: weights.length } }
   },
@@ -1518,6 +1671,17 @@ module.exports = {
 
     await db.collection('health_records').doc(id).update(updateData)
 
+    await logHealthOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'update',
+      targetType: 'health_record',
+      targetId: id,
+      targetName: record.dog_name || record.dog_id || id,
+      summary: `更新了 ${record.dog_name || '未命名犬只'} 的${HEALTH_RECORD_LABEL_MAP[record.type] || '健康记录'}`,
+      meta: { type: record.type },
+    })
+
     return { message: '已更新' }
   },
 
@@ -1560,6 +1724,17 @@ module.exports = {
     if (latest?.[0]?.weight) {
       await db.collection('dogs').doc(dog_id).update({ latest_weight: latest[0].weight })
     }
+
+    await logHealthOperation({
+      familyId,
+      actorUserId: this.uid,
+      actionType: 'create',
+      targetType: 'dog_weight',
+      targetId: dog_id,
+      targetName: dogs[0].name || dog_id,
+      summary: `为 ${dogs[0].name || '未命名犬只'} 新增了体重记录`,
+      meta: { weight: Number(weight), date: date || now },
+    })
 
     return { message: '已保存' }
   },

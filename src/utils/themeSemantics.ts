@@ -44,7 +44,7 @@ export function getDogStatusTone(statusType: DeriveStatusType | string, priority
   const map: Record<string, SemanticTone> = {
     '发情中': { color: 'amber', variant: 'default' },
     '怀孕中': { color: 'rose', variant: 'default' },
-    '哺乳中': { color: 'green', variant: 'default' },
+    '哺乳中': { color: 'amber', variant: 'default' },
     '生病中': { color: 'red', variant: 'illness' },
     '用药中': { color: 'plum', variant: 'default' },
   }

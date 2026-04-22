@@ -3,12 +3,30 @@
  * 管理首页卡片生成、任务完成/推迟、每日审计
  */
 const { verifyAndGetFamily, requireFamily } = require('breed-auth/auth')
+let safeWriteOperationLog = async () => null
+try {
+  ;({ safeWriteOperationLog } = require('breed-auth/operation-log'))
+} catch (error) {
+  ;({ safeWriteOperationLog } = require('../common/breed-auth/operation-log'))
+}
 
 const db = uniCloud.database()
 const dbCmd = db.command
 
 // 一天的毫秒数
 const DAY_MS = 86400000
+const DEFAULT_NOTIFICATION_SETTINGS = {
+  push_enabled: true,
+  morning_summary_enabled: true,
+  morning_summary_time: '09:00',
+  notification_types: {
+    breeding: true,
+    vaccination: true,
+    medication: true,
+    care_group: true,
+    overdue: true,
+  },
+}
 const BREEDING_EXTRA_TYPES = new Set([
   'breeding_extra_arrangement',
   'heat',
@@ -19,6 +37,20 @@ const BREEDING_EXTRA_TYPES = new Set([
   'pre_labor',
   'abnormal_termination',
 ])
+
+async function logTaskOperation({ familyId, actorUserId, actionType, targetType, targetId, targetName, summary, meta = null }) {
+  await safeWriteOperationLog({
+    familyId,
+    actorUserId,
+    actionType,
+    domain: 'task',
+    targetType,
+    targetId,
+    targetName,
+    summary,
+    meta,
+  })
+}
 
 /**
  * 取一组任务中的最高优先级
@@ -107,6 +139,133 @@ function getTaskPriority(task, todayStartMs, todayEndMs) {
   if (task.due_date < todayStartMs) return 'overdue'
   if (task.due_date <= todayEndMs) return 'today'
   return 'upcoming'
+}
+
+function mergeNotificationSettings(settings = {}) {
+  const safeSettings = settings && typeof settings === 'object' ? settings : {}
+
+  return {
+    ...DEFAULT_NOTIFICATION_SETTINGS,
+    ...safeSettings,
+    notification_types: {
+      ...DEFAULT_NOTIFICATION_SETTINGS.notification_types,
+      ...(safeSettings.notification_types && typeof safeSettings.notification_types === 'object' ? safeSettings.notification_types : {}),
+      overdue: true,
+    },
+  }
+}
+
+function getBeijingDayContext(now = Date.now()) {
+  const offsetMs = 8 * 60 * 60 * 1000
+  const beijingNow = new Date(now + offsetMs)
+  const year = beijingNow.getUTCFullYear()
+  const month = beijingNow.getUTCMonth()
+  const day = beijingNow.getUTCDate()
+  const hour = String(beijingNow.getUTCHours()).padStart(2, '0')
+  const minute = String(beijingNow.getUTCMinutes()).padStart(2, '0')
+  const start = Date.UTC(year, month, day, 0, 0, 0, 0) - offsetMs
+
+  return {
+    currentTime: `${hour}:${minute}`,
+    dayStart: start,
+    dayEnd: start + 86400000 - 1,
+  }
+}
+
+function computeMedItemsForBeijingDay(activeMedications, targetDate) {
+  const targetDayStart = getBeijingDayContext(targetDate).dayStart
+  return (activeMedications || []).map((med) => {
+    const startDayStart = getBeijingDayContext(med.actual_start_date).dayStart
+    const currentDay = Math.floor((targetDayStart - startDayStart) / 86400000) + 1
+    if (currentDay < 1 || currentDay > med.duration_days) return null
+    const frequency = med.frequency || 1
+    const todayDoses = med.daily_doses?.[String(currentDay)] || 0
+    return {
+      ...med,
+      currentDay,
+      todayDoses,
+      isDoneToday: todayDoses >= frequency,
+    }
+  }).filter(Boolean)
+}
+
+function buildMorningSummaryPayload(family, pendingTasks, activeMedications, now = Date.now()) {
+  const settings = mergeNotificationSettings(family?.settings)
+  const { currentTime, dayStart, dayEnd } = getBeijingDayContext(now)
+
+  if (!settings.push_enabled || !settings.morning_summary_enabled) return null
+  if (settings.morning_summary_time !== currentTime) return null
+
+  const counts = {
+    overdue: 0,
+    breeding: 0,
+    vaccination: 0,
+    medication: 0,
+    care_group: 0,
+  }
+
+  for (const task of pendingTasks || []) {
+    if (!task || task.status !== 'pending') continue
+
+    if (task.due_date < dayStart) {
+      counts.overdue += 1
+      continue
+    }
+
+    if (task.due_date > dayEnd) continue
+
+    if (task.type === 'care_group') {
+      counts.care_group += 1
+      continue
+    }
+
+    if (task.type === 'vaccination' || task.type === 'deworming') {
+      counts.vaccination += 1
+      continue
+    }
+
+    if (task.type === 'breeding_milestone' || isBreedingExtraTask(task)) {
+      counts.breeding += 1
+    }
+  }
+
+  const medItems = computeMedItemsForBeijingDay(activeMedications, now)
+  counts.medication = medItems.filter(item => !item.isDoneToday).length
+
+  const enabledTypes = settings.notification_types || DEFAULT_NOTIFICATION_SETTINGS.notification_types
+  const parts = []
+  let total = 0
+
+  if (enabledTypes.overdue && counts.overdue > 0) {
+    parts.push(`${counts.overdue}件逾期需处理`)
+    total += counts.overdue
+  }
+  if (enabledTypes.breeding && counts.breeding > 0) {
+    parts.push(`${counts.breeding}项繁育提醒`)
+    total += counts.breeding
+  }
+  if (enabledTypes.vaccination && counts.vaccination > 0) {
+    parts.push(`${counts.vaccination}项疫苗/驱虫提醒`)
+    total += counts.vaccination
+  }
+  if (enabledTypes.medication && counts.medication > 0) {
+    parts.push(`${counts.medication}项今日用药`)
+    total += counts.medication
+  }
+  if (enabledTypes.care_group && counts.care_group > 0) {
+    parts.push(`${counts.care_group}项护理提醒`)
+    total += counts.care_group
+  }
+
+  if (total === 0) return null
+
+  return {
+    total,
+    parts,
+    content: `今日待办(${total}件)：${parts.join(' · ')}`,
+    counts,
+    currentTime,
+  }
 }
 
 async function ensureEstrusCycleMilestones(familyId, now = Date.now()) {
@@ -956,6 +1115,17 @@ module.exports = {
       }
     }
 
+    await logTaskOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'complete',
+      targetType: 'task_batch',
+      targetId: `batch:${Date.now()}`,
+      targetName: `${completed}个任务`,
+      summary: `批量完成了 ${completed} 个任务`,
+      meta: { completed, autoRecord: Boolean(autoRecord) },
+    })
+
     return { data: { completed } }
   },
 
@@ -993,8 +1163,28 @@ module.exports = {
         completed_by: this.uid,
         updated_at: now,
       })
+      await logTaskOperation({
+        familyId,
+        actorUserId: this.uid,
+        actionType: 'complete',
+        targetType: 'task',
+        targetId: taskId,
+        targetName: task.title || taskId,
+        summary: `完成了任务 ${task.title || ''}`.trim(),
+      })
       return { data: { doses_given: dosesSoFar, completed: true } }
     }
+
+    await logTaskOperation({
+      familyId,
+      actorUserId: this.uid,
+      actionType: 'update',
+      targetType: 'task',
+      targetId: taskId,
+      targetName: task.title || taskId,
+      summary: `记录了任务 ${task.title || ''} 的执行进度`.trim(),
+      meta: { dosesSoFar },
+    })
 
     return { data: { doses_given: dosesSoFar, completed: false } }
   },
@@ -1036,6 +1226,17 @@ module.exports = {
       }
     }
 
+    await logTaskOperation({
+      familyId,
+      actorUserId: this.uid,
+      actionType: 'complete',
+      targetType: 'task',
+      targetId: taskId,
+      targetName: task.title || taskId,
+      summary: `完成了任务 ${task.title || ''}`.trim(),
+      meta: { autoRecord: Boolean(autoRecord) },
+    })
+
     return { message: '已完成', autoRecorded: autoRecord && HEALTH_TYPES.includes(task.type) }
   },
 
@@ -1054,11 +1255,24 @@ module.exports = {
     if (!tasks || tasks.length === 0) throw new Error('任务不存在')
     if (tasks[0].status !== 'pending') throw new Error('任务已处理')
 
+    const task = tasks[0]
+
     await db.collection('tasks').doc(taskId).update({
       due_date: newDate,
       postpone_count: dbCmd.inc(1),
       postpone_reason: reason || null,
       updated_at: now,
+    })
+
+    await logTaskOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'postpone',
+      targetType: 'task',
+      targetId: taskId,
+      targetName: task.title || taskId,
+      summary: `推迟了任务 ${task.title || ''}`.trim(),
+      meta: { dueDate: newDate, reason: reason || null },
     })
 
     return { message: '已推迟' }
@@ -1118,6 +1332,15 @@ module.exports = {
     }
 
     const { id } = await db.collection('tasks').add(taskData)
+    await logTaskOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'create',
+      targetType: 'task',
+      targetId: id,
+      targetName: taskData.title,
+      summary: `创建了待办 ${taskData.title}`,
+    })
     return {
       data: {
         taskId: id,
@@ -1192,6 +1415,17 @@ module.exports = {
       const { id } = await db.collection('tasks').add(taskData)
       return { taskId: id, dog_id: dog.dog_id }
     }))
+
+    await logTaskOperation({
+      familyId,
+      actorUserId: uid,
+      actionType: 'create',
+      targetType: 'task_batch',
+      targetId: `batch:${now}`,
+      targetName: `${results.length}个待办`,
+      summary: `批量创建了 ${results.length} 个待办任务`,
+      meta: { created: results.length, skipped: data.dogs.length - results.length },
+    })
 
     return {
       data: {
@@ -1390,55 +1624,44 @@ module.exports = {
   },
 
   /**
-   * 晨间摘要推送（定时任务，每日 07:00）
-   * 统计今日待办和逾期任务，通过 UniPush 推送给所有活跃成员
+   * 晨间摘要推送（定时任务，按分钟检查）
+   * 统计逾期、繁育、疫苗/驱虫、用药、护理提醒，通过 UniPush 推送给所有活跃成员
    */
   async _timing_morningSummary() {
     const now = Date.now()
-    const todayStart = new Date(now)
-    todayStart.setHours(0, 0, 0, 0)
-    const todayEnd = new Date(now)
-    todayEnd.setHours(23, 59, 59, 999)
+    const { dayEnd } = getBeijingDayContext(now)
 
     const { data: families } = await db.collection('families').get()
     let pushCount = 0
 
     for (const family of families) {
       const familyId = family._id
-
-      // 统计逾期 + 今日任务
-      const [overdueRes, todayRes] = await Promise.all([
+      const [pendingRes, medRes] = await Promise.all([
         db.collection('tasks').where({
           family_id: familyId,
           status: 'pending',
-          type: dbCmd.neq('breeding_milestone'),
-          due_date: dbCmd.lt(todayStart.getTime()),
-        }).count(),
-        db.collection('tasks').where({
+          due_date: dbCmd.lte(dayEnd),
+        }).get(),
+        db.collection('medication_tasks').where({
           family_id: familyId,
-          status: 'pending',
-          type: dbCmd.neq('breeding_milestone'),
-          due_date: dbCmd.gte(todayStart.getTime()).and(dbCmd.lte(todayEnd.getTime())),
-        }).count(),
+          status: '进行中',
+        }).get(),
       ])
 
-      const overdueCount = overdueRes.total || 0
-      const todayCount = todayRes.total || 0
-
-      if (overdueCount === 0 && todayCount === 0) continue
-
-      // 构建推送内容
-      const parts = []
-      if (overdueCount > 0) parts.push(`${overdueCount}件逾期需处理`)
-      if (todayCount > 0) parts.push(`${todayCount}件今日待办`)
-      const content = `今日待办(${overdueCount + todayCount}件)：${parts.join(' · ')}`
+      const summary = buildMorningSummaryPayload(
+        family,
+        pendingRes.data || [],
+        medRes.data || [],
+        now,
+      )
+      if (!summary) continue
 
       // UniPush 推送（需要在 manifest.json 配置 UniPush 2.0）
       // V1 先记录推送内容，实际推送需要配置厂商通道后启用
       // TODO: 配置 UniPush 后取消注释
       // const activeMembers = family.members.filter(m => m.status === 'active')
       // for (const member of activeMembers) {
-      //   await uniCloud.sendSms({ ... }) 或 uni-push
+      //   await uniCloud.sendSms({ ...summary.content }) 或 uni-push
       // }
 
       pushCount++
@@ -1452,4 +1675,6 @@ module.exports = {
 // 测试用导出（仅在测试环境使用）
 if (typeof process !== 'undefined' && process.env.NODE_ENV === 'test') {
   module.exports._mergeTasks = mergeTasks
+  module.exports._buildMorningSummaryPayload = buildMorningSummaryPayload
+  module.exports._getBeijingDayContext = getBeijingDayContext
 }
