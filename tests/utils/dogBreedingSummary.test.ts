@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildActiveCycleSummaryViewModel, buildHistoryCycleSummaryViewModel } from '@/utils/dogBreedingSummary'
+import {
+  buildActiveCycleSummaryViewModel,
+  buildHistoryCycleSummaryViewModel,
+  isDogDetailActiveBreedingCycle,
+  isDogDetailHistoryBreedingCycle,
+} from '@/utils/dogBreedingSummary'
 
 describe('dogBreedingSummary', () => {
   const now = new Date('2026-04-21T10:00:00+08:00').getTime()
@@ -33,6 +38,25 @@ describe('dogBreedingSummary', () => {
       details,
       ...overrides,
     }
+  }
+
+  function createLitter(overrides: Record<string, any> = {}) {
+    return {
+      _id: 'litter-1',
+      family_id: 'fam-1',
+      cycle_id: 'cycle-1',
+      dam_id: 'dog-1',
+      dam_name: '花花',
+      birth_date: new Date('2026-04-16T00:00:00+08:00').getTime(),
+      total_born: 3,
+      born_alive: 3,
+      born_dead: 0,
+      birth_type: '顺产',
+      created_by: 'user-1',
+      created_at: new Date('2026-04-16T00:00:00+08:00').getTime(),
+      updated_at: new Date('2026-04-16T00:00:00+08:00').getTime(),
+      ...overrides,
+    } as any
   }
 
   it('会把当前周期改造成下一步 + 当前状态 + 历史倒序时间线', () => {
@@ -77,7 +101,7 @@ describe('dogBreedingSummary', () => {
       tone: 'rose',
       summary: '预产期 2026-04-23',
     })
-    expect(summary.timeline[5].summary).toContain('02-25 / 02-27 / 03-01')
+    expect(summary.timeline[5].summary).toContain('2026-02-25 / 2026-02-27 / 2026-03-01')
     expect(summary.timeline[5].summary).toContain('等4次')
     expect(summary.timeline[4].summary).toContain('确认怀孕 · 5只')
     expect(summary.stageSummary).toContain('怀孕第56天')
@@ -132,6 +156,89 @@ describe('dogBreedingSummary', () => {
     })
   })
 
+  it('已生产但未断奶的当前周期摘要应显示待断奶、哺乳阶段和生产节点', () => {
+    const summary = buildActiveCycleSummaryViewModel(createCycle({
+      status: '已生产',
+    }), [
+      createRecord('pregnancy_check', '2026-04-15T00:00:00+08:00', { result: '确认怀孕', fetus_count: 3 }),
+      createRecord('birth', '2026-04-16T00:00:00+08:00', { birth_type: '顺产', total_born: 3, born_alive: 3 }),
+    ] as any, now, createLitter({
+      weaned_at: null,
+    }))
+
+    expect(summary.timeline.map(item => item.title)).toEqual(['待断奶', '哺乳第6天', '生产', '孕检'])
+    expect(summary.timeline[0]).toMatchObject({
+      kind: 'upcoming',
+      summary: '出生第6天',
+    })
+    expect(summary.timeline[1]).toMatchObject({
+      kind: 'current',
+      tone: 'amber',
+      summary: '生产于 2026-04-16',
+    })
+    expect(summary.timeline[2]).toMatchObject({
+      kind: 'record',
+      tone: 'green',
+      summary: '2026-04-16 · 顺产 · 存活 3/3',
+    })
+    expect(summary.stageSummary).toBe('已生产 · 生产日期 2026-04-16')
+  })
+
+  it('已生产且已断奶的当前周期摘要不再显示待断奶', () => {
+    const summary = buildActiveCycleSummaryViewModel(createCycle({
+      status: '已生产',
+    }), [], now, createLitter({
+      weaned_at: new Date('2026-05-20T00:00:00+08:00').getTime(),
+    }))
+
+    expect(summary.timeline.map(item => item.title)).toEqual(['已断奶', '生产'])
+    expect(summary.timeline[1]).toMatchObject({
+      title: '生产',
+      summary: '2026-04-16 · 顺产 · 存活 3/3',
+    })
+    expect(summary.stageSummary).toBe('已生产 · 生产日期 2026-04-16')
+  })
+
+  it('没有生产记录但已有窝时，应使用窝信息补出生产节点', () => {
+    const summary = buildActiveCycleSummaryViewModel(createCycle({
+      status: '已生产',
+    }), [
+      createRecord('pregnancy_check', '2026-04-15T00:00:00+08:00', { result: '确认怀孕', fetus_count: 3 }),
+    ] as any, now, createLitter({
+      weaned_at: null,
+    }))
+
+    expect(summary.timeline.map(item => item.title)).toEqual(['待断奶', '哺乳第6天', '生产', '孕检'])
+    expect(summary.timeline[2]).toMatchObject({
+      title: '生产',
+      summary: '2026-04-16 · 顺产 · 存活 3/3',
+    })
+  })
+
+  it('同一天只有日期粒度时，应按繁育阶段排序而不是按 key 排序', () => {
+    const sameDay = '2026-04-20T00:00:00+08:00'
+    const summary = buildActiveCycleSummaryViewModel(createCycle({
+      status: '已生产',
+    }), [
+      createRecord('mating', sameDay, { mating_number: 1 }),
+      createRecord('pregnancy_check', sameDay, { result: '确认怀孕', fetus_count: 5 }),
+      createRecord('birth', sameDay, { birth_type: '剖腹产', total_born: 3, born_alive: 3 }),
+      createRecord('follicle_check', '2026-04-17T00:00:00+08:00', { left_count: 2, right_count: 2 }),
+    ] as any, now, createLitter({
+      birth_date: new Date(sameDay).getTime(),
+      weaned_at: null,
+    }))
+
+    expect(summary.timeline.map(item => item.title)).toEqual([
+      '待断奶',
+      '哺乳第2天',
+      '生产',
+      '孕检',
+      '配种 ×1',
+      '卵泡检查',
+    ])
+  })
+
   it('会兼容孕检旧字段并保留当前状态节点', () => {
     const summary = buildActiveCycleSummaryViewModel(createCycle(), [
       createRecord('pregnancy_check', '2026-04-20T00:00:00+08:00', { result: '确认怀孕', fetus_count: 4 }, { _id: 'pregnancy-legacy' }),
@@ -176,5 +283,33 @@ describe('dogBreedingSummary', () => {
     expect(summary.title).toBe('第2次周期')
     expect(summary.meta).toBe('2026-02-18 · 种公: 团团')
     expect(summary.result).toBe('存活 3/4 · 在养 2')
+  })
+
+  it('已生产但未断奶的周期应归为当前进行中，不进入繁育历史', () => {
+    const cycle = createCycle({ status: '已生产' })
+    const litter = createLitter({ weaned_at: null })
+
+    expect(isDogDetailActiveBreedingCycle(cycle, litter)).toBe(true)
+    expect(isDogDetailHistoryBreedingCycle(cycle, litter)).toBe(false)
+  })
+
+  it('已生产且已断奶的周期应进入繁育历史', () => {
+    const cycle = createCycle({ status: '已生产' })
+    const litter = createLitter({
+      weaned_at: new Date('2026-05-20T00:00:00+08:00').getTime(),
+    })
+
+    expect(isDogDetailActiveBreedingCycle(cycle, litter)).toBe(false)
+    expect(isDogDetailHistoryBreedingCycle(cycle, litter)).toBe(true)
+  })
+
+  it('失败和放弃的周期始终进入繁育历史', () => {
+    const failedCycle = createCycle({ status: '失败' })
+    const abandonedCycle = createCycle({ status: '放弃' })
+
+    expect(isDogDetailActiveBreedingCycle(failedCycle, null)).toBe(false)
+    expect(isDogDetailHistoryBreedingCycle(failedCycle, null)).toBe(true)
+    expect(isDogDetailActiveBreedingCycle(abandonedCycle, null)).toBe(false)
+    expect(isDogDetailHistoryBreedingCycle(abandonedCycle, null)).toBe(true)
   })
 })

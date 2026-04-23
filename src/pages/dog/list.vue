@@ -426,6 +426,10 @@ function normalizeBreed(dog: Pick<DogWithStatus, 'breed'>) {
   return dog.breed?.trim() || '马尔济斯'
 }
 
+function normalizeGender(dog: Pick<DogWithStatus, 'gender'>) {
+  return dog.gender === '公' || dog.gender === '母' ? dog.gender : ''
+}
+
 function isWeakDisposition(disposition: DogDisposition) {
   return disposition === '在养' || disposition === '自留'
 }
@@ -466,6 +470,8 @@ function secondaryStatusLabel(status: DeriveStatus) {
 
 function buildMetaInfoText(dog: DogWithStatus) {
   const parts = [normalizeBreed(dog)]
+  const gender = normalizeGender(dog)
+  if (gender) parts.push(gender)
   if (dog.birth_date) parts.push(formatAge(dog.birth_date))
   parts.push(roleLabel(dog))
   return parts.join(' · ')
@@ -473,6 +479,8 @@ function buildMetaInfoText(dog: DogWithStatus) {
 
 function buildBasicInfoText(dog: DogWithStatus) {
   const parts = [normalizeBreed(dog)]
+  const gender = normalizeGender(dog)
+  if (gender) parts.push(gender)
   if (dog.birth_date) parts.push(formatAge(dog.birth_date))
   return parts.join(' · ')
 }

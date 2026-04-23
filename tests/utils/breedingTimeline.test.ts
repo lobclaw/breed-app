@@ -69,7 +69,7 @@ describe('breedingTimeline', () => {
     expect(items[1]).toMatchObject({
       kind: 'current',
       tone: 'rose',
-      title: '怀孕中 · 第52天',
+      title: '怀孕第52天',
       summary: '预产期 2026-05-01',
     })
   })
@@ -80,6 +80,55 @@ describe('breedingTimeline', () => {
       created_at: new Date('2026-04-18T00:00:00+08:00').getTime(),
     }), [], now)
 
-    expect(title).toBe('发情中 · 第4天')
+    expect(title).toBe('发情第4天')
+  })
+
+  it('已生产但未断奶时应显示哺乳阶段，并把下一步指向断奶', () => {
+    const birthDate = new Date('2026-04-16T00:00:00+08:00').getTime()
+    const items = buildBreedingTimelineSyntheticItems(createCycle({
+      status: '已生产',
+    }), [], now, {
+      litter: {
+        birth_date: birthDate,
+        weaned_at: null,
+      } as any,
+    })
+
+    expect(items.map(item => item.key)).toEqual(['upcoming', 'current'])
+    expect(items[0]).toMatchObject({
+      kind: 'upcoming',
+      tone: 'gray',
+      title: '待断奶',
+      summary: '出生第6天',
+    })
+    expect(items[1]).toMatchObject({
+      kind: 'current',
+      tone: 'amber',
+      title: '哺乳第6天',
+      summary: '生产于 2026-04-16',
+    })
+  })
+
+  it('已生产且已断奶时应显示已断奶，不再生成下一步', () => {
+    const title = buildBreedingTimelineCurrentTitle(createCycle({
+      status: '已生产',
+    }), [], now, {
+      litter: {
+        birth_date: new Date('2026-04-16T00:00:00+08:00').getTime(),
+        weaned_at: new Date('2026-04-21T00:00:00+08:00').getTime(),
+      } as any,
+    })
+
+    const items = buildBreedingTimelineSyntheticItems(createCycle({
+      status: '已生产',
+    }), [], now, {
+      litter: {
+        birth_date: new Date('2026-04-16T00:00:00+08:00').getTime(),
+        weaned_at: new Date('2026-04-21T00:00:00+08:00').getTime(),
+      } as any,
+    })
+
+    expect(title).toBe('已断奶')
+    expect(items.map(item => item.key)).toEqual(['current'])
   })
 })

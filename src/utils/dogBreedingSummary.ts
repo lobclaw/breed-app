@@ -34,16 +34,37 @@ export interface HistoryCycleSummaryViewModel {
   result: string
 }
 
+export function isUnweanedProducedCycle(cycle?: BreedingCycle | null, litter?: Litter | null) {
+  return cycle?.status === '已生产' && !!litter && !litter.weaned_at
+}
+
+export function isDogDetailActiveBreedingCycle(cycle?: BreedingCycle | null, litter?: Litter | null) {
+  if (!cycle?.status) return false
+  if (cycle.status === '发情中' || cycle.status === '怀孕中') return true
+  return isUnweanedProducedCycle(cycle, litter)
+}
+
+export function isDogDetailHistoryBreedingCycle(cycle?: BreedingCycle | null, litter?: Litter | null) {
+  if (!cycle?.status) return false
+  if (cycle.status === '失败' || cycle.status === '放弃') return true
+  if (cycle.status === '已生产') return !isUnweanedProducedCycle(cycle, litter)
+  return false
+}
+
+const RECORD_STAGE_SORT_ORDER: Record<string, number> = {
+  birth: 70,
+  pre_labor: 60,
+  prenatal_check: 50,
+  pregnancy_check: 40,
+  mating: 30,
+  follicle_check: 20,
+  heat: 10,
+}
+
 function formatDate(ts?: number | null) {
   if (typeof ts !== 'number') return '—'
   const date = new Date(ts)
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-}
-
-function formatShortDate(ts?: number | null) {
-  if (typeof ts !== 'number') return '—'
-  const date = new Date(ts)
-  return `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
 function truncateText(text: string, maxLength = 18) {
@@ -71,14 +92,27 @@ function buildSubtitle(cycle?: BreedingCycle | null, records: BreedingRecord[] =
   return parts.join(' · ')
 }
 
-function buildStageSummary(cycle?: BreedingCycle | null, records: BreedingRecord[] = [], now = Date.now()) {
+function buildStageSummary(
+  cycle?: BreedingCycle | null,
+  records: BreedingRecord[] = [],
+  now = Date.now(),
+  litter?: Litter | null,
+) {
   if (!cycle?.status) return ''
   const parts = []
   parts.push(buildCompactBreedingCycleStatusTitle(cycle, records, now))
 
-  const dueDate = getBreedingTimelineExpectedDueDate(cycle, records)
-  if (typeof dueDate === 'number') {
-    parts.push(`预产期 ${formatDate(dueDate)}`)
+  if (cycle.status === '已生产') {
+    const birthRecord = getLatestBreedingRecord(records, 'birth')
+    const birthDate = birthRecord?.date || litter?.birth_date
+    if (typeof birthDate === 'number') {
+      parts.push(`生产日期 ${formatDate(birthDate)}`)
+    }
+  } else {
+    const dueDate = getBreedingTimelineExpectedDueDate(cycle, records)
+    if (typeof dueDate === 'number') {
+      parts.push(`预产期 ${formatDate(dueDate)}`)
+    }
   }
 
   return parts.join(' · ')
@@ -87,7 +121,8 @@ function buildStageSummary(cycle?: BreedingCycle | null, records: BreedingRecord
 export function buildActiveCycleSummaryViewModel(
   cycle?: BreedingCycle | null,
   records: BreedingRecord[] = [],
-  now = Date.now()
+  now = Date.now(),
+  litter?: Litter | null,
 ): ActiveCycleSummaryViewModel {
   const recordItems: ActiveCycleSummaryTimelineItem[] = []
   const heatRecord = getEarliestBreedingRecord(records, 'heat')
@@ -96,6 +131,7 @@ export function buildActiveCycleSummaryViewModel(
   const pregnancyRecord = getLatestBreedingRecord(records, 'pregnancy_check')
   const prenatalRecord = getLatestBreedingRecord(records, 'prenatal_check')
   const preLaborRecord = getLatestBreedingRecord(records, 'pre_labor')
+  const birthRecord = getLatestBreedingRecord(records, 'birth')
 
   if (heatRecord?.date) {
     recordItems.push({
@@ -125,7 +161,7 @@ export function buildActiveCycleSummaryViewModel(
   }
 
   if (matingRecords.length > 0) {
-    const dateSummary = matingRecords.slice(0, 3).map(record => formatShortDate(record.date)).join(' / ')
+    const dateSummary = matingRecords.slice(0, 3).map(record => formatDate(record.date)).join(' / ')
     const suffix = matingRecords.length > 3 ? ` · 等${matingRecords.length}次` : ''
     recordItems.push({
       key: 'mating',
@@ -181,14 +217,38 @@ export function buildActiveCycleSummaryViewModel(
     })
   }
 
+  const birthDate = birthRecord?.date || litter?.birth_date
+  if (birthDate) {
+    const details = birthRecord?.details || {}
+    const aliveCount = Number(details.born_alive ?? litter?.born_alive)
+    const totalCount = Number(details.total_born ?? litter?.total_born)
+    const countSummary = Number.isFinite(aliveCount) && Number.isFinite(totalCount) && totalCount > 0
+      ? `存活 ${aliveCount}/${totalCount}`
+      : ''
+    const birthType = details.birth_type || litter?.birth_type || ''
+    const detail = [birthType, countSummary].filter(Boolean).join(' · ')
+
+    recordItems.push({
+      key: 'birth',
+      kind: 'record',
+      type: 'birth',
+      tone: getBreedingTimelineRecordTone('birth'),
+      title: '生产',
+      summary: `${formatDate(birthDate)}${detail ? ` · ${detail}` : ''}`,
+      date: birthDate,
+    })
+  }
+
   recordItems.sort((a, b) => {
     const dateDiff = b.date - a.date
     if (dateDiff !== 0) return dateDiff
+    const stageDiff = (RECORD_STAGE_SORT_ORDER[b.type] || 0) - (RECORD_STAGE_SORT_ORDER[a.type] || 0)
+    if (stageDiff !== 0) return stageDiff
     return b.key.localeCompare(a.key)
   })
 
   const timeline = [
-    ...buildBreedingTimelineSyntheticItems(cycle, records, now),
+    ...buildBreedingTimelineSyntheticItems(cycle, records, now, { litter }),
     ...recordItems,
   ]
 
@@ -196,7 +256,7 @@ export function buildActiveCycleSummaryViewModel(
     title: cycle?.cycle_number ? `第${cycle.cycle_number}次繁育周期` : '当前繁育周期',
     subtitle: buildSubtitle(cycle, records, now),
     timeline,
-    stageSummary: buildStageSummary(cycle, records, now),
+    stageSummary: buildStageSummary(cycle, records, now, litter),
   }
 }
 

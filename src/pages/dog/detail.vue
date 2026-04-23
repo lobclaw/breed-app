@@ -382,7 +382,7 @@
           actionText="添加记录"
           @action="addRecord"
         />
-        <view v-else>
+        <view v-else class="dog-detail__breeding-stack">
           <!-- 当前进行中周期（突出显示） -->
           <view v-if="activeCycle" class="breeding-active-cycle" @click="goToCycle(activeCycle._id)">
             <view class="breeding-active-cycle__header">
@@ -468,7 +468,7 @@
           </view>
 
           <!-- 历史周期列表 -->
-          <view v-if="pastCycles.length > 0">
+          <view v-if="pastCycles.length > 0" class="dog-detail__breeding-group">
             <view class="dog-detail__sec dog-detail__sec--rose">
               <text class="dog-detail__sec-text">繁育历史</text>
             </view>
@@ -496,7 +496,7 @@
           </view>
 
           <!-- 窝列表 -->
-          <view v-if="litters.length > 0">
+          <view v-if="litters.length > 0" class="dog-detail__breeding-group">
             <view class="dog-detail__sec dog-detail__sec--green">
               <text class="dog-detail__sec-text">窝列表</text>
               <view class="dog-detail__sec-badge">
@@ -1169,13 +1169,22 @@ import { useDogStore } from '@/stores/dogStore'
 import type { Dog, DeriveStatus } from '@/types/dog'
 import { buildMedicationDetailUrl, resolveDogDetailStatusRoute } from '@/utils/dogDetailNavigation'
 import { formatMedicationDosage } from '@/utils/medicationDisplay'
-import { buildCompactBreedingCycleStatusTitle, buildCompactDeriveStatusTitle } from '@/utils/dogStatusCopy'
+import { buildCompactDeriveStatusTitle } from '@/utils/dogStatusCopy'
 import { getDogStatusTone, getHealthTypeTone } from '@/utils/themeSemantics'
 import type { AddRecordItem } from '@/utils/addRecordSheet'
 import { createDogDetailAddRecordGroups } from '@/utils/addRecordSheet'
 import type { BreedingCycleDetailResponse } from '@/types/breeding'
-import { buildActiveCycleSummaryViewModel, buildHistoryCycleSummaryViewModel } from '@/utils/dogBreedingSummary'
-import { getBreedingTimelineExpectedDueDate, formatRelativeDayLabel as formatDueRelativeDayLabel } from '@/utils/breedingTimeline'
+import {
+  buildActiveCycleSummaryViewModel,
+  buildHistoryCycleSummaryViewModel,
+  isDogDetailActiveBreedingCycle,
+  isDogDetailHistoryBreedingCycle,
+} from '@/utils/dogBreedingSummary'
+import {
+  buildBreedingTimelineCurrentTitle,
+  getBreedingTimelineExpectedDueDate,
+  formatRelativeDayLabel as formatDueRelativeDayLabel,
+} from '@/utils/breedingTimeline'
 import { buildTimestampFromDayOffset, formatDateInputValue } from '@/utils/date'
 import { formatFinanceAmount, getFinanceAmountParts, type FinanceAmountParts } from '@/utils/financeDisplay'
 
@@ -1272,8 +1281,8 @@ const statusColorMap: Record<string, 'amber' | 'rose' | 'red' | 'plum'> = {
 // 状态 → 图标映射
 const statusIconMap: Record<string, string> = {
   '发情中': 'local_fire_department',
-  '怀孕中': 'favorite',
-  '哺乳中': 'child_friendly',
+  '怀孕中': 'pregnant_woman',
+  '哺乳中': 'child_care',
   '生病中': 'sick',
   '用药中': 'medication',
 }
@@ -1295,13 +1304,16 @@ onPageScroll(({ scrollTop }) => {
 
 // 繁育周期计算属性
 const isInEstrus = computed(() => statuses.value.some((s: any) => s.type === '发情中'))
-const TERMINAL_CYCLE_STATUSES = ['已生产', '失败', '放弃']
-const activeCycle = computed(() => cycles.value.find((c: any) => !TERMINAL_CYCLE_STATUSES.includes(c.status)))
-const pastCycles = computed(() => cycles.value.filter((c: any) => TERMINAL_CYCLE_STATUSES.includes(c.status)))
+const activeCycle = computed(() => cycles.value.find((cycle: any) => {
+  return isDogDetailActiveBreedingCycle(cycle, litterByCycleId.value.get(cycle._id) || null)
+}))
+const pastCycles = computed(() => cycles.value.filter((cycle: any) => {
+  return isDogDetailHistoryBreedingCycle(cycle, litterByCycleId.value.get(cycle._id) || null)
+}))
 const activeCycleId = computed(() => activeCycle.value?._id || '')
 const currentBreedingCycleId = computed(() => {
   if (activeCycleId.value) return activeCycleId.value
-  const breedingStatus = statuses.value.find(status => ['发情中', '怀孕中'].includes(status?.type))
+  const breedingStatus = statuses.value.find(status => ['发情中', '怀孕中', '哺乳中'].includes(status?.type))
   const legacyCycleId = (breedingStatus as Record<string, any> | undefined)?.cycle_id
   return typeof breedingStatus?.cycleId === 'string'
     ? breedingStatus.cycleId
@@ -1687,25 +1699,6 @@ const litterByCycleId = computed(() => {
   }
   return map
 })
-const activeCycleSummary = computed(() => buildActiveCycleSummaryViewModel(
-  activeCycleSummaryDetail.value?.cycle || activeCycle.value || null,
-  activeCycleSummaryDetail.value?.records || [],
-))
-const activeCycleStatusTitle = computed(() => {
-  const cycle = activeCycleSummaryDetail.value?.cycle || activeCycle.value || null
-  return buildCompactBreedingCycleStatusTitle(cycle, activeCycleSummaryDetail.value?.records || [])
-    || cycle?.status
-    || '进行中'
-})
-const activeCycleDueTagTitle = computed(() => {
-  const cycle = activeCycleSummaryDetail.value?.cycle || activeCycle.value || null
-  if (cycle?.status !== '怀孕中') return activeCycleStatusTitle.value
-
-  const dueDate = getBreedingTimelineExpectedDueDate(cycle, activeCycleSummaryDetail.value?.records || [])
-  return typeof dueDate === 'number'
-    ? formatDueRelativeDayLabel(dueDate)
-    : '预产待定'
-})
 const currentCycleLitter = computed(() => {
   if (activeCycleSummaryDetail.value?.litter) return activeCycleSummaryDetail.value.litter
   const nursingStatus = statuses.value.find(status => status?.type === '哺乳中')
@@ -1718,6 +1711,36 @@ const currentCycleLitter = computed(() => {
 
   if (!cycleId) return null
   return litterByCycleId.value.get(cycleId) || null
+})
+const activeCycleSummary = computed(() => buildActiveCycleSummaryViewModel(
+  activeCycleSummaryDetail.value?.cycle || activeCycle.value || null,
+  activeCycleSummaryDetail.value?.records || [],
+  Date.now(),
+  activeCycleSummaryDetail.value?.litter || currentCycleLitter.value,
+))
+const activeCycleStatusTitle = computed(() => {
+  const cycle = activeCycleSummaryDetail.value?.cycle || activeCycle.value || null
+  return buildBreedingTimelineCurrentTitle(
+    cycle,
+    activeCycleSummaryDetail.value?.records || [],
+    Date.now(),
+    { litter: activeCycleSummaryDetail.value?.litter || currentCycleLitter.value },
+  )
+    || cycle?.status
+    || '进行中'
+})
+const activeCycleDueTagTitle = computed(() => {
+  const cycle = activeCycleSummaryDetail.value?.cycle || activeCycle.value || null
+  if (cycle?.status === '已生产' && currentCycleLitter.value && !currentCycleLitter.value.weaned_at) {
+    const upcoming = activeCycleSummary.value.timeline.find(item => item.kind === 'upcoming')
+    return upcoming?.title || '待断奶'
+  }
+  if (cycle?.status !== '怀孕中') return activeCycleStatusTitle.value
+
+  const dueDate = getBreedingTimelineExpectedDueDate(cycle, activeCycleSummaryDetail.value?.records || [])
+  return typeof dueDate === 'number'
+    ? formatDueRelativeDayLabel(dueDate)
+    : '预产待定'
 })
 const historyCycleCards = computed(() => {
   return pastCycles.value.map((cycle: any) => {
@@ -2802,19 +2825,22 @@ function syncActiveCycleSummary({
   nextCycles: any[]
   refreshBreedingSummary: boolean
 }) {
-  const nextActiveCycleId = isPuppy
-    ? ''
-    : nextCycles.find((cycle: any) => !TERMINAL_CYCLE_STATUSES.includes(cycle.status))?._id || ''
-
-  if (!nextActiveCycleId || isPuppy) {
-    activeCycleSummaryDetail.value = null
-    return nextActiveCycleId
-  }
-
   if (refreshBreedingSummary) {
     const nextCache = { ...activeCycleSummaryCache.value }
-    delete nextCache[nextActiveCycleId]
+    nextCycles.forEach((cycle: any) => {
+      if (cycle?._id) delete nextCache[cycle._id]
+    })
     activeCycleSummaryCache.value = nextCache
+    activeCycleSummaryDetail.value = null
+  }
+
+  const nextActiveCycleId = isPuppy
+    ? ''
+    : nextCycles.find((cycle: any) => {
+        return isDogDetailActiveBreedingCycle(cycle, litterByCycleId.value.get(cycle._id) || null)
+      })?._id || ''
+
+  if (!nextActiveCycleId || isPuppy) {
     activeCycleSummaryDetail.value = null
     return nextActiveCycleId
   }
@@ -3446,11 +3472,13 @@ onShow(() => {
 .dog-detail__sec {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
+  min-height: 20px;
+  padding: 0 2px;
   &::before {
     content: '';
-    width: 7px;
-    height: 7px;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
     flex-shrink: 0;
   }
@@ -3466,7 +3494,7 @@ onShow(() => {
   font-size: 12px;
   font-weight: 700;
   color: var(--text-3);
-  letter-spacing: 0.3px;
+  letter-spacing: 0;
 }
 .dog-detail__sec-link {
   margin-left: auto;
@@ -3486,13 +3514,13 @@ onShow(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--card-dim);
+  background: rgba(184, 154, 130, 0.14);
   border-radius: 999px;
-  padding: 2px 8px;
+  padding: 2px 9px;
 }
 .dog-detail__sec-badge-text {
   font-family: var(--font-display);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
   line-height: 1;
   color: var(--text-2);
@@ -3821,17 +3849,27 @@ onShow(() => {
 }
 
 /* ==================== 繁育周期卡片 ==================== */
+.dog-detail__breeding-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.dog-detail__breeding-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
 .dog-detail__cycle-card {
   background: var(--card);
   border-radius: var(--radius-card);
-  padding: 15px 16px 15px 18px;
+  padding: 14px 13px 14px 16px;
   box-shadow: var(--shadow);
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
+  align-items: center;
+  gap: 11px;
   cursor: pointer;
   transition: transform 0.12s ease, box-shadow 0.12s ease;
-  border-left: 3.5px solid transparent;
+  border: 1px solid rgba(216, 203, 189, 0.12);
   &:active {
     transform: scale(0.975);
     box-shadow: 0 1px 6px rgba(234, 62, 119, 0.04);
@@ -3840,18 +3878,19 @@ onShow(() => {
 .dog-detail__cycle-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 9px;
 }
 .dog-detail__cycle-body {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 .dog-detail__cycle-title {
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 800;
+  line-height: 1.25;
   color: var(--text-1);
 }
 .dog-detail__cycle-meta,
@@ -3859,7 +3898,7 @@ onShow(() => {
   font-size: 12px;
   font-weight: 500;
   color: var(--text-2);
-  line-height: 1.4;
+  line-height: 1.35;
 }
 .dog-detail__cycle-result {
   color: var(--text-3);
@@ -3894,7 +3933,6 @@ onShow(() => {
   background: var(--card);
   border-radius: 14px;
   padding: 14px 16px;
-  margin-bottom: 10px;
   border-left: 3.5px solid var(--rose);
   box-shadow: var(--shadow);
   &:active { opacity: 0.8; }
@@ -4949,26 +4987,43 @@ onShow(() => {
 .dog-detail__litter-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 9px;
 }
 .dog-detail__litter-item {
-  background: var(--card);
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(240, 255, 254, 0.72) 100%);
   border-radius: var(--radius-card);
-  padding: 14px 16px;
+  padding: 15px 13px 15px 16px;
   box-shadow: var(--shadow);
+  border: 1px solid rgba(61, 168, 160, 0.12);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 3px;
+    height: 100%;
+    background: var(--teal);
+  }
+  & > * {
+    position: relative;
+    z-index: 1;
+  }
   &:active { background: rgba(234, 62, 119, 0.03); }
 }
 .dog-detail__litter-main {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
+  align-items: center;
+  gap: 10px;
 }
 .dog-detail__litter-copy {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 7px;
 }
 .dog-detail__litter-title-row {
   display: flex;
@@ -4977,35 +5032,40 @@ onShow(() => {
   flex-wrap: wrap;
 }
 .dog-detail__litter-date {
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.25;
   color: var(--text-1);
 }
 .dog-detail__litter-number {
   font-size: 11px;
-  font-weight: 600;
-  color: var(--text-3);
-  background: var(--card-dim);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-2);
+  background: rgba(184, 154, 130, 0.14);
   border-radius: var(--radius-tag);
-  padding: 3px 8px;
+  padding: 4px 9px;
 }
 .dog-detail__litter-sire {
   font-size: 12px;
+  font-weight: 500;
   line-height: 1.35;
   color: var(--text-2);
 }
 .dog-detail__pup-chips {
   display: flex;
-  gap: 6px;
+  gap: 7px;
   flex-wrap: wrap;
+  margin-top: 2px;
 }
 .dog-detail__pup-chip {
-  padding: 3px 9px;
+  padding: 4px 10px;
   border-radius: var(--radius-tag);
 }
 .dog-detail__pup-chip-text {
   font-size: 11px;
   font-weight: 700;
+  line-height: 1;
 }
 .dog-detail__pup-chip--total {
   background: var(--card-dim);

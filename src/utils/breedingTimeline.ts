@@ -1,4 +1,4 @@
-import type { BreedingCycle, BreedingRecord } from '@/types/breeding'
+import type { BreedingCycle, BreedingRecord, Litter } from '@/types/breeding'
 import { getBeijingDayStart } from '@/utils/date'
 import { buildCompactBreedingCycleStatusTitle, getBreedingCycleCurrentDayCount } from '@/utils/dogStatusCopy'
 
@@ -16,6 +16,10 @@ export interface BreedingTimelineSyntheticItem {
 }
 
 const DAY_MS = 86400000
+
+type BreedingTimelineContext = {
+  litter?: Pick<Litter, 'birth_date' | 'weaned_at'> | null
+}
 
 function startOfDay(ts: number) {
   return getBeijingDayStart(ts)
@@ -48,6 +52,28 @@ export function getBreedingTimelineStatusTone(status?: string | null): BreedingT
   if (status === '已生产') return 'green'
   if (status === '失败' || status === '放弃') return 'red'
   return 'gray'
+}
+
+function isNursingLitter(litter?: Pick<Litter, 'birth_date' | 'weaned_at'> | null) {
+  return !!litter && !litter.weaned_at
+}
+
+function getNursingDayCount(litter?: Pick<Litter, 'birth_date'> | null, now = Date.now()) {
+  if (typeof litter?.birth_date !== 'number') return null
+  return Math.max(1, Math.floor((startOfDay(now) - startOfDay(litter.birth_date)) / DAY_MS) + 1)
+}
+
+function formatNursingTitle(litter?: Pick<Litter, 'birth_date'> | null, now = Date.now()) {
+  const dayCount = getNursingDayCount(litter, now)
+  return dayCount ? `哺乳第${dayCount}天` : '哺乳中'
+}
+
+export function getBreedingTimelineCurrentStatusTone(
+  cycle?: BreedingCycle | null,
+  context: BreedingTimelineContext = {},
+): BreedingTimelineTone {
+  if (cycle?.status === '已生产' && isNursingLitter(context.litter)) return 'amber'
+  return getBreedingTimelineStatusTone(cycle?.status)
 }
 
 export function getBreedingTimelineSortTimestamp(record: BreedingRecord) {
@@ -102,11 +128,20 @@ export function buildBreedingTimelineCurrentTitle(
   cycle?: BreedingCycle | null,
   records: BreedingRecord[] = [],
   now = Date.now(),
+  context: BreedingTimelineContext = {},
 ) {
+  if (cycle?.status === '已生产') {
+    if (isNursingLitter(context.litter)) return formatNursingTitle(context.litter, now)
+    if (context.litter?.weaned_at) return '已断奶'
+  }
   return buildCompactBreedingCycleStatusTitle(cycle, records, now)
 }
 
-function buildBreedingTimelineCurrentSummary(cycle?: BreedingCycle | null, records: BreedingRecord[] = []) {
+function buildBreedingTimelineCurrentSummary(
+  cycle?: BreedingCycle | null,
+  records: BreedingRecord[] = [],
+  context: BreedingTimelineContext = {},
+) {
   if (!cycle?.status) return ''
 
   if (cycle.status === '发情中') {
@@ -123,13 +158,27 @@ function buildBreedingTimelineCurrentSummary(cycle?: BreedingCycle | null, recor
     return typeof matingTs === 'number' ? `配种于 ${formatDate(matingTs)}` : '怀孕进行中'
   }
 
+  if (cycle.status === '已生产') {
+    if (isNursingLitter(context.litter)) {
+      return typeof context.litter?.birth_date === 'number'
+        ? `生产于 ${formatDate(context.litter.birth_date)}`
+        : '等待确认断奶'
+    }
+    if (typeof context.litter?.weaned_at === 'number') return `断奶于 ${formatDate(context.litter.weaned_at)}`
+  }
+
   return cycle.status
 }
 
-function getBreedingTimelineUpcomingTitle(cycle?: BreedingCycle | null, records: BreedingRecord[] = []) {
+function getBreedingTimelineUpcomingTitle(
+  cycle?: BreedingCycle | null,
+  records: BreedingRecord[] = [],
+  context: BreedingTimelineContext = {},
+) {
   if (!cycle?.status) return ''
 
   if (cycle.status === '怀孕中') return '待产'
+  if (cycle.status === '已生产') return isNursingLitter(context.litter) ? '待断奶' : ''
   if (cycle.status !== '发情中') return cycle.status
 
   const follicleRecord = getLatestBreedingRecord(records, 'follicle_check')
@@ -153,9 +202,15 @@ function buildBreedingTimelineUpcomingSummary(
   cycle?: BreedingCycle | null,
   records: BreedingRecord[] = [],
   now = Date.now(),
+  context: BreedingTimelineContext = {},
 ) {
-  const upcomingTitle = getBreedingTimelineUpcomingTitle(cycle, records)
+  const upcomingTitle = getBreedingTimelineUpcomingTitle(cycle, records, context)
   if (!upcomingTitle) return ''
+
+  if (upcomingTitle === '待断奶') {
+    const dayCount = getNursingDayCount(context.litter, now)
+    return dayCount ? `出生第${dayCount}天` : '等待确认断奶'
+  }
 
   if (upcomingTitle === '待产') {
     const dueDate = getBreedingTimelineExpectedDueDate(cycle, records)
@@ -195,11 +250,12 @@ export function buildBreedingTimelineSyntheticItems(
   cycle?: BreedingCycle | null,
   records: BreedingRecord[] = [],
   now = Date.now(),
+  context: BreedingTimelineContext = {},
 ): BreedingTimelineSyntheticItem[] {
   if (!cycle) return []
 
-  const upcomingTitle = getBreedingTimelineUpcomingTitle(cycle, records)
-  const currentTitle = buildBreedingTimelineCurrentTitle(cycle, records, now)
+  const upcomingTitle = getBreedingTimelineUpcomingTitle(cycle, records, context)
+  const currentTitle = buildBreedingTimelineCurrentTitle(cycle, records, now, context)
   const baseDate = cycle.updated_at || cycle.created_at || now
   const items: BreedingTimelineSyntheticItem[] = []
 
@@ -210,7 +266,7 @@ export function buildBreedingTimelineSyntheticItems(
       type: 'upcoming',
       tone: 'gray',
       title: upcomingTitle,
-      summary: buildBreedingTimelineUpcomingSummary(cycle, records, now),
+      summary: buildBreedingTimelineUpcomingSummary(cycle, records, now, context),
       date: baseDate + 2,
     })
   }
@@ -220,9 +276,9 @@ export function buildBreedingTimelineSyntheticItems(
       key: 'current',
       kind: 'current',
       type: 'current',
-      tone: getBreedingTimelineStatusTone(cycle.status),
+      tone: getBreedingTimelineCurrentStatusTone(cycle, context),
       title: currentTitle,
-      summary: buildBreedingTimelineCurrentSummary(cycle, records),
+      summary: buildBreedingTimelineCurrentSummary(cycle, records, context),
       date: baseDate + 1,
     })
   }

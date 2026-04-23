@@ -307,8 +307,8 @@ import {
   getBreedingTimelineExpectedDueDate,
   formatRelativeDayLabel,
   buildBreedingTimelineSyntheticItems,
+  getBreedingTimelineCurrentStatusTone,
   getBreedingTimelineRecordTone,
-  getBreedingTimelineStatusTone,
   type BreedingTimelineKind,
   type BreedingTimelineTone,
 } from '@/utils/breedingTimeline'
@@ -384,11 +384,11 @@ const expectedDueDateRelativeText = computed(() => {
 
 const currentStatusText = computed(() => {
   if (!cycle.value?.status) return '-'
-  return buildBreedingTimelineCurrentTitle(cycle.value, timelineRecords.value, Date.now()) || cycle.value.status
+  return buildBreedingTimelineCurrentTitle(cycle.value, timelineRecords.value, Date.now(), { litter: litter.value }) || cycle.value.status
 })
 const currentStatusTone = computed(() => {
   if (!cycle.value?.status) return 'rose'
-  return getBreedingTimelineStatusTone(cycle.value.status)
+  return getBreedingTimelineCurrentStatusTone(cycle.value, { litter: litter.value })
 })
 const currentStatusTagColor = computed<'primary' | 'red' | 'amber' | 'green' | 'blue' | 'plum' | 'rose' | 'teal'>(() => {
   return currentStatusTone.value === 'gray' ? 'plum' : currentStatusTone.value
@@ -481,7 +481,7 @@ function timelineDetailLines(record: any) {
 }
 
 const timelineItems = computed<CycleTimelineItem[]>(() => {
-  const syntheticItems = buildBreedingTimelineSyntheticItems(cycle.value, timelineRecords.value, Date.now()).map(item => ({
+  const syntheticItems = buildBreedingTimelineSyntheticItems(cycle.value, timelineRecords.value, Date.now(), { litter: litter.value }).map(item => ({
     key: `synthetic-${item.key}`,
     kind: item.kind,
     type: item.type,

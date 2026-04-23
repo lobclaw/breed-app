@@ -32,7 +32,7 @@ describe('breeding cycle page source contract', () => {
 
   it('应收敛未来节点和历史节点的颜色语义，并复用共享 tone helper', () => {
     expect(source).toContain('getBreedingTimelineRecordTone')
-    expect(source).toContain('getBreedingTimelineStatusTone')
+    expect(source).toContain('getBreedingTimelineCurrentStatusTone')
     expect(source).toContain("tone: record._is_future ? 'gray' as const : getBreedingTimelineRecordTone(record.type)")
     expect(source).toContain("class=\"timeline-desc\"")
     expect(source).toContain('.timeline-desc--future')

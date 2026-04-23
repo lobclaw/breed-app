@@ -72,6 +72,42 @@
         <BDogPicker v-model="selectedDogs" :multiple="true" title="选择犬只" />
       </view>
 
+      <view v-if="showSingleIllnessSelector" class="field-group">
+        <view class="field-label">
+          <text>关联疾病</text>
+          <text class="field-label__optional">（选填）</text>
+        </view>
+        <view class="illness-picker">
+          <view
+            class="illness-picker__item illness-picker__item--standalone"
+            :class="{ 'illness-picker__item--active': !selectedSingleIllnessId }"
+            @click="selectedSingleIllnessId = ''"
+          >
+            <view class="illness-picker__copy">
+              <text class="illness-picker__title">不关联疾病</text>
+              <text class="illness-picker__sub">作为独立用药任务</text>
+            </view>
+            <view class="illness-picker__radio" :class="{ 'illness-picker__radio--active': !selectedSingleIllnessId }" />
+          </view>
+          <view
+            v-for="item in singleDogIllnessOptions"
+            :key="item.illnessRecordId"
+            class="illness-picker__item"
+            :class="{ 'illness-picker__item--active': selectedSingleIllnessId === item.illnessRecordId }"
+            @click="selectedSingleIllnessId = item.illnessRecordId"
+          >
+            <view class="illness-picker__copy">
+              <view class="illness-picker__head">
+                <text class="illness-picker__title">{{ item.primaryCondition || '疾病' }}</text>
+                <BTag :label="item.treatmentStatus || '观察中'" :color="illnessOptionStatusColor(item.treatmentStatus)" />
+              </view>
+              <text v-if="item.symptomSummary" class="illness-picker__sub">{{ item.symptomSummary }}</text>
+            </view>
+            <view class="illness-picker__radio" :class="{ 'illness-picker__radio--active': selectedSingleIllnessId === item.illnessRecordId }" />
+          </view>
+        </view>
+      </view>
+
       <view class="field-group">
         <view class="field-label"><text>药品名称</text></view>
         <input v-model="drugName" class="form-input" type="text" placeholder="请输入药品名称" />
@@ -364,8 +400,11 @@ const linkedIllness = ref<null | {
   date?: number | null
   dogId?: string
 }>(null)
+const singleDogIllnessOptions = ref<MedicationRouteIllnessLink[]>([])
+const selectedSingleIllnessId = ref('')
 const saveAsProtocol = ref(false)
 const showDatePicker = ref(false)
+let singleIllnessLoadToken = 0
 
 const { submitState, submitButtonText, markSubmitting, markSuccess, resetSubmitState } = useRecordSubmitState({
   idleLabel: '创建用药任务',
@@ -387,11 +426,7 @@ const linkedIllnessStatusColor = computed<'green' | 'amber' | 'red'>(() => {
 
 const linkedIllnessMetaText = computed(() => {
   if (!linkedIllness.value) return ''
-  const parts = [
-    linkedIllness.value.date ? `发病 ${formatDateInputValue(linkedIllness.value.date)}` : '',
-    isLinkedIllnessApplicable.value ? '本次创建后将与该疾病记录强关联' : '仅保持当前犬只不变且单犬创建时才会保留这条关联',
-  ].filter(Boolean)
-  return parts.join(' · ')
+  return linkedIllness.value.date ? `发病 ${formatDateInputValue(linkedIllness.value.date)}` : ''
 })
 
 const isLinkedIllnessApplicable = computed(() => {
@@ -399,18 +434,34 @@ const isLinkedIllnessApplicable = computed(() => {
   return selectedDogs.value[0]?._id === linkedIllness.value.dogId
 })
 
+const selectedSingleIllnessLink = computed<MedicationRouteIllnessLink | null>(() => {
+  if (selectedDogs.value.length !== 1 || !selectedSingleIllnessId.value) return null
+  if (isLinkedIllnessApplicable.value) return null
+  return singleDogIllnessOptions.value.find(item => item.illnessRecordId === selectedSingleIllnessId.value) || null
+})
+
 const effectiveIllnessLinks = computed<MedicationRouteIllnessLink[]>(() => {
-  if (selectedDogs.value.length === 0 || illnessLinks.value.length === 0) return []
+  if (selectedDogs.value.length === 0) return []
 
   const selectedDogIds = new Set(selectedDogs.value.map((dog: any) => dog?._id).filter(Boolean))
   const seenDogIds = new Set<string>()
 
-  return illnessLinks.value.filter((item) => {
+  const routeLinks = illnessLinks.value.filter((item) => {
     if (!item?.dogId || !item?.illnessRecordId) return false
     if (!selectedDogIds.has(item.dogId) || seenDogIds.has(item.dogId)) return false
     seenDogIds.add(item.dogId)
     return true
   })
+
+  const singleLink = selectedSingleIllnessLink.value
+  if (singleLink?.dogId && singleLink.illnessRecordId && selectedDogIds.has(singleLink.dogId)) {
+    return [
+      ...routeLinks.filter(item => item.dogId !== singleLink.dogId),
+      singleLink,
+    ]
+  }
+
+  return routeLinks
 })
 
 const linkedIllnessCount = computed(() => effectiveIllnessLinks.value.length)
@@ -446,6 +497,11 @@ const batchLinkedIllnessSummary = computed(() => {
 
 const showBatchLinkedSummary = computed(() => selectedDogs.value.length > 1 && linkedIllnessCount.value > 0)
 const showStandaloneBatchHint = computed(() => selectedDogs.value.length > 1 && linkedIllnessCount.value === 0)
+const showSingleIllnessSelector = computed(() => {
+  return selectedDogs.value.length === 1
+    && singleDogIllnessOptions.value.length > 0
+    && !isLinkedIllnessApplicable.value
+})
 
 function normalizeRouteIllnessLinks(value: MedicationRouteIllnessLink[]) {
   return value.reduce<MedicationRouteIllnessLink[]>((list, item) => {
@@ -537,11 +593,69 @@ const { run: fetchHealthRecord } = useCloudCall('health-service', 'getHealthReco
   successMode: 'silent',
   loadingMode: 'local',
 })
+const { run: fetchHealthHistory } = useCloudCall<{ data: any[] }>('health-service', 'getHealthHistory', {
+  successMode: 'silent',
+  loadingMode: 'local',
+  showError: false,
+})
 const { run: saveProtocol } = useCloudCall('health-service', 'addMedicationProtocol', {
   successMode: 'silent',
   loadingMode: 'local',
   throwOnError: true,
 })
+
+watch(() => selectedDogs.value.map((dog: any) => dog?._id || '').join(','), () => {
+  void loadSingleDogIllnessOptions()
+})
+
+function illnessOptionStatusColor(status?: string): 'green' | 'amber' | 'red' {
+  if (status === '已康复') return 'green'
+  if (status === '治疗中') return 'amber'
+  return 'red'
+}
+
+function buildIllnessLinkFromRecord(record: any): MedicationRouteIllnessLink | null {
+  if (!record || record.type !== 'illness') return null
+  const details = record.details || {}
+  const treatmentStatus = String(details.treatment_status || '观察中').trim()
+  if (treatmentStatus === '已康复') return null
+  const tags = Array.isArray(details.symptom_tags)
+    ? details.symptom_tags
+      .map((item: unknown) => typeof item === 'string' ? item.trim() : '')
+      .filter(Boolean)
+    : []
+
+  return {
+    dogId: record.dog_id || '',
+    illnessRecordId: record._id || '',
+    primaryCondition: String(details.primary_condition || details.condition || '').trim(),
+    symptomSummary: tags.length <= 2 ? tags.join(' / ') : `${tags.slice(0, 2).join(' / ')} 等${tags.length}项`,
+    treatmentStatus,
+  }
+}
+
+async function loadSingleDogIllnessOptions() {
+  const token = ++singleIllnessLoadToken
+  selectedSingleIllnessId.value = ''
+  singleDogIllnessOptions.value = []
+
+  if (selectedDogs.value.length !== 1) return
+  const dogId = selectedDogs.value[0]?._id
+  if (!dogId) return
+  if (isLinkedIllnessApplicable.value) return
+
+  const result = await fetchHealthHistory(dogId, 'illness')
+  if (token !== singleIllnessLoadToken) return
+
+  const options = (result?.data || [])
+    .map(buildIllnessLinkFromRecord)
+    .filter((item): item is MedicationRouteIllnessLink => !!item?.dogId && !!item?.illnessRecordId)
+
+  singleDogIllnessOptions.value = options
+  if (options.length === 1) {
+    selectedSingleIllnessId.value = options[0].illnessRecordId
+  }
+}
 
 async function submit() {
   if (!canSubmit.value || submitState.value === 'submitting') return
@@ -812,6 +926,76 @@ async function initFromRoute() {
   color: var(--amber);
   font-size: 12px;
   line-height: 1.5;
+}
+
+.illness-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.illness-picker__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(216, 203, 189, 0.55);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+  transition: border-color 0.16s ease, background 0.16s ease, transform 0.12s ease;
+
+  &:active {
+    transform: scale(0.985);
+  }
+}
+
+.illness-picker__item--active {
+  border-color: rgba(230, 93, 93, 0.34);
+  background: rgba(255, 244, 244, 0.88);
+}
+
+.illness-picker__item--standalone.illness-picker__item--active {
+  border-color: rgba(174, 153, 132, 0.38);
+  background: rgba(250, 246, 241, 0.9);
+}
+
+.illness-picker__copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.illness-picker__head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.illness-picker__title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.illness-picker__sub {
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.45;
+}
+
+.illness-picker__radio {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 2px solid rgba(174, 153, 132, 0.42);
+  flex-shrink: 0;
+}
+
+.illness-picker__radio--active {
+  border: 6px solid var(--red);
 }
 
 .batch-mode-banner {
