@@ -67,7 +67,7 @@ function buildSubtitle(cycle?: BreedingCycle | null, records: BreedingRecord[] =
   if (!cycle) return ''
   const parts = []
   if (cycle.sire_name) parts.push(`种公: ${cycle.sire_name}`)
-  parts.push(buildCompactBreedingCycleStatusTitle(cycle, records, now) || cycle.status || '进行中')
+  if (!parts.length) parts.push(buildCompactBreedingCycleStatusTitle(cycle, records, now) || cycle.status || '进行中')
   return parts.join(' · ')
 }
 

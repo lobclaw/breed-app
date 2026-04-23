@@ -65,12 +65,7 @@ const showSuggestionChip = computed(() => {
 const hasMultipleActions = computed(() => hasMultipleHomeBreedingActions(props.card))
 
 function onCardTap() {
-  if (hasMultipleActions.value) {
-    openHomeBreedingDetail(props.card)
-    return
-  }
-
-  openHomeBreedingAction(props.card, 'process')
+  openHomeBreedingDetail(props.card)
 }
 
 function onPrimaryActionTap() {

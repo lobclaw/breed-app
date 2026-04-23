@@ -528,6 +528,14 @@
     </BSheet>
 
     <BDateTimePicker
+      v-model:visible="showHomeDatePicker"
+      :model-value="selectedDate"
+      mode="date"
+      value-type="timestamp"
+      @confirm="onHomeCalendarConfirm"
+    />
+
+    <BDateTimePicker
       v-model:visible="showQuickCompleteDatePicker"
       :model-value="quickCompleteDate"
       mode="date"
@@ -602,6 +610,7 @@ const focusedHomeCardId = ref('')
 const pendingHomeCardFocusTarget = ref<HomeCardFocusTarget | ''>('')
 let focusedHomeCardTimer: ReturnType<typeof setTimeout> | null = null
 const isHomeActive = ref(false)
+const showHomeDatePicker = ref(false)
 
 // 选中日期（0点 timestamp）
 const selectedDate = ref(getBeijingDayStart(Date.now()))
@@ -1076,22 +1085,60 @@ async function loadAll() {
   }
 }
 
-function onDateSelect(ts: number) {
-  selectedDate.value = ts
+async function onDateSelect(ts: number) {
+  const normalizedTs = startOfDay(ts)
+  selectedDate.value = normalizedTs
   const todayTs = startOfDay(Date.now())
-  if (ts === todayTs) {
+  if (normalizedTs === todayTs) {
     // 切回今天：显示今日模式
     viewMode.value = 'today'
     dayCards.value = []
+    loading.value = false
   } else {
-    // 其他日期：从缓存读取，零延迟
+    const cachedEntry = weekCache.value[normalizedTs]
     viewMode.value = 'date'
-    dayCards.value = weekCache.value[ts]?.cards || []
+    if (cachedEntry) {
+      // 已缓存日期：零延迟读取
+      dayCards.value = cachedEntry.cards
+      loading.value = false
+      return
+    }
+
+    const loadToken = latestLoadToken
+    dayCards.value = []
+    loading.value = true
+    try {
+      const result = await fetchWeekCards(normalizedTs, normalizedTs + 86400000 - 1)
+      if (loadToken !== latestLoadToken || selectedDate.value !== normalizedTs) return
+      pruneSuppressedTasks()
+      const dayData = result?.data?.[normalizedTs] || result?.data?.[String(normalizedTs)]
+      const cardsForDay = filterSuppressedCards(dayData?.cards || [])
+      weekCache.value = {
+        ...weekCache.value,
+        [normalizedTs]: { cards: cardsForDay },
+      }
+      dayCards.value = cardsForDay
+    } finally {
+      if (loadToken === latestLoadToken && selectedDate.value === normalizedTs && viewMode.value === 'date') {
+        loading.value = false
+      }
+    }
   }
 }
 
 function toggleCalendar() {
-  uni.showToast({ title: '月历功能后续迭代', icon: 'none' })
+  showHomeDatePicker.value = true
+}
+
+function onHomeCalendarConfirm(value: number | string) {
+  if (typeof value !== 'number') return
+  const dayTs = getBeijingDayStart(value)
+  const todayTs = startOfDay(Date.now())
+  if (dayTs < todayTs) {
+    uni.showToast({ title: '过去日期暂不可查看', icon: 'none' })
+    return
+  }
+  void onDateSelect(dayTs)
 }
 
 function dismissSubmitToast() {

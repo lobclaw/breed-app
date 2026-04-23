@@ -391,7 +391,7 @@
                 <text class="breeding-active-cycle__label">{{ activeCycleStatusTitle }}</text>
               </view>
               <view class="dog-detail__rec-tag dog-detail__rec-tag--rose">
-                <text class="dog-detail__rec-tag-text">{{ activeCycleStatusTitle }}</text>
+                <text class="dog-detail__rec-tag-text">{{ activeCycleDueTagTitle }}</text>
               </view>
             </view>
             <text class="breeding-active-cycle__title">{{ activeCycleSummary.title }}</text>
@@ -1175,6 +1175,7 @@ import type { AddRecordItem } from '@/utils/addRecordSheet'
 import { createDogDetailAddRecordGroups } from '@/utils/addRecordSheet'
 import type { BreedingCycleDetailResponse } from '@/types/breeding'
 import { buildActiveCycleSummaryViewModel, buildHistoryCycleSummaryViewModel } from '@/utils/dogBreedingSummary'
+import { getBreedingTimelineExpectedDueDate, formatRelativeDayLabel as formatDueRelativeDayLabel } from '@/utils/breedingTimeline'
 import { buildTimestampFromDayOffset, formatDateInputValue } from '@/utils/date'
 import { formatFinanceAmount, getFinanceAmountParts, type FinanceAmountParts } from '@/utils/financeDisplay'
 
@@ -1223,6 +1224,7 @@ const pageInstance = getCurrentInstance()
 const HEALTH_FILTER_FOCUS_RATIO = 0.38
 const HEALTH_FILTER_AUTO_TOLERANCE_PX = 12
 const HEALTH_FILTER_FORCE_MIN_DELTA_PX = 8
+const FINANCE_ENTRY_DOG_FILTER_KEY = 'finance_entry_dog_filter'
 let dogId = ''
 let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
 let healthFilterFocusTimer: ReturnType<typeof setTimeout> | null = null
@@ -1674,6 +1676,15 @@ const activeCycleStatusTitle = computed(() => {
   return buildCompactBreedingCycleStatusTitle(cycle, activeCycleSummaryDetail.value?.records || [])
     || cycle?.status
     || '进行中'
+})
+const activeCycleDueTagTitle = computed(() => {
+  const cycle = activeCycleSummaryDetail.value?.cycle || activeCycle.value || null
+  if (cycle?.status !== '怀孕中') return activeCycleStatusTitle.value
+
+  const dueDate = getBreedingTimelineExpectedDueDate(cycle, activeCycleSummaryDetail.value?.records || [])
+  return typeof dueDate === 'number'
+    ? formatDueRelativeDayLabel(dueDate)
+    : '预产待定'
 })
 const currentCycleLitter = computed(() => {
   if (activeCycleSummaryDetail.value?.litter) return activeCycleSummaryDetail.value.litter
@@ -2325,8 +2336,17 @@ function goToIncomeAdd() {
 }
 
 function goToFinanceList() {
-  const dogName = encodeURIComponent(dog.value?.name || '')
-  uni.navigateTo({ url: `/pages/finance/index?dogId=${dogId}&dogName=${dogName}` })
+  uni.setStorageSync(FINANCE_ENTRY_DOG_FILTER_KEY, JSON.stringify({
+    dogId,
+    dogName: dog.value?.name || '',
+  }))
+  uni.switchTab({
+    url: '/pages/finance/index',
+    fail() {
+      uni.removeStorageSync(FINANCE_ENTRY_DOG_FILTER_KEY)
+      uni.showToast({ title: '财务页打开失败', icon: 'none' })
+    },
+  })
 }
 
 function goToDamRoi() {

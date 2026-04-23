@@ -287,7 +287,8 @@ interface DogListItem extends DogWithStatus {
 
 const DEFAULT_DISPOSITION: DogDisposition = '在养'
 const MAX_SECONDARY_STATUS_TAGS = 2
-const MAX_STATUS_TAGS = 2
+const MAX_STATUS_TAGS = 3
+const BREEDING_STATUS_TYPES = new Set<DeriveStatusType>(['发情中', '怀孕中', '哺乳中'])
 const dogs = ref<DogWithStatus[]>([])
 const loading = ref(true)
 const activeFilter = ref<QuickFilterValue>('all')
@@ -494,8 +495,21 @@ function statusTagClass(status: DeriveStatus) {
   return `dog-list__status-tag--${statusColor(status.type)}`
 }
 
+function isBreedingStatus(status: DeriveStatus) {
+  return BREEDING_STATUS_TYPES.has(status.type)
+}
+
+function pickVisibleStatusTags(activeStatuses: DeriveStatus[]) {
+  const visibleStatuses = activeStatuses.slice(0, MAX_STATUS_TAGS)
+  const breedingStatus = activeStatuses.find(isBreedingStatus)
+  if (!breedingStatus || visibleStatuses.some(isBreedingStatus)) return visibleStatuses
+
+  visibleStatuses[visibleStatuses.length - 1] = breedingStatus
+  return visibleStatuses
+}
+
 function buildStatusTags(activeStatuses: DeriveStatus[]) {
-  return activeStatuses.slice(0, MAX_STATUS_TAGS).map((status, index) => ({
+  return pickVisibleStatusTags(activeStatuses).map((status, index) => ({
     key: `${status.type}-${status.activityTs || 0}-${index}`,
     label: statusTagLabel(status),
     className: statusTagClass(status),

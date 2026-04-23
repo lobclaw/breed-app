@@ -1,6 +1,6 @@
 <template>
   <view class="page">
-    <BPageHeader title="用药任务详情" />
+    <BPageHeader :title="pageTitle" />
     <BSubmitBanner :message="submitBannerMessage" />
 
     <template v-if="loading">
@@ -74,10 +74,6 @@
         </view>
       </view>
 
-      <view class="section-label">
-        <view class="section-dot" style="background: var(--red);" />
-        <text class="section-text">操作</text>
-      </view>
       <view class="action-area">
         <view class="detail-skeleton-action">
           <view class="detail-skeleton-action__glow" />
@@ -98,8 +94,8 @@
               <text class="detail-summary__tag-text">{{ statusText }}</text>
             </view>
             <text class="detail-summary__title">{{ task.drug_name || '用药任务' }}</text>
-            <text class="detail-summary__sub">{{ task.dog_name || '未知犬只' }} · {{ formatDate(task.start_date) }} 开始</text>
-            <text v-if="completionSummaryText" class="detail-summary__completion">{{ completionSummaryText }}</text>
+            <text class="detail-summary__sub">{{ medicationMethodSummary }}</text>
+            <text v-if="treatmentSummaryText" class="detail-summary__completion">{{ treatmentSummaryText }}</text>
           </view>
           <view class="detail-summary__meta">
             <text class="detail-summary__meta-value">{{ summaryMetaValue }}</text>
@@ -129,41 +125,12 @@
         <BCard color="plum" :pressable="false">
           <view class="info-rows">
             <view class="info-row">
-              <text class="info-row-label">犬只</text>
-              <view class="info-row-value">
-                <view class="mini-avatar">
-                  <BEntityIcon :size="14" color="#fff" />
-                </view>
-                <text>{{ task.dog_name || '未知' }}</text>
-              </view>
-            </view>
-            <view class="info-row">
-              <text class="info-row-label">药品</text>
-              <text class="info-row-value">{{ task.drug_name || '—' }}</text>
-            </view>
-            <view class="info-row" v-if="dosageText">
-              <text class="info-row-label">剂量</text>
-              <text class="info-row-value">{{ dosageText }}</text>
-            </view>
-            <view class="info-row" v-if="task.method">
-              <text class="info-row-label">方式</text>
-              <text class="info-row-value">{{ task.method }}</text>
-            </view>
-            <view class="info-row" v-if="frequencyText">
-              <text class="info-row-label">频率</text>
-              <text class="info-row-value">{{ frequencyText }}</text>
-            </view>
-            <view class="info-row">
               <text class="info-row-label">开始日期</text>
               <text class="info-row-value">{{ formatDate(task.start_date) }}</text>
             </view>
             <view class="info-row">
               <text class="info-row-label">预计结束</text>
-              <text class="info-row-value">{{ formatDate(task.end_date) }}</text>
-            </view>
-            <view class="info-row" v-if="completionDetailText">
-              <text class="info-row-label">完成情况</text>
-              <text class="info-row-value">{{ completionDetailText }}</text>
+              <text class="info-row-value">{{ formatDate(task.end_date) }} · {{ endDateRelativeText }}</text>
             </view>
             <view class="info-row" v-if="task.protocol_name">
               <text class="info-row-label">来源方案</text>
@@ -199,7 +166,7 @@
               <view class="exec-log-item__body">
                 <view class="exec-log-item__head">
                   <text class="exec-day" :style="{ color: day.isToday ? 'var(--plum)' : 'var(--text-2)' }">
-                    第{{ day.dayNum }}天
+                    {{ day.title }}
                   </text>
                   <text class="exec-date" :style="{ color: day.isToday ? 'var(--plum)' : 'var(--text-3)' }">
                     {{ day.dateStr }}
@@ -219,10 +186,6 @@
         </BCard>
       </view>
 
-      <view class="section-label">
-        <view class="section-dot" style="background: var(--red);" />
-        <text class="section-text">操作</text>
-      </view>
       <view class="action-area">
         <view class="medication-action-card">
           <view class="medication-action-card__glow" />
@@ -281,7 +244,6 @@ import { useCloudCall } from '@/composables/useCloudCall'
 import { consumeSubmitFeedback, queueSubmitFeedback } from '@/composables/useSubmitFeedback'
 import BButton from '@/components/base/BButton.vue'
 import BCard from '@/components/base/BCard.vue'
-import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BProgress from '@/components/base/BProgress.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
@@ -324,6 +286,15 @@ const showDayProgress = computed(() => {
   return (task.value?.duration_days || 0) > 1
 })
 
+const pageTitle = computed(() => {
+  const dogName = task.value?.dog_name
+  const drugName = task.value?.drug_name
+  if (!dogName || !drugName) return '用药任务详情'
+  if (task.value?.status === 'cancelled') return `${dogName} · ${drugName}已取消`
+  if (task.value?.status === 'completed') return `${dogName} · ${drugName}已结束`
+  return `${dogName} · ${drugName}第${currentDay.value}天`
+})
+
 const statusText = computed(() => {
   if (!task.value) return ''
   if (task.value.status === 'completed') return '已完成'
@@ -333,6 +304,14 @@ const statusText = computed(() => {
 
 const dosageText = computed(() => formatMedicationDosage(task.value?.dosage, task.value?.dosage_unit))
 const frequencyText = computed(() => formatMedicationFrequency(task.value?.frequency))
+const medicationMethodSummary = computed(() => {
+  const parts = [
+    task.value?.method || '',
+    dosageText.value,
+    frequencyText.value,
+  ].filter(Boolean)
+  return parts.length ? parts.join(' · ') : '用药信息待补充'
+})
 
 const statusBannerBg = computed(() => {
   if (task.value?.status === 'completed') return 'var(--green-soft)'
@@ -352,52 +331,46 @@ const canMarkToday = computed(() => {
   return !completedDates.includes(todayTs.value)
 })
 
-const completionCounts = computed(() => {
-  if (!task.value) return { completed: 0, total: 0 }
-  return {
-    completed: Number(task.value.completed_dose_count) || 0,
-    total: Number(task.value.total_dose_count) || 0,
-  }
+const todayRequiredDoseCount = computed(() => getMedicationFrequency(task.value))
+const todayCompletedDoseCount = computed(() => {
+  if (!task.value) return 0
+  if ((task.value.completed_dates || []).includes(todayTs.value)) return todayRequiredDoseCount.value
+  const dayDoseCount = Number(task.value.daily_doses?.[String(currentDay.value)]) || 0
+  return Math.min(dayDoseCount, todayRequiredDoseCount.value)
 })
 
 const summaryMetaValue = computed(() => {
   if (!task.value) return ''
-  if (!showDayProgress.value && completionCounts.value.total > 0) {
-    return `${completionCounts.value.completed}/${completionCounts.value.total}`
-  }
-  return `${currentDay.value}/${task.value.duration_days}`
+  return `${todayCompletedDoseCount.value}/${todayRequiredDoseCount.value}`
 })
 
 const summaryMetaLabel = computed(() => {
-  return showDayProgress.value ? '天数进度' : '完成情况'
+  return '今日完成'
 })
 
-const completionSummaryText = computed(() => {
-  if (!task.value || completionCounts.value.total === 0) return ''
-
-  const { completed, total } = completionCounts.value
-  if (task.value.status === 'completed') {
-    return completed >= total ? `已完成 · ${completed}/${total} 次` : `部分完成 · ${completed}/${total} 次`
+const treatmentSummaryText = computed(() => {
+  if (!task.value) return ''
+  const parts = []
+  if (task.value.status === 'active') {
+    parts.push(`疗程第${currentDay.value}天`)
+  } else {
+    parts.push(statusText.value)
   }
-
-  if (task.value.status === 'cancelled') {
-    return `已执行 ${completed}/${total} 次`
-  }
-
-  return completed > 0 ? `已执行 ${completed}/${total} 次` : ''
+  if (task.value.end_date) parts.push(`预计${endDateRelativeText.value}`)
+  return parts.join(' · ')
 })
 
-const completionDetailText = computed(() => {
-  if (!task.value || completionCounts.value.total === 0) return ''
-  const { completed, total } = completionCounts.value
-  if (task.value.status === 'completed' && completed < total) return `部分完成 · ${completed}/${total} 次`
-  if (task.value.status === 'completed') return `已完成 · ${completed}/${total} 次`
-  if (task.value.status === 'cancelled') return `已执行 ${completed}/${total} 次`
-  return `${completed}/${total} 次`
+const endDateRelativeText = computed(() => {
+  if (!task.value?.end_date) return '结束时间待定'
+  const diffDays = Math.floor((startOfDay(task.value.end_date) - todayTs.value) / DAY_MS)
+  if (diffDays > 0) return `还有${diffDays}天`
+  if (diffDays === 0) return '今天结束'
+  return `已结束${Math.abs(diffDays)}天`
 })
 
 interface ExecutionDay {
   dayNum: number
+  title: string
   dateStr: string
   status: 'done' | 'pending' | 'partial' | 'missed' | 'future'
   statusLabel: string
@@ -435,9 +408,11 @@ const executionDays = computed<ExecutionDay[]>(() => {
     } else if (status === 'partial') {
       detail = `已执行 ${dayDoseCount}/${frequency} 次`
     } else if (isToday && status === 'pending') {
-      detail = '待执行'
+      detail = `待执行 · ${frequencyText.value}`
     } else if (status === 'missed') {
       detail = '当日未执行'
+    } else if (status === 'future') {
+      detail = frequencyText.value
     }
 
     const statusLabelMap: Record<ExecutionDay['status'], string> = {
@@ -448,7 +423,8 @@ const executionDays = computed<ExecutionDay[]>(() => {
       future: '未开始',
     }
     const statusLabel = statusLabelMap[status]
-    days.push({ dayNum: i + 1, dateStr, status, statusLabel, detail, isToday })
+    const title = isToday ? `今天 · 第${i + 1}天` : `第${i + 1}天`
+    days.push({ dayNum: i + 1, title, dateStr, status, statusLabel, detail, isToday })
   }
 
   return days
@@ -540,7 +516,7 @@ onShow(() => {
 
 <style lang="scss" scoped>
 .page {
-  padding-bottom: 40px;
+  padding-bottom: calc(188px + env(safe-area-inset-bottom));
 }
 
 .detail-skeleton-card,
@@ -1027,7 +1003,13 @@ onShow(() => {
 }
 
 .action-area {
-  padding: 0 16px 8px;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  padding: 12px 16px calc(8px + env(safe-area-inset-bottom));
+  background: linear-gradient(180deg, rgba(252, 248, 248, 0) 0%, rgba(252, 248, 248, 0.94) 18%, rgba(252, 248, 248, 0.98) 100%);
 }
 
 .medication-action-card {

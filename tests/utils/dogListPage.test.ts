@@ -37,6 +37,15 @@ describe('dog list page source contract', () => {
     expect(source).not.toContain('b.created_at - a.created_at')
   })
 
+  it('状态标签最多显示 3 个，并且有繁育状态时必须进入可见标签', () => {
+    expect(source).toContain('const MAX_STATUS_TAGS = 3')
+    expect(source).toContain("const BREEDING_STATUS_TYPES = new Set<DeriveStatusType>(['发情中', '怀孕中', '哺乳中'])")
+    expect(source).toContain('function pickVisibleStatusTags(activeStatuses: DeriveStatus[])')
+    expect(source).toContain('const breedingStatus = activeStatuses.find(isBreedingStatus)')
+    expect(source).toContain('visibleStatuses[visibleStatuses.length - 1] = breedingStatus')
+    expect(source).toContain('return pickVisibleStatusTags(activeStatuses).map((status, index) => ({')
+  })
+
   it('从档案页进入新建页时应显式传回跳目标路由，并在后台刷新后继续尝试承接新犬只', () => {
     expect(source).toContain("uni.navigateTo({ url: `/pages/dog/add?targetRoute=${encodeURIComponent('/pages/dog/list')}` })")
     expect(source).toContain("pendingFeedbackDogId = feedback.targetDogId")

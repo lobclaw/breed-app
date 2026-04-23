@@ -142,7 +142,7 @@ function getBreedingTimelineUpcomingTitle(cycle?: BreedingCycle | null, records:
   return '待产'
 }
 
-function formatRelativeDayLabel(targetTs: number, now = Date.now()) {
+export function formatRelativeDayLabel(targetTs: number, now = Date.now()) {
   const diffDays = Math.floor((startOfDay(targetTs) - startOfDay(now)) / DAY_MS)
   if (diffDays > 0) return `还有${diffDays}天`
   if (diffDays === 0) return '就在今天'

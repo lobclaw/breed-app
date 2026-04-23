@@ -24,7 +24,7 @@
             </view>
           </view>
           <view class="info-rows">
-            <view v-for="row in 5" :key="`cycle-summary-${row}`" class="info-row">
+            <view v-for="row in 4" :key="`cycle-summary-${row}`" class="info-row">
               <view class="cycle-skeleton cycle-skeleton--label" :class="{ 'cycle-skeleton--label-short': row > 3 }" />
               <view class="cycle-skeleton cycle-skeleton--value" :class="{ 'cycle-skeleton--value-strong': row === 4 }" />
             </view>
@@ -112,7 +112,7 @@
             <view class="dam-info">
               <view class="dam-title-row">
                 <text class="dam-name">{{ cycle.dam_name }}</text>
-                <BTag :label="cycle.status" :color="currentStatusTagColor" />
+                <BTag :label="currentStatusText" :color="currentStatusTagColor" />
               </view>
               <text class="dam-breed">马尔济斯 · 种母</text>
             </view>
@@ -130,15 +130,9 @@
               <text class="info-label">首配日期</text>
               <text class="info-value">{{ firstMatingDateText }}</text>
             </view>
-            <view class="info-row">
-              <text class="info-label">当前状态</text>
-              <text class="info-value info-value--highlight" :style="{ color: `var(--${currentStatusTone})` }">
-                {{ currentStatusText }}
-              </text>
-            </view>
             <view v-if="expectedDueDateText" class="info-row">
               <text class="info-label">预产期</text>
-              <text class="info-value">{{ expectedDueDateText }}</text>
+              <text class="info-value">{{ expectedDueDateText }} · {{ expectedDueDateRelativeText }}</text>
             </view>
           </view>
         </BCard>
@@ -311,6 +305,7 @@ import { createCycleBreedingAddRecordGroups } from '@/utils/addRecordSheet'
 import {
   buildBreedingTimelineCurrentTitle,
   getBreedingTimelineExpectedDueDate,
+  formatRelativeDayLabel,
   buildBreedingTimelineSyntheticItems,
   getBreedingTimelineRecordTone,
   getBreedingTimelineStatusTone,
@@ -382,6 +377,9 @@ const expectedDueDate = computed(() => {
 
 const expectedDueDateText = computed(() => {
   return typeof expectedDueDate.value === 'number' ? formatDate(expectedDueDate.value) : ''
+})
+const expectedDueDateRelativeText = computed(() => {
+  return typeof expectedDueDate.value === 'number' ? formatRelativeDayLabel(expectedDueDate.value) : ''
 })
 
 const currentStatusText = computed(() => {

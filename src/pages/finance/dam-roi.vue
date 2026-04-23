@@ -261,7 +261,7 @@ const breakdownSections = computed(() => {
       items: [
         { label: '购入成本', value: formatFinanceAmount(-roiData.value.purchaseCost, { scene: 'report' }), tone: 'negative' },
         { label: '繁育投入', value: formatFinanceAmount(-roiData.value.totalBreedingCost, { scene: 'report' }), tone: 'negative' },
-        { label: '健康相关支出', value: formatFinanceAmount(-roiData.value.healthCost, { scene: 'report' }), tone: 'negative' },
+        { label: '个体费用', value: formatFinanceAmount(-roiData.value.healthCost, { scene: 'report' }), tone: 'negative' },
       ],
     },
     {

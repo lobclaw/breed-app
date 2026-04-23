@@ -129,12 +129,7 @@ function goDogDetail(card: any) {
 }
 
 function onRowTap(card: any) {
-  if (hasMultipleHomeBreedingActions(card)) {
-    openHomeBreedingDetail(card)
-    return
-  }
-
-  openHomeBreedingAction(card, 'process')
+  openHomeBreedingDetail(card)
 }
 
 function onPrimaryActionTap(card: any) {

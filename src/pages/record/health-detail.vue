@@ -1,6 +1,6 @@
 <template>
   <view class="page">
-    <BPageHeader title="健康记录详情">
+    <BPageHeader :title="pageTitle">
       <template #right>
         <view class="header-actions">
           <view v-if="canEdit" class="header-action" @click="goEdit">
@@ -74,7 +74,7 @@
               <text class="detail-summary__tag-text">{{ typeLabel }}</text>
             </view>
             <text class="detail-summary__title">{{ summaryTitle }}</text>
-            <text class="detail-summary__sub">{{ record.dog_name || '未知犬只' }} · {{ formatDate(record.date) }}</text>
+            <text class="detail-summary__sub">{{ summarySubtitle }}</text>
             <view v-if="summaryFact" class="detail-summary__facts">
               <view class="detail-summary__fact" :class="summaryFact.tone ? `detail-summary__fact--${summaryFact.tone}` : ''">
                 <text class="material-icons-round detail-summary__fact-icon">{{ summaryFact.icon || 'schedule' }}</text>
@@ -83,7 +83,7 @@
               </view>
             </view>
           </view>
-          <view class="detail-summary__meta">
+          <view v-if="summaryMeta" class="detail-summary__meta">
             <text class="detail-summary__meta-value">{{ summaryMeta }}</text>
             <text class="detail-summary__meta-label">{{ summaryMetaLabel }}</text>
           </view>
@@ -98,14 +98,14 @@
       <view class="card-feed">
         <BCard :color="cardColor" :pressable="false">
           <view class="info-rows">
-            <view class="info-row">
+            <view v-if="record.type !== 'illness'" class="info-row">
               <text class="info-row-label">记录类型</text>
               <view class="info-row-value">
                 <BTag :label="typeLabel" :color="tagColor" />
               </view>
             </view>
 
-            <view class="info-row">
+            <view v-if="record.type !== 'illness'" class="info-row">
               <text class="info-row-label">犬只</text>
               <view class="info-row-value">
                 <view class="mini-avatar">
@@ -149,10 +149,6 @@
 
             <!-- 疾病特有字段 -->
             <template v-if="record.type === 'illness'">
-              <view class="info-row" v-if="record.details?.condition">
-                <text class="info-row-label">病症类型</text>
-                <text class="info-row-value">{{ record.details.condition }}</text>
-              </view>
               <view class="info-row" v-if="record.details?.severity">
                 <text class="info-row-label">严重程度</text>
                 <view class="info-row-value">
@@ -162,12 +158,6 @@
               <view class="info-row">
                 <text class="info-row-label">发病日期</text>
                 <text class="info-row-value">{{ formatDate(record.date) }}</text>
-              </view>
-              <view class="info-row" v-if="record.details?.treatment_status">
-                <text class="info-row-label">治疗状态</text>
-                <view class="info-row-value">
-                  <BTag :label="record.details.treatment_status" :color="treatmentStatusColor" />
-                </view>
               </view>
             </template>
 
@@ -274,6 +264,12 @@ const dewormingTypeMap: Record<string, string> = {
 const typeLabel = computed(() => typeMap[record.value?.type]?.label || record.value?.type || '未知')
 const tagColor = computed(() => typeMap[record.value?.type]?.tagColor || 'green')
 const cardColor = computed(() => typeMap[record.value?.type]?.cardColor || 'green')
+const pageTitle = computed(() => {
+  const dogName = record.value?.dog_name
+  if (!dogName) return '健康记录详情'
+  if (record.value?.type === 'illness') return `${dogName} · ${illnessTitleText.value}`
+  return `${dogName} · 健康记录详情`
+})
 const canEdit = computed(() => !loading.value && !!record.value)
 const isIllnessRecord = computed(() => record.value?.type === 'illness')
 const illnessStatus = computed(() => record.value?.details?.treatment_status || '观察中')
@@ -311,39 +307,42 @@ const severityColor = computed(() => {
   return 'green'
 })
 
-const treatmentStatusColor = computed(() => {
-  const s = record.value?.details?.treatment_status
-  if (s === '治疗中') return 'amber'
-  if (s === '已康复') return 'green'
-  return 'plum'
-})
 const summaryTitle = computed(() => {
   if (record.value?.type === 'vaccination') return record.value?.details?.vaccine_type || record.value?.details?.vaccine_name || '疫苗记录'
   if (record.value?.type === 'deworming') return record.value?.details?.drug_name || dewormingTypeLabel.value || '驱虫记录'
-  if (record.value?.type === 'illness') return record.value?.details?.condition || '疾病记录'
+  if (record.value?.type === 'illness') return illnessStatus.value
   return '健康记录'
 })
+const summarySubtitle = computed(() => {
+  if (record.value?.type === 'illness') {
+    const parts = [
+      record.value?.details?.condition || '疾病',
+      record.value?.details?.severity || '',
+      record.value?.date ? `发病 ${formatDate(record.value.date)}` : '',
+    ].filter(Boolean)
+    return parts.join(' · ')
+  }
+  return `${record.value?.dog_name || '未知犬只'} · ${formatDate(record.value?.date)}`
+})
+const illnessTitleText = computed(() => {
+  const condition = record.value?.details?.condition || '疾病'
+  const courseDay = getIllnessCourseDay(record.value?.date)
+  return courseDay ? `${condition}第${courseDay}天` : condition
+})
 const summaryMeta = computed(() => {
-  if (record.value?.type === 'illness') return record.value?.details?.treatment_status || '观察中'
+  if (record.value?.type === 'illness') return ''
   if (record.value?.type === 'deworming') return dewormingTypeLabel.value
   return typeLabel.value
 })
 const summaryMetaLabel = computed(() => {
-  if (record.value?.type === 'illness') return '当前状态'
+  if (record.value?.type === 'illness') return ''
   if (record.value?.type === 'deworming') return '驱虫类型'
   return '当前记录'
 })
 const summaryFact = computed(() => {
   if (!record.value) return null
 
-  if (record.value.type === 'illness') {
-    return {
-      label: '病程',
-      value: formatIllnessCourseText(record.value.date),
-      tone: 'red',
-      icon: 'timeline',
-    }
-  }
+  if (record.value.type === 'illness') return null
 
   if (record.value.type === 'vaccination' && nextReminderShortText.value) {
     return {
@@ -387,10 +386,9 @@ function formatDateTime(ts: number | undefined): string {
   return `${formatDate(ts)} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-function formatIllnessCourseText(ts: number | undefined): string {
-  if (!ts) return '病程未记录'
-  const days = Math.max(1, Math.floor((Date.now() - ts) / 86400000) + 1)
-  return `病程第${days}天`
+function getIllnessCourseDay(ts: number | undefined): number | null {
+  if (!ts) return null
+  return Math.max(1, Math.floor((Date.now() - ts) / 86400000) + 1)
 }
 
 function formatAmount(n: number): string {

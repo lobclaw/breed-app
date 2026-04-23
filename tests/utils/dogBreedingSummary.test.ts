@@ -56,7 +56,7 @@ describe('dogBreedingSummary', () => {
     ] as any, now)
 
     expect(summary.title).toBe('第3次繁育周期')
-    expect(summary.subtitle).toBe('种公: 团团 · 怀孕第56天')
+    expect(summary.subtitle).toBe('种公: 团团')
     expect(summary.timeline.map(item => item.title)).toEqual([
       '待产',
       '怀孕第56天',

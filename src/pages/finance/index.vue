@@ -517,6 +517,7 @@ import { formatFinanceAmount, getFinanceAmountDisplay, getFinanceAmountParts } f
 type FinanceFilterType = '' | 'income' | 'expense'
 type FinanceDateRangeValue = typeof FINANCE_DATE_RANGE_OPTIONS[number]['value']
 type FinanceSortValue = typeof FINANCE_SORT_OPTIONS[number]['value']
+const FINANCE_ENTRY_DOG_FILTER_KEY = 'finance_entry_dog_filter'
 
 interface FinanceFilterState {
   type: FinanceFilterType
@@ -613,16 +614,30 @@ function decodeQueryValue(value: unknown) {
 }
 
 function applyEntryDogFilter(query: Record<string, any> | undefined) {
-  const dogId = decodeQueryValue(query?.dogId)
-  if (!dogId) return
+  const dogId = decodeQueryValue(query?.dogId || query?.dog_id)
+  if (!dogId) return false
 
-  const dogName = decodeQueryValue(query?.dogName)
+  const dogName = decodeQueryValue(query?.dogName || query?.dog_name)
   Object.assign(appliedFilters, normalizeFilters({
     ...createDefaultFilters(currentMonth.value),
     selectedDogIds: [dogId],
     selectedDogNames: dogName ? [dogName] : [],
   }))
   syncDraftWithApplied()
+  return true
+}
+
+function consumeEntryDogFilter() {
+  try {
+    const raw = uni.getStorageSync(FINANCE_ENTRY_DOG_FILTER_KEY)
+    if (!raw) return false
+    uni.removeStorageSync(FINANCE_ENTRY_DOG_FILTER_KEY)
+    const payload = JSON.parse(raw)
+    return applyEntryDogFilter(payload)
+  } catch {
+    uni.removeStorageSync(FINANCE_ENTRY_DOG_FILTER_KEY)
+    return false
+  }
 }
 
 const appliedFilters = reactive<FinanceFilterState>(createDefaultFilters())
@@ -1293,6 +1308,7 @@ onLoad((query) => {
 
 onShow(async () => {
   await loadCategories()
+  consumeEntryDogFilter()
   Object.assign(appliedFilters, normalizeFilters(appliedFilters))
   syncDraftWithApplied()
   await loadPage()
