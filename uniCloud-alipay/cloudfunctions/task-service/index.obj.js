@@ -472,7 +472,7 @@ function buildSectionedCards(pendingTasks, todayCompletedTasks, activeIllnesses,
     extra_arrangements,
     reminders,
     therapy,
-    cards: [...workflow, ...extra_arrangements, ...reminders, ...therapy],
+    cards: [...workflow, ...extra_arrangements, ...therapy, ...reminders],
   }
 }
 

@@ -5,7 +5,13 @@
  */
 import { defineStore } from 'pinia'
 import { cloudCall } from '@/composables/useCloudCall'
-import { buildMedicationDetailUrl } from '@/utils/dogDetailNavigation'
+import type { HomeCardFocusTarget } from '@/utils/homeCardFocus'
+import {
+  buildFabTaskRecommendation,
+  buildFabTaskUrl,
+  hasBreedingMilestoneTask,
+  type FabTaskRecommendation,
+} from '@/utils/fabTaskRecommendation'
 import { getTaskActionMeta } from '@/utils/iconRegistry'
 
 interface TaskCard {
@@ -21,12 +27,32 @@ interface TaskCard {
   [key: string]: any
 }
 
+interface SimpleRecommendation {
+  category: 'common'
+  kind?: 'simple'
+  materialIcon: string
+  iconColor: string
+  label: string
+  sub: string
+  tag?: string
+  tagColor?: string
+  url: string
+}
+
 const STORAGE_KEY = 'recent_actions'
+
+function getRecommendationDedupKey(url: string): string {
+  if (url.startsWith('/pages/record/') || url.startsWith('/pages/health/')) {
+    return url.split('?')[0]
+  }
+  return url
+}
 
 export const useTaskStore = defineStore('tasks', {
   state: () => ({
     cards: [] as TaskCard[],
     counts: { today: 0, week: 0, month30: 0, hasOverdue: false },
+    pendingHomeTarget: '' as '' | HomeCardFocusTarget,
     loaded: false,
   }),
 
@@ -88,6 +114,16 @@ export const useTaskStore = defineStore('tasks', {
       } catch { /* ignore */ }
     },
 
+    setPendingHomeTarget(target: HomeCardFocusTarget) {
+      this.pendingHomeTarget = target
+    },
+
+    consumePendingHomeTarget() {
+      const target = this.pendingHomeTarget
+      this.pendingHomeTarget = ''
+      return target
+    },
+
     /** 本地移除卡片（乐观更新） */
     removeCardByTaskId(taskId: string) {
       const idx = this.cards.findIndex(c => c.tasks?.some((t: any) => t._id === taskId) || c.id === taskId)
@@ -103,25 +139,26 @@ export const useTaskStore = defineStore('tasks', {
     },
 
     /** 构建智能推荐（3 槽位降级） */
-    buildSmartRecommendations(): any[] {
+    buildSmartRecommendations(): Array<FabTaskRecommendation | SimpleRecommendation> {
       const ACTION_META = getTaskActionMeta()
 
-      const slots: any[] = []
+      const slots: Array<FabTaskRecommendation | SimpleRecommendation> = []
       const usedUrls = new Set<string>()
 
-      // 槽位 1：待办（排除健康卡）
-      const actionableCards = this.cards.filter((c: any) => !['health_attention', 'medication', 'sick_observation'].includes(c.cardType))
-      if (actionableCards.length > 0) {
-        const task = actionableCards[0]
-        slots.push({
-          materialIcon: 'assignment_turned_in',
-          iconColor: task.priority === 'overdue' ? 'red' : 'amber',
-          label: task.groupTitle || task.title || task.dogName || '待处理任务',
-          sub: task.priority === 'overdue' ? '已逾期 · 点击直接录入' : '今日待办 · 点击直接录入',
-          tag: '待办', tagColor: task.priority === 'overdue' ? 'red' : 'amber',
-          url: this._getTaskUrl(task),
-        })
-        usedUrls.add(slots[0].url)
+      const todoCard = this.cards.find((card: any) => !hasBreedingMilestoneTask(card))
+      const suggestionCard = this.cards.find((card: any) => hasBreedingMilestoneTask(card))
+
+      const todoRecommendation = todoCard ? buildFabTaskRecommendation(todoCard) : null
+      const suggestionRecommendation = suggestionCard ? buildFabTaskRecommendation(suggestionCard) : null
+
+      if (todoRecommendation?.url) {
+        slots.push(todoRecommendation)
+        usedUrls.add(getRecommendationDedupKey(todoRecommendation.url))
+      }
+
+      if (suggestionRecommendation?.url && !usedUrls.has(getRecommendationDedupKey(suggestionRecommendation.url)) && slots.length < 3) {
+        slots.push(suggestionRecommendation)
+        usedUrls.add(getRecommendationDedupKey(suggestionRecommendation.url))
       }
 
       // 补位：最近常用
@@ -129,59 +166,29 @@ export const useTaskStore = defineStore('tasks', {
       for (const key of recentKeys) {
         if (slots.length >= 3) break
         const meta = ACTION_META[key]
-        if (!meta || usedUrls.has(meta.url)) continue
-        slots.push({ ...meta, sub: '最近常用', tag: '常用', tagColor: 'green' })
-        usedUrls.add(meta.url)
+        if (!meta || usedUrls.has(getRecommendationDedupKey(meta.url))) continue
+        slots.push({ ...meta, category: 'common', kind: 'simple', sub: '最近常用', tag: '常用', tagColor: 'green' })
+        usedUrls.add(getRecommendationDedupKey(meta.url))
       }
 
       // 兜底
       const defaults = [
-        { ...ACTION_META.expense, sub: '开始记账', tag: '常用', tagColor: 'green' },
-        { ...ACTION_META.income, sub: '记录收入', tag: '常用', tagColor: 'green' },
-        { ...ACTION_META.weight, sub: '记录体重', tag: '常用', tagColor: 'green' },
+        { ...ACTION_META.expense, category: 'common' as const, kind: 'simple' as const, sub: '开始记账', tag: '常用', tagColor: 'green' },
+        { ...ACTION_META.income, category: 'common' as const, kind: 'simple' as const, sub: '记录收入', tag: '常用', tagColor: 'green' },
+        { ...ACTION_META.weight, category: 'common' as const, kind: 'simple' as const, sub: '记录体重', tag: '常用', tagColor: 'green' },
       ]
       for (const d of defaults) {
         if (slots.length >= 3) break
-        if (usedUrls.has(d.url)) continue
+        if (usedUrls.has(getRecommendationDedupKey(d.url))) continue
         slots.push(d)
-        usedUrls.add(d.url)
+        usedUrls.add(getRecommendationDedupKey(d.url))
       }
 
       return slots
     },
 
     _getTaskUrl(task: any): string {
-      const t = task.tasks?.[0]
-      const taskType = t?.type || ''
-
-      if (task.cardType === 'batch' && task.dogs?.length > 0) {
-        const dogList = task.dogs
-          .filter((d: any) => !d.completed)
-          .map((d: any) => ({ _id: d.dogId, name: d.dogName }))
-        const dogsParam = encodeURIComponent(JSON.stringify(dogList))
-        const taskIds = task.tasks?.map((t: any) => t._id).join(',') || ''
-        const typePageMap: Record<string, string> = {
-          vaccination: '/pages/record/health-vaccination',
-          deworming: '/pages/record/health-deworming',
-          illness: '/pages/record/health-illness',
-        }
-        const page = typePageMap[taskType] || '/pages/record/health-vaccination'
-        return `${page}?batchDogs=${dogsParam}&taskIds=${taskIds}`
-      }
-
-      const dogId = task.dogId || task.dog_id
-      const dogParam = dogId ? `?dogId=${dogId}` : ''
-      if (!t) return '/pages/record/health-vaccination' + dogParam
-      switch (taskType) {
-        case 'vaccination': return '/pages/record/health-vaccination' + dogParam
-        case 'deworming': return '/pages/record/health-deworming' + dogParam
-        case 'breeding_milestone': return `/pages/breeding/cycle${t.cycle_id ? '?id=' + t.cycle_id : ''}`
-        case 'medication': {
-          const medicationTaskId = t.medication_task_id || t.medicationTaskId || t._id || t.id || t.task_id || t.source_record_id
-          return medicationTaskId ? buildMedicationDetailUrl(medicationTaskId) : '/pages/record/medication-detail'
-        }
-        default: return '/pages/record/health-vaccination' + dogParam
-      }
+      return buildFabTaskUrl(task)
     },
   },
 })

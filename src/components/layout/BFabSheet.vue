@@ -15,13 +15,13 @@
         <template v-if="recommendations.length > 0">
           <text class="sheet-section-title">智能推荐</text>
           <view class="rec-list">
-            <view v-for="rec in recommendations" :key="rec.label" class="rec-card" @click="doAction(rec)">
+            <view v-for="(rec, index) in recommendations" :key="`${rec.url}-${index}`" class="rec-card" @click="doAction(rec)">
               <view class="rec-icon" :class="`rec-icon--${rec.iconColor}`">
                 <text class="material-icons-round">{{ rec.materialIcon }}</text>
               </view>
-              <view class="rec-text">
-                <text class="rec-title">{{ rec.label }}</text>
-                <text class="rec-sub">{{ rec.sub }}</text>
+              <view class="rec-text" :class="{ 'rec-text--task': rec.kind === 'task' }">
+                <text class="rec-title">{{ rec.kind === 'task' ? rec.title : rec.label }}</text>
+                <text class="rec-sub">{{ rec.kind === 'task' ? rec.subtitle : rec.sub }}</text>
               </view>
               <view class="rec-right">
                 <view v-if="rec.tag" class="rec-tag" :class="`rec-tag--${rec.tagColor}`">
@@ -94,6 +94,7 @@
 import { ref, computed, watch } from 'vue'
 import { useTaskStore } from '@/stores/taskStore'
 import { getQuickActionButtons, getRecordCatalogGroups } from '@/utils/iconRegistry'
+import type { HomeCardFocusTarget } from '@/utils/homeCardFocus'
 
 const props = defineProps<{ visible: boolean }>()
 const emit = defineEmits<{ 'update:visible': [value: boolean] }>()
@@ -118,7 +119,13 @@ function close() {
   // #endif
 }
 
-function doAction(action: { url: string; label?: string }) {
+function getCurrentRoute() {
+  const pages = getCurrentPages()
+  const current = pages[pages.length - 1]
+  return current?.route ? `/${current.route}` : ''
+}
+
+function doAction(action: { url: string; label?: string; homeFocusTarget?: HomeCardFocusTarget }) {
   // 记录操作用于智能推荐
   const keyMap: Record<string, string> = {
     '/pages/finance/expense-add': 'expense',
@@ -133,7 +140,16 @@ function doAction(action: { url: string; label?: string }) {
   const key = keyMap[action.url]
   if (key) taskStore.trackAction(key)
 
+  const currentRoute = getCurrentRoute()
+  const isHomeFocusAction = action.url === '/pages/home/index' && !!action.homeFocusTarget
+  if (isHomeFocusAction) taskStore.setPendingHomeTarget(action.homeFocusTarget!)
+
   close()
+  if (isHomeFocusAction && currentRoute === '/pages/home/index') return
+  if (['/pages/home/index', '/pages/dog/list', '/pages/finance/index', '/pages/profile/index'].includes(action.url)) {
+    uni.switchTab({ url: action.url })
+    return
+  }
   uni.navigateTo({ url: action.url })
 }
 </script>
@@ -192,6 +208,11 @@ function doAction(action: { url: string; label?: string }) {
   &--plum { background: var(--plum); }
 }
 .rec-text { flex: 1; min-width: 0; }
+.rec-text--task {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
 .rec-title { display: block; font-size: 14px; font-weight: 700; color: var(--text-1); line-height: 1.3; }
 .rec-sub { display: block; font-size: 11px; color: var(--text-3); margin-top: 1px; }
 .rec-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
@@ -200,6 +221,7 @@ function doAction(action: { url: string; label?: string }) {
   &--red { background: var(--red-soft); color: var(--red); }
   &--amber { background: var(--amber-soft); color: var(--amber); }
   &--green { background: var(--green-soft); color: var(--green); }
+  &--blue { background: var(--blue-soft); color: var(--blue); }
   &--plum { background: var(--plum-soft); color: var(--plum); }
 }
 .rec-tag-text { font-size: 10px; font-weight: 700; }

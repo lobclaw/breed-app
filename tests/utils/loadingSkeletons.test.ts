@@ -60,4 +60,14 @@ describe('page loading skeletons', () => {
     expect(source).toContain('@keyframes active-cycle-skeleton-shimmer')
     expect(source).not.toContain('正在加载当前周期摘要...')
   })
+
+  it('窝详情页首屏使用拟真骨架并保留底部操作区占位', () => {
+    const source = readSource('../../src/pages/breeding/litter.vue')
+
+    expect(source).toContain('class="litter-skeleton__summary"')
+    expect(source).toContain('class="litter-skeleton__stats"')
+    expect(source).toContain('class="litter-skeleton__dock-cta litter-skeleton__shimmer"')
+    expect(source).toContain('@keyframes litter-skeleton-shimmer')
+    expect(source).not.toContain('<BSkeleton v-if="!litter && loading"')
+  })
 })

@@ -6,6 +6,15 @@ export interface FinanceAmountDisplay {
   abbreviated: boolean
 }
 
+export interface FinanceAmountParts {
+  sign: '' | '-'
+  currency: '¥'
+  number: string
+  fullText: string
+  detail: string
+  abbreviated: boolean
+}
+
 interface FinanceAmountOptions {
   scene?: FinanceAmountScene
   absolute?: boolean
@@ -31,20 +40,35 @@ function formatFinanceWan(amount: number) {
   return `${(amount / FINANCE_WAN_UNIT).toFixed(1).replace(/\.0$/, '')}万`
 }
 
-export function getFinanceAmountDisplay(amount: number, options: FinanceAmountOptions = {}): FinanceAmountDisplay {
+export function getFinanceAmountParts(amount: number, options: FinanceAmountOptions = {}): FinanceAmountParts {
   const numericAmount = normalizeAmount(amount)
   const effectiveAmount = options.absolute ? Math.abs(numericAmount) : numericAmount
   const absoluteAmount = Math.abs(effectiveAmount)
   const abbreviated = absoluteAmount >= FINANCE_WAN_THRESHOLD
   const baseValue = abbreviated ? formatFinanceWan(absoluteAmount) : formatFinanceInteger(absoluteAmount)
-  const negative = effectiveAmount < 0
+  const sign: '' | '-' = effectiveAmount < 0 ? '-' : ''
+  const currency = '¥'
+  const fullText = `${sign}${currency}${baseValue}`
 
   return {
-    value: negative ? `-${baseValue}` : baseValue,
+    sign,
+    currency,
+    number: baseValue,
+    fullText,
     detail: options.showDetailWhenAbbreviated !== false && abbreviated
-      ? `完整：${negative ? '-' : ''}${formatFinanceInteger(absoluteAmount)}`
+      ? `完整：${sign}${currency}${formatFinanceInteger(absoluteAmount)}`
       : '',
     abbreviated,
+  }
+}
+
+export function getFinanceAmountDisplay(amount: number, options: FinanceAmountOptions = {}): FinanceAmountDisplay {
+  const parts = getFinanceAmountParts(amount, options)
+
+  return {
+    value: parts.fullText,
+    detail: parts.detail,
+    abbreviated: parts.abbreviated,
   }
 }
 

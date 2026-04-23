@@ -150,7 +150,7 @@ describe('buildHomeWorkbench', () => {
   it('生成固定四区块和首页元数据', () => {
     const workbench = buildHomeWorkbench([], { visibleRowLimit: 2 })
 
-    expect(workbench.sectionOrder).toEqual(['overdue', 'breeding', 'reminders', 'therapy'])
+    expect(workbench.sectionOrder).toEqual(['overdue', 'breeding', 'therapy', 'reminders'])
     expect(workbench.sections.overdue.title).toBe('逾期待处理')
     expect(workbench.sections.breeding.dotColor).toBe('var(--amber)')
     expect(WORKBENCH_SECTION_META.therapy.title).toBe('今日用药')

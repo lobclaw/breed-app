@@ -1,4 +1,4 @@
-export const WORKBENCH_SECTION_ORDER = ['overdue', 'breeding', 'reminders', 'therapy'] as const
+export const WORKBENCH_SECTION_ORDER = ['overdue', 'breeding', 'therapy', 'reminders'] as const
 
 export type WorkbenchSectionKey = typeof WORKBENCH_SECTION_ORDER[number]
 

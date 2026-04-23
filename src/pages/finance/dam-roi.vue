@@ -39,7 +39,11 @@
         <view class="roi-hero__header">
           <view>
             <text class="roi-hero__eyebrow">累计净收益</text>
-            <text class="roi-hero__headline">{{ roiHeadline }}</text>
+            <view class="roi-hero__headline" :class="`roi-hero__headline--${roiToneClass}`">
+              <text v-if="roiHeadline.sign" class="roi-hero__headline-sign">{{ roiHeadline.sign }}</text>
+              <text class="roi-hero__headline-currency">{{ roiHeadline.currency }}</text>
+              <text class="roi-hero__headline-number">{{ roiHeadline.number }}</text>
+            </view>
             <text class="roi-hero__sub">{{ roiInsight }}</text>
           </view>
           <view class="roi-hero__rate-pill" :class="`roi-hero__rate-pill--${roiToneClass}`">
@@ -179,7 +183,7 @@ import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
-import { formatFinanceAmount } from '@/utils/financeDisplay'
+import { formatFinanceAmount, getFinanceAmountParts } from '@/utils/financeDisplay'
 
 const selectedDam = ref<any>(null)
 const showDamPickerVisible = ref(false)
@@ -219,8 +223,7 @@ const totalInvestment = computed(() => {
 })
 
 const roiHeadline = computed(() => {
-  if (!roiData.value) return ''
-  return formatFinanceAmount(roiData.value.netProfit, { scene: 'report' })
+  return getFinanceAmountParts(roiData.value?.netProfit || 0, { scene: 'report' })
 })
 
 const roiInsight = computed(() => {
@@ -483,12 +486,42 @@ onLoad((query) => {
   }
 
   &__headline {
-    display: block;
+    display: inline-flex;
+    align-items: flex-end;
     font-family: var(--font-display);
+    line-height: 1.1;
+    color: var(--text-1);
+
+    &--primary {
+      color: var(--primary);
+    }
+
+    &--negative {
+      color: var(--green);
+    }
+
+    &--neutral {
+      color: var(--text-1);
+    }
+  }
+
+  &__headline-sign {
+    font-size: 24px;
+    font-weight: 800;
+    margin-bottom: 1px;
+  }
+
+  &__headline-currency {
     font-size: 34px;
     font-weight: 800;
     line-height: 1.1;
-    color: var(--text-1);
+    margin-right: 2px;
+  }
+
+  &__headline-number {
+    font-size: 34px;
+    font-weight: 800;
+    letter-spacing: -0.03em;
   }
 
   &__sub {

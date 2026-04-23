@@ -2,15 +2,18 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   buildTimestampFromDateTimeStrings,
   buildTimestampFromDateString,
+  buildTimestampFromMonthParts,
   buildTimestampFromDayOffset,
   buildTimestampFromTimeString,
   clampDayInMonth,
   formatDateInputValue,
   formatDateTimeInputValue,
   formatTimeInputValue,
-  getDraftTimestamp,
   getBeijingDayDiff,
   getBeijingDayStart,
+  getDraftTimestamp,
+  normalizeMonthCursor,
+  offsetMonthCursor,
   parseDateString,
   parseTimeString,
   replaceTimestampDateParts,
@@ -21,6 +24,13 @@ describe('日期工具函数', () => {
   it('日期选择应保留当前时分秒毫秒', () => {
     const baseTs = new Date('2026-04-22T15:16:17.123+08:00').getTime()
     const result = buildTimestampFromDateString('2026-05-01', baseTs)
+
+    expect(result).toBe(new Date('2026-05-01T15:16:17.123+08:00').getTime())
+  })
+
+  it('月份选择应固定落在当月 1 号，并保留当前时分秒毫秒', () => {
+    const baseTs = new Date('2026-04-22T15:16:17.123+08:00').getTime()
+    const result = buildTimestampFromMonthParts(2026, 4, baseTs)
 
     expect(result).toBe(new Date('2026-05-01T15:16:17.123+08:00').getTime())
   })
@@ -90,6 +100,20 @@ describe('日期工具函数', () => {
   it('月份变化时应自动夹紧月底天数并兼容闰年', () => {
     expect(clampDayInMonth(2026, 1, 31)).toBe(28)
     expect(clampDayInMonth(2028, 1, 31)).toBe(29)
+  })
+
+  it('月游标归一后应固定在当月 1 号', () => {
+    const sourceTs = new Date('2026-01-31T15:16:17.123+08:00').getTime()
+
+    expect(normalizeMonthCursor(sourceTs)).toBe(new Date('2026-01-01T15:16:17.123+08:00').getTime())
+  })
+
+  it('月底切月时不应因为 31 号而跨到下下个月', () => {
+    const sourceTs = new Date('2026-01-31T15:16:17.123+08:00').getTime()
+    const normalized = normalizeMonthCursor(sourceTs)
+
+    expect(offsetMonthCursor(normalized, 1)).toBe(new Date('2026-02-01T15:16:17.123+08:00').getTime())
+    expect(offsetMonthCursor(normalized, -1)).toBe(new Date('2025-12-01T15:16:17.123+08:00').getTime())
   })
 
   it('北京时间日边界计算应忽略业务字段的具体时分秒', () => {

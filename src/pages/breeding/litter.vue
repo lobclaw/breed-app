@@ -1,7 +1,62 @@
 <template>
   <view class="page">
     <!-- 骨架屏 -->
-    <BSkeleton v-if="!litter && loading" :rows="4" :avatar="true" />
+    <template v-if="!litter && loading">
+      <view class="litter-skeleton">
+        <view class="litter-skeleton__header">
+          <view class="litter-skeleton__back litter-skeleton__shimmer" />
+          <view class="litter-skeleton__title litter-skeleton__shimmer" />
+          <view class="litter-skeleton__edit litter-skeleton__shimmer" />
+        </view>
+
+        <view class="card-feed">
+          <view class="litter-skeleton__summary">
+            <view v-for="row in 6" :key="row" class="litter-skeleton__info-row">
+              <view class="litter-skeleton__label litter-skeleton__shimmer" />
+              <view
+                class="litter-skeleton__value litter-skeleton__shimmer"
+                :class="'litter-skeleton__value--' + row"
+              />
+            </view>
+          </view>
+
+          <view class="litter-skeleton__stats">
+            <view v-for="stat in 2" :key="stat" class="litter-skeleton__stat">
+              <view class="litter-skeleton__stat-num litter-skeleton__shimmer" />
+              <view class="litter-skeleton__stat-label litter-skeleton__shimmer" />
+            </view>
+          </view>
+
+          <view class="litter-skeleton__section">
+            <view class="litter-skeleton__section-dot litter-skeleton__shimmer" />
+            <view class="litter-skeleton__section-title litter-skeleton__shimmer" />
+            <view class="litter-skeleton__badge litter-skeleton__shimmer" />
+          </view>
+
+          <view class="litter-skeleton__puppy-card">
+            <view class="litter-skeleton__avatar litter-skeleton__shimmer" />
+            <view class="litter-skeleton__puppy-main">
+              <view class="litter-skeleton__puppy-name litter-skeleton__shimmer" />
+              <view class="litter-skeleton__puppy-meta">
+                <view class="litter-skeleton__chip litter-skeleton__shimmer" />
+                <view class="litter-skeleton__weight litter-skeleton__shimmer" />
+              </view>
+            </view>
+            <view class="litter-skeleton__status litter-skeleton__shimmer" />
+          </view>
+        </view>
+      </view>
+
+      <view class="action-dock action-dock--skeleton">
+        <view class="action-dock__panel">
+          <view class="action-dock__row">
+            <view class="litter-skeleton__dock-btn litter-skeleton__shimmer" />
+            <view class="litter-skeleton__dock-btn litter-skeleton__dock-btn--ghost litter-skeleton__shimmer" />
+          </view>
+          <view class="litter-skeleton__dock-cta litter-skeleton__shimmer" />
+        </view>
+      </view>
+    </template>
 
     <template v-if="litter">
       <!-- 顶栏 -->
@@ -251,7 +306,6 @@ import BCard from '@/components/base/BCard.vue'
 import BTag from '@/components/base/BTag.vue'
 import BButton from '@/components/base/BButton.vue'
 import BSectionLabel from '@/components/base/BSectionLabel.vue'
-import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
 import BSheet from '@/components/layout/BSheet.vue'
@@ -497,6 +551,232 @@ onShow(() => {
   flex-direction: column;
   gap: var(--space-card-gap);
   padding-bottom: 12px;
+}
+
+.litter-skeleton {
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+.litter-skeleton__shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--card-dim) 25%,
+    rgba(255, 255, 255, 0.28) 50%,
+    var(--card-dim) 75%
+  );
+  background-size: 200% 100%;
+  animation: litter-skeleton-shimmer 1.5s infinite;
+}
+
+.litter-skeleton__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 38px var(--space-page) 14px;
+}
+
+.litter-skeleton__back,
+.litter-skeleton__edit {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.litter-skeleton__title {
+  width: 124px;
+  height: 20px;
+  border-radius: 999px;
+}
+
+.litter-skeleton__edit {
+  margin-left: auto;
+  background-color: var(--card);
+}
+
+.litter-skeleton__summary {
+  background: var(--card-dim);
+  border-radius: var(--radius-card);
+  padding: 16px;
+}
+
+.litter-skeleton__info-row {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border-bottom: 1px solid rgba(216, 203, 189, 0.42);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.litter-skeleton__label {
+  width: 42px;
+  height: 12px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.litter-skeleton__value {
+  height: 14px;
+  border-radius: 999px;
+}
+
+.litter-skeleton__value--1 { width: 92px; }
+.litter-skeleton__value--2 { width: 38px; }
+.litter-skeleton__value--3 { width: 88px; }
+.litter-skeleton__value--4 { width: 52px; }
+.litter-skeleton__value--5 { width: 94px; }
+.litter-skeleton__value--6 { width: 72px; }
+
+.litter-skeleton__stats {
+  display: flex;
+  background: var(--card);
+  border-radius: var(--radius-card);
+  padding: 14px 0;
+  box-shadow: var(--shadow);
+}
+
+.litter-skeleton__stat {
+  flex: 1;
+  min-height: 42px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  position: relative;
+
+  & + &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 15%;
+    width: 1px;
+    height: 70%;
+    background: var(--text-4);
+    opacity: 0.5;
+  }
+}
+
+.litter-skeleton__stat-num {
+  width: 22px;
+  height: 20px;
+  border-radius: 999px;
+}
+
+.litter-skeleton__stat-label {
+  width: 28px;
+  height: 11px;
+  border-radius: 999px;
+}
+
+.litter-skeleton__section {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+}
+
+.litter-skeleton__section-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.litter-skeleton__section-title {
+  width: 32px;
+  height: 13px;
+  border-radius: 999px;
+}
+
+.litter-skeleton__badge {
+  width: 24px;
+  height: 22px;
+  border-radius: 999px;
+  margin-left: 2px;
+}
+
+.litter-skeleton__puppy-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--card);
+  border-radius: var(--radius-row);
+  padding: 12px 14px;
+  box-shadow: var(--shadow);
+}
+
+.litter-skeleton__avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.litter-skeleton__puppy-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.litter-skeleton__puppy-name {
+  width: 86px;
+  height: 14px;
+  border-radius: 999px;
+}
+
+.litter-skeleton__puppy-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.litter-skeleton__chip {
+  width: 24px;
+  height: 18px;
+  border-radius: var(--radius-tag);
+}
+
+.litter-skeleton__weight {
+  width: 38px;
+  height: 12px;
+  border-radius: 999px;
+}
+
+.litter-skeleton__status {
+  width: 42px;
+  height: 20px;
+  border-radius: var(--radius-tag);
+  flex-shrink: 0;
+}
+
+.litter-skeleton__dock-btn,
+.litter-skeleton__dock-cta {
+  position: relative;
+  flex: 1;
+  min-height: 48px;
+  border-radius: 999px;
+}
+
+.litter-skeleton__dock-btn--ghost {
+  background-color: rgba(255, 255, 255, 0.82);
+}
+
+.litter-skeleton__dock-cta {
+  width: 100%;
+  margin-top: 10px;
+  min-height: 50px;
+  flex: none;
+}
+
+@keyframes litter-skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 
 .edit-btn {

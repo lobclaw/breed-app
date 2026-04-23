@@ -63,11 +63,11 @@ function getPregnancyCount(details: Record<string, any> = {}) {
   return value > 0 ? value : null
 }
 
-function buildSubtitle(cycle?: BreedingCycle | null) {
+function buildSubtitle(cycle?: BreedingCycle | null, records: BreedingRecord[] = [], now = Date.now()) {
   if (!cycle) return ''
   const parts = []
   if (cycle.sire_name) parts.push(`种公: ${cycle.sire_name}`)
-  parts.push(cycle.status || '进行中')
+  parts.push(buildCompactBreedingCycleStatusTitle(cycle, records, now) || cycle.status || '进行中')
   return parts.join(' · ')
 }
 
@@ -194,7 +194,7 @@ export function buildActiveCycleSummaryViewModel(
 
   return {
     title: cycle?.cycle_number ? `第${cycle.cycle_number}次繁育周期` : '当前繁育周期',
-    subtitle: buildSubtitle(cycle),
+    subtitle: buildSubtitle(cycle, records, now),
     timeline,
     stageSummary: buildStageSummary(cycle, records, now),
   }

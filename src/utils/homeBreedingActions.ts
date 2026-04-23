@@ -68,7 +68,7 @@ function getStepType(card: HomeBreedingCardLike | null | undefined) {
   return getTask(card)?.details?.step_type || ''
 }
 
-function buildPrimaryAction(card: HomeBreedingCardLike | null | undefined): HomeBreedingActionItem | null {
+export function getHomeBreedingPrimaryAction(card: HomeBreedingCardLike | null | undefined): HomeBreedingActionItem | null {
   const task = getTask(card)
   if (!task) return null
 
@@ -168,7 +168,7 @@ function buildPrimaryAction(card: HomeBreedingCardLike | null | undefined): Home
 
 export function getHomeBreedingActionItems(card: HomeBreedingCardLike | null | undefined): HomeBreedingActionItem[] {
   const items: HomeBreedingActionItem[] = []
-  const primaryAction = buildPrimaryAction(card)
+  const primaryAction = getHomeBreedingPrimaryAction(card)
   if (primaryAction) items.push(primaryAction)
 
   if (canOpenHomeHeatObservation(card)) {
@@ -270,7 +270,7 @@ export function openHomeBreedingDetail(card: HomeBreedingCardLike | null | undef
   }
 }
 
-function buildProcessUrl(card: HomeBreedingCardLike | null | undefined) {
+export function buildHomeBreedingProcessUrl(card: HomeBreedingCardLike | null | undefined) {
   const task = getTask(card)
   if (!task) return ''
 
@@ -307,7 +307,7 @@ export function openHomeBreedingAction(card: HomeBreedingCardLike | null | undef
   if (!card) return
 
   if (actionKey === 'process') {
-    const processUrl = buildProcessUrl(card)
+    const processUrl = buildHomeBreedingProcessUrl(card)
     if (processUrl) uni.navigateTo({ url: processUrl })
     return
   }

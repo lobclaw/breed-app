@@ -183,15 +183,20 @@ export function createDogDetailAddRecordGroups({
 
 export function createCycleBreedingAddRecordGroups(status?: string): AddRecordGroup[] {
   const allowedPages = status === '发情中'
-    ? ['breeding-heat', 'heat-observation', 'breeding-follicle', 'breeding-mating', 'breeding-pregnancy', 'breeding-prenatal', 'breeding-prelabor', 'breeding-termination']
-    : ['breeding-heat', 'breeding-follicle', 'breeding-mating', 'breeding-pregnancy', 'breeding-prenatal', 'breeding-prelabor', 'breeding-termination']
+    ? ['heat-observation', 'breeding-follicle', 'breeding-mating', 'breeding-termination']
+    : status === '怀孕中'
+      ? ['breeding-pregnancy', 'breeding-prenatal', 'breeding-prelabor', 'breeding-termination']
+      : []
+  const items = breedingItems.filter(item => allowedPages.includes(item.page))
+
+  if (items.length === 0) return []
 
   return [
     {
       key: 'breeding',
       title: '繁育',
       hint: '将自动带入当前周期',
-      items: breedingItems.filter(item => allowedPages.includes(item.page)),
+      items,
     },
   ]
 }

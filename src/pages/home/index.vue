@@ -72,8 +72,10 @@
                   <view v-else class="card-feed">
                     <view
                       v-for="card in group.cards"
+                      :id="`home-card-${card.id}`"
                       :key="card.id"
                       class="home-card-anchor"
+                      :class="{ 'home-card-anchor--focus': focusedHomeCardId === card.id }"
                     >
                       <SmartCard
                         :card="card"
@@ -90,8 +92,10 @@
               <view v-else class="card-feed">
                 <view
                   v-for="card in section.cards"
+                  :id="`home-card-${card.id}`"
                   :key="card.id"
                   class="home-card-anchor"
+                  :class="{ 'home-card-anchor--focus': focusedHomeCardId === card.id }"
                 >
                   <SmartCard
                     :card="card"
@@ -150,8 +154,10 @@
                   <view v-else class="card-feed">
                     <view
                       v-for="card in group.cards"
+                      :id="`home-card-${card.id}`"
                       :key="card.id"
                       class="home-card-anchor"
+                      :class="{ 'home-card-anchor--focus': focusedHomeCardId === card.id }"
                     >
                       <SmartCard
                         :card="card"
@@ -168,8 +174,10 @@
               <view v-else class="card-feed">
                 <view
                   v-for="card in section.cards"
+                  :id="`home-card-${card.id}`"
                   :key="card.id"
                   class="home-card-anchor"
+                  :class="{ 'home-card-anchor--focus': focusedHomeCardId === card.id }"
                 >
                   <SmartCard
                     :card="card"
@@ -538,8 +546,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, nextTick, getCurrentInstance } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { ref, reactive, computed, nextTick, getCurrentInstance, watch } from 'vue'
+import { onHide, onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import { useAuth } from '@/composables/useAuth'
 import WeekStrip from '@/components/week-strip/WeekStrip.vue'
@@ -555,6 +563,7 @@ import BIconBox from '@/components/base/BIconBox.vue'
 import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
 import { useTaskStore } from '@/stores/taskStore'
 import { consumeSubmitFeedback } from '@/composables/useSubmitFeedback'
+import type { HomeCardFocusTarget } from '@/utils/homeCardFocus'
 import { deriveBreedingMilestoneViewModel } from '@/utils/breedingMilestone'
 import { buildBreedingMilestoneSummary } from '@/utils/breedingMilestoneSummary'
 import type { HomeBreedingActionKey } from '@/utils/homeBreedingActions'
@@ -589,6 +598,10 @@ let submitToastHideTimer: ReturnType<typeof setTimeout> | null = null
 const suppressedTaskMap = ref<Record<string, number>>({})
 const pageInstance = getCurrentInstance()
 const HOME_SUBMIT_TOAST_DURATION_MS = 1800
+const focusedHomeCardId = ref('')
+const pendingHomeCardFocusTarget = ref<HomeCardFocusTarget | ''>('')
+let focusedHomeCardTimer: ReturnType<typeof setTimeout> | null = null
+const isHomeActive = ref(false)
 
 // 选中日期（0点 timestamp）
 const selectedDate = ref(getBeijingDayStart(Date.now()))
@@ -607,16 +620,16 @@ const daySections = computed(() => [
     groups: dayBreedingGroups.value,
   },
   {
-    key: 'reminders',
-    title: '健康提醒',
-    dotColor: 'var(--blue)',
-    cards: dayCards.value.filter(card => card.sectionType === 'reminders' && card.priority !== 'overdue'),
-  },
-  {
     key: 'therapy',
     title: '今日用药',
     dotColor: 'var(--plum)',
     cards: dayCards.value.filter(card => card.sectionType === 'therapy' && card.priority !== 'overdue'),
+  },
+  {
+    key: 'reminders',
+    title: '健康提醒',
+    dotColor: 'var(--blue)',
+    cards: dayCards.value.filter(card => card.sectionType === 'reminders' && card.priority !== 'overdue'),
   },
 ])
 const todaySections = computed(() => [
@@ -634,16 +647,16 @@ const todaySections = computed(() => [
     groups: breedingGroups.value,
   },
   {
-    key: 'reminders',
-    title: '健康提醒',
-    dotColor: 'var(--blue)',
-    cards: cards.value.filter(card => card.sectionType === 'reminders' && card.priority !== 'overdue'),
-  },
-  {
     key: 'therapy',
     title: '今日用药',
     dotColor: 'var(--plum)',
     cards: cards.value.filter(card => card.sectionType === 'therapy' && card.priority !== 'overdue'),
+  },
+  {
+    key: 'reminders',
+    title: '健康提醒',
+    dotColor: 'var(--blue)',
+    cards: cards.value.filter(card => card.sectionType === 'reminders' && card.priority !== 'overdue'),
   },
 ])
 const summaryPills = computed(() => [
@@ -892,6 +905,103 @@ function scrollToAnchor(targetId: string) {
         cardAreaScrollTop.value = nextTop
       })
     }, 20)
+  })
+}
+
+function hydrateHomeFromTaskStore() {
+  if (!taskStore.cards.length) return
+  cards.value = taskStore.cards
+  counts.today = taskStore.counts.today || 0
+  counts.week = taskStore.counts.week || 0
+  counts.month30 = taskStore.counts.month30 || 0
+  counts.hasOverdue = taskStore.counts.hasOverdue || false
+}
+
+function getHomeFocusSection(target: HomeCardFocusTarget) {
+  return target === 'medication' ? 'therapy' : 'reminders'
+}
+
+function getHomeFocusCard(target: HomeCardFocusTarget) {
+  return cards.value.find(card => card.cardType === target)
+}
+
+function highlightHomeCard(cardId: string) {
+  focusedHomeCardId.value = cardId
+  if (focusedHomeCardTimer) clearTimeout(focusedHomeCardTimer)
+  focusedHomeCardTimer = setTimeout(() => {
+    focusedHomeCardId.value = ''
+  }, 1800)
+}
+
+function openSickBatchFromCard(card: any) {
+  sickBatchList.value = (card?.dogs || []).map((dog: any) => ({
+    id: dog.illnessId || `${dog.dogId}-${dog.illness}-${dog._createdAt || 0}`,
+    illnessId: dog.illnessId || '',
+    dogId: dog.dogId,
+    name: dog.dogName,
+    illness: dog.illness || '生病',
+    treatmentStatus: dog.treatmentStatus || '观察中',
+    daysSick: dog.daysSick || 1,
+  }))
+  Object.keys(sickBatchSelected).forEach(key => delete sickBatchSelected[key])
+  sickBatchList.value.forEach((item) => {
+    sickBatchSelected[item.id] = true
+  })
+  showSickBatch.value = true
+}
+
+function openMedBatchFromCard(card: any) {
+  medBatchList.value = (card?.dogs || []).map((dog: any, index: number) => ({
+    id: dog.dogId || `med-${index}`,
+    dogId: dog.dogId,
+    name: dog.dogName,
+    detail: [dog.illnessNames || dog.illness, dog.drugName, dog.progress].filter(Boolean).join(' · '),
+    medicationTaskIds: (dog.allMedTasks || []).map((task: any) => task._id).filter(Boolean),
+    illnessId: dog.illnessId || '',
+  }))
+  Object.keys(medBatchSelected).forEach(key => delete medBatchSelected[key])
+  medBatchList.value.forEach((item) => {
+    medBatchSelected[item.id] = true
+  })
+  showMedBatch.value = true
+}
+
+function openHomeAggregateAction(target: HomeCardFocusTarget) {
+  const targetCard = getHomeFocusCard(target)
+  if (!targetCard) return false
+  if (target === 'sick_observation') {
+    openSickBatchFromCard(targetCard)
+    return true
+  }
+  if (target === 'medication') {
+    openMedBatchFromCard(targetCard)
+    return true
+  }
+  return false
+}
+
+function applyPendingHomeCardFocus() {
+  const target = pendingHomeCardFocusTarget.value
+  if (!target) return
+  const targetCard = getHomeFocusCard(target)
+  pendingHomeCardFocusTarget.value = ''
+  if (!targetCard?.id) {
+    scrollToSection(getHomeFocusSection(target))
+    return
+  }
+  highlightHomeCard(targetCard.id)
+  scrollToAnchor(`home-card-${targetCard.id}`)
+  setTimeout(() => {
+    openHomeAggregateAction(target)
+  }, 220)
+}
+
+function scheduleHomeCardFocus(target: HomeCardFocusTarget) {
+  pendingHomeCardFocusTarget.value = target
+  nextTick(() => {
+    setTimeout(() => {
+      applyPendingHomeCardFocus()
+    }, 80)
   })
 }
 
@@ -1371,34 +1481,9 @@ function onAction(payload: { type: string; data: any }) {
     sickMenuItems.value = payload.data.items
     showSickMenu.value = true
   } else if (payload.type === 'show_sick_batch') {
-    sickBatchList.value = (payload.data?.dogs || []).map((dog: any) => ({
-      id: dog.illnessId || `${dog.dogId}-${dog.illness}-${dog._createdAt || 0}`,
-      illnessId: dog.illnessId || '',
-      dogId: dog.dogId,
-      name: dog.dogName,
-      illness: dog.illness || '生病',
-      treatmentStatus: dog.treatmentStatus || '观察中',
-      daysSick: dog.daysSick || 1,
-    }))
-    Object.keys(sickBatchSelected).forEach(key => delete sickBatchSelected[key])
-    sickBatchList.value.forEach((item) => {
-      sickBatchSelected[item.id] = true
-    })
-    showSickBatch.value = true
+    openSickBatchFromCard({ dogs: payload.data?.dogs || [] })
   } else if (payload.type === 'show_med_batch') {
-    medBatchList.value = (payload.data?.dogs || []).map((dog: any, index: number) => ({
-      id: dog.dogId || `med-${index}`,
-      dogId: dog.dogId,
-      name: dog.dogName,
-      detail: [dog.illnessNames || dog.illness, dog.drugName, dog.progress].filter(Boolean).join(' · '),
-      medicationTaskIds: (dog.allMedTasks || []).map((task: any) => task._id).filter(Boolean),
-      illnessId: dog.illnessId || '',
-    }))
-    Object.keys(medBatchSelected).forEach(key => delete medBatchSelected[key])
-    medBatchList.value.forEach((item) => {
-      medBatchSelected[item.id] = true
-    })
-    showMedBatch.value = true
+    openMedBatchFromCard({ dogs: payload.data?.dogs || [] })
   } else if (payload.type === 'show_stop_confirm') {
     // 打开停止用药确认 BSheet
     stopConfirmData.value = payload.data
@@ -1548,7 +1633,10 @@ async function confirmBatchComplete() {
 }
 
 onShow(async () => {
+  isHomeActive.value = true
   const feedback = consumeSubmitFeedback('/pages/home/index')
+  const pendingTarget = taskStore.consumePendingHomeTarget()
+  let deferredTarget: HomeCardFocusTarget | '' = ''
   if (feedback?.message) {
     applyHomeFeedback(feedback)
     showSubmitToast(feedback.message)
@@ -1569,7 +1657,30 @@ onShow(async () => {
   selectedDate.value = startOfDay(Date.now())
   viewMode.value = 'today'
   dayCards.value = []
+
+  if (pendingTarget) {
+    hydrateHomeFromTaskStore()
+    if (getHomeFocusCard(pendingTarget)) {
+      scheduleHomeCardFocus(pendingTarget)
+    } else {
+      deferredTarget = pendingTarget
+    }
+  }
+
   await loadAll()
+  if (deferredTarget) {
+    scheduleHomeCardFocus(deferredTarget)
+  }
+})
+
+onHide(() => {
+  isHomeActive.value = false
+})
+
+watch(() => taskStore.pendingHomeTarget, (target) => {
+  if (!isHomeActive.value || !target) return
+  taskStore.consumePendingHomeTarget()
+  scheduleHomeCardFocus(target)
 })
 </script>
 
@@ -1767,8 +1878,56 @@ onShow(async () => {
 }
 
 .home-card-anchor {
+  position: relative;
   border-radius: 20px;
   transition: box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.home-card-anchor--focus {
+  box-shadow: 0 0 0 2px rgba(234, 170, 69, 0.24), 0 12px 30px rgba(234, 170, 69, 0.16);
+  transform: translateY(-2px);
+  animation: home-card-focus-pulse 1.05s ease-out 1;
+}
+
+.home-card-anchor--focus::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 24px;
+  border: 2px solid rgba(234, 170, 69, 0.34);
+  box-shadow: 0 0 0 6px rgba(234, 170, 69, 0.08);
+  pointer-events: none;
+  animation: home-card-focus-ring 1.05s ease-out 1;
+}
+
+@keyframes home-card-focus-pulse {
+  0% {
+    transform: translateY(0) scale(0.992);
+    box-shadow: 0 0 0 0 rgba(234, 170, 69, 0);
+  }
+  38% {
+    transform: translateY(-2px) scale(1.01);
+    box-shadow: 0 0 0 2px rgba(234, 170, 69, 0.24), 0 16px 34px rgba(234, 170, 69, 0.18);
+  }
+  100% {
+    transform: translateY(-2px) scale(1);
+    box-shadow: 0 0 0 2px rgba(234, 170, 69, 0.24), 0 12px 30px rgba(234, 170, 69, 0.16);
+  }
+}
+
+@keyframes home-card-focus-ring {
+  0% {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  28% {
+    opacity: 1;
+    transform: scale(1.01);
+  }
+  100% {
+    opacity: 0.72;
+    transform: scale(1);
+  }
 }
 
 .home-section + .home-section {

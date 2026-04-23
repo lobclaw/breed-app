@@ -91,6 +91,14 @@ export function buildTimestampFromDateParts(
   ).getTime()
 }
 
+export function buildTimestampFromMonthParts(
+  year: number,
+  monthIndex: number,
+  timeSource: number | Date = Date.now(),
+) {
+  return buildTimestampFromDateParts(year, monthIndex, 1, timeSource)
+}
+
 export function buildTimestampFromDateString(dateStr: string, timeSource: number | Date = Date.now()) {
   const parsed = parseDateString(dateStr)
   if (!parsed) return NaN
@@ -171,6 +179,22 @@ export function replaceTimestampTimeParts(
 
 export function getDraftTimestamp(value?: number | Date | null, fallback: number | Date = Date.now()) {
   return resolveSourceTimestamp(value, fallback)
+}
+
+export function normalizeMonthCursor(value?: number | Date | null, fallback: number | Date = Date.now()) {
+  const baseTs = resolveSourceTimestamp(value, fallback)
+  const base = toDate(baseTs)
+  return buildTimestampFromMonthParts(base.getFullYear(), base.getMonth(), baseTs)
+}
+
+export function offsetMonthCursor(
+  value: number | Date | null | undefined,
+  offsetMonths: number,
+  fallback: number | Date = Date.now(),
+) {
+  const baseTs = resolveSourceTimestamp(value, fallback)
+  const base = toDate(baseTs)
+  return buildTimestampFromMonthParts(base.getFullYear(), base.getMonth() + offsetMonths, baseTs)
 }
 
 export function formatDateInputValue(ts?: number | null) {

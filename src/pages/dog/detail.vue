@@ -140,7 +140,7 @@
             :class="statusToneClass(s.type, 'hero')"
             @click="handleStatusTap(s)"
           >
-            <text class="dog-detail__hero-tag-text">{{ s.label || s.type }}</text>
+            <text class="dog-detail__hero-tag-text">{{ statusTitle(s) }}</text>
             <text class="material-icons-round dog-detail__hero-tag-arrow">chevron_right</text>
           </view>
           <!-- 角色标签（静态，带边框） -->
@@ -217,12 +217,12 @@
                 <text class="material-icons-round dog-detail__st-chevron">chevron_right</text>
               </view>
               <!-- 进度条 -->
-              <view v-if="s.progress" class="dog-detail__st-progress">
+              <view v-if="shouldShowStatusProgress(s)" class="dog-detail__st-progress">
                 <view class="dog-detail__st-progress-track">
                   <view
                     class="dog-detail__st-progress-fill"
                     :class="statusToneClass(s.type, 'progress')"
-                    :style="{ width: Math.min(100, Math.round(s.progress.current / s.progress.total * 100)) + '%' }"
+                    :style="{ width: statusProgressPercent(s) + '%' }"
                   />
                 </view>
                 <text class="dog-detail__st-progress-text" :class="statusToneClass(s.type, 'progressText')">{{ statusProgressText(s) }}</text>
@@ -388,10 +388,10 @@
             <view class="breeding-active-cycle__header">
               <view class="breeding-active-cycle__eyebrow">
                 <view class="breeding-active-cycle__dot" />
-                <text class="breeding-active-cycle__label">进行中</text>
+                <text class="breeding-active-cycle__label">{{ activeCycleStatusTitle }}</text>
               </view>
               <view class="dog-detail__rec-tag dog-detail__rec-tag--rose">
-                <text class="dog-detail__rec-tag-text">进行中</text>
+                <text class="dog-detail__rec-tag-text">{{ activeCycleStatusTitle }}</text>
               </view>
             </view>
             <text class="breeding-active-cycle__title">{{ activeCycleSummary.title }}</text>
@@ -557,14 +557,22 @@
           description="记录疫苗、驱虫、疾病、用药等信息"
         />
         <view v-else>
-          <scroll-view scroll-x class="dog-detail__health-filters-scroll" show-scrollbar="false">
+          <scroll-view
+            scroll-x
+            scroll-with-animation
+            class="dog-detail__health-filters-scroll"
+            show-scrollbar="false"
+            :scroll-left="healthFilterScrollLeft"
+            @scroll="onHealthFilterScroll"
+          >
             <view class="dog-detail__health-filters">
               <view
                 v-for="filter in healthFilters"
                 :key="filter.key"
+                :id="healthFilterChipId(filter.key)"
                 class="dog-detail__health-filter"
                 :class="{ 'dog-detail__health-filter--active': activeHealthFilter === filter.key }"
-                @click="activeHealthFilter = filter.key"
+                @click="setActiveHealthFilter(filter.key)"
               >
                 <text
                   class="dog-detail__health-filter-text"
@@ -616,66 +624,79 @@
           <BSkeleton :rows="3" />
         </view>
         <template v-else>
-        <!-- 快捷操作 -->
-        <view class="dog-detail__finance-links">
-          <view class="dog-detail__finance-link" @click="goToExpenseAdd()">
-            <text class="material-icons-round" style="font-size: 20px; color: var(--red);">remove_circle</text>
-            <text class="dog-detail__finance-link-text">记录支出</text>
-          </view>
-          <view class="dog-detail__finance-link" @click="goToIncomeAdd()">
-            <text class="material-icons-round" style="font-size: 20px; color: var(--green);">add_circle</text>
-            <text class="dog-detail__finance-link-text">记录收入</text>
-          </view>
-          <view v-if="dog?.role === '种狗' && dog?.gender === '母'" class="dog-detail__finance-link" @click="goToDamRoi()">
-            <text class="material-icons-round" style="font-size: 20px; color: var(--primary);">trending_up</text>
-            <text class="dog-detail__finance-link-text">投资回报</text>
-          </view>
-        </view>
-        <!-- 财务汇总 -->
-        <view v-if="dogFinance" class="dog-detail__fin-summary">
-          <view class="dog-detail__fin-grid">
-            <view class="dog-detail__fin-cell">
-              <text class="dog-detail__fin-cell-label">购入成本</text>
-              <text class="dog-detail__fin-cell-value dog-detail__fin-cell-value--red">{{ formatFinanceOverviewAmount(-(dogFinance.purchaseCost || 0)) }}</text>
-            </view>
-            <view class="dog-detail__fin-cell">
-              <text class="dog-detail__fin-cell-label">直接费用</text>
-              <text class="dog-detail__fin-cell-value dog-detail__fin-cell-value--red">{{ formatFinanceOverviewAmount(-(dogFinance.directExpenses || 0)) }}</text>
-            </view>
-            <view class="dog-detail__fin-cell">
-              <text class="dog-detail__fin-cell-label">销售收入</text>
-              <text class="dog-detail__fin-cell-value dog-detail__fin-cell-value--green">{{ formatFinanceOverviewAmount(dogFinance.salesIncome || 0) }}</text>
-            </view>
-            <view class="dog-detail__fin-cell">
-              <text class="dog-detail__fin-cell-label">净利润</text>
-              <text
-                class="dog-detail__fin-cell-value"
-                :class="(dogFinance.netProfit || 0) >= 0 ? 'dog-detail__fin-cell-value--green' : 'dog-detail__fin-cell-value--red'"
-              >{{ formatFinanceOverviewAmount(dogFinance.netProfit || 0) }}</text>
-            </view>
-          </view>
-        </view>
-        <!-- 最近交易 -->
-        <view v-if="dogFinance?.recent?.length > 0">
-          <view class="dog-detail__sec dog-detail__sec--teal">
-            <text class="dog-detail__sec-text">最近交易</text>
-          </view>
-          <view class="dog-detail__rec-list">
-            <view v-for="tx in dogFinance.recent" :key="tx._id" class="dog-detail__rec-item">
-              <view class="dog-detail__rec-icon" :class="tx._txType === 'income' ? 'dog-detail__rec-icon--green' : 'dog-detail__rec-icon--red'">
-                <text class="material-icons-round">{{ tx._txType === 'income' ? 'add_circle' : 'remove_circle' }}</text>
+          <view class="dog-detail__finance-links">
+            <view class="dog-detail__finance-link dog-detail__finance-link--expense" @click="goToExpenseAdd()">
+              <view class="dog-detail__finance-link-icon dog-detail__finance-link-icon--expense">
+                <text class="material-icons-round">remove_circle</text>
               </view>
-              <view class="dog-detail__rec-body">
-                <text class="dog-detail__rec-title">{{ tx.category || (tx._txType === 'income' ? '收入' : '支出') }}</text>
-                <text class="dog-detail__rec-sub">{{ formatDate(tx.date) }}</text>
+              <view class="dog-detail__finance-link-copy">
+                <text class="dog-detail__finance-link-text">记录支出</text>
               </view>
-              <text
-                class="dog-detail__rec-amount"
-                :class="tx._txType === 'income' ? 'dog-detail__rec-amount--green' : 'dog-detail__rec-amount--red'"
-              >{{ formatFinanceTransactionAmount(tx) }}</text>
+            </view>
+            <view class="dog-detail__finance-link dog-detail__finance-link--income" @click="goToIncomeAdd()">
+              <view class="dog-detail__finance-link-icon dog-detail__finance-link-icon--income">
+                <text class="material-icons-round">add_circle</text>
+              </view>
+              <view class="dog-detail__finance-link-copy">
+                <text class="dog-detail__finance-link-text">记录收入</text>
+              </view>
             </view>
           </view>
-        </view>
+
+          <view class="dog-detail__section">
+            <view class="dog-detail__sec dog-detail__sec--amber">
+              <text class="dog-detail__sec-text">{{ financeSummaryTitle }}</text>
+              <text v-if="isDamFinanceDog" class="dog-detail__sec-link" @click="goToDamRoi()">查看全部</text>
+            </view>
+            <view class="dog-detail__fin-summary">
+              <view class="dog-detail__fin-grid" :class="{ 'dog-detail__fin-grid--dam': isDamFinanceDog }">
+                <view
+                  v-for="card in financeSummaryCards"
+                  :key="card.key"
+                  class="dog-detail__fin-cell"
+                  :class="{ 'dog-detail__fin-cell--full': card.full }"
+                >
+                  <text class="dog-detail__fin-cell-label">{{ card.label }}</text>
+                  <view v-if="card.full && card.parts" class="dog-detail__fin-amount" :class="getFinanceSummaryCardValueClass(card)">
+                    <text v-if="card.parts.sign" class="dog-detail__fin-amount-sign">{{ card.parts.sign }}</text>
+                    <text class="dog-detail__fin-amount-currency">{{ card.parts.currency }}</text>
+                    <text class="dog-detail__fin-amount-number">{{ card.parts.number }}</text>
+                  </view>
+                  <text v-else class="dog-detail__fin-cell-value" :class="getFinanceSummaryCardValueClass(card)">{{ card.value }}</text>
+                </view>
+              </view>
+            </view>
+          </view>
+
+          <view class="dog-detail__section">
+            <view class="dog-detail__sec dog-detail__sec--amber">
+              <text class="dog-detail__sec-text">最近收支</text>
+              <text class="dog-detail__sec-link" @click="goToFinanceList()">查看全部</text>
+            </view>
+            <view v-if="financeRecentTransactions.length > 0" class="dog-detail__rec-list dog-detail__rec-list--finance">
+              <view
+                v-for="tx in financeRecentTransactions"
+                :key="tx._id"
+                class="dog-detail__rec-item dog-detail__rec-item--finance"
+                @click="goToFinanceDetail(tx)"
+              >
+                <view class="dog-detail__rec-icon" :class="getFinanceRecentIconClass(tx)">
+                  <text class="material-icons-round">{{ getFinanceRecentIcon(tx) }}</text>
+                </view>
+                <view class="dog-detail__rec-body">
+                  <text class="dog-detail__rec-title">{{ getFinanceRecentTitle(tx) }}</text>
+                  <text class="dog-detail__rec-sub">{{ getFinanceRecentSubtitle(tx) }}</text>
+                </view>
+                <view class="dog-detail__rec-right">
+                  <text class="dog-detail__rec-amount" :class="getFinanceRecentAmountClass(tx)">{{ formatFinanceTransactionAmount(tx) }}</text>
+                  <text class="material-icons-round dog-detail__rec-chevron">chevron_right</text>
+                </view>
+              </view>
+            </view>
+            <view v-else class="dog-detail__fin-empty">
+              <BEmpty icon="receipt_long" title="暂无收支记录" description="先记录第一笔收支，后续会在这里汇总展示" />
+            </view>
+          </view>
         </template>
       </view>
     </view>
@@ -1130,7 +1151,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, getCurrentInstance } from 'vue'
 import { onLoad, onPageScroll, onShow } from '@dcloudio/uni-app'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
@@ -1148,14 +1169,14 @@ import { useDogStore } from '@/stores/dogStore'
 import type { Dog, DeriveStatus } from '@/types/dog'
 import { buildMedicationDetailUrl, resolveDogDetailStatusRoute } from '@/utils/dogDetailNavigation'
 import { formatMedicationDosage } from '@/utils/medicationDisplay'
-import { buildCompactDeriveStatusTitle } from '@/utils/dogStatusCopy'
+import { buildCompactBreedingCycleStatusTitle, buildCompactDeriveStatusTitle } from '@/utils/dogStatusCopy'
 import { getDogStatusTone, getHealthTypeTone } from '@/utils/themeSemantics'
 import type { AddRecordItem } from '@/utils/addRecordSheet'
 import { createDogDetailAddRecordGroups } from '@/utils/addRecordSheet'
 import type { BreedingCycleDetailResponse } from '@/types/breeding'
 import { buildActiveCycleSummaryViewModel, buildHistoryCycleSummaryViewModel } from '@/utils/dogBreedingSummary'
 import { buildTimestampFromDayOffset, formatDateInputValue } from '@/utils/date'
-import { formatFinanceAmount } from '@/utils/financeDisplay'
+import { formatFinanceAmount, getFinanceAmountParts, type FinanceAmountParts } from '@/utils/financeDisplay'
 
 const dog = ref<Dog | null>(null)
 const statuses = ref<DeriveStatus[]>([])
@@ -1195,10 +1216,17 @@ const submitBannerMessage = ref('')
 const showCompactTopbarTitle = ref(false)
 const TOPBAR_TITLE_SCROLL_THRESHOLD = 36
 const activeHealthFilter = ref<HealthFilterKey>('all')
+const healthFilterScrollLeft = ref(0)
 const activeCycleSummaryDetail = ref<BreedingCycleDetailResponse | null>(null)
 const activeCycleSummaryCache = ref<Record<string, BreedingCycleDetailResponse>>({})
+const pageInstance = getCurrentInstance()
+const HEALTH_FILTER_FOCUS_RATIO = 0.38
+const HEALTH_FILTER_AUTO_TOLERANCE_PX = 12
+const HEALTH_FILTER_FORCE_MIN_DELTA_PX = 8
 let dogId = ''
 let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
+let healthFilterFocusTimer: ReturnType<typeof setTimeout> | null = null
+let pendingHealthFilterFocusMode: 'auto' | 'force' = 'auto'
 let hasLoadedOnce = false
 let latestLoadToken = 0
 let latestActiveCycleSummaryToken = 0
@@ -1292,6 +1320,7 @@ const healthFilters: Array<{ key: HealthFilterKey; label: string }> = [
   { key: 'vaccination', label: '疫苗' },
   { key: 'deworming', label: '驱虫' },
 ]
+const healthFilterChipId = (filterKey: HealthFilterKey) => `dog-detail-health-filter-${filterKey}`
 const canQuickStartMedication = computed(() => !!latestActiveIllnessRecord.value && activeMedicationRecords.value.length === 0)
 const canQuickRecover = computed(() => !!latestActiveIllnessRecord.value)
 type DispositionActionKey = 'promote' | 'deceased' | 'adoption' | 'gift' | 'retire' | 'cancel-retire'
@@ -1451,8 +1480,182 @@ const dispositionActionSummary = computed(() => {
   return `${d.role || '种狗'} · ${d.disposition || '在养'}`
 })
 
+function onHealthFilterScroll(event: any) {
+  healthFilterScrollLeft.value = Number(event?.detail?.scrollLeft || 0)
+}
+
+function setActiveHealthFilter(filterKey: HealthFilterKey) {
+  if (activeHealthFilter.value === filterKey) return
+  pendingHealthFilterFocusMode = 'force'
+  activeHealthFilter.value = filterKey
+}
+
+type HealthFilterLayoutMetrics = {
+  viewportWidth: number
+  contentWidth: number
+  currentScrollLeft: number
+  chipLeft: number
+  chipWidth: number
+}
+
+function scheduleFocusActiveHealthFilter(mode: 'auto' | 'force' = 'auto') {
+  if (!pageInstance || activeTab.value !== 'health') return
+  if (healthFilterFocusTimer) clearTimeout(healthFilterFocusTimer)
+  nextTick(() => {
+    healthFilterFocusTimer = setTimeout(() => {
+      focusActiveHealthFilter(mode)
+    }, 20)
+  })
+}
+
+function measureHealthFilterLayout(callback: (metrics: HealthFilterLayoutMetrics | null) => void) {
+  if (!pageInstance) {
+    callback(null)
+    return
+  }
+  const query = uni.createSelectorQuery().in(pageInstance)
+  query.select('.dog-detail__health-filters-scroll').boundingClientRect()
+  query.select('.dog-detail__health-filters').boundingClientRect()
+  query.select(`#${healthFilterChipId(activeHealthFilter.value)}`).boundingClientRect()
+  query.exec((result) => {
+    const [containerRect, contentRect, chipRect] = result || []
+    if (!containerRect || !contentRect || !chipRect) {
+      callback(null)
+      return
+    }
+
+    callback({
+      viewportWidth: Number(containerRect.width || 0),
+      contentWidth: Number(contentRect.width || 0),
+      currentScrollLeft: Math.max(0, Number(containerRect.left || 0) - Number(contentRect.left || 0)),
+      chipLeft: Number(chipRect.left || 0) - Number(contentRect.left || 0),
+      chipWidth: Number(chipRect.width || 0),
+    })
+  })
+}
+
+function computeHealthFilterTargetScrollLeft(metrics: HealthFilterLayoutMetrics, mode: 'auto' | 'force') {
+  const desiredChipLeft = metrics.viewportWidth * HEALTH_FILTER_FOCUS_RATIO - metrics.chipWidth / 2
+  const maxScrollLeft = Math.max(0, metrics.contentWidth - metrics.viewportWidth)
+  let targetScrollLeft = metrics.chipLeft - desiredChipLeft
+  targetScrollLeft = Math.min(maxScrollLeft, Math.max(0, targetScrollLeft))
+
+  const delta = targetScrollLeft - metrics.currentScrollLeft
+  if (mode === 'force' && Math.abs(delta) > 0 && Math.abs(delta) < HEALTH_FILTER_FORCE_MIN_DELTA_PX) {
+    targetScrollLeft = metrics.currentScrollLeft + Math.sign(delta) * HEALTH_FILTER_FORCE_MIN_DELTA_PX
+    targetScrollLeft = Math.min(maxScrollLeft, Math.max(0, targetScrollLeft))
+  }
+
+  return targetScrollLeft
+}
+
+function isHealthFilterWithinCorridor(metrics: HealthFilterLayoutMetrics) {
+  const chipCenter = metrics.chipLeft - metrics.currentScrollLeft + metrics.chipWidth / 2
+  const desiredCenter = metrics.viewportWidth * HEALTH_FILTER_FOCUS_RATIO
+  return Math.abs(chipCenter - desiredCenter) <= HEALTH_FILTER_AUTO_TOLERANCE_PX
+}
+
+function focusActiveHealthFilter(mode: 'auto' | 'force' = 'auto', retryCount = 1) {
+  measureHealthFilterLayout((metrics) => {
+    if (!metrics) {
+      if (retryCount > 0) {
+        setTimeout(() => focusActiveHealthFilter(mode, retryCount - 1), 16)
+      }
+      return
+    }
+
+    if (mode === 'auto' && isHealthFilterWithinCorridor(metrics)) return
+
+    const nextScrollLeft = computeHealthFilterTargetScrollLeft(metrics, mode)
+    if (Math.abs(nextScrollLeft - metrics.currentScrollLeft) < 0.5) return
+    healthFilterScrollLeft.value = nextScrollLeft
+  })
+}
+
+type FinanceSummaryCard = {
+  key: string
+  label: string
+  value: string
+  parts?: FinanceAmountParts
+  tone: 'income' | 'expense' | 'profit' | 'loss' | 'neutral'
+  full?: boolean
+}
+
 const litters = ref<any[]>([])
 const dogFinance = ref<any>(null)
+const damFinanceRoi = ref<any>(null)
+const isDamFinanceDog = computed(() => dog.value?.role === '种狗' && dog.value?.gender === '母')
+const financeSummaryTitle = computed(() => isDamFinanceDog.value ? '投资回报' : '财务概览')
+const financeSummaryCards = computed<FinanceSummaryCard[]>(() => {
+  if (isDamFinanceDog.value) {
+    const roi = damFinanceRoi.value || {}
+    const netProfit = Number(roi.netProfit) || 0
+    return [
+      {
+        key: 'purchase-cost',
+        label: '购入成本',
+        value: formatFinanceOverviewAmount(-(Number(roi.purchaseCost) || 0)),
+        tone: 'expense',
+      },
+      {
+        key: 'breeding-cost',
+        label: '繁育支出',
+        value: formatFinanceOverviewAmount(-(Number(roi.totalBreedingCost) || 0)),
+        tone: 'expense',
+      },
+      {
+        key: 'health-cost',
+        label: '个体费用',
+        value: formatFinanceOverviewAmount(-(Number(roi.healthCost) || 0)),
+        tone: 'expense',
+      },
+      {
+        key: 'breeding-income',
+        label: '繁育收入',
+        value: formatFinanceOverviewAmount(Number(roi.totalBreedingIncome) || 0),
+        tone: 'income',
+      },
+      {
+        key: 'net-profit',
+        label: '累计净收益',
+        value: formatFinanceOverviewAmount(netProfit),
+        parts: formatFinanceOverviewAmountParts(netProfit),
+        tone: netProfit >= 0 ? 'profit' : 'loss',
+        full: true,
+      },
+    ]
+  }
+
+  const finance = dogFinance.value || {}
+  const netProfit = Number(finance.netProfit) || 0
+  return [
+    {
+      key: 'purchase-cost',
+      label: '购入成本',
+      value: formatFinanceOverviewAmount(-(Number(finance.purchaseCost) || 0)),
+      tone: 'expense',
+    },
+    {
+      key: 'direct-expenses',
+      label: '直接费用',
+      value: formatFinanceOverviewAmount(-(Number(finance.directExpenses) || 0)),
+      tone: 'expense',
+    },
+    {
+      key: 'sales-income',
+      label: '销售收入',
+      value: formatFinanceOverviewAmount(Number(finance.salesIncome) || 0),
+      tone: 'income',
+    },
+    {
+      key: 'net-profit',
+      label: '累计净收益',
+      value: formatFinanceOverviewAmount(netProfit),
+      tone: netProfit >= 0 ? 'profit' : 'loss',
+    },
+  ]
+})
+const financeRecentTransactions = computed(() => Array.isArray(dogFinance.value?.recent) ? dogFinance.value.recent : [])
 const litterByCycleId = computed(() => {
   const map = new Map<string, any>()
   for (const litter of litters.value) {
@@ -1466,6 +1669,12 @@ const activeCycleSummary = computed(() => buildActiveCycleSummaryViewModel(
   activeCycleSummaryDetail.value?.cycle || activeCycle.value || null,
   activeCycleSummaryDetail.value?.records || [],
 ))
+const activeCycleStatusTitle = computed(() => {
+  const cycle = activeCycleSummaryDetail.value?.cycle || activeCycle.value || null
+  return buildCompactBreedingCycleStatusTitle(cycle, activeCycleSummaryDetail.value?.records || [])
+    || cycle?.status
+    || '进行中'
+})
 const currentCycleLitter = computed(() => {
   if (activeCycleSummaryDetail.value?.litter) return activeCycleSummaryDetail.value.litter
   const nursingStatus = statuses.value.find(status => status?.type === '哺乳中')
@@ -1525,6 +1734,7 @@ const { run: fetchHealth } = useCloudCall<{ data: any[] }>('health-service', 'ge
 const { run: fetchMedicationHistory } = useCloudCall<{ data: any[] }>('health-service', 'getMedicationHistory')
 const { run: fetchLitters } = useCloudCall<{ data: any[] }>('breeding-service', 'getLittersByDam')
 const { run: fetchDogFinance } = useCloudCall<{ data: any }>('finance-service', 'getDogFinanceSummary')
+const { run: fetchDamRoi } = useCloudCall<{ data: any }>('finance-service', 'getDamRoi')
 const { run: cleanupDuplicateIllnesses } = useCloudCall('health-service', 'cleanupDuplicateIllnesses', {
   showLoading: false,
 })
@@ -1826,6 +2036,17 @@ function statusProgressText(s: DeriveStatus): string {
   return `${s.progress.current}/${s.progress.total}天`
 }
 
+function shouldShowStatusProgress(s: DeriveStatus): boolean {
+  if (!s.progress || !s.progress.total) return false
+  if (s.type === '用药中') return s.progress.total > 1
+  return true
+}
+
+function statusProgressPercent(s: DeriveStatus): number {
+  if (!s.progress?.total) return 0
+  return Math.min(100, Math.round(s.progress.current / s.progress.total * 100))
+}
+
 function statusMeta(s: DeriveStatus): Array<{ icon: string; text: string }> {
   if (s.type === '哺乳中') {
     const items: Array<{ icon: string; text: string }> = []
@@ -1847,11 +2068,8 @@ function statusMeta(s: DeriveStatus): Array<{ icon: string; text: string }> {
 
   if (s.type === '生病中') {
     const items: Array<{ icon: string; text: string }> = []
-    const treatmentStatus = latestActiveIllnessRecord.value?.details?.treatment_status
     const dateTs = getIllnessStartTs()
-    const day = getElapsedDaysFromTs(dateTs)
-    if (treatmentStatus) items.push({ icon: 'healing', text: treatmentStatus })
-    if (day) items.push({ icon: 'schedule', text: `第${day}天` })
+    // 标题已承接“病名第X天”，副标题已承接治疗状态，这里只保留不重复的起始信息
     if (typeof dateTs === 'number') items.push({ icon: 'event', text: `开始于 ${formatDate(dateTs)}` })
     return items
   }
@@ -1922,9 +2140,60 @@ function formatFinanceOverviewAmount(amount: number) {
   return formatFinanceAmount(amount, { scene: 'overview' })
 }
 
+function formatFinanceOverviewAmountParts(amount: number) {
+  return getFinanceAmountParts(amount, { scene: 'overview' })
+}
+
 function formatFinanceTransactionAmount(tx: any) {
-  const amount = tx?._txType === 'expense' ? -(tx.amount || 0) : (tx.amount || 0)
-  return formatFinanceAmount(amount, { scene: 'list' })
+  const amount = tx?._txType === 'expense' ? -(tx.total_amount || 0) : (tx.amount || 0)
+  const formattedAmount = formatFinanceAmount(amount, { scene: 'list' })
+  return tx?._txType === 'income' ? `+${formattedAmount}` : formattedAmount
+}
+
+function getFinanceSummaryCardValueClass(card: FinanceSummaryCard) {
+  if (card.tone === 'income' || card.tone === 'profit') return 'dog-detail__fin-cell-value--income'
+  if (card.tone === 'expense' || card.tone === 'loss') return 'dog-detail__fin-cell-value--expense'
+  return 'dog-detail__fin-cell-value--neutral'
+}
+
+function getFinanceRecentIcon(tx: any) {
+  return tx?._txType === 'income' ? 'payments' : 'account_balance_wallet'
+}
+
+function getFinanceRecentIconClass(tx: any) {
+  return tx?._txType === 'income' ? 'dog-detail__rec-icon--finance-income' : 'dog-detail__rec-icon--finance-expense'
+}
+
+function getFinanceRecentAmountClass(tx: any) {
+  return tx?._txType === 'income' ? 'dog-detail__rec-amount--income' : 'dog-detail__rec-amount--expense'
+}
+
+function getFinanceRecentTitle(tx: any) {
+  if (tx?._txType === 'expense') return tx?.notes || tx?.category || '支出记录'
+  return tx?.notes || tx?.type || '收入记录'
+}
+
+function getFinanceRecentSubtitle(tx: any) {
+  const dateText = formatDate(tx?.date || 0)
+  if (tx?._txType === 'expense') {
+    if (tx?.linked_litter_id) {
+      const litterText = tx?.dam_name
+        ? `${tx.dam_name}${tx?.litter_number ? ` · 第${tx.litter_number}窝` : ' · 关联窝'}`
+        : '关联窝'
+      return `${dateText} · ${litterText}`
+    }
+    if (tx?.linked_cycle_id) {
+      return `${dateText} · ${tx?.dam_name ? `${tx.dam_name} · 繁育周期` : '繁育周期'}`
+    }
+    if (Array.isArray(tx?.dog_names) && tx.dog_names.length > 0) {
+      const dogNames = tx.dog_names.slice(0, 2).join('、')
+      return `${dateText} · ${dogNames}${tx.dog_names.length > 2 ? ` +${tx.dog_names.length - 2}` : ''}`
+    }
+    return dateText
+  }
+
+  if (tx?.dog_name) return `${dateText} · ${tx.dog_name}`
+  return dateText
 }
 
 function goBack() {
@@ -2055,8 +2324,27 @@ function goToIncomeAdd() {
   uni.navigateTo({ url: `/pages/finance/expense-add?type=income&dogId=${dogId}` })
 }
 
+function goToFinanceList() {
+  const dogName = encodeURIComponent(dog.value?.name || '')
+  uni.navigateTo({ url: `/pages/finance/index?dogId=${dogId}&dogName=${dogName}` })
+}
+
 function goToDamRoi() {
   uni.navigateTo({ url: `/pages/finance/dam-roi?damId=${dogId}` })
+}
+
+function goToFinanceDetail(tx: any) {
+  if (!tx?._id) {
+    uni.showToast({ title: '记录信息缺失', icon: 'none' })
+    return
+  }
+
+  if (tx._txType === 'expense') {
+    uni.navigateTo({ url: `/pages/finance/expense-detail?id=${tx._id}` })
+    return
+  }
+
+  uni.navigateTo({ url: `/pages/finance/income-detail?id=${tx._id}` })
 }
 
 function handleStatusTap(status: DeriveStatus) {
@@ -2555,15 +2843,32 @@ async function loadData({
         }
       })
 
-    const financePromise = fetchDogFinance(dogId)
-      .then((financeRes) => {
-        if (loadToken !== latestLoadToken) return
-        dogFinance.value = financeRes?.data || null
-      })
-      .catch(() => {
-        if (loadToken !== latestLoadToken) return
-        dogFinance.value = null
-      })
+    const shouldLoadDamRoi = detailRes?.data?.role === '种狗' && detailRes?.data?.gender === '母'
+    const financePromise = Promise.all([
+      fetchDogFinance(dogId)
+        .then((financeRes) => {
+          if (loadToken !== latestLoadToken) return
+          dogFinance.value = financeRes?.data || null
+        })
+        .catch(() => {
+          if (loadToken !== latestLoadToken) return
+          dogFinance.value = null
+        }),
+      shouldLoadDamRoi
+        ? fetchDamRoi(dogId)
+            .then((roiRes) => {
+              if (loadToken !== latestLoadToken) return
+              damFinanceRoi.value = roiRes?.data || null
+            })
+            .catch(() => {
+              if (loadToken !== latestLoadToken) return
+              damFinanceRoi.value = null
+            })
+        : Promise.resolve().then(() => {
+            if (loadToken !== latestLoadToken) return
+            damFinanceRoi.value = null
+          }),
+    ])
       .finally(() => {
         if (loadToken === latestLoadToken) {
           financeLoaded.value = true
@@ -2646,6 +2951,18 @@ watch([activeTab, activeCycleId], async ([tab, cycleId], [, previousCycleId]) =>
 
   if (tab === 'breeding') {
     await ensureActiveCycleSummary()
+  }
+})
+
+watch(activeHealthFilter, () => {
+  const nextMode = pendingHealthFilterFocusMode
+  pendingHealthFilterFocusMode = 'auto'
+  scheduleFocusActiveHealthFilter(nextMode)
+})
+
+watch([activeTab, healthTabLoaded], ([tab, loaded]) => {
+  if (tab === 'health' && loaded) {
+    scheduleFocusActiveHealthFilter('auto')
   }
 })
 
@@ -4449,26 +4766,67 @@ onShow(() => {
 
 /* 财务 Tab 链接 */
 .dog-detail__finance-links {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
 
 .dog-detail__finance-link {
   display: flex;
   align-items: center;
-  gap: 12px;
+  justify-content: center;
+  gap: 8px;
   background: var(--card);
-  border-radius: var(--radius-row);
-  padding: 14px 16px;
+  border-radius: 14px;
+  padding: 9px 12px;
   box-shadow: var(--shadow);
-  transition: transform 0.12s ease;
-  &:active { transform: scale(0.975); }
+  border: 1px solid rgba(216, 203, 189, 0.18);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  &:active {
+    transform: scale(0.975);
+    box-shadow: 0 4px 14px rgba(99, 70, 49, 0.08);
+  }
+}
+
+.dog-detail__finance-link--expense {
+  background: linear-gradient(180deg, rgba(248, 255, 250, 0.98) 0%, rgba(255, 255, 255, 0.98) 100%);
+}
+
+.dog-detail__finance-link--income {
+  background: linear-gradient(180deg, rgba(255, 247, 249, 0.98) 0%, rgba(255, 255, 255, 0.98) 100%);
+}
+
+.dog-detail__finance-link-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  .material-icons-round {
+    font-family: 'Material Icons Round';
+    font-size: 15px;
+  }
+}
+
+.dog-detail__finance-link-icon--expense {
+  background: var(--icon-green);
+  .material-icons-round { color: var(--green); }
+}
+
+.dog-detail__finance-link-icon--income {
+  background: var(--icon-red);
+  .material-icons-round { color: var(--red); }
+}
+
+.dog-detail__finance-link-copy {
+  min-width: 0;
 }
 
 .dog-detail__finance-link-text {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
   color: var(--text-1);
 }
 
@@ -4615,37 +4973,128 @@ onShow(() => {
 
 /* ==================== F: 财务汇总 ==================== */
 .dog-detail__fin-summary {
-  background: var(--card);
-  border-radius: var(--radius-card);
+  padding: 8px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.985) 0%, rgba(255, 250, 247, 0.985) 100%);
+  border-radius: 24px;
   box-shadow: var(--shadow);
+  border: 1px solid rgba(234, 62, 119, 0.08);
+  position: relative;
   overflow: hidden;
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at top left, rgba(255, 181, 79, 0.12), transparent 24%);
+    pointer-events: none;
+  }
 }
 .dog-detail__fin-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  position: relative;
+  z-index: 1;
+}
+.dog-detail__fin-grid--dam {
+  grid-template-columns: 1fr 1fr;
 }
 .dog-detail__fin-cell {
-  padding: 14px 16px;
+  min-width: 0;
+  padding: 14px 14px 13px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  &:nth-child(2) { border-left: 1px solid rgba(216, 203, 189, 0.15); }
-  &:nth-child(3), &:nth-child(4) { border-top: 1px solid rgba(216, 203, 189, 0.15); }
-  &:nth-child(4) { border-left: 1px solid rgba(216, 203, 189, 0.15); }
+  justify-content: space-between;
+  gap: 10px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 246, 242, 0.86) 0%, rgba(255, 255, 255, 0.94) 100%);
+}
+.dog-detail__fin-cell--full {
+  grid-column: 1 / -1;
+  align-items: center;
+  text-align: center;
+  padding-top: 16px;
+  padding-bottom: 16px;
+  background: linear-gradient(180deg, rgba(250, 241, 244, 0.96) 0%, rgba(255, 252, 251, 0.98) 100%);
 }
 .dog-detail__fin-cell-label {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-3);
 }
 .dog-detail__fin-cell-value {
   font-family: var(--font-display);
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 800;
   color: var(--text-1);
+  line-height: 1.1;
+  word-break: break-all;
 }
-.dog-detail__fin-cell-value--red { color: var(--red); }
-.dog-detail__fin-cell-value--green { color: var(--green); }
+.dog-detail__fin-cell-value--income { color: var(--red); }
+.dog-detail__fin-cell-value--expense { color: var(--green); }
+.dog-detail__fin-cell-value--neutral { color: var(--text-1); }
+
+.dog-detail__fin-amount {
+  display: inline-flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 1px;
+  flex-wrap: nowrap;
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums lining-nums;
+  line-height: 1;
+}
+
+.dog-detail__fin-amount-sign {
+  font-size: 18px;
+  font-weight: 800;
+  margin-bottom: 1px;
+}
+
+.dog-detail__fin-amount-currency {
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+  margin-right: 2px;
+}
+
+.dog-detail__fin-amount-number {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.dog-detail__fin-empty {
+  background: var(--card);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow);
+  padding: 8px 0;
+}
+
+.dog-detail__rec-list--finance {
+  border-radius: 22px;
+}
+
+.dog-detail__rec-item--finance {
+  padding-top: 11px;
+  padding-bottom: 11px;
+}
+
+.dog-detail__rec-icon--finance-income {
+  background: rgba(255, 219, 225, 0.82);
+  .material-icons-round { color: var(--red); }
+}
+
+.dog-detail__rec-icon--finance-expense {
+  background: rgba(213, 241, 219, 0.92);
+  .material-icons-round { color: var(--green); }
+}
+
+.dog-detail__rec-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
 
 /* 交易金额 */
 .dog-detail__rec-amount {
@@ -4653,7 +5102,7 @@ onShow(() => {
   font-weight: 700;
   flex-shrink: 0;
 }
-.dog-detail__rec-amount--green { color: var(--green); }
-.dog-detail__rec-amount--red { color: var(--red); }
+.dog-detail__rec-amount--income { color: var(--red); }
+.dog-detail__rec-amount--expense { color: var(--green); }
 
 </style>

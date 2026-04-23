@@ -209,7 +209,7 @@ import {
   replaceTimestampTimeParts,
 } from '@/utils/date'
 
-type PickerMode = 'date' | 'time' | 'datetime'
+type PickerMode = 'date' | 'time' | 'datetime' | 'month'
 type PickerValueType = 'timestamp' | 'date-string' | 'time-string'
 type PickerViewMode = 'calendar' | 'month' | 'time'
 
@@ -282,6 +282,7 @@ const minutes = computed(() => {
 
 const draftDate = computed(() => new Date(draftTimestamp.value))
 const mode = computed(() => props.mode)
+const isMonthOnlyMode = computed(() => props.mode === 'month')
 const selectedYear = computed(() => draftDate.value.getFullYear())
 const selectedMonth = computed(() => draftDate.value.getMonth() + 1)
 const selectedMonthIndex = computed(() => draftDate.value.getMonth())
@@ -291,16 +292,19 @@ const selectedMinute = computed(() => draftDate.value.getMinutes())
 
 const toolbarLeftLabel = computed(() => {
   if (props.mode === 'time') return '取消'
+  if (isMonthOnlyMode.value) return '取消'
   return currentView.value === 'calendar' ? '取消' : '返回'
 })
 
 const toolbarRightLabel = computed(() => {
   if (props.mode === 'time') return '完成'
+  if (isMonthOnlyMode.value) return '确定'
   return currentView.value === 'calendar' ? '完成' : '确定'
 })
 
 const toolbarTitle = computed(() => {
   if (props.mode === 'time') return '选择时间'
+  if (isMonthOnlyMode.value) return '选择年月'
   if (currentView.value === 'month') return '选择年月'
   if (currentView.value === 'time') return '选择时间'
   return '选择日期时间'
@@ -456,7 +460,11 @@ function syncDraftFromValue() {
   }
 
   draftTimestamp.value = nextDraftTs
-  currentView.value = props.mode === 'time' ? 'time' : 'calendar'
+  currentView.value = props.mode === 'time'
+    ? 'time'
+    : props.mode === 'month'
+      ? 'month'
+      : 'calendar'
   syncCalendarCursorToDraft()
 }
 
@@ -524,6 +532,10 @@ function onTimePickerChange(event: any) {
 }
 
 function handleToolbarLeft() {
+  if (isMonthOnlyMode.value) {
+    close()
+    return
+  }
   if (props.mode !== 'time' && currentView.value !== 'calendar') {
     currentView.value = 'calendar'
     return
@@ -532,6 +544,10 @@ function handleToolbarLeft() {
 }
 
 function handleToolbarRight() {
+  if (isMonthOnlyMode.value) {
+    handleConfirm()
+    return
+  }
   if (props.mode !== 'time' && currentView.value === 'month') {
     calendarYear.value = panelYear.value
     calendarMonth.value = panelMonth.value
@@ -559,6 +575,17 @@ function handleConfirm() {
     } else {
       nextValue = replaceTimestampTimeParts(draftTimestamp.value, selectedHour.value, selectedMinute.value)
     }
+  } else if (props.mode === 'month') {
+    const nextTimestamp = buildTimestampFromDateParts(
+      panelYear.value,
+      panelMonth.value - 1,
+      1,
+      draftTimestamp.value,
+    )
+
+    nextValue = props.valueType === 'date-string'
+      ? formatDateParts(panelYear.value, panelMonth.value - 1, 1)
+      : nextTimestamp
   } else if (props.valueType === 'date-string') {
     nextValue = formatDateParts(selectedYear.value, selectedMonthIndex.value, selectedDay.value)
   } else {

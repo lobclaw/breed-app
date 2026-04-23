@@ -36,17 +36,25 @@
     </view>
 
     <view class="dog-list__filters-wrap">
-      <scroll-view scroll-x class="dog-list__filters" show-scrollbar="false">
+      <scroll-view
+        scroll-x
+        scroll-with-animation
+        class="dog-list__filters"
+        show-scrollbar="false"
+        :scroll-left="filterScrollLeft"
+        @scroll="onFilterScroll"
+      >
         <view class="dog-list__filters-inner primary-page-chip-row">
           <view
             v-for="filter in filterOptions"
             :key="filter.value"
+            :id="filterChipId(filter.value)"
             class="dog-list__chip primary-page-tab"
             :class="{
               'dog-list__chip--active': activeFilter === filter.value,
               'primary-page-tab--active': activeFilter === filter.value,
             }"
-            @click="activeFilter = filter.value"
+            @click="setActiveFilter(filter.value)"
           >
             <text class="dog-list__chip-text">{{ filter.label }}</text>
           </view>
@@ -229,7 +237,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref } from 'vue'
+import { computed, nextTick, reactive, ref, watch, getCurrentInstance } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
@@ -283,13 +291,20 @@ const MAX_STATUS_TAGS = 2
 const dogs = ref<DogWithStatus[]>([])
 const loading = ref(true)
 const activeFilter = ref<QuickFilterValue>('all')
+const filterScrollLeft = ref(0)
 const showFilterSheet = ref(false)
 const searchKeyword = ref('')
 const submitBannerMessage = ref('')
 const highlightedDogId = ref('')
 const dogStore = useDogStore()
+const pageInstance = getCurrentInstance()
+const FILTER_FOCUS_RATIO = 0.38
+const FILTER_AUTO_TOLERANCE_PX = 12
+const FILTER_FORCE_MIN_DELTA_PX = 8
 let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
 let highlightTimer: ReturnType<typeof setTimeout> | null = null
+let filterFocusTimer: ReturnType<typeof setTimeout> | null = null
+let pendingFilterFocusMode: 'auto' | 'force' = 'auto'
 let pendingFeedbackDogId = ''
 let pendingFeedbackHiddenMessage = ''
 
@@ -581,6 +596,102 @@ const filteredDogs = computed<DogListItem[]>(() => {
   })
 })
 
+function filterChipId(filterValue: QuickFilterValue) {
+  return `dog-list-filter-${filterValue}`
+}
+
+function onFilterScroll(event: any) {
+  filterScrollLeft.value = Number(event?.detail?.scrollLeft || 0)
+}
+
+function setActiveFilter(filterValue: QuickFilterValue) {
+  if (activeFilter.value === filterValue) return
+  pendingFilterFocusMode = 'force'
+  activeFilter.value = filterValue
+}
+
+type FilterLayoutMetrics = {
+  viewportWidth: number
+  contentWidth: number
+  currentScrollLeft: number
+  chipLeft: number
+  chipWidth: number
+}
+
+function scheduleFocusActiveFilter(mode: 'auto' | 'force' = 'auto') {
+  if (!pageInstance) return
+  if (filterFocusTimer) clearTimeout(filterFocusTimer)
+  nextTick(() => {
+    filterFocusTimer = setTimeout(() => {
+      focusActiveFilter(mode)
+    }, 20)
+  })
+}
+
+function measureFilterLayout(callback: (metrics: FilterLayoutMetrics | null) => void) {
+  if (!pageInstance) {
+    callback(null)
+    return
+  }
+  const query = uni.createSelectorQuery().in(pageInstance)
+  query.select('.dog-list__filters').boundingClientRect()
+  query.select('.dog-list__filters-inner').boundingClientRect()
+  query.select(`#${filterChipId(activeFilter.value)}`).boundingClientRect()
+  query.exec((result) => {
+    const [containerRect, contentRect, chipRect] = result || []
+    if (!containerRect || !contentRect || !chipRect) {
+      callback(null)
+      return
+    }
+
+    callback({
+      viewportWidth: Number(containerRect.width || 0),
+      contentWidth: Number(contentRect.width || 0),
+      currentScrollLeft: Math.max(0, Number(containerRect.left || 0) - Number(contentRect.left || 0)),
+      chipLeft: Number(chipRect.left || 0) - Number(contentRect.left || 0),
+      chipWidth: Number(chipRect.width || 0),
+    })
+  })
+}
+
+function computeTargetFilterScrollLeft(metrics: FilterLayoutMetrics, mode: 'auto' | 'force') {
+  const desiredChipLeft = metrics.viewportWidth * FILTER_FOCUS_RATIO - metrics.chipWidth / 2
+  const maxScrollLeft = Math.max(0, metrics.contentWidth - metrics.viewportWidth)
+  let targetScrollLeft = metrics.chipLeft - desiredChipLeft
+  targetScrollLeft = Math.min(maxScrollLeft, Math.max(0, targetScrollLeft))
+
+  const delta = targetScrollLeft - metrics.currentScrollLeft
+  if (mode === 'force' && Math.abs(delta) > 0 && Math.abs(delta) < FILTER_FORCE_MIN_DELTA_PX) {
+    targetScrollLeft = metrics.currentScrollLeft + Math.sign(delta) * FILTER_FORCE_MIN_DELTA_PX
+    targetScrollLeft = Math.min(maxScrollLeft, Math.max(0, targetScrollLeft))
+  }
+
+  return targetScrollLeft
+}
+
+function isActiveFilterWithinCorridor(metrics: FilterLayoutMetrics) {
+  const chipCenter = metrics.chipLeft - metrics.currentScrollLeft + metrics.chipWidth / 2
+  const desiredCenter = metrics.viewportWidth * FILTER_FOCUS_RATIO
+  return Math.abs(chipCenter - desiredCenter) <= FILTER_AUTO_TOLERANCE_PX
+}
+
+function focusActiveFilter(mode: 'auto' | 'force' = 'auto', retryCount = 1) {
+  measureFilterLayout((metrics) => {
+    if (!metrics) {
+      if (retryCount > 0) {
+        setTimeout(() => focusActiveFilter(mode, retryCount - 1), 16)
+      }
+      return
+    }
+
+    if (mode === 'auto' && isActiveFilterWithinCorridor(metrics)) return
+
+    const nextScrollLeft = computeTargetFilterScrollLeft(metrics, mode)
+    if (Math.abs(nextScrollLeft - metrics.currentScrollLeft) < 0.5) return
+    filterScrollLeft.value = nextScrollLeft
+  })
+}
+
 function toggleFilter(group: FilterGroup, value: string) {
   const idx = advFilters[group].indexOf(value)
   if (idx >= 0) advFilters[group].splice(idx, 1)
@@ -798,8 +909,15 @@ async function loadDogs() {
   }
 }
 
+watch(activeFilter, () => {
+  const nextMode = pendingFilterFocusMode
+  pendingFilterFocusMode = 'auto'
+  scheduleFocusActiveFilter(nextMode)
+})
+
 onShow(() => {
   loadDogs().then(() => applyDogListFeedback())
+  scheduleFocusActiveFilter('auto')
 })
 </script>
 

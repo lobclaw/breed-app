@@ -36,7 +36,11 @@
       <view class="profit-divider" />
       <view class="profit-big">
         <text class="profit-label">净利润</text>
-        <text class="profit-value" :class="netProfitClass">{{ formatFinanceAmount(profitData.netProfit, { scene: 'report' }) }}</text>
+        <view class="profit-amount" :class="netProfitClass">
+          <text v-if="netProfitParts.sign" class="profit-amount__sign">{{ netProfitParts.sign }}</text>
+          <text class="profit-amount__currency">{{ netProfitParts.currency }}</text>
+          <text class="profit-amount__number">{{ netProfitParts.number }}</text>
+        </view>
       </view>
       <view class="profit-sub-row">
         <text class="profit-label">每只均摊成本</text>
@@ -138,7 +142,7 @@ import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BLitterSelector from '@/components/form/BLitterSelector.vue'
-import { formatFinanceAmount } from '@/utils/financeDisplay'
+import { formatFinanceAmount, getFinanceAmountParts } from '@/utils/financeDisplay'
 
 const showLitterPickerVisible = ref(false)
 
@@ -167,6 +171,7 @@ const netProfitClass = computed(() => {
   if (value < 0) return 'negative'
   return 'neutral'
 })
+const netProfitParts = computed(() => getFinanceAmountParts(profitData.value?.netProfit || 0, { scene: 'report' }))
 
 const incomeItems = computed(() => {
   if (!profitData.value) return []
@@ -414,14 +419,36 @@ onLoad((query) => {
   color: var(--text-1);
 }
 
-.profit-big .profit-value,
+.profit-amount,
 .profit-value.primary {
+  display: inline-flex;
+  align-items: flex-end;
   font-family: var(--font-display);
-  font-size: 24px;
-  font-weight: 800;
+  font-variant-numeric: tabular-nums lining-nums;
+  line-height: 1;
   color: var(--primary);
 }
 
+.profit-amount__sign {
+  font-size: 18px;
+  font-weight: 800;
+  margin-bottom: 1px;
+}
+
+.profit-amount__currency {
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
+  margin-right: 2px;
+}
+
+.profit-amount__number {
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.profit-amount.negative { color: var(--red); }
+.profit-amount.neutral { color: var(--text-2); }
 .profit-value.negative { color: var(--red); }
 .profit-value.neutral { color: var(--text-2); }
 

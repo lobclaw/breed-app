@@ -102,13 +102,13 @@
             <text v-if="completionSummaryText" class="detail-summary__completion">{{ completionSummaryText }}</text>
           </view>
           <view class="detail-summary__meta">
-            <text class="detail-summary__meta-value">{{ currentDay }}/{{ task.duration_days }}</text>
-            <text class="detail-summary__meta-label">天数进度</text>
+            <text class="detail-summary__meta-value">{{ summaryMetaValue }}</text>
+            <text class="detail-summary__meta-label">{{ summaryMetaLabel }}</text>
           </view>
         </view>
       </view>
 
-      <view class="status-banner" :style="{ background: statusBannerBg }">
+      <view v-if="showDayProgress" class="status-banner" :style="{ background: statusBannerBg }">
         <text class="status-banner-left" :style="{ color: statusBannerColor }">
           {{ statusText }} · 第{{ currentDay }}天/共{{ task.duration_days }}天
         </text>
@@ -117,7 +117,7 @@
         </text>
       </view>
 
-      <view class="progress-wrapper">
+      <view v-if="showDayProgress" class="progress-wrapper">
         <BProgress :value="currentDay" :max="task.duration_days" color="plum" :show-label="false" />
       </view>
 
@@ -320,6 +320,10 @@ const progressPercent = computed(() => {
   return Math.round((currentDay.value / task.value.duration_days) * 100)
 })
 
+const showDayProgress = computed(() => {
+  return (task.value?.duration_days || 0) > 1
+})
+
 const statusText = computed(() => {
   if (!task.value) return ''
   if (task.value.status === 'completed') return '已完成'
@@ -354,6 +358,18 @@ const completionCounts = computed(() => {
     completed: Number(task.value.completed_dose_count) || 0,
     total: Number(task.value.total_dose_count) || 0,
   }
+})
+
+const summaryMetaValue = computed(() => {
+  if (!task.value) return ''
+  if (!showDayProgress.value && completionCounts.value.total > 0) {
+    return `${completionCounts.value.completed}/${completionCounts.value.total}`
+  }
+  return `${currentDay.value}/${task.value.duration_days}`
+})
+
+const summaryMetaLabel = computed(() => {
+  return showDayProgress.value ? '天数进度' : '完成情况'
 })
 
 const completionSummaryText = computed(() => {

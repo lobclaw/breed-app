@@ -19,7 +19,14 @@
           :class="{ 'month-selector__arrow--disabled': monthNavigationDisabled }"
           @click="changeMonth(-1)"
         >chevron_left</text>
-        <text class="month-selector__text">{{ monthLabel }}</text>
+        <view
+          class="month-selector__body"
+          :class="{ 'month-selector__body--disabled': monthPickerDisabled }"
+          @click="openMonthPicker"
+        >
+          <text class="month-selector__text">{{ monthLabel }}</text>
+          <text class="material-icons-round month-selector__caret">arrow_drop_down</text>
+        </view>
         <text
           class="material-icons-round month-selector__arrow"
           :class="{ 'month-selector__arrow--disabled': monthNavigationDisabled }"
@@ -40,7 +47,11 @@
       </view>
 
       <view class="summary-board__main">
-        <text class="summary-board__number" :class="netProfitToneClass">{{ netProfitDisplay.value }}</text>
+        <view class="summary-board__amount" :class="netProfitToneClass">
+          <text v-if="netProfitParts.sign" class="summary-board__amount-sign">{{ netProfitParts.sign }}</text>
+          <text class="summary-board__amount-currency">{{ netProfitParts.currency }}</text>
+          <text class="summary-board__number">{{ netProfitParts.number }}</text>
+        </view>
       </view>
 
       <text v-if="netProfitDisplay.detail" class="summary-board__detail">{{ netProfitDisplay.detail }}</text>
@@ -463,13 +474,21 @@
       @confirm="onDraftDateConfirm('end', $event)"
     />
 
+    <BDateTimePicker
+      v-model:visible="showMonthPicker"
+      :model-value="monthPickerValue"
+      mode="month"
+      value-type="timestamp"
+      @confirm="onMonthPickerConfirm"
+    />
+
     <BNavBar current="finance" />
   </view>
 </template>
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import BNavBar from '@/components/layout/BNavBar.vue'
 import BIconBox from '@/components/base/BIconBox.vue'
@@ -492,7 +511,8 @@ import {
   normalizeExpenseCategories,
 } from '@/constants/financeCategories'
 import type { ExpenseCategory, ExpenseCategoryGroup, ExpenseCategoryGroupKey } from '@/types/finance'
-import { formatFinanceAmount, getFinanceAmountDisplay } from '@/utils/financeDisplay'
+import { normalizeMonthCursor, offsetMonthCursor } from '@/utils/date'
+import { formatFinanceAmount, getFinanceAmountDisplay, getFinanceAmountParts } from '@/utils/financeDisplay'
 
 type FinanceFilterType = '' | 'income' | 'expense'
 type FinanceDateRangeValue = typeof FINANCE_DATE_RANGE_OPTIONS[number]['value']
@@ -541,7 +561,8 @@ const showLitterPicker = ref(false)
 const showCyclePicker = ref(false)
 const showDraftStartDatePicker = ref(false)
 const showDraftEndDatePicker = ref(false)
-const currentMonth = ref(new Date())
+const showMonthPicker = ref(false)
+const currentMonth = ref(new Date(normalizeMonthCursor()))
 const expenseGroups = ref<ExpenseCategoryGroup[]>(buildExpenseCategoryGroups())
 const categories = ref<ExpenseCategory[]>(normalizeExpenseCategories(DEFAULT_EXPENSE_CATEGORIES, expenseGroups.value))
 const expenseGroupOptions = computed(() => expenseGroups.value)
@@ -580,6 +601,28 @@ function createDefaultFilters(date = currentMonth.value): FinanceFilterState {
     customStartDate: monthStartTs(date),
     customEndDate: monthEndTs(date),
   }
+}
+
+function decodeQueryValue(value: unknown) {
+  if (typeof value !== 'string') return ''
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
+function applyEntryDogFilter(query: Record<string, any> | undefined) {
+  const dogId = decodeQueryValue(query?.dogId)
+  if (!dogId) return
+
+  const dogName = decodeQueryValue(query?.dogName)
+  Object.assign(appliedFilters, normalizeFilters({
+    ...createDefaultFilters(currentMonth.value),
+    selectedDogIds: [dogId],
+    selectedDogNames: dogName ? [dogName] : [],
+  }))
+  syncDraftWithApplied()
 }
 
 const appliedFilters = reactive<FinanceFilterState>(createDefaultFilters())
@@ -647,6 +690,13 @@ function normalizeFilters(input: FinanceFilterState): FinanceFilterState {
 const groupedExpenseCategories = computed(() => groupExpenseCategories(categories.value, expenseGroups.value))
 
 const monthNavigationDisabled = computed(() => appliedFilters.dateRange === 'custom')
+const monthPickerDisabled = computed(() => monthNavigationDisabled.value || !['this_month', 'last_month'].includes(appliedFilters.dateRange))
+const monthPickerValue = computed(() => {
+  if (appliedFilters.dateRange === 'last_month') {
+    return offsetMonthCursor(currentMonth.value, -1)
+  }
+  return normalizeMonthCursor(currentMonth.value)
+})
 
 const monthLabel = computed(() => {
   if (appliedFilters.dateRange === 'custom') {
@@ -696,6 +746,7 @@ const summaryBoardBadgeText = computed(() => {
 const incomeDisplay = computed(() => getFinanceAmountDisplay(summary.totalIncome, { scene: 'overview' }))
 const expenseDisplay = computed(() => getFinanceAmountDisplay(-summary.totalExpense, { scene: 'overview' }))
 const netProfitDisplay = computed(() => getFinanceAmountDisplay(summary.netProfit, { scene: 'overview' }))
+const netProfitParts = computed(() => getFinanceAmountParts(summary.netProfit, { scene: 'overview' }))
 const groupedTransactions = computed<TransactionGroup[]>(() => {
   const groups = new Map<string, TransactionGroup>()
 
@@ -819,7 +870,8 @@ function getTransactionAmount(tx: any) {
 
 function formatTransactionAmount(tx: any) {
   const amount = getTransactionAmount(tx)
-  return formatFinanceAmount(tx._txType === 'expense' ? -amount : amount, { scene: 'list' })
+  const formattedAmount = formatFinanceAmount(tx._txType === 'expense' ? -amount : amount, { scene: 'list' })
+  return tx._txType === 'income' ? `+${formattedAmount}` : formattedAmount
 }
 
 function isSameDay(left: Date, right: Date) {
@@ -1028,6 +1080,10 @@ function syncAndReload(next: FinanceFilterState) {
   loadPage()
 }
 
+function setCurrentMonthCursor(value: number | Date | null | undefined) {
+  currentMonth.value = new Date(normalizeMonthCursor(value, currentMonth.value))
+}
+
 function switchTypeTab(type: FinanceFilterType) {
   syncAndReload({
     ...appliedFilters,
@@ -1037,15 +1093,26 @@ function switchTypeTab(type: FinanceFilterType) {
 
 function changeMonth(delta: number) {
   if (monthNavigationDisabled.value) return
-  const date = new Date(currentMonth.value)
-  if (appliedFilters.dateRange === 'this_year') {
-    date.setFullYear(date.getFullYear() + delta)
-  } else if (appliedFilters.dateRange === 'this_quarter') {
-    date.setMonth(date.getMonth() + (delta * 3))
-  } else {
-    date.setMonth(date.getMonth() + delta)
-  }
-  currentMonth.value = date
+  const offset = appliedFilters.dateRange === 'this_year'
+    ? delta * 12
+    : appliedFilters.dateRange === 'this_quarter'
+      ? delta * 3
+      : delta
+  setCurrentMonthCursor(offsetMonthCursor(currentMonth.value, offset))
+  loadPage()
+}
+
+function openMonthPicker() {
+  if (monthPickerDisabled.value) return
+  showMonthPicker.value = true
+}
+
+function onMonthPickerConfirm(value: number | string) {
+  if (typeof value !== 'number') return
+  const nextCursor = appliedFilters.dateRange === 'last_month'
+    ? offsetMonthCursor(value, 1)
+    : normalizeMonthCursor(value)
+  setCurrentMonthCursor(nextCursor)
   loadPage()
 }
 
@@ -1220,6 +1287,10 @@ function goToTxDetail(tx: any) {
   uni.navigateTo({ url: `/pages/finance/income-detail?id=${tx._id}` })
 }
 
+onLoad((query) => {
+  applyEntryDogFilter(query as Record<string, any> | undefined)
+})
+
 onShow(async () => {
   await loadCategories()
   Object.assign(appliedFilters, normalizeFilters(appliedFilters))
@@ -1242,11 +1313,33 @@ onShow(async () => {
   gap: 16px;
   padding: var(--primary-page-subsection-gap) 0 0;
 
+  &__body {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+
+    &:active {
+      transform: scale(0.98);
+    }
+
+    &--disabled {
+      opacity: 0.62;
+    }
+  }
+
   &__text {
     font-family: var(--font-display);
     font-size: 16px;
     font-weight: 700;
     color: var(--text-1);
+  }
+
+  &__caret {
+    font-family: 'Material Icons Round';
+    font-size: 18px;
+    color: var(--text-3);
+    flex-shrink: 0;
   }
 
   &__arrow {
@@ -1359,6 +1452,29 @@ onShow(async () => {
   &__detail {
     font-family: var(--font-display);
     font-variant-numeric: tabular-nums lining-nums;
+  }
+
+  &__amount {
+    display: inline-flex;
+    align-items: flex-end;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  &__amount-sign {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 800;
+    line-height: 1;
+    margin-bottom: 1px;
+  }
+
+  &__amount-currency {
+    font-family: var(--font-display);
+    font-size: 31px;
+    font-weight: 800;
+    line-height: 0.95;
+    margin-right: 2px;
   }
 
   &__number {
@@ -2196,6 +2312,11 @@ onShow(async () => {
   .month-selector {
     gap: 10px;
 
+    &__body {
+      gap: 0;
+      min-width: 0;
+    }
+
     &__text {
       display: block;
       max-width: calc(100vw - 160px);
@@ -2208,6 +2329,10 @@ onShow(async () => {
     &__arrow {
       font-size: 18px;
       flex-shrink: 0;
+    }
+
+    &__caret {
+      font-size: 17px;
     }
   }
 
@@ -2224,11 +2349,11 @@ onShow(async () => {
       margin-top: 6px;
     }
 
-    &__sign,
-    &__currency {
+    &__amount-sign {
       font-size: 15px;
     }
 
+    &__amount-currency,
     &__number {
       font-size: 27px;
     }
