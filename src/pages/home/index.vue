@@ -586,6 +586,7 @@ import {
 import { buildHomeWorkbench } from '@/utils/homeWorkbench'
 import { buildTimestampFromDayOffset, formatDateInputValue, getBeijingDayStart } from '@/utils/date'
 import { buildMedicationDetailUrl } from '@/utils/dogDetailNavigation'
+import type { MedicationRouteIllnessLink } from '@/utils/recordFormRoutes'
 
 const { hasFamily, loadFamily } = useAuth()
 const taskStore = useTaskStore()
@@ -781,10 +782,19 @@ const batchDogList = ref<Array<{ id: string; name: string; completed: boolean }>
 const batchSelected = reactive<Record<string, boolean>>({})
 let batchTaskIds: string[] = []
 const showSickBatch = ref(false)
-const sickBatchList = ref<Array<{ id: string; dogId: string; name: string; illness: string; treatmentStatus: string; daysSick: number; illnessId: string }>>([])
+const sickBatchList = ref<Array<{
+  id: string
+  dogId: string
+  name: string
+  illness: string
+  treatmentStatus: string
+  daysSick: number
+  illnessId: string
+  symptomSummary?: string
+}>>([])
 const sickBatchSelected = reactive<Record<string, boolean>>({})
 const showMedBatch = ref(false)
-const medBatchList = ref<Array<{ id: string; dogId: string; name: string; detail: string; medicationTaskIds: string[]; illnessId: string }>>([])
+const medBatchList = ref<Array<{ id: string; dogId: string; name: string; detail: string; medicationTaskIds: string[]; illnessId: string; illnessIds: string[] }>>([])
 const medBatchSelected = reactive<Record<string, boolean>>({})
 const showBreedingActionSheet = ref(false)
 const breedingActionCard = ref<any>(null)
@@ -798,7 +808,7 @@ const sickBatchSelectedCount = computed(() => Object.values(sickBatchSelected).f
 const isAllSickBatchSelected = computed(() => sickBatchList.value.length > 0 && sickBatchList.value.every(item => sickBatchSelected[item.id]))
 const medBatchSelectedCount = computed(() => Object.values(medBatchSelected).filter(Boolean).length)
 const isAllMedBatchSelected = computed(() => medBatchList.value.length > 0 && medBatchList.value.every(item => medBatchSelected[item.id]))
-const medBatchRecoverCount = computed(() => medBatchList.value.filter(item => medBatchSelected[item.id] && !!item.illnessId).length)
+const medBatchRecoverCount = computed(() => medBatchList.value.filter(item => medBatchSelected[item.id] && item.illnessIds.length > 0).length)
 const breedingActionTask = computed(() => breedingActionCard.value?.tasks?.[0] || null)
 const breedingActionMilestone = computed(() => {
   return breedingActionTask.value ? deriveBreedingMilestoneViewModel(breedingActionTask.value) : null
@@ -895,6 +905,10 @@ const { run: doPostponeTask } = useCloudCall('task-service', 'postponeTask')
 const { run: doBatchComplete } = useCloudCall('task-service', 'batchCompleteTask')
 const { run: doRecordMedDose } = useCloudCall('health-service', 'recordMedicationDose')
 const { run: doBatchCompleteMedDay } = useCloudCall('health-service', 'batchCompleteMedicationDay')
+const { run: recoverIllnesses } = useCloudCall('health-service', 'recoverIllnesses', {
+  successMode: 'silent',
+  loadingMode: 'local',
+})
 
 // 7天卡片缓存：{ [dayTimestamp]: Card[] }
 type WeekCacheEntry = { cards: any[] }
@@ -967,6 +981,7 @@ function openSickBatchFromCard(card: any) {
     dogId: dog.dogId,
     name: dog.dogName,
     illness: dog.illness || '生病',
+    symptomSummary: dog.symptomSummary || '',
     treatmentStatus: dog.treatmentStatus || '观察中',
     daysSick: dog.daysSick || 1,
   }))
@@ -985,6 +1000,7 @@ function openMedBatchFromCard(card: any) {
     detail: [dog.illnessNames || dog.illness, dog.drugName, dog.progress].filter(Boolean).join(' · '),
     medicationTaskIds: (dog.allMedTasks || []).map((task: any) => task._id).filter(Boolean),
     illnessId: dog.illnessId || '',
+    illnessIds: Array.isArray(dog.illnessIds) ? dog.illnessIds.filter(Boolean) : (dog.illnessId ? [dog.illnessId] : []),
   }))
   Object.keys(medBatchSelected).forEach(key => delete medBatchSelected[key])
   medBatchList.value.forEach((item) => {
@@ -1601,7 +1617,7 @@ function onAction(payload: { type: string; data: any }) {
     showStopConfirm.value = true
   } else if (payload.type === 'recover' && payload.data?.illnessId) {
     removeSickDogLocally(payload.data.dogId, payload.data.illnessId)
-    updateIllnessStatus(payload.data.illnessId, '已康复')
+    void recoverIllnesses({ illnessIds: [payload.data.illnessId] })
   } else if (payload.type === 'update_status' && payload.data?.illnessId) {
     // 就地更新状态标签（不移除行）
     const sickCard = cards.value.find(c => c.cardType === 'sick_observation')
@@ -1609,7 +1625,7 @@ function onAction(payload: { type: string; data: any }) {
       const dog = (sickCard.dogs || []).find((d: any) => d.illnessId === payload.data.illnessId)
       if (dog) dog.treatmentStatus = payload.data.status
     }
-    updateIllnessStatus(payload.data.illnessId, payload.data.status)
+    void updateIllnessStatus(payload.data.illnessId, payload.data.status)
   } else if (payload.type === 'stop_medication' && payload.data?.dogId) {
     endMedication(payload.data.dogId).then(() => loadAll())
   }
@@ -1629,11 +1645,14 @@ async function confirmMedBatchComplete() {
 }
 
 async function confirmMedBatchRecover() {
-  const selectedItems = medBatchList.value.filter(item => medBatchSelected[item.id] && item.illnessId)
+  const selectedItems = medBatchList.value.filter(item => medBatchSelected[item.id] && item.illnessIds.length > 0)
   if (selectedItems.length === 0) return
   showMedBatch.value = false
 
-  await Promise.all(selectedItems.map(item => updateIllnessStatus(item.illnessId, '已康复')))
+  const illnessIds = [...new Set(selectedItems.flatMap(item => item.illnessIds).filter(Boolean))]
+  const medicationTaskIds = [...new Set(selectedItems.flatMap(item => item.medicationTaskIds).filter(Boolean))]
+
+  await recoverIllnesses({ illnessIds, medicationTaskIds })
   await loadAll()
 }
 
@@ -1644,10 +1663,11 @@ async function confirmSickBatchAction(action: SickBatchAction) {
   showSickBatch.value = false
 
   if (action === 'recover') {
+    const illnessIds = [...new Set(selectedItems.map(item => item.illnessId).filter(Boolean))]
     selectedItems.forEach((item) => {
       removeSickDogLocally(item.dogId, item.illnessId)
-      updateIllnessStatus(item.illnessId, '已康复')
     })
+    await recoverIllnesses({ illnessIds })
     return
   }
 
@@ -1659,9 +1679,7 @@ async function confirmSickBatchAction(action: SickBatchAction) {
         if (dog) dog.treatmentStatus = '治疗中'
       })
     }
-    selectedItems.forEach((item) => {
-      updateIllnessStatus(item.illnessId, '治疗中')
-    })
+    await Promise.all(selectedItems.map(item => updateIllnessStatus(item.illnessId, '治疗中')))
     return
   }
 
@@ -1676,11 +1694,7 @@ async function confirmSickBatchAction(action: SickBatchAction) {
     return
   }
 
-  const dogList = selectedItems.map(item => ({ _id: item.dogId, name: item.name }))
-  const illnessParam = selectedItems.length === 1 && selectedItems[0].illnessId
-    ? `&illnessRecordId=${selectedItems[0].illnessId}`
-    : ''
-  uni.navigateTo({ url: `/pages/record/health-medication?batchDogs=${encodeURIComponent(JSON.stringify(dogList))}${illnessParam}` })
+  navigateToMedicationFromIllnesses(selectedItems)
 }
 
 function getSickMenuTone(action?: string) {
@@ -1701,10 +1715,47 @@ function onSickMenuSelect(item: any) {
   } else if (item.action === 'view_medication' && dog.linkedMedicationTaskId) {
     uni.navigateTo({ url: buildMedicationDetailUrl(dog.linkedMedicationTaskId) })
   } else if (item.action === 'start_medication') {
-    const dogList = [{ _id: dog.dogId, name: dog.dogName }]
-    const illnessParam = dog.illnessId ? `&illnessRecordId=${dog.illnessId}` : ''
-    uni.navigateTo({ url: `/pages/record/health-medication?batchDogs=${encodeURIComponent(JSON.stringify(dogList))}${illnessParam}` })
+    navigateToMedicationFromIllnesses([{
+      dogId: dog.dogId,
+      name: dog.dogName,
+      illnessId: dog.illnessId || '',
+      illness: dog.illness || '生病',
+      symptomSummary: dog.symptomSummary || '',
+      treatmentStatus: dog.treatmentStatus || '观察中',
+    }])
   }
+}
+
+function navigateToMedicationFromIllnesses(items: Array<{
+  dogId: string
+  name: string
+  illnessId?: string
+  illness?: string
+  symptomSummary?: string
+  treatmentStatus?: string
+}>) {
+  const dogList = items.map(item => ({ _id: item.dogId, name: item.name }))
+  const illnessParam = items.length === 1 && items[0].illnessId
+    ? `&illnessRecordId=${items[0].illnessId}`
+    : ''
+  const illnessLinks = items.reduce<MedicationRouteIllnessLink[]>((list, item) => {
+    const illnessRecordId = typeof item.illnessId === 'string' ? item.illnessId.trim() : ''
+    if (!illnessRecordId) return list
+
+    list.push({
+      dogId: item.dogId,
+      illnessRecordId,
+      primaryCondition: item.illness || '生病',
+      symptomSummary: item.symptomSummary || '',
+      treatmentStatus: item.treatmentStatus || '观察中',
+    })
+    return list
+  }, [])
+  const illnessLinksParam = illnessLinks.length > 1
+    ? `&illnessLinks=${encodeURIComponent(JSON.stringify(illnessLinks))}`
+    : ''
+
+  uni.navigateTo({ url: `/pages/record/health-medication?batchDogs=${encodeURIComponent(JSON.stringify(dogList))}${illnessParam}${illnessLinksParam}` })
 }
 
 function confirmStopMedication() {

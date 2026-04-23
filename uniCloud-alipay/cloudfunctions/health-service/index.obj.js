@@ -299,6 +299,31 @@ function buildLinkedMedicationTaskSummary(task) {
   }
 }
 
+function normalizeMedicationIllnessLinks(value) {
+  if (!Array.isArray(value)) return []
+
+  const seenDogIds = new Set()
+  return value
+    .map((item) => {
+      const dogId = getIdArg(item, 'dog_id', 'dogId')
+      const illnessRecordId = getIdArg(item, 'illness_record_id', 'illnessRecordId')
+      if (!dogId || !illnessRecordId || seenDogIds.has(dogId)) return null
+      seenDogIds.add(dogId)
+      return {
+        dog_id: dogId,
+        illness_record_id: illnessRecordId,
+      }
+    })
+    .filter(Boolean)
+}
+
+function normalizeIdList(value) {
+  if (!Array.isArray(value)) return []
+  return Array.from(new Set(value
+    .map((item) => typeof item === 'string' ? item.trim() : '')
+    .filter(Boolean)))
+}
+
 function isActiveIllnessRecord(record) {
   return record?.type === 'illness' && (record.details?.treatment_status || '观察中') !== '已康复'
 }
@@ -718,6 +743,108 @@ module.exports = {
     return { data: { success: true } }
   },
 
+  /**
+   * 疾病康复收口：标记疾病康复，并停止显式关联的进行中用药。
+   */
+  async recoverIllnesses(input = {}) {
+    const familyId = this.familyId
+    const now = Date.now()
+    const singleIllnessId = getIdArg(input, 'id', 'recordId', 'record_id', 'illnessId', 'illness_id')
+    const illnessIds = normalizeIdList([
+      ...(Array.isArray(input?.illnessIds) ? input.illnessIds : []),
+      ...(Array.isArray(input?.illness_ids) ? input.illness_ids : []),
+      singleIllnessId,
+    ])
+    const medicationTaskIds = normalizeIdList([
+      ...(Array.isArray(input?.medicationTaskIds) ? input.medicationTaskIds : []),
+      ...(Array.isArray(input?.medication_task_ids) ? input.medication_task_ids : []),
+    ])
+
+    if (illnessIds.length === 0) throw new Error('缺少疾病记录 ID')
+
+    const { data: illnessRecords } = await db.collection('health_records')
+      .where({
+        _id: dbCmd.in(illnessIds),
+        family_id: familyId,
+        type: 'illness',
+        deleted_at: null,
+      })
+      .get()
+    const validIllnessIds = (illnessRecords || []).map(record => record._id).filter(Boolean)
+    if (validIllnessIds.length === 0) throw new Error('疾病记录不存在')
+
+    await db.collection('health_records').where({
+      _id: dbCmd.in(validIllnessIds),
+      family_id: familyId,
+      type: 'illness',
+    }).update({
+      'details.treatment_status': '已康复',
+      updated_at: now,
+    })
+
+    const medicationMap = new Map()
+    if (validIllnessIds.length > 0) {
+      const { data: linkedMeds } = await db.collection('medication_tasks')
+        .where({
+          family_id: familyId,
+          source_record_id: dbCmd.in(validIllnessIds),
+          status: '进行中',
+        })
+        .get()
+      ;(linkedMeds || []).forEach(med => medicationMap.set(med._id, med))
+    }
+    if (medicationTaskIds.length > 0) {
+      const { data: selectedMeds } = await db.collection('medication_tasks')
+        .where({
+          _id: dbCmd.in(medicationTaskIds),
+          family_id: familyId,
+          status: '进行中',
+        })
+        .get()
+      ;(selectedMeds || []).forEach(med => medicationMap.set(med._id, med))
+    }
+
+    const activeMedicationIds = Array.from(medicationMap.keys()).filter(Boolean)
+    if (activeMedicationIds.length > 0) {
+      await db.collection('medication_tasks').where({
+        _id: dbCmd.in(activeMedicationIds),
+        family_id: familyId,
+        status: '进行中',
+      }).update({
+        status: '已取消',
+        updated_at: now,
+      })
+
+      // 兼容旧数据：取消关联的 daily tasks（新记录没有，旧记录可能有）
+      await db.collection('tasks').where({
+        medication_task_id: dbCmd.in(activeMedicationIds),
+        status: 'pending',
+      }).update({
+        status: 'cancelled',
+        updated_at: now,
+      })
+    }
+
+    await logHealthOperation({
+      familyId,
+      actorUserId: this.uid,
+      actionType: 'status_change',
+      domain: 'health',
+      targetType: 'illness_batch',
+      targetId: `batch:${now}`,
+      targetName: `${validIllnessIds.length}条疾病记录`,
+      summary: `标记 ${validIllnessIds.length} 条疾病康复，并停止 ${activeMedicationIds.length} 个关联用药任务`,
+      meta: { illnessCount: validIllnessIds.length, medicationTaskCount: activeMedicationIds.length },
+    })
+
+    return {
+      data: {
+        recovered: validIllnessIds.length,
+        cancelledMedicationTasks: activeMedicationIds.length,
+      },
+    }
+  },
+
   async checkDuplicateIllness({ dog_ids, condition, exclude_record_id } = {}) {
     const duplicates = await findDuplicateActiveIllnesses(this.familyId, {
       dogIds: Array.isArray(dog_ids) ? dog_ids : [],
@@ -1056,6 +1183,9 @@ module.exports = {
     const uid = this.uid
     const startDate = Number.isFinite(Number(data.actual_start_date)) ? Number(data.actual_start_date) : now
     const endDate = startDate + ((durationDays - 1) * DAY_MS)
+    const normalizedIllnessLinks = normalizeMedicationIllnessLinks(data.illness_links || data.illnessLinks)
+    const illnessLinkMap = new Map(normalizedIllnessLinks.map(item => [item.dog_id, item.illness_record_id]))
+    const singleIllnessRecordId = getIdArg(data, 'illnessRecordId', 'illness_record_id')
 
     // ① 一次校验所有犬只
     const { data: dogs } = await db.collection('dogs')
@@ -1081,6 +1211,9 @@ module.exports = {
 
     // ③ 并行创建
     const results = await Promise.all(dogs.map(async (dog) => {
+      const linkedIllnessRecordId = illnessLinkMap.get(dog._id)
+        || ((dogs.length === 1 && singleIllnessRecordId) ? singleIllnessRecordId : '')
+
       // 覆盖模式：先取消该犬的同名进行中任务
       if (data.override_dog_ids && data.override_dog_ids.includes(dog._id)) {
         const { data: existingMeds } = await db.collection('medication_tasks')
@@ -1095,7 +1228,7 @@ module.exports = {
         dog_id: dog._id,
         dog_name: dog.name,
         family_id: familyId,
-        source_record_id: data.illnessRecordId || null,
+        source_record_id: linkedIllnessRecordId || null,
         protocol_id: data.protocol_id || null,
         drug_name: data.drug_name,
         dosage: data.dosage || null,
@@ -1134,18 +1267,18 @@ module.exports = {
       }
 
       // 疾病升级：观察中 → 治疗中
-      if (data.illnessRecordId && dogs.length === 1) {
-        // 单犬从疾病表单跳转：只升级指定疾病记录
+      if (linkedIllnessRecordId) {
+        // 显式关联：只升级当前犬对应的疾病记录
         const { data: ill } = await db.collection('health_records')
-          .where({ _id: data.illnessRecordId, family_id: familyId })
+          .where({ _id: linkedIllnessRecordId, family_id: familyId, dog_id: dog._id, type: 'illness' })
           .get()
         if (ill && ill.length > 0) {
-          await db.collection('health_records').doc(data.illnessRecordId).update({
+          await db.collection('health_records').doc(linkedIllnessRecordId).update({
             'details.treatment_status': '治疗中', updated_at: now,
           })
         }
-      } else {
-        // 批量或无指定：升级该犬所有观察中的疾病
+      } else if (dogs.length === 1 && normalizedIllnessLinks.length === 0 && !singleIllnessRecordId) {
+        // 兼容旧单犬入口：未显式绑定疾病时，仍保留单犬兜底升级逻辑
         const { data: activeIllnesses } = await db.collection('health_records')
           .where({
             family_id: familyId, dog_id: dog._id, type: 'illness',

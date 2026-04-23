@@ -428,12 +428,14 @@
             </view>
           </view>
         </view>
+      </view>
 
-        <view class="filter-actions filter-actions--sticky">
+      <template #footer>
+        <view class="filter-actions filter-actions--sheet-footer">
           <button class="filter-actions__reset" @click="resetDraftFilters">重置</button>
           <button class="filter-actions__apply" :disabled="!canApplyDraftFilters" @click="applyDraftFilters">应用筛选</button>
         </view>
-      </view>
+      </template>
     </BSheet>
 
     <BDogPicker
@@ -1830,7 +1832,7 @@ onShow(async () => {
 }
 
 .filter-sheet {
-  padding: 0 0 24px;
+  padding: 0 0 8px;
 
   &__hero {
     margin: 0 2px 14px;
@@ -1857,8 +1859,12 @@ onShow(async () => {
     display: flex;
     flex-direction: column;
     gap: 16px;
-    padding-bottom: 112px;
+    padding-bottom: 10px;
   }
+}
+
+:deep(.b-sheet__body--with-footer) {
+  padding-bottom: calc(env(safe-area-inset-bottom, 20px) + 92px);
 }
 
 .filter-section {
@@ -2263,18 +2269,14 @@ onShow(async () => {
 .filter-actions {
   display: flex;
   gap: 10px;
-  margin-top: 10px;
+  margin-top: 0;
 
-  &--sticky {
-    position: sticky;
-    bottom: 0;
-    z-index: 3;
-    padding: 18px var(--space-page) calc(env(safe-area-inset-bottom, 0px) + 14px);
-    margin: 0 calc(var(--space-page) * -1) -20px;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0) 0%, rgba(255, 252, 249, 0.94) 24%, rgba(255, 255, 255, 0.985) 100%);
-    border-top: 1px solid rgba(216, 203, 189, 0.24);
-    box-shadow: 0 -12px 28px rgba(77, 52, 31, 0.06);
-    backdrop-filter: blur(10px);
+  &--sheet-footer {
+    padding: 8px var(--space-page) calc(env(safe-area-inset-bottom, 0px) + 10px);
+    background: transparent;
+    border-top: none;
+    box-shadow: none;
+    backdrop-filter: none;
   }
 
   &__reset,

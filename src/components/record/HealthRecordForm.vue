@@ -338,7 +338,7 @@ import { useCloudCall } from '@/composables/useCloudCall'
 import { useAuth } from '@/composables/useAuth'
 import { useRecordSubmitState } from '@/composables/useRecordSubmitState'
 import { buildRecordFeedbackMessage, buildTaskFeedbackMessage, queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
-import { resolveHealthCreateRouteQuery } from '@/utils/recordFormRoutes'
+import { resolveHealthCreateRouteQuery, type MedicationRouteIllnessLink } from '@/utils/recordFormRoutes'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 import BFormOptions from '@/components/form/BFormOptions.vue'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
@@ -377,6 +377,7 @@ const enableReminder = ref(false)
 const reminderDate = ref<number | null>(null)
 const showMedPrompt = ref(false)
 const savedRecordId = ref('')
+const savedIllnessLinks = ref<MedicationRouteIllnessLink[]>([])
 
 const resolvedType = computed<HealthRecordType | ''>(() => {
   return (isEdit.value ? currentRecord.value?.type : props.type) || ''
@@ -636,6 +637,7 @@ function resetFormState() {
   reminderDate.value = null
   showMedPrompt.value = false
   savedRecordId.value = ''
+  savedIllnessLinks.value = []
   customVaccine.value = ''
   customDrug.value = ''
   customCondition.value = ''
@@ -956,6 +958,37 @@ function buildDetails() {
   return built
 }
 
+function buildIllnessRouteLinks(records: any[], detailPayload: Record<string, any>) {
+  if (!Array.isArray(records) || records.length === 0) return []
+
+  const primaryCondition = String(detailPayload.primary_condition || detailPayload.condition || '').trim()
+  const symptomTags = Array.isArray(detailPayload.symptom_tags)
+    ? detailPayload.symptom_tags
+      .map((item: unknown) => typeof item === 'string' ? item.trim() : '')
+      .filter(Boolean)
+    : []
+  const symptomSummary = symptomTags.length <= 2
+    ? symptomTags.join(' / ')
+    : `${symptomTags.slice(0, 2).join(' / ')} 等${symptomTags.length}项`
+  const treatmentStatus = String(detailPayload.treatment_status || '观察中').trim()
+
+  return records.reduce<MedicationRouteIllnessLink[]>((list, record: any) => {
+      const illnessRecordId = typeof record?.recordId === 'string' ? record.recordId.trim() : ''
+      const dogId = typeof record?.dog_id === 'string' ? record.dog_id.trim() : ''
+      if (!illnessRecordId || !dogId) return list
+
+      list.push({
+        dogId,
+        illnessRecordId,
+        primaryCondition,
+        symptomSummary,
+        treatmentStatus,
+      })
+
+      return list
+    }, [])
+}
+
 function getHealthHomeAnchorKey(type: string, detailPayload: Record<string, any>, isTodo: boolean) {
   if (type === 'illness') return 'health-illness:observation'
   if (!isTodo) return ''
@@ -1090,8 +1123,12 @@ async function submitCreateRecord() {
   const completedTaskIds = completedTasks.map((task: any) => task._id).filter(Boolean)
   const suppressTaskIds = sourceTaskIds.value.length > 0 ? sourceTaskIds.value : completedTaskIds
 
-  if (resolvedType.value === 'illness' && selectedDogs.value.length === 1 && result?.data?.records?.[0]?.recordId) {
-    savedRecordId.value = result.data.records[0].recordId
+  if (resolvedType.value === 'illness') {
+    const illnessLinks = buildIllnessRouteLinks(result?.data?.records || [], detailPayload)
+    savedIllnessLinks.value = illnessLinks
+    if (selectedDogs.value.length === 1 && illnessLinks[0]?.illnessRecordId) {
+      savedRecordId.value = illnessLinks[0].illnessRecordId
+    }
   }
 
   markSuccess()
@@ -1167,7 +1204,10 @@ function goToMedication() {
   const illnessParam = savedRecordId.value && selectedDogs.value.length === 1
     ? `&illnessRecordId=${savedRecordId.value}`
     : ''
-  uni.redirectTo({ url: `/pages/record/health-medication?batchDogs=${dogsParam}${illnessParam}` })
+  const illnessLinksParam = savedIllnessLinks.value.length > 1
+    ? `&illnessLinks=${encodeURIComponent(JSON.stringify(savedIllnessLinks.value))}`
+    : ''
+  uni.redirectTo({ url: `/pages/record/health-medication?batchDogs=${dogsParam}${illnessParam}${illnessLinksParam}` })
 }
 
 function finishAndBack() {

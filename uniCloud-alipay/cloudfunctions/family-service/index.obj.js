@@ -219,9 +219,15 @@ function normalizeOperationLogQuery(input = {}) {
   const page = Math.max(1, Number(input.page) || 1)
   const pageSize = Math.min(50, Math.max(1, Number(input.pageSize) || 20))
   const actorUserId = typeof input.actorUserId === 'string' ? input.actorUserId.trim() : ''
+  const actorUserIds = Array.isArray(input.actorUserIds)
+    ? input.actorUserIds.map(item => String(item || '').trim()).filter(Boolean)
+    : []
   const actionTypes = Array.isArray(input.actionTypes)
     ? input.actionTypes.map(item => String(item || '').trim()).filter(Boolean)
     : []
+  const normalizedActorUserIds = actorUserIds.length > 0
+    ? Array.from(new Set(actorUserIds))
+    : (actorUserId ? [actorUserId] : [])
 
   return {
     start: Number(input.start) || 0,
@@ -229,6 +235,7 @@ function normalizeOperationLogQuery(input = {}) {
     page,
     pageSize,
     actorUserId,
+    actorUserIds: normalizedActorUserIds,
     actionTypes,
   }
 }
@@ -797,8 +804,8 @@ module.exports = {
       created_at: dbCmd.gte(query.start).and(dbCmd.lte(query.end)),
     }
 
-    if (query.actorUserId) {
-      where.actor_user_id = query.actorUserId
+    if (query.actorUserIds.length > 0) {
+      where.actor_user_id = dbCmd.in(query.actorUserIds)
     }
 
     if (query.actionTypes.length > 0) {

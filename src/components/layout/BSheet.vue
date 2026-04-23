@@ -22,15 +22,18 @@
         </view>
       </view>
       <!-- 内容 -->
-      <scroll-view scroll-y class="b-sheet__body">
+      <scroll-view scroll-y class="b-sheet__body" :class="{ 'b-sheet__body--with-footer': hasFooter }">
         <slot />
       </scroll-view>
+      <view v-if="hasFooter" class="b-sheet__footer">
+        <slot name="footer" />
+      </view>
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, nextTick, onBeforeUnmount, useSlots } from 'vue'
 
 const props = withDefaults(defineProps<{
   visible: boolean
@@ -42,6 +45,7 @@ const props = withDefaults(defineProps<{
 })
 
 const emit = defineEmits<{ 'update:visible': [value: boolean] }>()
+const slots = useSlots()
 
 const animOpen = ref(false)
 const renderVisible = ref(props.visible)
@@ -97,6 +101,8 @@ const panelStyle = computed(() => {
   if (props.height === 'auto') return {}
   return { height: props.height, maxHeight: '85vh' }
 })
+
+const hasFooter = computed(() => Boolean(slots.footer))
 
 function close() {
   if (!renderVisible.value) return
@@ -197,8 +203,26 @@ onBeforeUnmount(() => {
     padding: 0 var(--space-page) env(safe-area-inset-bottom, 20px);
     overflow-y: auto;
     scrollbar-width: none;
+
+    &--with-footer {
+      padding-bottom: calc(env(safe-area-inset-bottom, 20px) + 76px);
+    }
+
     &::-webkit-scrollbar { display: none; }
     :deep(::-webkit-scrollbar) { display: none; }
+  }
+
+  &__footer {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 2;
+    pointer-events: none;
+
+    :deep(*) {
+      pointer-events: auto;
+    }
   }
 }
 </style>

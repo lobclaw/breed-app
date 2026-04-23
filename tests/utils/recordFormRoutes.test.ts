@@ -53,6 +53,47 @@ describe('recordFormRoutes', () => {
 
     expect(result.selectedDogs).toEqual([{ _id: 'dog-3', name: '奶糖' }])
     expect(result.illnessRecordId).toBe('ill-1')
+    expect(result.illnessLinks).toEqual([])
+  })
+
+  it('用药创建路由兼容批量 illnessLinks 参数', () => {
+    const result = resolveMedicationRouteQuery({
+      batchDogs: encodeURIComponent(JSON.stringify([
+        { _id: 'dog-1', name: '花花' },
+        { _id: 'dog-2', name: '奶糖' },
+      ])),
+      illness_links: encodeURIComponent(JSON.stringify([
+        {
+          dogId: 'dog-1',
+          illnessRecordId: 'ill-1',
+          primaryCondition: '感冒',
+          symptomSummary: '流鼻涕 / 咳嗽',
+          treatmentStatus: '观察中',
+        },
+        {
+          dogId: 'dog-2',
+          illnessRecordId: 'ill-2',
+          primaryCondition: '肠胃炎',
+        },
+      ])),
+    })
+
+    expect(result.selectedDogs).toHaveLength(2)
+    expect(result.illnessRecordId).toBe('')
+    expect(result.illnessLinks).toEqual([
+      {
+        dogId: 'dog-1',
+        illnessRecordId: 'ill-1',
+        primaryCondition: '感冒',
+        symptomSummary: '流鼻涕 / 咳嗽',
+        treatmentStatus: '观察中',
+      },
+      {
+        dogId: 'dog-2',
+        illnessRecordId: 'ill-2',
+        primaryCondition: '肠胃炎',
+      },
+    ])
   })
 
   it('繁育路由兼容 cycleId、taskId 与 locked 犬只上下文', () => {

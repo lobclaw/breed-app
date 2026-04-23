@@ -587,6 +587,64 @@ describe('family-service', () => {
       expect(result.list.map((item: any) => item._id)).toEqual(['log_1', 'log_3'])
     })
 
+    it('获取操作日志时应支持多成员筛选', async () => {
+      seedCollection('operation_logs', [
+        {
+          _id: 'log_1',
+          family_id: familyId,
+          actor_user_id: 'user_1',
+          actor_name: '小林',
+          action_type: 'create',
+          domain: 'dog',
+          target_type: 'dog',
+          target_id: 'dog_1',
+          target_name: '糯米',
+          summary: '新增了犬只 糯米',
+          created_at: 3000,
+        },
+        {
+          _id: 'log_2',
+          family_id: familyId,
+          actor_user_id: 'user_2',
+          actor_name: '阿青',
+          action_type: 'create',
+          domain: 'finance',
+          target_type: 'expense',
+          target_id: 'exp_1',
+          target_name: '医疗',
+          summary: '新增了支出 医疗',
+          created_at: 2000,
+        },
+        {
+          _id: 'log_3',
+          family_id: familyId,
+          actor_user_id: 'user_3',
+          actor_name: '小周',
+          action_type: 'delete',
+          domain: 'task',
+          target_type: 'task',
+          target_id: 'task_1',
+          target_name: '首次疫苗',
+          summary: '删除了待办 首次疫苗',
+          created_at: 1000,
+        },
+      ])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'test_uid', role: 'creator' })
+      const result = await familyService.getOperationLogs.call(ctx, {
+        start: 0,
+        end: 4000,
+        page: 1,
+        pageSize: 20,
+        actorUserIds: ['user_1', 'user_2'],
+        actionTypes: ['create'],
+      })
+
+      expect(result.total).toBe(2)
+      expect(result.hasMore).toBe(false)
+      expect(result.list.map((item: any) => item._id)).toEqual(['log_1', 'log_2'])
+    })
+
     it('operation_logs 集合缺失时应静默返回空列表', async () => {
       const originalCollection = mockUniCloud.database().collection
       const ctx = createCloudObjectContext({ familyId, uid: 'test_uid', role: 'creator' })

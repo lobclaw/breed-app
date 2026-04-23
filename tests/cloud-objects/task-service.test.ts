@@ -639,6 +639,55 @@ describe('task-service', () => {
       expect(medCard.dogs[0].drugName).toBe('2种用药')
     })
 
+    it('单犬：多条治疗中疾病合并到今日用药时，应保留全部 illnessIds 供批量康复使用', () => {
+      const now = Date.now()
+      const illnesses = [
+        makeIllness('肉肉', '感冒', '治疗中'),
+        makeIllness('肉肉', '腹泻', '治疗中'),
+      ]
+      const tasks = [
+        {
+          _id: 'med_linked_cold',
+          dog_id: '肉肉',
+          dog_name: '肉肉',
+          drug_name: '药A',
+          dosage: '1',
+          dosage_unit: 'mg',
+          method: '口服',
+          frequency: 1,
+          duration_days: 5,
+          currentDay: 1,
+          todayDoses: 0,
+          isDoneToday: false,
+          created_at: now,
+          source_record_id: 'ill_肉肉_感冒',
+        },
+        {
+          _id: 'med_linked_diarrhea',
+          dog_id: '肉肉',
+          dog_name: '肉肉',
+          drug_name: '药B',
+          dosage: '1',
+          dosage_unit: 'mg',
+          method: '口服',
+          frequency: 1,
+          duration_days: 5,
+          currentDay: 1,
+          todayDoses: 0,
+          isDoneToday: false,
+          created_at: now,
+          source_record_id: 'ill_肉肉_腹泻',
+        },
+      ]
+
+      const cards = mergeTasks([], [], illnesses, tasks)
+      const medCard = cards.find((card: any) => card.cardType === 'medication')
+
+      expect(medCard?.dogs[0].state).toBe('sick_with_med')
+      expect(medCard?.dogs[0].illnessId).toBe('')
+      expect(medCard?.dogs[0].illnessIds).toEqual(['ill_肉肉_感冒', 'ill_肉肉_腹泻'])
+    })
+
     it('单犬：仅用药无疾病 → 用药卡 med_only，无疾病观察卡', () => {
       const tasks = [makeMedTask('肉肉', '药A')]
       const cards = mergeTasks(tasks, [], [])

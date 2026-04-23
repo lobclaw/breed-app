@@ -10,6 +10,63 @@
     </BPageHeader>
 
     <view class="form-body">
+      <view v-if="showStandaloneBatchHint" class="batch-mode-banner batch-mode-banner--compact">
+        <view class="batch-mode-banner__icon-wrap">
+          <text class="material-icons-round batch-mode-banner__icon">info</text>
+        </view>
+        <view class="batch-mode-banner__body">
+          <view class="batch-mode-banner__row">
+            <text class="batch-mode-banner__title">独立批量用药</text>
+            <view class="batch-mode-banner__meta">
+              <text class="batch-mode-banner__chip">未绑定疾病</text>
+            </view>
+          </view>
+          <text class="batch-mode-banner__text">适合保健药或非疾病疗程。</text>
+        </view>
+      </view>
+
+      <view v-if="showBatchLinkedSummary" class="batch-mode-banner batch-mode-banner--compact">
+        <view class="batch-mode-banner__icon-wrap">
+          <text class="material-icons-round batch-mode-banner__icon">info</text>
+        </view>
+        <view class="batch-mode-banner__body">
+          <view class="batch-mode-banner__row">
+            <text class="batch-mode-banner__title">已关联疾病</text>
+            <view class="batch-mode-banner__row-side">
+              <view class="batch-mode-banner__meta">
+                <text v-if="batchLinkedIllnessSummary.conditionLabel" class="batch-mode-banner__chip">{{ batchLinkedIllnessSummary.conditionLabel }}</text>
+                <text class="batch-mode-banner__chip">{{ batchLinkedIllnessSummary.coverageLabel }}</text>
+              </view>
+            </view>
+          </view>
+          <text class="batch-mode-banner__text">{{ batchLinkedIllnessSummary.summaryText }}</text>
+        </view>
+      </view>
+
+      <view v-if="linkedIllness" class="field-group">
+        <view class="field-label">
+          <text>当前关联疾病</text>
+          <text class="field-label__optional">（从疾病记录带入）</text>
+        </view>
+        <BCard color="red" :pressable="false">
+          <view class="linked-illness-card">
+            <view class="linked-illness-card__main">
+              <view class="linked-illness-card__head">
+                <text class="linked-illness-card__title">{{ linkedIllness.primaryCondition || '疾病' }}</text>
+                <BTag :label="linkedIllness.treatmentStatus || '观察中'" :color="linkedIllnessStatusColor" />
+              </view>
+              <text v-if="linkedIllness.symptomSummary" class="linked-illness-card__sub">{{ linkedIllness.symptomSummary }}</text>
+              <text class="linked-illness-card__meta">
+                {{ linkedIllnessMetaText }}
+              </text>
+            </view>
+          </view>
+        </BCard>
+        <view v-if="!isLinkedIllnessApplicable" class="linked-illness-tip">
+          <text>{{ selectedDogs.length !== 1 ? '当前已切换为多犬创建，这条疾病关联不会随本次用药一起保存。' : '当前犬只已变更，本次创建不会继续关联原来的疾病记录。' }}</text>
+        </view>
+      </view>
+
       <view class="field-group">
         <view class="field-label"><text>选择犬只</text></view>
         <BDogPicker v-model="selectedDogs" :multiple="true" title="选择犬只" />
@@ -29,8 +86,11 @@
               v-for="unit in dosageUnits"
               :key="unit.value"
               class="pill-select__item"
-              :class="{ 'pill-select__item--active': dosageUnit === unit.value }"
-              @click="dosageUnit = unit.value"
+              :class="{
+                'pill-select__item--active': dosageUnit === unit.value,
+                'pill-select__item--disabled': isDosageUnitDisabled(unit.value),
+              }"
+              @click="selectDosageUnit(unit.value)"
             >
               <text>{{ unit.label }}</text>
             </view>
@@ -46,7 +106,7 @@
             :key="medicationMethod.value"
             class="pill-select__item"
             :class="{ 'pill-select__item--active': method === medicationMethod.value }"
-            @click="method = medicationMethod.value"
+            @click="selectMethod(medicationMethod.value)"
           >
             <text>{{ medicationMethod.label }}</text>
           </view>
@@ -262,14 +322,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useCloudCall } from '@/composables/useCloudCall'
 import { useRecordSubmitState } from '@/composables/useRecordSubmitState'
 import { buildTaskFeedbackMessage, queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
-import { resolveMedicationRouteQuery } from '@/utils/recordFormRoutes'
+import { resolveMedicationRouteQuery, type MedicationRouteIllnessLink } from '@/utils/recordFormRoutes'
 import { formatMedicationDosage } from '@/utils/medicationDisplay'
 import { buildTimestampFromDayOffset, formatDateInputValue, getLocalCalendarDayDiff } from '@/utils/date'
 import { useProtocolStore, type MedicationProtocol } from '@/stores/protocolStore'
+import BCard from '@/components/base/BCard.vue'
+import BTag from '@/components/base/BTag.vue'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
@@ -293,6 +355,15 @@ const durationDays = ref('')
 const notes = ref('')
 const costInput = ref('')
 const illnessRecordId = ref('')
+const illnessLinks = ref<MedicationRouteIllnessLink[]>([])
+const linkedIllness = ref<null | {
+  recordId: string
+  primaryCondition: string
+  symptomSummary: string
+  treatmentStatus: string
+  date?: number | null
+  dogId?: string
+}>(null)
 const saveAsProtocol = ref(false)
 const showDatePicker = ref(false)
 
@@ -307,6 +378,92 @@ const chipActive = ref('today')
 const dateStr = computed(() => {
   return formatDateInputValue(date.value)
 })
+
+const linkedIllnessStatusColor = computed<'green' | 'amber' | 'red'>(() => {
+  if (linkedIllness.value?.treatmentStatus === '已康复') return 'green'
+  if (linkedIllness.value?.treatmentStatus === '治疗中') return 'amber'
+  return 'red'
+})
+
+const linkedIllnessMetaText = computed(() => {
+  if (!linkedIllness.value) return ''
+  const parts = [
+    linkedIllness.value.date ? `发病 ${formatDateInputValue(linkedIllness.value.date)}` : '',
+    isLinkedIllnessApplicable.value ? '本次创建后将与该疾病记录强关联' : '仅保持当前犬只不变且单犬创建时才会保留这条关联',
+  ].filter(Boolean)
+  return parts.join(' · ')
+})
+
+const isLinkedIllnessApplicable = computed(() => {
+  if (!linkedIllness.value || selectedDogs.value.length !== 1) return false
+  return selectedDogs.value[0]?._id === linkedIllness.value.dogId
+})
+
+const effectiveIllnessLinks = computed<MedicationRouteIllnessLink[]>(() => {
+  if (selectedDogs.value.length === 0 || illnessLinks.value.length === 0) return []
+
+  const selectedDogIds = new Set(selectedDogs.value.map((dog: any) => dog?._id).filter(Boolean))
+  const seenDogIds = new Set<string>()
+
+  return illnessLinks.value.filter((item) => {
+    if (!item?.dogId || !item?.illnessRecordId) return false
+    if (!selectedDogIds.has(item.dogId) || seenDogIds.has(item.dogId)) return false
+    seenDogIds.add(item.dogId)
+    return true
+  })
+})
+
+const linkedIllnessCount = computed(() => effectiveIllnessLinks.value.length)
+
+const linkedIllnessCoverage = computed(() => {
+  return `${linkedIllnessCount.value} / ${selectedDogs.value.length}`
+})
+
+const batchLinkedIllnessSummary = computed(() => {
+  if (selectedDogs.value.length <= 1 || linkedIllnessCount.value === 0) {
+    return {
+      conditionLabel: '',
+      coverageLabel: '',
+      summaryText: '',
+      description: '',
+    }
+  }
+
+  const conditions = [...new Set(effectiveIllnessLinks.value
+    .map(item => (item.primaryCondition || '').trim())
+    .filter(Boolean))]
+  const conditionLabel = conditions.length === 1 ? conditions[0] : '多种疾病'
+  const coverageLabel = `${linkedIllnessCoverage.value} 只`
+  const description = linkedIllnessCount.value === selectedDogs.value.length
+    ? '本次会为每只犬绑定到自己的疾病记录。'
+    : '仅已带入的犬只会绑定疾病记录，新增犬只默认不绑定。'
+  const summaryText = linkedIllnessCount.value === selectedDogs.value.length
+    ? '每只犬都会绑定到自己的疾病记录。'
+    : '仅当前已带入的犬只会保留疾病关联。'
+
+  return { conditionLabel, coverageLabel, summaryText, description }
+})
+
+const showBatchLinkedSummary = computed(() => selectedDogs.value.length > 1 && linkedIllnessCount.value > 0)
+const showStandaloneBatchHint = computed(() => selectedDogs.value.length > 1 && linkedIllnessCount.value === 0)
+
+function normalizeRouteIllnessLinks(value: MedicationRouteIllnessLink[]) {
+  return value.reduce<MedicationRouteIllnessLink[]>((list, item) => {
+    const dogId = typeof item?.dogId === 'string' ? item.dogId.trim() : ''
+    const illnessLinkRecordId = typeof item?.illnessRecordId === 'string' ? item.illnessRecordId.trim() : ''
+    if (!dogId || !illnessLinkRecordId) return list
+
+    list.push({
+      dogId,
+      illnessRecordId: illnessLinkRecordId,
+      primaryCondition: typeof item?.primaryCondition === 'string' ? item.primaryCondition.trim() : '',
+      symptomSummary: typeof item?.symptomSummary === 'string' ? item.symptomSummary.trim() : '',
+      treatmentStatus: typeof item?.treatmentStatus === 'string' ? item.treatmentStatus.trim() : '',
+    })
+
+    return list
+  }, [])
+}
 
 const dosageUnits = [
   { label: '毫升', value: 'ml' },
@@ -326,6 +483,25 @@ const frequencies = [
 const parsedDuration = computed(() => {
   const parsed = parseInt(durationDays.value)
   return parsed > 0 ? parsed : 1
+})
+
+function isDosageUnitDisabled(unitValue: string) {
+  return method.value === 'injection' && unitValue !== 'ml'
+}
+
+function selectDosageUnit(unitValue: string) {
+  if (isDosageUnitDisabled(unitValue)) return
+  dosageUnit.value = unitValue
+}
+
+function selectMethod(methodValue: string) {
+  method.value = methodValue
+}
+
+watch(method, (nextMethod) => {
+  if (nextMethod === 'injection') {
+    dosageUnit.value = 'ml'
+  }
 })
 
 const canSubmit = computed(() => {
@@ -357,6 +533,10 @@ const { run: batchStartMedication } = useCloudCall('health-service', 'batchStart
   throwOnError: true,
 })
 const { run: batchCheckDuplicate } = useCloudCall<{ data: any[] }>('health-service', 'batchCheckDuplicateMedication')
+const { run: fetchHealthRecord } = useCloudCall('health-service', 'getHealthRecordDetail', {
+  successMode: 'silent',
+  loadingMode: 'local',
+})
 const { run: saveProtocol } = useCloudCall('health-service', 'addMedicationProtocol', {
   successMode: 'silent',
   loadingMode: 'local',
@@ -392,6 +572,12 @@ async function submit() {
     const finalDogIds = [...cleanDogIds, ...overrideDogIds]
     const frequencyMap: Record<string, number> = { once_daily: 1, twice_daily: 2, three_daily: 3 }
     const methodLabels: Record<string, string> = { oral: '口服', injection: '注射' }
+    const linkedIllnessPayload = effectiveIllnessLinks.value
+      .filter(item => finalDogIds.includes(item.dogId))
+      .map(item => ({
+        dog_id: item.dogId,
+        illness_record_id: item.illnessRecordId,
+      }))
 
     await batchStartMedication({
       dog_ids: finalDogIds,
@@ -406,7 +592,8 @@ async function submit() {
       notes: notes.value || null,
       cost: costInput.value ? parseFloat(costInput.value) : null,
       protocol_id: null,
-      illnessRecordId: selectedDogs.value.length === 1 ? (illnessRecordId.value || null) : null,
+      illnessRecordId: isLinkedIllnessApplicable.value ? (illnessRecordId.value || null) : null,
+      illness_links: linkedIllnessPayload.length > 0 ? linkedIllnessPayload : undefined,
     })
 
     const created = finalDogIds.length
@@ -464,8 +651,10 @@ function applyProtocol(protocol: MedicationProtocol) {
   drugName.value = protocol.drug_name || ''
   dosage.value = protocol.dosage || ''
   durationDays.value = protocol.duration_days ? String(protocol.duration_days) : ''
-  dosageUnit.value = protocol.dosage_unit || 'mg'
   method.value = protocol.method || 'oral'
+  dosageUnit.value = method.value === 'injection'
+    ? 'ml'
+    : (protocol.dosage_unit || 'mg')
   frequency.value = protocol.frequency || 'once_daily'
   notes.value = protocol.notes || ''
   showProtocolPicker.value = false
@@ -544,25 +733,219 @@ function toggleAllOverride() {
 }
 
 onMounted(() => {
+  void initFromRoute()
+})
+
+async function initFromRoute() {
   const routeQuery = resolveMedicationRouteQuery(props.query)
   selectedDogs.value = routeQuery.selectedDogs
   illnessRecordId.value = routeQuery.illnessRecordId
-})
+  illnessLinks.value = Array.isArray(routeQuery.illnessLinks)
+    ? normalizeRouteIllnessLinks(routeQuery.illnessLinks)
+    : []
+
+  if (!illnessRecordId.value) return
+  const result = await fetchHealthRecord({ id: illnessRecordId.value })
+  const record = result?.data || result
+  if (!record || record.type !== 'illness') return
+
+  const details = record.details || {}
+  const tags = Array.isArray(details.symptom_tags)
+    ? details.symptom_tags
+      .map((item: unknown) => typeof item === 'string' ? item.trim() : '')
+      .filter(Boolean)
+    : []
+
+  linkedIllness.value = {
+    recordId: record._id || illnessRecordId.value,
+    dogId: record.dog_id || '',
+    primaryCondition: String(details.primary_condition || details.condition || '').trim(),
+    symptomSummary: tags.length <= 2 ? tags.join(' / ') : `${tags.slice(0, 2).join(' / ')} 等${tags.length}项`,
+    treatmentStatus: String(details.treatment_status || '观察中').trim(),
+    date: typeof record.date === 'number' ? record.date : null,
+  }
+}
 </script>
 
 <style lang="scss" scoped>
+.linked-illness-card {
+  display: flex;
+  align-items: flex-start;
+}
+
+.linked-illness-card__main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.linked-illness-card__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.linked-illness-card__title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.linked-illness-card__sub {
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.linked-illness-card__meta {
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+
+.linked-illness-tip {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--amber-soft);
+  color: var(--amber);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.batch-mode-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.batch-mode-banner--compact {
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 16px;
+}
+
+.batch-mode-banner__icon-wrap {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.batch-mode-banner__icon {
+  font-size: 16px;
+}
+
+.batch-mode-banner__body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.batch-mode-banner__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.batch-mode-banner__row-side {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.batch-mode-banner__title {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.batch-mode-banner__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.batch-mode-banner__chip {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.12);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.batch-mode-banner__text {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .dosage-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  min-width: 0;
 }
 
 .dosage-row__input {
-  flex: 1;
+  flex: 0 0 96px;
+  width: 96px;
+  min-width: 0;
 }
 
 .dosage-row__unit {
-  flex: 2;
+  flex: 1 1 0;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.dosage-row__unit :deep(.pill-select__item) {
+  min-width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  text-align: center;
+}
+
+.dosage-row__unit :deep(.pill-select__item--disabled) {
+  opacity: 0.42;
+  color: var(--text-4);
+  background: var(--card-dim);
+  box-shadow: none;
+}
+
+@media (max-width: 360px) {
+  .dosage-row {
+    gap: 6px;
+  }
+
+  .dosage-row__input {
+    flex-basis: 88px;
+    width: 88px;
+  }
+
+  .dosage-row__unit {
+    gap: 6px;
+  }
+
+  .dosage-row__unit :deep(.pill-select__item) {
+    font-size: 12px;
+  }
 }
 
 .input-suffix-wrapper {

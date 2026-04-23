@@ -455,6 +455,157 @@ describe('health-service', () => {
       expect(illnesses[0].details.treatment_status).toBe('治疗中')
     })
 
+    it('批量疾病发起批量用药时，应按犬只分别写入 source_record_id 并只升级各自疾病', async () => {
+      const now = Date.now()
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+      await db.collection('dogs').add({
+        _id: 'dog_2',
+        name: '奶糖',
+        gender: '母',
+        role: '种狗',
+        disposition: '在养',
+        family_id: familyId,
+        deleted_at: null,
+      })
+
+      seedCollection('health_records', [
+        {
+          _id: 'ill_dog1_target',
+          type: 'illness',
+          dog_id: 'dog_1',
+          dog_name: '花花',
+          family_id: familyId,
+          deleted_at: null,
+          date: now - DAY_MS,
+          details: { primary_condition: '感冒', condition: '感冒', treatment_status: '观察中', severity: '轻微' },
+          created_at: now - DAY_MS,
+          updated_at: now - DAY_MS,
+        },
+        {
+          _id: 'ill_dog1_other',
+          type: 'illness',
+          dog_id: 'dog_1',
+          dog_name: '花花',
+          family_id: familyId,
+          deleted_at: null,
+          date: now - DAY_MS,
+          details: { primary_condition: '皮肤病', condition: '皮肤病', treatment_status: '观察中', severity: '轻微' },
+          created_at: now - DAY_MS,
+          updated_at: now - DAY_MS,
+        },
+        {
+          _id: 'ill_dog2_target',
+          type: 'illness',
+          dog_id: 'dog_2',
+          dog_name: '奶糖',
+          family_id: familyId,
+          deleted_at: null,
+          date: now - DAY_MS,
+          details: { primary_condition: '感冒', condition: '感冒', treatment_status: '观察中', severity: '轻微' },
+          created_at: now - DAY_MS,
+          updated_at: now - DAY_MS,
+        },
+      ])
+
+      const result = await healthService.batchStartMedication.call(ctx, {
+        dog_ids: ['dog_1', 'dog_2'],
+        drug_name: '阿莫西林',
+        dosage: '1',
+        dosage_unit: 'tablet',
+        method: '口服',
+        frequency: 1,
+        duration_days: 3,
+        actual_start_date: now,
+        illness_links: [
+          { dog_id: 'dog_1', illness_record_id: 'ill_dog1_target' },
+          { dog_id: 'dog_2', illness_record_id: 'ill_dog2_target' },
+        ],
+      })
+
+      expect(result.data.count).toBe(2)
+
+      const { data: meds } = await db.collection('medication_tasks')
+        .where({ family_id: familyId, drug_name: '阿莫西林' })
+        .get()
+      const sourceMap = new Map(meds.map(item => [item.dog_id, item.source_record_id]))
+      expect(sourceMap.get('dog_1')).toBe('ill_dog1_target')
+      expect(sourceMap.get('dog_2')).toBe('ill_dog2_target')
+
+      const { data: illnesses } = await db.collection('health_records')
+        .where({ family_id: familyId, type: 'illness' })
+        .get()
+      const illnessMap = new Map(illnesses.map(item => [item._id, item]))
+      expect(illnessMap.get('ill_dog1_target')?.details?.treatment_status).toBe('治疗中')
+      expect(illnessMap.get('ill_dog2_target')?.details?.treatment_status).toBe('治疗中')
+      expect(illnessMap.get('ill_dog1_other')?.details?.treatment_status).toBe('观察中')
+    })
+
+    it('批量独立创建用药时，应保持 source_record_id 为空且不自动推进疾病状态', async () => {
+      const now = Date.now()
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+      await db.collection('dogs').add({
+        _id: 'dog_2',
+        name: '奶糖',
+        gender: '母',
+        role: '种狗',
+        disposition: '在养',
+        family_id: familyId,
+        deleted_at: null,
+      })
+
+      seedCollection('health_records', [
+        {
+          _id: 'ill_batch_1',
+          type: 'illness',
+          dog_id: 'dog_1',
+          dog_name: '花花',
+          family_id: familyId,
+          deleted_at: null,
+          date: now - DAY_MS,
+          details: { primary_condition: '感冒', condition: '感冒', treatment_status: '观察中', severity: '轻微' },
+          created_at: now - DAY_MS,
+          updated_at: now - DAY_MS,
+        },
+        {
+          _id: 'ill_batch_2',
+          type: 'illness',
+          dog_id: 'dog_2',
+          dog_name: '奶糖',
+          family_id: familyId,
+          deleted_at: null,
+          date: now - DAY_MS,
+          details: { primary_condition: '肠胃炎', condition: '肠胃炎', treatment_status: '观察中', severity: '轻微' },
+          created_at: now - DAY_MS,
+          updated_at: now - DAY_MS,
+        },
+      ])
+
+      const result = await healthService.batchStartMedication.call(ctx, {
+        dog_ids: ['dog_1', 'dog_2'],
+        drug_name: '益生菌',
+        dosage: '1',
+        dosage_unit: 'tablet',
+        method: '口服',
+        frequency: 1,
+        duration_days: 3,
+        actual_start_date: now,
+      })
+
+      expect(result.data.count).toBe(2)
+
+      const { data: meds } = await db.collection('medication_tasks')
+        .where({ family_id: familyId, drug_name: '益生菌' })
+        .get()
+      expect(meds.every(item => !item.source_record_id)).toBe(true)
+
+      const { data: illnessOne } = await db.collection('health_records').doc('ill_batch_1').get()
+      const { data: illnessTwo } = await db.collection('health_records').doc('ill_batch_2').get()
+      expect(illnessOne[0].details.treatment_status).toBe('观察中')
+      expect(illnessTwo[0].details.treatment_status).toBe('观察中')
+    })
+
     it('应创建用药任务和每日提醒', async () => {
       const now = Date.now()
       const durationDays = 7

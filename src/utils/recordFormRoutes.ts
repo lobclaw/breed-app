@@ -1,6 +1,14 @@
 type QueryValue = string | undefined
 type QueryLike = Record<string, QueryValue>
 
+export interface MedicationRouteIllnessLink {
+  dogId: string
+  illnessRecordId: string
+  primaryCondition?: string
+  symptomSummary?: string
+  treatmentStatus?: string
+}
+
 function getString(value?: string) {
   return typeof value === 'string' ? value : ''
 }
@@ -50,6 +58,7 @@ export function resolveMedicationRouteQuery(query: QueryLike = {}) {
   return {
     selectedDogs: resolveBatchDogs(query),
     illnessRecordId: getString(query.illnessRecordId || query.illness_record_id),
+    illnessLinks: parseJsonParam<MedicationRouteIllnessLink[]>(query.illnessLinks || query.illness_links, []),
   }
 }
 

@@ -686,6 +686,7 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
       const illnessNames = medicatedIllnessNames.join('/')
       const isSickWithMed = medicatedIllnessNames.length > 0
       const primaryIllnessId = medicatedIllnesses.length === 1 ? medicatedIllnesses[0].illnessId : ''
+      const illnessIds = [...new Set(medicatedIllnesses.map(ill => ill.illnessId).filter(Boolean))]
 
       dogMap.set(dogId, {
         dogId,
@@ -695,6 +696,7 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
         illnessNames,
         symptomSummary: medicatedSymptomSummaries[0] || '',
         illnessId: primaryIllnessId,
+        illnessIds,
         relationType,
         treatmentStatus: isSickWithMed ? '治疗中' : '',
         drugName,

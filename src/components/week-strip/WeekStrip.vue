@@ -7,16 +7,22 @@
   <view class="day-strip-wrap">
     <!-- 月份标题 -->
     <view class="month-header">
-      <view class="month-header__center" @click="$emit('toggle-calendar')">
+      <view class="month-header__month-btn" @click="$emit('toggle-calendar')">
         <text class="month-text">{{ monthLabel }}</text>
-        <text class="month-arrow">·</text>
+        <text class="material-icons-round month-header__month-icon">arrow_drop_down</text>
       </view>
-      <view
-        v-if="!isSelectedToday"
-        class="month-header__today"
-        @click="$emit('jump-today')"
-      >
-        <text class="month-header__today-text">今日</text>
+      <view class="month-header__actions">
+        <view
+          v-if="!isSelectedToday"
+          class="month-header__today"
+          @click="$emit('jump-today')"
+        >
+          <text class="material-icons-round month-header__today-icon">history</text>
+          <text class="month-header__today-text">回到今日</text>
+        </view>
+        <view class="month-header__calendar" @click="$emit('toggle-calendar')">
+          <text class="material-icons-round month-header__calendar-icon">calendar_month</text>
+        </view>
       </view>
     </view>
 
@@ -138,45 +144,66 @@ function onDayClick(day: any) {
 
 /* 月份标题 */
 .month-header {
-  position: relative;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
+  gap: 12px;
   padding: 0 20px 8px;
 }
-.month-header__center {
+.month-header__month-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  min-width: 0;
+}
+.month-text {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-1);
+}
+.month-header__month-icon {
+  font-size: 18px;
+  color: var(--text-3);
+}
+.month-header__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.month-header__today {
+  min-height: 28px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 4px;
-}
-.month-text {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-2);
-}
-.month-arrow {
-  font-size: 16px;
-  color: var(--text-3);
-}
-.month-header__today {
-  position: absolute;
-  right: 20px;
-  top: 50%;
-  transform: translateY(calc(-50% - 4px));
-  min-height: 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 8px;
+  padding: 0 10px;
   border-radius: 999px;
   background: rgba(234, 62, 119, 0.08);
 }
+.month-header__today-icon {
+  font-size: 14px;
+  color: var(--primary);
+}
 .month-header__today-text {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--primary);
   line-height: 1;
+}
+.month-header__calendar {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: rgba(234, 62, 119, 0.08);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.month-header__calendar-icon {
+  font-size: 18px;
+  color: var(--primary);
 }
 
 /* 7天格子行 */

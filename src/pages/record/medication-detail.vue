@@ -106,7 +106,7 @@
 
       <view v-if="showDayProgress" class="status-banner" :style="{ background: statusBannerBg }">
         <text class="status-banner-left" :style="{ color: statusBannerColor }">
-          {{ statusText }} · 第{{ currentDay }}天/共{{ task.duration_days }}天
+          {{ statusBannerText }}
         </text>
         <text class="status-banner-right" :style="{ color: statusBannerColor }">
           {{ progressPercent }}%
@@ -163,7 +163,8 @@
             <view class="linked-illness-card" @click="goToLinkedIllness">
               <view class="linked-illness-card__main">
                 <text class="linked-illness-card__title">{{ linkedIllness.primaryCondition }}</text>
-                <text class="linked-illness-card__sub">{{ linkedIllnessSummary }}</text>
+                <text v-if="linkedIllnessSymptomText" class="linked-illness-card__sub">{{ linkedIllnessSymptomText }}</text>
+                <text v-if="linkedIllnessDateText" class="linked-illness-card__sub linked-illness-card__sub--secondary">{{ linkedIllnessDateText }}</text>
               </view>
               <view class="linked-illness-card__side">
                 <BTag :label="linkedIllness.treatmentStatus || '观察中'" :color="linkedIllnessStatusColor" />
@@ -238,7 +239,7 @@
                 </view>
               </BButton>
             </view>
-            <text class="action-note medication-action__note">当前不支持直接编辑历史用药任务；如需调整，请取消后重新创建。</text>
+            <text v-if="actionNoteText" class="action-note medication-action__note">{{ actionNoteText }}</text>
           </view>
         </view>
       </view>
@@ -374,15 +375,16 @@ const relationType = computed<'linked' | 'fallback' | 'standalone'>(() => {
 })
 const relationTypeLabel = computed(() => {
   if (relationType.value === 'linked') return '关联疾病'
-  if (relationType.value === 'fallback') return '按当前治疗状态推断关联'
+  if (relationType.value === 'fallback') return '未明确关联'
   return '独立用药'
 })
-const linkedIllnessSummary = computed(() => {
+const linkedIllnessSymptomText = computed(() => {
   if (!linkedIllness.value) return ''
-  return [
-    linkedIllness.value.symptomSummary || '',
-    linkedIllness.value.date ? `发病 ${formatDate(linkedIllness.value.date)}` : '',
-  ].filter(Boolean).join(' · ') || '查看疾病详情'
+  return linkedIllness.value.symptomSummary || ''
+})
+const linkedIllnessDateText = computed(() => {
+  if (!linkedIllness.value?.date) return linkedIllness.value ? '查看完整疾病记录' : ''
+  return `发病日期：${formatDate(linkedIllness.value.date)}`
 })
 const linkedIllnessStatusColor = computed<'green' | 'amber' | 'red'>(() => {
   if (linkedIllness.value?.treatmentStatus === '已康复') return 'green'
@@ -420,6 +422,12 @@ const statusBannerColor = computed(() => {
   if (task.value?.status === 'cancelled') return 'var(--red)'
   return 'var(--plum)'
 })
+const statusBannerText = computed(() => {
+  if (!task.value) return ''
+  if (task.value.status === 'completed') return `疗程共${task.value.duration_days}天`
+  if (task.value.status === 'cancelled') return `已在第${currentDay.value}天停止`
+  return `第${currentDay.value}天/共${task.value.duration_days}天`
+})
 
 const canMarkToday = computed(() => {
   if (!task.value || task.value.status !== 'active') return false
@@ -454,6 +462,13 @@ const treatmentSummaryText = computed(() => {
   }
   if (task.value.end_date) parts.push(`预计${endDateRelativeText.value}`)
   return parts.join(' · ')
+})
+const actionNoteText = computed(() => {
+  if (!task.value) return ''
+  if (task.value.status === 'completed') return '疗程已结束，可继续查看完整执行记录。'
+  if (task.value.status === 'cancelled') return '用药已取消，已执行记录会继续保留。'
+  if (canMarkToday.value) return `今天还需完成 ${todayRequiredDoseCount.value - todayCompletedDoseCount.value} 次。`
+  return '今日用药已完成，可继续查看执行记录。'
 })
 
 const endDateRelativeText = computed(() => {
@@ -1054,6 +1069,12 @@ onShow(() => {
 .linked-illness-card__sub {
   font-size: 12px;
   color: var(--text-3);
+  line-height: 1.4;
+}
+
+.linked-illness-card__sub--secondary {
+  color: var(--text-2);
+  font-weight: 500;
 }
 
 .linked-illness-card__side {

@@ -1769,8 +1769,8 @@ const { run: fetchDamRoi } = useCloudCall<{ data: any }>('finance-service', 'get
 const { run: cleanupDuplicateIllnesses } = useCloudCall('health-service', 'cleanupDuplicateIllnesses', {
   showLoading: false,
 })
+const { run: recoverIllnesses } = useCloudCall('health-service', 'recoverIllnesses', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 const { run: updateDisposition } = useCloudCall('dog-service', 'updateDisposition', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
-const { run: updateStatus } = useCloudCall('dog-service', 'updateStatus', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 const { run: deleteDog } = useCloudCall('dog-service', 'deleteDog', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 const { run: promoteToBreeder } = useCloudCall('dog-service', 'promoteToBreeder', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 
@@ -2599,9 +2599,9 @@ function openRecoveryConfirm() {
 }
 
 async function doRecovery() {
-  await updateStatus(dogId, 'recover', {
-    date: recoveryDate.value,
-  })
+  const illnessId = latestActiveIllnessRecord.value?._id
+  if (!illnessId) return
+  await recoverIllnesses({ illnessIds: [illnessId], recoveredAt: recoveryDate.value })
   showRecoverySheet.value = false
   await loadData()
 }

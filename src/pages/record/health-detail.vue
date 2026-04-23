@@ -92,7 +92,7 @@
 
       <view class="section-label">
         <view class="section-dot" :class="`section-dot--${cardColor}`" />
-        <text class="section-text">核心信息</text>
+        <text class="section-text">{{ detailSectionTitle }}</text>
       </view>
       <!-- 记录信息卡片 -->
       <view class="card-feed">
@@ -149,32 +149,38 @@
 
             <!-- 疾病特有字段 -->
             <template v-if="record.type === 'illness'">
-              <view class="info-row">
-                <text class="info-row-label">主疾病</text>
-                <text class="info-row-value">{{ illnessPrimaryCondition || '—' }}</text>
-              </view>
-              <view class="info-row" v-if="illnessSymptomSummary">
-                <text class="info-row-label">症状表现</text>
-                <text class="info-row-value">{{ illnessSymptomSummary }}</text>
-              </view>
-              <view class="info-row" v-if="record.details?.severity">
-                <text class="info-row-label">严重程度</text>
-                <view class="info-row-value">
-                  <BTag :label="record.details.severity" :color="severityColor" />
+              <view v-if="illnessSymptomTags.length > 0" class="detail-block detail-block--symptoms">
+                <view class="detail-block__head">
+                  <text class="detail-block__title">症状表现</text>
+                  <text class="detail-block__meta">{{ illnessSymptomCount }}项</text>
+                </view>
+                <view class="symptom-grid">
+                  <text
+                    v-for="symptom in illnessSymptomTags"
+                    :key="symptom"
+                    class="symptom-chip"
+                  >
+                    {{ symptom }}
+                  </text>
                 </view>
               </view>
-              <view class="info-row">
-                <text class="info-row-label">发病日期</text>
-                <text class="info-row-value">{{ formatDate(record.date) }}</text>
+              <view v-if="record.cost" class="info-row">
+                <text class="info-row-label">费用</text>
+                <text class="info-row-value" style="color: var(--green);">¥{{ formatAmount(record.cost) }}</text>
               </view>
+              <view v-if="record.notes" class="info-row info-row--top">
+                <text class="info-row-label">补充说明</text>
+                <text class="info-row-value info-row-value--note">{{ record.notes }}</text>
+              </view>
+              <view v-if="!hasIllnessDetailRows" class="detail-empty-hint">暂无更多病情细节</view>
             </template>
 
             <!-- 通用字段 -->
-            <view class="info-row" v-if="record.cost">
+            <view class="info-row" v-if="record.type !== 'illness' && record.cost">
               <text class="info-row-label">费用</text>
               <text class="info-row-value" style="color: var(--green);">¥{{ formatAmount(record.cost) }}</text>
             </view>
-            <view class="info-row">
+            <view class="info-row" v-if="record.type !== 'illness'">
               <text class="info-row-label">备注</text>
               <text class="info-row-value info-row-value--note" :style="{ color: record.notes ? 'var(--text-1)' : 'var(--text-3)' }">{{ record.notes || '暂无补充说明' }}</text>
             </view>
@@ -226,29 +232,37 @@
       </view>
 
       <view v-if="record.type === 'illness' && primaryIllnessAction" class="action-area action-area--red">
-        <view class="detail-action-card">
-          <view class="detail-action-card__glow" />
-          <view class="detail-action-card__body">
-            <view class="detail-action-card__row">
+        <view class="health-action-card">
+          <view class="health-action-card__glow" />
+          <view class="health-action-card__body">
+            <view class="health-action__row">
+              <view v-if="canRecoverIllness" class="health-action__secondary-wrap">
+                <BButton
+                  class="health-action__secondary"
+                  variant="ghost"
+                  color="green"
+                  @click="markRecovered"
+                >
+                  <view class="health-action__secondary-inner">
+                    <text class="material-icons-round health-action__secondary-icon">check_circle</text>
+                    <text>标记康复</text>
+                  </view>
+                </BButton>
+              </view>
               <BButton
-                v-if="canRecoverIllness"
-                class="detail-action-card__secondary"
-                variant="ghost"
-                color="green"
-                @click="markRecovered"
-              >
-                标记康复
-              </BButton>
-              <BButton
-                class="detail-action-card__primary"
+                class="health-action__primary"
                 variant="filled"
                 color="red"
+                size="large"
                 @click="handlePrimaryIllnessAction"
               >
-                {{ primaryIllnessAction.label }}
+                <view class="health-action__primary-inner">
+                  <text class="material-icons-round health-action__primary-icon">medication</text>
+                  <text>{{ primaryIllnessAction.label }}</text>
+                </view>
               </BButton>
             </view>
-            <text class="action-note">{{ primaryIllnessAction.note }}</text>
+            <text class="action-note health-action__note">{{ primaryIllnessAction.note }}</text>
           </view>
         </view>
       </view>
@@ -350,7 +364,7 @@ const primaryIllnessAction = computed<null | { key: 'view_medication' | 'start_m
     return {
       key: 'view_medication',
       label: '查看用药',
-      note: '当前疾病已有进行中的关联疗程，可直接查看执行情况。',
+      note: '直接查看疗程进度、今日执行情况与停药去向。',
     }
   }
   return {
@@ -362,10 +376,6 @@ const primaryIllnessAction = computed<null | { key: 'view_medication' | 'start_m
 const hasMoreActions = computed(() => moreActions.value.length > 0)
 const moreActions = computed(() => {
   const actions: Array<{ key: 'recover' | 'start_medication' | 'delete'; label: string; icon: string; tone?: 'danger' }> = []
-
-  if (canRecoverIllness.value) {
-    actions.push({ key: 'recover', label: '标记康复', icon: 'check_circle' })
-  }
 
   if (canStartMedication.value) {
     actions.push({
@@ -387,26 +397,21 @@ const dewormingTypeLabel = computed(() => {
   return dewormingTypeMap[t] || t || '—'
 })
 
-const severityColor = computed(() => {
-  const s = record.value?.details?.severity
-  if (s === '严重') return 'red'
-  if (s === '中等') return 'amber'
-  return 'green'
-})
 const illnessPrimaryCondition = computed(() => {
   const details = record.value?.details || {}
   return String(details.primary_condition || details.condition || '').trim()
 })
-const illnessSymptomSummary = computed(() => {
+const illnessSymptomTags = computed<string[]>(() => {
   const tags = Array.isArray(record.value?.details?.symptom_tags)
     ? record.value.details.symptom_tags
       .map((item: unknown) => typeof item === 'string' ? item.trim() : '')
       .filter(Boolean)
     : []
-  if (tags.length === 0) return ''
-  if (tags.length <= 2) return tags.join(' / ')
-  return `${tags.slice(0, 2).join(' / ')} 等${tags.length}项`
+  return Array.from(new Set(tags))
 })
+const illnessSymptomCount = computed(() => illnessSymptomTags.value.length)
+const hasIllnessDetailRows = computed(() => illnessSymptomCount.value > 0 || !!record.value?.notes || !!record.value?.cost)
+const detailSectionTitle = computed(() => record.value?.type === 'illness' ? '病情细节' : '核心信息')
 
 const summaryTitle = computed(() => {
   if (record.value?.type === 'vaccination') return record.value?.details?.vaccine_type || record.value?.details?.vaccine_name || '疫苗记录'
@@ -417,12 +422,11 @@ const summaryTitle = computed(() => {
 const summarySubtitle = computed(() => {
   if (record.value?.type === 'illness') {
     const parts = [
-      illnessPrimaryCondition.value || '疾病',
-      illnessSymptomSummary.value || '',
       record.value?.details?.severity || '',
-      record.value?.date ? `发病 ${formatDate(record.value.date)}` : '',
+      record.value?.date ? `${formatDate(record.value.date)} 发病` : '',
+      illnessSymptomCount.value > 0 ? `${illnessSymptomCount.value}项症状` : '',
     ].filter(Boolean)
-    return parts.join(' · ')
+    return parts.join(' · ') || (illnessPrimaryCondition.value || '疾病')
   }
   return `${record.value?.dog_name || '未知犬只'} · ${formatDate(record.value?.date)}`
 })
@@ -524,7 +528,7 @@ const { run: deleteRecord } = useCloudCall('health-service', 'deleteHealthRecord
   loadingMode: 'local',
   throwOnError: true,
 })
-const { run: updateIllnessStatus } = useCloudCall('health-service', 'updateIllnessStatus', {
+const { run: recoverIllnesses } = useCloudCall('health-service', 'recoverIllnesses', {
   successMode: 'silent',
   loadingMode: 'local',
   throwOnError: true,
@@ -574,7 +578,7 @@ async function handleDeleteConfirm() {
 async function markRecovered() {
   if (!recordId) return
   showMore.value = false
-  const result = await updateIllnessStatus(recordId, '已康复')
+  const result = await recoverIllnesses({ illnessIds: [recordId] })
   if (result) {
     showSubmitBanner('已标记康复')
     await loadRecord()
@@ -647,7 +651,7 @@ onShow(() => {
 <style lang="scss" scoped>
 
 .page {
-  padding-bottom: 40px;
+  padding-bottom: calc(188px + env(safe-area-inset-bottom));
 }
 
 .detail-skeleton-card,
@@ -956,6 +960,33 @@ onShow(() => {
   display: flex;
   flex-direction: column;
 }
+.detail-block {
+  padding: 4px 0 16px;
+}
+.detail-block--symptoms {
+  border-bottom: 1px solid rgba(216, 203, 189, 0.16);
+  margin-bottom: 2px;
+}
+.detail-block__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.detail-block__title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-2);
+}
+.detail-block__meta {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.info-row--top {
+  align-items: flex-start;
+}
 .info-row-label {
   flex-shrink: 0;
 }
@@ -965,12 +996,46 @@ onShow(() => {
   align-items: center;
   gap: 6px;
 
+  &--wrap {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    max-width: 220px;
+  }
+
   &--note {
     max-width: 180px;
     text-align: right;
     line-height: 1.45;
     font-weight: 500;
   }
+}
+
+.symptom-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(224, 82, 82, 0.07);
+  color: var(--red);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.symptom-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 12px 10px;
+}
+
+.detail-empty-hint {
+  padding: 16px 0 8px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-3);
 }
 
 /* ==================== MINI AVATAR ==================== */
@@ -1081,51 +1146,111 @@ onShow(() => {
 }
 
 .action-area {
-  margin: 0 16px 16px;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  padding: 12px 16px calc(8px + env(safe-area-inset-bottom));
+  background: linear-gradient(180deg, rgba(252, 248, 248, 0) 0%, rgba(252, 248, 248, 0.94) 18%, rgba(252, 248, 248, 0.98) 100%);
 }
 
-.detail-action-card {
+.health-action-card {
   position: relative;
   overflow: hidden;
-  border-radius: 16px;
-  background: var(--card);
-  box-shadow: var(--shadow);
+  border-radius: 20px;
+  border: 1px solid rgba(230, 93, 93, 0.12);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 245, 245, 0.96));
+  box-shadow: 0 10px 30px rgba(190, 86, 86, 0.08);
 }
 
-.detail-action-card__glow {
+.health-action-card__glow {
   position: absolute;
+  top: -42px;
   right: -18px;
-  bottom: -22px;
-  width: 120px;
-  height: 120px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 237, 237, 0.95) 0%, rgba(255, 237, 237, 0) 72%);
+  width: 132px;
+  height: 132px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(230, 93, 93, 0.16), rgba(230, 93, 93, 0));
+  pointer-events: none;
 }
 
-.detail-action-card__body {
+.health-action-card__body {
   position: relative;
-  padding: 14px 16px 16px;
-}
-
-.detail-action-card__row {
   display: flex;
+  flex-direction: column;
   gap: 12px;
+  padding: 14px;
 }
 
-.detail-action-card__primary {
+.health-action__row {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.health-action__secondary-wrap {
+  flex: 0 0 auto;
+  display: flex;
+}
+
+.health-action__primary {
   flex: 1;
+  min-width: 0;
+  min-height: 52px;
+  border-radius: 18px;
+  box-shadow: 0 10px 24px rgba(230, 93, 93, 0.22);
 }
 
-.detail-action-card__secondary {
-  min-width: 116px;
+.health-action__secondary {
+  min-width: 114px;
+  min-height: 52px;
+  padding: 0 10px;
+  border-radius: 18px;
+  border-color: rgba(50, 186, 120, 0.18);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(243, 255, 248, 0.9));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
+  color: var(--green);
+}
+
+.health-action__primary-inner,
+.health-action__secondary-inner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.health-action__primary-icon {
+  font-size: 18px;
+  color: #fff;
+}
+
+.health-action__secondary-icon {
+  font-size: 16px;
+  color: var(--green);
 }
 
 .action-note {
   display: block;
-  margin-top: 12px;
-  font-size: 11px;
+  margin-top: 10px;
+  font-size: 12px;
   color: var(--text-3);
   line-height: 1.5;
+}
+
+.health-action__note {
+  margin-top: 2px;
+}
+
+@media (max-width: 360px) {
+  .health-action__row {
+    flex-direction: column;
+  }
+
+  .health-action__secondary {
+    width: 100%;
+  }
 }
 
 /* ==================== MORE ACTIONS ==================== */

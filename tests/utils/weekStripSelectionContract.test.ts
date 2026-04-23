@@ -27,5 +27,15 @@ describe('week strip selection contract', () => {
     expect(source).toContain("@click=\"$emit('jump-today')\"")
     expect(source).toContain("(e: 'jump-today'): void")
     expect(source).toContain('const isSelectedToday = computed(() => props.selectedDate === today.value)')
+    expect(source).toContain('class="material-icons-round month-header__today-icon">history</text>')
+    expect(source).toContain('<text class="month-header__today-text">回到今日</text>')
+  })
+
+  it('WeekStrip 顶部应为月份主入口加固定日历按钮的导航条', () => {
+    expect(source).toContain('class="month-header__month-btn" @click="$emit(\'toggle-calendar\')"')
+    expect(source).toContain('class="material-icons-round month-header__month-icon">arrow_drop_down</text>')
+    expect(source).toContain('class="month-header__calendar" @click="$emit(\'toggle-calendar\')"')
+    expect(source).toContain('class="material-icons-round month-header__calendar-icon">calendar_month</text>')
+    expect(source).toContain('.month-header__actions')
   })
 })
