@@ -26,15 +26,61 @@ export const DEFAULT_EXPENSE_CATEGORIES: ExpenseCategoryOption[] = [
   { name: '食品', parent_group: 'feeding', is_default: true },
   { name: '营养品', parent_group: 'feeding', is_default: true },
   { name: '医疗', parent_group: 'health', is_default: true },
+  { name: '疫苗驱虫', parent_group: 'health', is_default: true },
+  { name: '检查化验', parent_group: 'health', is_default: true },
   { name: '配种费', parent_group: 'breeding', is_default: true },
+  { name: '孕检产检', parent_group: 'breeding', is_default: true },
+  { name: '生产育幼', parent_group: 'breeding', is_default: true },
   { name: '消耗品', parent_group: 'operations', is_default: true },
   { name: '日常用品', parent_group: 'operations', is_default: true },
   { name: '固定开销', parent_group: 'operations', is_default: true },
   { name: '交通', parent_group: 'operations', is_default: true },
+  { name: '洗护美容', parent_group: 'operations', is_default: true },
+  { name: '设备器材', parent_group: 'operations', is_default: true },
   { name: '其他', parent_group: 'other', is_default: true },
 ]
 
 export const INCOME_TYPES = ['销售', '定金保留', '领养', '其他'] as const
+export const INCOME_AUTO_TYPES = ['退款'] as const
+export const INCOME_FILTER_TYPES = ['销售', '定金保留', '领养', '其他', '退款'] as const
+export const LEGACY_INCOME_TYPES = ['定金', '领养费', '配种费收入'] as const
+
+export type ManualIncomeType = typeof INCOME_TYPES[number]
+export type AutoIncomeType = typeof INCOME_AUTO_TYPES[number]
+export type IncomeFilterType = typeof INCOME_FILTER_TYPES[number]
+export type LegacyIncomeType = typeof LEGACY_INCOME_TYPES[number]
+
+const LEGACY_INCOME_TYPE_MAP: Record<LegacyIncomeType, ManualIncomeType> = {
+  定金: '定金保留',
+  领养费: '领养',
+  配种费收入: '其他',
+}
+
+export const EXPENSE_CATEGORY_META: Record<string, { icon: string; bg: string }> = {
+  食品: { icon: 'restaurant', bg: '#FFD4DE' },
+  营养品: { icon: 'medication', bg: '#E4D8F4' },
+  医疗: { icon: 'local_hospital', bg: '#D0F0DC' },
+  疫苗驱虫: { icon: 'vaccines', bg: '#D9EEFF' },
+  检查化验: { icon: 'science', bg: '#E3F2E1' },
+  配种费: { icon: 'favorite', bg: '#FFD4DE' },
+  孕检产检: { icon: 'monitor_heart', bg: '#F6D8E9' },
+  生产育幼: { icon: 'child_care', bg: '#FFE7C7' },
+  消耗品: { icon: 'shopping_bag', bg: '#D4E8F8' },
+  日常用品: { icon: 'home', bg: '#D0F0EC' },
+  固定开销: { icon: 'pin_drop', bg: '#FFD9D4' },
+  交通: { icon: 'directions_car', bg: '#D4E8F8' },
+  洗护美容: { icon: 'content_cut', bg: '#F6D8E9' },
+  设备器材: { icon: 'build', bg: '#E8E1DA' },
+  其他: { icon: 'more_horiz', bg: 'var(--card-dim)' },
+}
+
+export const INCOME_TYPE_META: Record<IncomeFilterType | ManualIncomeType, { icon: string; bg: string; desc: string }> = {
+  销售: { icon: 'sell', bg: '#FFD9E2', desc: '幼犬销售、尾款回收' },
+  定金保留: { icon: 'savings', bg: '#FFE7C7', desc: '取消后保留的定金' },
+  领养: { icon: 'volunteer_activism', bg: '#F6D8E9', desc: '领养费、安置费用' },
+  其他: { icon: 'more_horiz', bg: '#E8E1DA', desc: '补录收入或其他进账' },
+  退款: { icon: 'undo', bg: '#D9EEFF', desc: '销售退款或金额回冲' },
+}
 
 export const FINANCE_SORT_OPTIONS = [
   { value: 'date_desc', label: '最近记录' },
@@ -189,4 +235,26 @@ export function groupExpenseCategories(
       items: categories.filter(category => category.parent_group === group.key),
     }))
     .filter(group => includeEmpty || group.items.length > 0)
+}
+
+export function getExpenseCategoryMeta(name?: string | null) {
+  return EXPENSE_CATEGORY_META[name || ''] || { icon: 'category', bg: 'var(--amber-soft)' }
+}
+
+export function normalizeIncomeType(type?: string | null): IncomeFilterType | ManualIncomeType {
+  const normalized = String(type || '').trim()
+  if (!normalized) return '其他'
+  if (normalized in LEGACY_INCOME_TYPE_MAP) {
+    return LEGACY_INCOME_TYPE_MAP[normalized as LegacyIncomeType]
+  }
+  return (INCOME_FILTER_TYPES as readonly string[]).includes(normalized) ? normalized as IncomeFilterType : '其他'
+}
+
+export function isManualIncomeType(type?: string | null): type is ManualIncomeType {
+  return (INCOME_TYPES as readonly string[]).includes(normalizeIncomeType(type))
+}
+
+export function getIncomeTypeMeta(type?: string | null) {
+  const normalized = normalizeIncomeType(type)
+  return INCOME_TYPE_META[normalized] || { icon: 'payments', bg: '#FFD9E2', desc: '手动记录收入' }
 }

@@ -29,7 +29,7 @@ export type MedicationTaskStatus = '进行中' | '已完成' | '已取消'
 export interface MedicationTask extends BaseDocument {
   dog_id: string
   dog_name: string            // 冗余
-  source_record_id: string    // 关联的疾病记录
+  source_record_id?: string | null    // 关联的疾病记录
   drug_name: string
   dosage: string
   frequency: number           // 每日次数

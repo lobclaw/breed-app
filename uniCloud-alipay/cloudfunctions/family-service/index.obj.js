@@ -94,6 +94,11 @@ function normalizeNotificationTypes(input, currentSettings) {
 }
 
 const RECYCLE_RETENTION_DAYS = 30
+const LEGACY_INCOME_TYPE_MAP = {
+  定金: '定金保留',
+  领养费: '领养',
+  配种费收入: '其他',
+}
 const RECYCLE_SUPPORTED_TYPES = {
   dog: {
     collection: 'dogs',
@@ -110,8 +115,8 @@ const RECYCLE_SUPPORTED_TYPES = {
   income: {
     collection: 'incomes',
     typeLabel: '收入',
-    name: item => item.type || '未命名收入',
-    summary: item => [item.type, formatCurrency(item.amount)].filter(Boolean).join(' · '),
+    name: item => normalizeIncomeType(item.type) || '未命名收入',
+    summary: item => [normalizeIncomeType(item.type), formatCurrency(item.amount)].filter(Boolean).join(' · '),
   },
   agent: {
     collection: 'agents',
@@ -132,6 +137,12 @@ function formatCurrency(amount) {
   const numericAmount = Number(amount)
   if (Number.isNaN(numericAmount)) return ''
   return `¥${numericAmount.toLocaleString()}`
+}
+
+function normalizeIncomeType(type) {
+  const normalized = String(type || '').trim()
+  if (!normalized) return '其他'
+  return LEGACY_INCOME_TYPE_MAP[normalized] || normalized
 }
 
 function clampDaysRemaining(deletedAt) {

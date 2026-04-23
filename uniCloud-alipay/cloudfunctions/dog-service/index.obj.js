@@ -103,11 +103,26 @@ function normalizeIllnessLabel(label) {
   return typeof label === 'string' ? label.trim() : '生病中'
 }
 
+function getIllnessPrimaryCondition(source = {}) {
+  return normalizeIllnessLabel(source?.primary_condition || source?.condition || '生病中')
+}
+
+function getIllnessSymptomSummary(source = {}, limit = 2) {
+  const tags = Array.isArray(source?.symptom_tags)
+    ? source.symptom_tags
+      .map(item => typeof item === 'string' ? item.trim() : '')
+      .filter(Boolean)
+    : []
+  if (tags.length === 0) return ''
+  if (tags.length <= limit) return tags.join(' / ')
+  return `${tags.slice(0, limit).join(' / ')} 等${tags.length}项`
+}
+
 function buildDetailIllnessStatuses(illnesses = []) {
   const grouped = new Map()
 
   for (const illness of illnesses) {
-    const label = normalizeIllnessLabel(illness.details?.condition || '生病中')
+    const label = getIllnessPrimaryCondition(illness.details || {})
     if (!grouped.has(label)) grouped.set(label, [])
     grouped.get(label).push(illness)
   }
@@ -131,7 +146,7 @@ function buildListIllnessStatuses(illnesses = []) {
   let firstRecordId = null
 
   for (const illness of sortedRecords) {
-    const label = (illness.details?.condition || '生病中').trim()
+    const label = getIllnessPrimaryCondition(illness.details || {})
     const dedupeKey = label
     if (seen.has(dedupeKey)) continue
     seen.add(dedupeKey)

@@ -49,6 +49,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import BSheet from '@/components/layout/BSheet.vue'
+import { getExpenseCategoryMeta } from '@/constants/financeCategories'
 
 const props = defineProps<{
   visible: boolean
@@ -72,20 +73,8 @@ const recentCategories = computed(() =>
   (props.recentCategories || []).filter(item => props.categories.includes(item)).slice(0, 2),
 )
 
-const CATEGORY_META: Record<string, { icon: string; bg: string }> = {
-  '食品': { icon: 'restaurant', bg: '#FFD4DE' },
-  '营养品': { icon: 'medication', bg: '#E4D8F4' },
-  '消耗品': { icon: 'shopping_bag', bg: '#D4E8F8' },
-  '日常用品': { icon: 'home', bg: '#D0F0EC' },
-  '固定开销': { icon: 'pin_drop', bg: '#FFD9D4' },
-  '交通': { icon: 'directions_car', bg: '#D4E8F8' },
-  '医疗': { icon: 'local_hospital', bg: '#D0F0DC' },
-  '配种费': { icon: 'favorite', bg: '#FFD4DE' },
-  '其他': { icon: 'more_horiz', bg: 'var(--card-dim)' },
-}
-
 function getCategoryMeta(name: string) {
-  return CATEGORY_META[name] || { icon: 'category', bg: 'var(--amber-soft)' }
+  return getExpenseCategoryMeta(name)
 }
 
 function selectCategory(name: string) {

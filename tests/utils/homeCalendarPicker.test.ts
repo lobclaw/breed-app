@@ -10,7 +10,10 @@ describe('home calendar picker contract', () => {
   it('首页月份标题应接入日期月历', () => {
     expect(source).toContain('v-model:visible="showHomeDatePicker"')
     expect(source).toContain(':model-value="selectedDate"')
+    expect(source).toContain(':day-dot-counts="dayCounts"')
+    expect(source).toContain('date-only')
     expect(source).toContain('mode="date"')
+    expect(source).toContain('@calendar-range-change="onHomeCalendarRangeChange"')
     expect(source).toContain('@confirm="onHomeCalendarConfirm"')
   })
 
@@ -26,5 +29,13 @@ describe('home calendar picker contract', () => {
     expect(source).toContain('const dayTs = getBeijingDayStart(value)')
     expect(source).toContain("uni.showToast({ title: '过去日期暂不可查看', icon: 'none' })")
     expect(source).toContain('void onDateSelect(dayTs)')
+  })
+
+  it('首页月历应按面板范围补拉并合并日期红点缓存', () => {
+    expect(source).toContain('const loadedDateCountRanges = new Set<string>()')
+    expect(source).toContain('async function onHomeCalendarRangeChange(payload: CalendarRangeChangePayload)')
+    expect(source).toContain('await ensureDateCountsRange(payload.startDate, payload.endDate)')
+    expect(source).toContain('function mergeDateCountsRange(startDate: number, endDate: number, nextCounts?: Record<number, number>)')
+    expect(source).toContain('loadedDateCountRanges.clear()')
   })
 })

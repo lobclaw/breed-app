@@ -65,24 +65,28 @@
               :class="{
                 'b-date-time-picker__calendar-cell--muted': !cell.isCurrentMonth,
                 'b-date-time-picker__calendar-cell--today': cell.isToday && !cell.isSelected,
+                'b-date-time-picker__calendar-cell--disabled': cell.isDisabled,
               }"
               @click="selectCalendarCell(cell)"
             >
-              <view
-                class="b-date-time-picker__calendar-day"
-                :class="{ 'b-date-time-picker__calendar-day--selected': cell.isSelected }"
-              >
-                <text
-                  class="b-date-time-picker__calendar-day-text"
-                  :class="{ 'b-date-time-picker__calendar-day-text--selected': cell.isSelected }"
+              <view class="b-date-time-picker__calendar-cell-inner">
+                <view
+                  class="b-date-time-picker__calendar-day"
+                  :class="{ 'b-date-time-picker__calendar-day--selected': cell.isSelected }"
                 >
-                  {{ cell.day }}
-                </text>
+                  <text
+                    class="b-date-time-picker__calendar-day-text"
+                    :class="{ 'b-date-time-picker__calendar-day-text--selected': cell.isSelected }"
+                  >
+                    {{ cell.day }}
+                  </text>
+                </view>
+                <view v-if="cell.showDot" class="b-date-time-picker__calendar-dot" />
               </view>
             </view>
           </view>
 
-          <view class="b-date-time-picker__time-card" @click="openTimePanel">
+          <view v-if="!isDateOnlyMode" class="b-date-time-picker__time-card" @click="openTimePanel">
             <view class="b-date-time-picker__time-row">
               <text class="b-date-time-picker__time-label">时刻</text>
               <view class="b-date-time-picker__time-value-wrap">
@@ -201,6 +205,7 @@ import {
   clampDayInMonth,
   formatDateParts,
   formatTimeParts,
+  getBeijingDayStart,
   getDaysInMonth,
   getDraftTimestamp,
   parseDateString,
@@ -219,9 +224,12 @@ interface CalendarCell {
   month: number
   day: number
   monthIndex: number
+  dayStartTs: number
   isCurrentMonth: boolean
   isSelected: boolean
   isToday: boolean
+  isDisabled: boolean
+  showDot: boolean
 }
 
 const props = withDefaults(defineProps<{
@@ -232,6 +240,8 @@ const props = withDefaults(defineProps<{
   yearStart?: number
   yearEnd?: number
   minuteStep?: number
+  dateOnly?: boolean
+  dayDotCounts?: Record<number, number>
 }>(), {
   modelValue: null,
   mode: 'date',
@@ -239,12 +249,15 @@ const props = withDefaults(defineProps<{
   yearStart: 1990,
   yearEnd: new Date().getFullYear() + 10,
   minuteStep: 1,
+  dateOnly: false,
+  dayDotCounts: undefined,
 })
 
 const emit = defineEmits<{
   'update:visible': [value: boolean]
   'update:modelValue': [value: number | string]
   confirm: [value: number | string]
+  'calendar-range-change': [payload: { startDate: number; endDate: number; year: number; month: number }]
 }>()
 
 const PICKER_ANIMATION_MS = 250
@@ -283,6 +296,7 @@ const minutes = computed(() => {
 const draftDate = computed(() => new Date(draftTimestamp.value))
 const mode = computed(() => props.mode)
 const isMonthOnlyMode = computed(() => props.mode === 'month')
+const isDateOnlyMode = computed(() => props.mode === 'date' && props.dateOnly)
 const selectedYear = computed(() => draftDate.value.getFullYear())
 const selectedMonth = computed(() => draftDate.value.getMonth() + 1)
 const selectedMonthIndex = computed(() => draftDate.value.getMonth())
@@ -305,6 +319,7 @@ const toolbarRightLabel = computed(() => {
 const toolbarTitle = computed(() => {
   if (props.mode === 'time') return '选择时间'
   if (isMonthOnlyMode.value) return '选择年月'
+  if (isDateOnlyMode.value) return '选择日期'
   if (currentView.value === 'month') return '选择年月'
   if (currentView.value === 'time') return '选择时间'
   return '选择日期时间'
@@ -330,7 +345,8 @@ const calendarCells = computed<CalendarCell[]>(() => {
   const nextMonthYear = month === 12 ? year + 1 : year
   const nextMonth = month === 12 ? 1 : month + 1
   const prevMonthDays = getDaysInMonth(prevMonthYear, prevMonth - 1)
-  const today = new Date()
+  const todayDayStartTs = getBeijingDayStart(Date.now())
+  const selectedDayStartTs = getBeijingDayStart(draftTimestamp.value)
 
   for (let index = 0; index < 42; index += 1) {
     const offset = index - firstWeekday + 1
@@ -351,15 +367,21 @@ const calendarCells = computed<CalendarCell[]>(() => {
       isCurrentMonth = false
     }
 
+    const dayStartTs = getBeijingDayStart(new Date(cellYear, cellMonth - 1, cellDay, 12, 0, 0, 0).getTime())
+    const isPast = dayStartTs < todayDayStartTs
+
     cells.push({
       key: `${cellYear}-${cellMonth}-${cellDay}`,
       year: cellYear,
       month: cellMonth,
       monthIndex: cellMonth - 1,
       day: cellDay,
+      dayStartTs,
       isCurrentMonth,
-      isSelected: cellYear === selectedYear.value && cellMonth === selectedMonth.value && cellDay === selectedDay.value,
-      isToday: cellYear === today.getFullYear() && cellMonth === today.getMonth() + 1 && cellDay === today.getDate(),
+      isSelected: dayStartTs === selectedDayStartTs,
+      isToday: dayStartTs === todayDayStartTs,
+      isDisabled: isDateOnlyMode.value && isPast,
+      showDot: !isPast && Boolean(props.dayDotCounts?.[dayStartTs]),
     })
   }
 
@@ -487,6 +509,7 @@ function goNextMonth() {
 }
 
 function selectCalendarCell(cell: CalendarCell) {
+  if (cell.isDisabled) return
   draftTimestamp.value = replaceTimestampDateParts(
     draftTimestamp.value,
     cell.year,
@@ -508,6 +531,7 @@ function openMonthPanel() {
 }
 
 function openTimePanel() {
+  if (isDateOnlyMode.value) return
   syncTimePickerValue()
   currentView.value = 'time'
 }
@@ -597,6 +621,18 @@ function handleConfirm() {
   close()
 }
 
+function emitCalendarRangeChange() {
+  const firstCell = calendarCells.value[0]
+  const lastCell = calendarCells.value[calendarCells.value.length - 1]
+  if (!firstCell || !lastCell) return
+  emit('calendar-range-change', {
+    startDate: firstCell.dayStartTs,
+    endDate: lastCell.dayStartTs + 86400000 - 1,
+    year: calendarYear.value,
+    month: calendarMonth.value,
+  })
+}
+
 watch(() => props.visible, (value) => {
   if (value) {
     syncDraftFromValue()
@@ -611,6 +647,11 @@ watch(() => props.visible, (value) => {
 
 watch(() => props.modelValue, () => {
   if (props.visible) syncDraftFromValue()
+})
+
+watch(() => [props.visible, currentView.value, calendarYear.value, calendarMonth.value], ([visible, view]) => {
+  if (!visible || view !== 'calendar') return
+  emitCalendarRangeChange()
 })
 
 watch(() => [props.yearStart, props.yearEnd, props.minuteStep], () => {
@@ -758,7 +799,7 @@ onBeforeUnmount(() => {
   &__calendar-cell {
     display: flex;
     justify-content: center;
-    padding: 2px 0;
+    padding: 0;
 
     &--muted {
       opacity: 0.4;
@@ -768,6 +809,18 @@ onBeforeUnmount(() => {
       border-color: rgba(217, 119, 6, 0.26);
       background: rgba(217, 119, 6, 0.08);
     }
+
+    &--disabled {
+      opacity: 0.42;
+    }
+  }
+
+  &__calendar-cell-inner {
+    min-height: 46px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
   }
 
   &__calendar-day {
@@ -794,6 +847,13 @@ onBeforeUnmount(() => {
     &--selected {
       color: #fff;
     }
+  }
+
+  &__calendar-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--primary);
   }
 
   &__time-card {

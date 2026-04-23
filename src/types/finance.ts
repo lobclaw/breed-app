@@ -2,8 +2,13 @@
  * 财务相关类型
  */
 import type { BaseDocument, SoftDeletable } from './index'
-import type { ExpenseCategoryGroupKey } from '@/constants/financeCategories'
-export type { ExpenseCategoryGroupKey } from '@/constants/financeCategories'
+import type { AutoIncomeType, ExpenseCategoryGroupKey, LegacyIncomeType, ManualIncomeType } from '@/constants/financeCategories'
+export type {
+  AutoIncomeType,
+  ExpenseCategoryGroupKey,
+  LegacyIncomeType,
+  ManualIncomeType,
+} from '@/constants/financeCategories'
 
 // 费用来源类型
 export type ExpenseSourceType = 'manual' | 'auto'
@@ -29,7 +34,9 @@ export interface Expense extends BaseDocument, SoftDeletable {
 }
 
 // 收入类型
-export type IncomeType = '销售' | '定金' | '定金保留' | '退款' | '领养费' | '配种费收入'
+// 当前写入口径：销售 / 定金保留 / 领养 / 其他 / 退款
+// 历史兼容读取：定金 / 领养费 / 配种费收入
+export type IncomeType = ManualIncomeType | AutoIncomeType | LegacyIncomeType
 
 // 收入
 export interface Income extends BaseDocument, SoftDeletable {

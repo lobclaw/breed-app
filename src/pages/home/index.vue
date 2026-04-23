@@ -530,8 +530,11 @@
     <BDateTimePicker
       v-model:visible="showHomeDatePicker"
       :model-value="selectedDate"
+      :day-dot-counts="dayCounts"
+      date-only
       mode="date"
       value-type="timestamp"
+      @calendar-range-change="onHomeCalendarRangeChange"
       @confirm="onHomeCalendarConfirm"
     />
 
@@ -889,7 +892,15 @@ const { run: doBatchCompleteMedDay } = useCloudCall('health-service', 'batchComp
 // 7天卡片缓存：{ [dayTimestamp]: Card[] }
 type WeekCacheEntry = { cards: any[] }
 const weekCache = ref<Record<number, WeekCacheEntry>>({})
+const loadedDateCountRanges = new Set<string>()
 let latestLoadToken = 0
+
+type CalendarRangeChangePayload = {
+  startDate: number
+  endDate: number
+  year: number
+  month: number
+}
 
 function onCardAreaScroll(event: any) {
   cardAreaScrollTop.value = event?.detail?.scrollTop || 0
@@ -1063,16 +1074,13 @@ async function loadDateCounts(loadToken = latestLoadToken) {
   const todayTs = startOfDay(Date.now())
   // 只查询今天到本周日的范围（过去日期不显示红点）
   const end = todayTs + 7 * DAY_MS - 1
-  const result = await fetchDateCounts(todayTs, end)
-  if (loadToken !== latestLoadToken) return
-  if (result?.data) {
-    dayCounts.value = result.data
-  }
+  await ensureDateCountsRange(todayTs, end, { loadToken, force: true })
 }
 
 /** 并行加载所有首页数据 */
 async function loadAll() {
   const loadToken = ++latestLoadToken
+  loadedDateCountRanges.clear()
   await Promise.all([loadTodayCards(loadToken), loadWeekCache(loadToken), loadDateCounts(loadToken)])
   if (loadToken !== latestLoadToken) return
   // 两个请求都完成后：以实际可见卡片数修正今天的红点
@@ -1130,6 +1138,10 @@ function toggleCalendar() {
   showHomeDatePicker.value = true
 }
 
+async function onHomeCalendarRangeChange(payload: CalendarRangeChangePayload) {
+  await ensureDateCountsRange(payload.startDate, payload.endDate)
+}
+
 function onHomeCalendarConfirm(value: number | string) {
   if (typeof value !== 'number') return
   const dayTs = getBeijingDayStart(value)
@@ -1139,6 +1151,47 @@ function onHomeCalendarConfirm(value: number | string) {
     return
   }
   void onDateSelect(dayTs)
+}
+
+function buildDateCountRangeKey(startDate: number, endDate: number) {
+  return `${startDate}:${endDate}`
+}
+
+function mergeDateCountsRange(startDate: number, endDate: number, nextCounts?: Record<number, number>) {
+  const merged = { ...dayCounts.value }
+  Object.keys(merged).forEach((key) => {
+    const ts = Number(key)
+    if (ts >= startDate && ts <= endDate) {
+      delete merged[ts]
+    }
+  })
+  Object.entries(nextCounts || {}).forEach(([key, count]) => {
+    const ts = Number(key)
+    if (count > 0) {
+      merged[ts] = count
+    }
+  })
+  dayCounts.value = merged
+}
+
+async function ensureDateCountsRange(
+  startDate: number,
+  endDate: number,
+  options: { loadToken?: number; force?: boolean } = {},
+) {
+  const todayTs = startOfDay(Date.now())
+  if (endDate < todayTs) return
+  const normalizedStart = Math.max(startOfDay(startDate), todayTs)
+  const normalizedEnd = Math.max(normalizedStart, endDate)
+
+  const rangeKey = buildDateCountRangeKey(normalizedStart, normalizedEnd)
+  if (!options.force && loadedDateCountRanges.has(rangeKey)) return
+
+  const result = await fetchDateCounts(normalizedStart, normalizedEnd)
+  if (options.loadToken !== undefined && options.loadToken !== latestLoadToken) return
+
+  mergeDateCountsRange(normalizedStart, normalizedEnd, result?.data)
+  loadedDateCountRanges.add(rangeKey)
 }
 
 function dismissSubmitToast() {

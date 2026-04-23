@@ -39,15 +39,29 @@ const DEFAULT_EXPENSE_CATEGORY_ITEMS = [
   { name: '食品', parent_group: 'feeding', is_default: true },
   { name: '营养品', parent_group: 'feeding', is_default: true },
   { name: '医疗', parent_group: 'health', is_default: true },
+  { name: '疫苗驱虫', parent_group: 'health', is_default: true },
+  { name: '检查化验', parent_group: 'health', is_default: true },
   { name: '配种费', parent_group: 'breeding', is_default: true },
+  { name: '孕检产检', parent_group: 'breeding', is_default: true },
+  { name: '生产育幼', parent_group: 'breeding', is_default: true },
   { name: '消耗品', parent_group: 'operations', is_default: true },
   { name: '日常用品', parent_group: 'operations', is_default: true },
   { name: '固定开销', parent_group: 'operations', is_default: true },
   { name: '交通', parent_group: 'operations', is_default: true },
+  { name: '洗护美容', parent_group: 'operations', is_default: true },
+  { name: '设备器材', parent_group: 'operations', is_default: true },
   { name: '其他', parent_group: 'other', is_default: true },
 ]
 
 const DEFAULT_EXPENSE_CATEGORIES = DEFAULT_EXPENSE_CATEGORY_ITEMS.map(item => item.name)
+const MANUAL_INCOME_TYPES = ['销售', '定金保留', '领养', '其他']
+const AUTO_INCOME_TYPES = ['退款']
+const INCOME_FILTER_TYPES = [...MANUAL_INCOME_TYPES, ...AUTO_INCOME_TYPES]
+const LEGACY_INCOME_TYPE_MAP = {
+  定金: '定金保留',
+  领养费: '领养',
+  配种费收入: '其他',
+}
 
 function normalizeExpenseCategoryGroupKey(groupKey) {
   return groupKey && PRESET_EXPENSE_CATEGORY_GROUPS.some(item => item.key === groupKey) ? groupKey : 'other'
@@ -152,12 +166,25 @@ function normalizeStringArray(rawValue) {
   ))
 }
 
+function normalizeIncomeType(type) {
+  const normalized = String(type || '').trim()
+  if (!normalized) return '其他'
+  return LEGACY_INCOME_TYPE_MAP[normalized] || (INCOME_FILTER_TYPES.includes(normalized) ? normalized : '其他')
+}
+
+function normalizeManualIncomeType(type) {
+  const normalized = normalizeIncomeType(type)
+  return MANUAL_INCOME_TYPES.includes(normalized) ? normalized : ''
+}
+
 function normalizeFinanceFilters(filters = {}) {
   const expenseCategoryGroups = normalizeStringArray(filters.expenseCategoryGroups)
   const type = filters.type || ''
   const normalized = {
     type,
-    incomeTypes: normalizeStringArray(filters.incomeTypes),
+    incomeTypes: normalizeStringArray(filters.incomeTypes)
+      .map(item => normalizeIncomeType(item))
+      .filter((item, index, list) => list.indexOf(item) === index),
     expenseCategoryGroups,
     expenseCategories: normalizeStringArray(filters.expenseCategories || filters.subCategory || filters.category),
     dogIds: normalizeStringArray(filters.dogIds || filters.dogId),
@@ -536,7 +563,8 @@ module.exports = {
    */
   async addIncome(data) {
     if (!data.amount || typeof data.amount !== 'number' || data.amount <= 0 || isNaN(data.amount)) throw new Error('请填写有效金额')
-    if (!data.type) throw new Error('请选择收入类型')
+    const normalizedType = normalizeManualIncomeType(data.type)
+    if (!normalizedType) throw new Error('请选择收入类型')
 
     const now = Date.now()
 
@@ -544,7 +572,7 @@ module.exports = {
       family_id: this.familyId,
       dog_id: data.dog_id || null,
       dog_name: data.dog_name || null,
-      type: data.type,
+      type: normalizedType,
       amount: data.amount,
       date: data.date || now,
       source_sale_id: data.source_sale_id || null,
@@ -562,8 +590,8 @@ module.exports = {
       actionType: 'create',
       targetType: 'income',
       targetId: id,
-      targetName: data.type,
-      summary: `新增了收入 ${data.type}`,
+      targetName: normalizedType,
+      summary: `新增了收入 ${normalizedType}`,
       meta: { amount: data.amount },
     })
     return { data: { incomeId: id } }
@@ -651,12 +679,18 @@ module.exports = {
       })),
       ...incomeResult.data
         .filter((income) => {
-          if (normalizedFilters.incomeTypes.length > 0 && !normalizedFilters.incomeTypes.includes(income.type || '其他')) {
+          const normalizedType = normalizeIncomeType(income.type)
+          if (normalizedFilters.incomeTypes.length > 0 && !normalizedFilters.incomeTypes.includes(normalizedType)) {
             return false
           }
           return matchesIncomeLinkFilter(income, normalizedFilters)
         })
-        .map(i => ({ ...i, _txType: 'income' })),
+        .map(i => ({
+          ...i,
+          _txType: 'income',
+          type: normalizeIncomeType(i.type),
+          type_label: normalizeIncomeType(i.type),
+        })),
     ]
 
     const sort = normalizedFilters.sort
@@ -750,8 +784,9 @@ module.exports = {
     return {
       data: {
         ...income,
+        type: normalizeIncomeType(income.type),
         created_by_name: getCreatorDisplayName(family.members, income.created_by),
-        type_label: income.type || '其他',
+        type_label: normalizeIncomeType(income.type),
         linked_dog_name: income.dog_name || '',
         sale_id: income.source_sale_id || '',
         source: income.source_sale_id ? 'auto' : 'manual',
@@ -870,7 +905,8 @@ module.exports = {
       .filter(expense => matchesExpenseLinkFilter(expense, normalizedFilters))
     const filteredIncomes = incomeResult.data
       .filter((income) => {
-        if (normalizedFilters.incomeTypes.length > 0 && !normalizedFilters.incomeTypes.includes(income.type || '其他')) {
+        const normalizedType = normalizeIncomeType(income.type)
+        if (normalizedFilters.incomeTypes.length > 0 && !normalizedFilters.incomeTypes.includes(normalizedType)) {
           return false
         }
         return matchesIncomeLinkFilter(income, normalizedFilters)
@@ -892,7 +928,7 @@ module.exports = {
     // 按类型汇总收入
     const incomeBreakdown = {}
     for (const i of filteredIncomes) {
-      const type = i.type || '其他'
+      const type = normalizeIncomeType(i.type)
       incomeBreakdown[type] = (incomeBreakdown[type] || 0) + (i.amount || 0)
     }
 
@@ -1108,7 +1144,8 @@ module.exports = {
     const incomeId = getIdArg(data, 'id')
     if (!incomeId) throw new Error('缺少记录 ID')
     if (!data.amount || data.amount <= 0) throw new Error('请填写有效金额')
-    if (!data.type) throw new Error('请选择收入类型')
+    const normalizedType = normalizeManualIncomeType(data.type)
+    if (!normalizedType) throw new Error('请选择收入类型')
 
     const { data: incomes } = await db.collection('incomes')
       .where({ _id: incomeId, family_id: this.familyId, deleted_at: null })
@@ -1118,7 +1155,7 @@ module.exports = {
 
     await db.collection('incomes').doc(incomeId).update({
       amount: data.amount,
-      type: data.type,
+      type: normalizedType,
       dog_id: data.dog_id || null,
       dog_name: data.dog_name || null,
       date: data.date || incomes[0].date,
@@ -1132,8 +1169,8 @@ module.exports = {
       actionType: 'update',
       targetType: 'income',
       targetId: incomeId,
-      targetName: data.type,
-      summary: `更新了收入 ${data.type}`,
+      targetName: normalizedType,
+      summary: `更新了收入 ${normalizedType}`,
       meta: { amount: data.amount },
     })
 

@@ -26,7 +26,7 @@
       "description": "所属家庭ID"
     },
     "source_record_id": {
-      "bsonType": "string",
+      "bsonType": ["string", "null"],
       "description": "来源健康记录ID"
     },
     "drug_name": {

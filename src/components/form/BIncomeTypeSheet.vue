@@ -50,6 +50,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import BSheet from '@/components/layout/BSheet.vue'
+import { getIncomeTypeMeta } from '@/constants/financeCategories'
 
 const props = defineProps<{
   visible: boolean
@@ -72,15 +73,8 @@ const recentTypes = computed(() =>
   (props.recentTypes || []).filter(item => props.types.includes(item)).slice(0, 2),
 )
 
-const TYPE_META: Record<string, { icon: string; bg: string; desc: string }> = {
-  '销售': { icon: 'sell', bg: '#FFD9E2', desc: '幼犬销售、尾款回收' },
-  '定金保留': { icon: 'savings', bg: '#FFE7C7', desc: '取消后保留的定金' },
-  '领养': { icon: 'volunteer_activism', bg: '#F6D8E9', desc: '领养费、安置费用' },
-  '其他': { icon: 'more_horiz', bg: '#E8E1DA', desc: '补录收入或其他进账' },
-}
-
 function getTypeMeta(name: string) {
-  return TYPE_META[name] || { icon: 'payments', bg: '#FFD9E2', desc: '手动记录收入' }
+  return getIncomeTypeMeta(name)
 }
 
 function selectType(name: string) {

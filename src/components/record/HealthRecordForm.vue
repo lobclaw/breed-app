@@ -143,14 +143,14 @@
 
       <template v-if="resolvedType === 'illness'">
         <view class="field-group">
-          <view class="field-label"><text>病症类型</text></view>
+          <view class="field-label"><text>主疾病</text></view>
           <view class="pill-options">
             <view
               v-for="condition in conditionTypes"
               :key="condition"
               class="pill-option"
-              :class="{ active: details.condition === condition }"
-              @click="details.condition = condition"
+              :class="{ active: details.primary_condition === condition }"
+              @click="setPrimaryCondition(condition)"
               @longpress="PRESET_CONDITION_TYPES.includes(condition) ? undefined : deleteCustomValue('illness', condition)"
             >
               <text>{{ condition }}</text>
@@ -158,12 +158,43 @@
             <view
               v-if="customCondition && !conditionTypes.includes(customCondition)"
               class="pill-option"
-              :class="{ active: details.condition === customCondition }"
-              @click="details.condition = customCondition"
+              :class="{ active: details.primary_condition === customCondition }"
+              @click="setPrimaryCondition(customCondition)"
             >
               <text>{{ customCondition }}</text>
             </view>
             <view class="pill-add" @click="openCustomModal('illness')">
+              <text class="material-icons-round" style="font-size: 14px;">add</text>
+              <text>自定义</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="field-group">
+          <view class="field-label">
+            <text>症状表现</text>
+            <text class="field-label__optional">（选填，可多选）</text>
+          </view>
+          <view class="pill-options">
+            <view
+              v-for="symptom in symptomTagOptions"
+              :key="symptom"
+              class="pill-option"
+              :class="{ active: selectedSymptomTags.includes(symptom) }"
+              @click="toggleSymptomTag(symptom)"
+              @longpress="PRESET_SYMPTOM_TAGS.includes(symptom) ? undefined : deleteCustomValue('symptom', symptom)"
+            >
+              <text>{{ symptom }}</text>
+            </view>
+            <view
+              v-if="customSymptom && !symptomTagOptions.includes(customSymptom)"
+              class="pill-option"
+              :class="{ active: selectedSymptomTags.includes(customSymptom) }"
+              @click="toggleSymptomTag(customSymptom)"
+            >
+              <text>{{ customSymptom }}</text>
+            </view>
+            <view class="pill-add" @click="openCustomModal('symptom')">
               <text class="material-icons-round" style="font-size: 14px;">add</text>
               <text>自定义</text>
             </view>
@@ -315,7 +346,7 @@ import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BModal from '@/components/layout/BModal.vue'
 
 type HealthRecordType = 'vaccination' | 'deworming' | 'illness'
-type CustomModalKind = 'vaccination' | 'deworming' | 'illness' | ''
+type CustomModalKind = 'vaccination' | 'deworming' | 'illness' | 'symptom' | ''
 type DewormSubtype = 'internal' | 'external' | 'combo'
 
 const props = withDefaults(defineProps<{
@@ -428,6 +459,7 @@ const hideTodo = computed(() => {
 
 const PRESET_VACCINE_TYPES = ['卫佳5', '卫佳8', '卫佳10', '狂犬']
 const PRESET_CONDITION_TYPES = ['感冒', '腹泻', '寄生虫', '皮肤病', '眼部', '骨骼', '犬瘟', '细小', '其他']
+const PRESET_SYMPTOM_TAGS = ['精神差', '食欲差', '呕吐', '腹泻', '咳嗽', '流鼻涕', '发热', '皮肤瘙痒', '抓挠', '分泌物']
 const PRESET_DEWORMING_DRUGS: Record<DewormSubtype, string[]> = {
   internal: ['拜宠清', '海乐妙', '犬心保'],
   external: ['福来恩', '大宠爱'],
@@ -446,9 +478,11 @@ const treatmentStatuses = ['观察中', '治疗中', '已康复', '慢性管理'
 const deletedCustomVaccines = ref<string[]>([])
 const deletedCustomDrugs = ref<string[]>([])
 const deletedCustomConditions = ref<string[]>([])
+const deletedCustomSymptoms = ref<string[]>([])
 const customVaccine = ref('')
 const customDrug = ref('')
 const customCondition = ref('')
+const customSymptom = ref('')
 const showDeleteConfirm = ref(false)
 const pendingDeleteVal = ref('')
 let confirmDeleteFn: (() => Promise<void>) | null = null
@@ -464,13 +498,15 @@ const customInput = ref('')
 const customModalTitle = computed(() => {
   if (customModalKind.value === 'vaccination') return '自定义疫苗'
   if (customModalKind.value === 'deworming') return '自定义药品'
-  return '自定义病症'
+  if (customModalKind.value === 'symptom') return '自定义症状表现'
+  return '自定义主疾病'
 })
 
 const customModalPlaceholder = computed(() => {
   if (customModalKind.value === 'vaccination') return '输入疫苗名称'
   if (customModalKind.value === 'deworming') return '输入药品名称'
-  return '输入病症名称'
+  if (customModalKind.value === 'symptom') return '输入症状表现'
+  return '输入主疾病名称'
 })
 
 const vaccineTypes = computed(() => {
@@ -497,12 +533,21 @@ const conditionTypes = computed(() => {
   return [...new Set([...PRESET_CONDITION_TYPES, ...custom])]
 })
 
+const symptomTagOptions = computed(() => {
+  const settings = (currentFamily.value?.settings || {}) as Record<string, any>
+  const custom = (settings.custom_symptom_tags || [])
+    .filter((value: string) => !deletedCustomSymptoms.value.includes(value))
+  return [...new Set([...PRESET_SYMPTOM_TAGS, ...custom])]
+})
+
+const selectedSymptomTags = computed(() => Array.isArray(details.symptom_tags) ? details.symptom_tags : [])
+
 const canSubmit = computed(() => {
   if (!resolvedType.value || !date.value) return false
   if (!isEdit.value && selectedDogs.value.length === 0) return false
   if (resolvedType.value === 'vaccination') return !!details.vaccine_type
   if (resolvedType.value === 'deworming') return !!details.deworming_type
-  return !!details.condition
+  return !!String(details.primary_condition || details.condition || '').trim()
 })
 
 type HealthSkeletonBlockKind = 'picker' | 'choice' | 'options-card' | 'input' | 'textarea' | 'display'
@@ -533,6 +578,7 @@ const skeletonBlocks = computed<HealthSkeletonBlock[]>(() => {
   } else if (resolvedType.value === 'illness') {
     blocks.push(
       { kind: 'choice', count: 5, grid: true },
+      { kind: 'choice', count: 6, grid: true },
       { kind: 'choice', count: 3 },
     )
   }
@@ -593,6 +639,7 @@ function resetFormState() {
   customVaccine.value = ''
   customDrug.value = ''
   customCondition.value = ''
+  customSymptom.value = ''
 
   Object.keys(details).forEach(key => {
     delete details[key]
@@ -603,6 +650,7 @@ function resetFormState() {
   if (props.type === 'illness') {
     details.treatment_status = '观察中'
     details.severity = '轻微'
+    details.symptom_tags = []
   }
 }
 
@@ -617,7 +665,9 @@ function applyPrefillDetails(prefill: Record<string, any>) {
     if (prefill.drug_name) details.drug_name = prefill.drug_name
   }
   if (resolvedType.value === 'illness') {
-    if (prefill.condition) details.condition = prefill.condition
+    const primaryCondition = prefill.primary_condition || prefill.condition
+    if (primaryCondition) setPrimaryCondition(primaryCondition)
+    details.symptom_tags = normalizeSymptomTags(prefill.symptom_tags)
     if (prefill.severity) details.severity = prefill.severity
     if (prefill.treatment_status) details.treatment_status = prefill.treatment_status
   }
@@ -668,6 +718,10 @@ async function loadEditRecord() {
     notes.value = record.notes || ''
     costInput.value = record.cost ? String(record.cost) : ''
     Object.assign(details, record.details || {})
+    if (record.type === 'illness') {
+      setPrimaryCondition(String(record.details?.primary_condition || record.details?.condition || '').trim())
+      details.symptom_tags = normalizeSymptomTags(record.details?.symptom_tags)
+    }
     enableReminder.value = Boolean(record.details?.next_reminder_date)
     reminderDate.value = record.details?.next_reminder_date || null
 
@@ -689,6 +743,35 @@ function openCustomModal(kind: CustomModalKind) {
   customModalKind.value = kind
   customInput.value = ''
   showCustomModal.value = true
+}
+
+function normalizeSymptomTags(value: unknown) {
+  if (!Array.isArray(value)) return []
+  return [...new Set(value
+    .map(item => typeof item === 'string' ? item.trim() : '')
+    .filter(Boolean))]
+}
+
+function ensureSymptomTags() {
+  const normalized = normalizeSymptomTags(details.symptom_tags)
+  details.symptom_tags = normalized
+  return normalized
+}
+
+function setPrimaryCondition(value: string) {
+  details.primary_condition = value
+  details.condition = value
+}
+
+function toggleSymptomTag(value: string) {
+  const next = ensureSymptomTags()
+  const index = next.indexOf(value)
+  if (index >= 0) {
+    next.splice(index, 1)
+  } else {
+    next.push(value)
+  }
+  details.symptom_tags = [...next]
 }
 
 async function saveCustomValue(kind: CustomModalKind, value: string) {
@@ -732,12 +815,26 @@ async function saveCustomValue(kind: CustomModalKind, value: string) {
     return
   }
 
-  customCondition.value = value
-  details.condition = value
-  if (!PRESET_CONDITION_TYPES.includes(value)) {
-    const existing = currentFamily.value?.settings?.custom_condition_types || []
+  if (kind === 'illness') {
+    customCondition.value = value
+    setPrimaryCondition(value)
+    if (!PRESET_CONDITION_TYPES.includes(value)) {
+      const existing = currentFamily.value?.settings?.custom_condition_types || []
+      if (!existing.includes(value)) {
+        await updateFamilySettings({ custom_condition_types: [...existing, value] })
+        await loadFamily()
+      }
+    }
+    return
+  }
+
+  customSymptom.value = value
+  toggleSymptomTag(value)
+  if (!PRESET_SYMPTOM_TAGS.includes(value)) {
+    const settings = (currentFamily.value?.settings || {}) as Record<string, any>
+    const existing = settings.custom_symptom_tags || []
     if (!existing.includes(value)) {
-      await updateFamilySettings({ custom_condition_types: [...existing, value] })
+      await updateFamilySettings({ custom_symptom_tags: [...existing, value] })
       await loadFamily()
     }
   }
@@ -785,7 +882,20 @@ async function deleteCustomValue(kind: CustomModalKind, value: string) {
       return
     }
 
+    if (kind === 'symptom') {
+      deletedCustomSymptoms.value.push(value)
+      details.symptom_tags = ensureSymptomTags().filter(item => item !== value)
+      if (customSymptom.value === value) customSymptom.value = ''
+      const settings = (currentFamily.value?.settings || {}) as Record<string, any>
+      const existing = settings.custom_symptom_tags || []
+      await updateFamilySettings({ custom_symptom_tags: existing.filter((item: string) => item !== value) })
+      await loadFamily()
+      deletedCustomSymptoms.value = deletedCustomSymptoms.value.filter(item => item !== value)
+      return
+    }
+
     deletedCustomConditions.value.push(value)
+    if (details.primary_condition === value) details.primary_condition = ''
     if (details.condition === value) details.condition = ''
     if (customCondition.value === value) customCondition.value = ''
     const existing = currentFamily.value?.settings?.custom_condition_types || []
@@ -833,7 +943,10 @@ function buildDetails() {
   }
 
   if (resolvedType.value === 'illness') {
-    built.condition = details.condition
+    const primaryCondition = String(details.primary_condition || details.condition || '').trim()
+    built.primary_condition = primaryCondition
+    built.condition = primaryCondition
+    built.symptom_tags = ensureSymptomTags()
     built.treatment_status = details.treatment_status || '观察中'
     built.start_date = date.value
     if (details.severity) built.severity = details.severity
@@ -858,7 +971,7 @@ function getHealthHomeAnchorKey(type: string, detailPayload: Record<string, any>
 async function handleDuplicateIllnessIfNeeded() {
   if (resolvedType.value !== 'illness') return false
 
-  const condition = String(details.condition || '').trim()
+  const condition = String(details.primary_condition || details.condition || '').trim()
   const treatmentStatus = details.treatment_status || '观察中'
   if (!condition || treatmentStatus === '已康复') return false
 

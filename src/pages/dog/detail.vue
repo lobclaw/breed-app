@@ -1312,8 +1312,17 @@ const currentBreedingCycleId = computed(() => {
 
 const illnessRecords = computed(() => healthRecords.value.filter((r: any) => r.type === 'illness'))
 const latestIllnessRecord = computed(() => illnessRecords.value[0] || null)
-const latestActiveIllnessRecord = computed(() => illnessRecords.value.find((record: any) => illnessStatusLabel(record) !== '已康复') || null)
 const activeMedicationRecords = computed(() => medicationRecords.value.filter((record: any) => record.status === 'active'))
+const linkedActiveIllnessIds = computed(() => new Set(
+  activeMedicationRecords.value
+    .map((record: any) => typeof record?.source_record_id === 'string' ? record.source_record_id.trim() : '')
+    .filter(Boolean),
+))
+const latestActiveIllnessRecord = computed(() => {
+  const activeIllnesses = illnessRecords.value.filter((record: any) => illnessStatusLabel(record) !== '已康复')
+  const linked = activeIllnesses.find((record: any) => linkedActiveIllnessIds.value.has(record._id))
+  return linked || activeIllnesses[0] || null
+})
 const healthFilters: Array<{ key: HealthFilterKey; label: string }> = [
   { key: 'all', label: '全部' },
   { key: 'ongoing', label: '进行中' },
@@ -1343,7 +1352,7 @@ const healthActions = computed(() => {
   }> = []
 
   if (canQuickStartMedication.value) {
-    const illnessName = latestActiveIllnessRecord.value?.details?.condition || '当前疾病'
+    const illnessName = illnessPrimaryCondition(latestActiveIllnessRecord.value) || '当前疾病'
     actions.push({
       key: 'start-medication',
       icon: 'medication',
@@ -1354,7 +1363,7 @@ const healthActions = computed(() => {
   }
 
   if (canQuickRecover.value) {
-    const illnessName = latestActiveIllnessRecord.value?.details?.condition || '当前疾病'
+    const illnessName = illnessPrimaryCondition(latestActiveIllnessRecord.value) || '当前疾病'
     actions.push({
       key: 'recover',
       icon: 'check_circle',
@@ -1440,9 +1449,10 @@ const healthEmptyState = computed(() => {
 const hasHealthActions = computed(() => healthActions.value.length > 0)
 const healthActionSummary = computed(() => {
   if (latestActiveIllnessRecord.value) {
-    const illnessName = latestActiveIllnessRecord.value.details?.condition || '当前疾病'
+    const illnessName = illnessPrimaryCondition(latestActiveIllnessRecord.value) || '当前疾病'
     const treatmentStatus = illnessStatusLabel(latestActiveIllnessRecord.value) || '观察中'
-    return `${illnessName} · ${treatmentStatus}`
+    const symptomSummary = illnessSymptomSummary(latestActiveIllnessRecord.value)
+    return [illnessName, symptomSummary, treatmentStatus].filter(Boolean).join(' · ')
   }
   if (activeMedicationRecords.value.length > 0) {
     return `进行中用药 ${activeMedicationRecords.value.length} 项`
@@ -1813,8 +1823,24 @@ function typeLabel(type: string) {
 }
 
 /** 记录副标题：病名/疫苗型号/驱虫药，优先 details 字段，fallback notes */
+function illnessPrimaryCondition(record: any) {
+  const details = record?.details || {}
+  return String(details.primary_condition || details.condition || '').trim()
+}
+
+function illnessSymptomSummary(record: any, limit = 2) {
+  const tags = Array.isArray(record?.details?.symptom_tags)
+    ? record.details.symptom_tags
+      .map((item: unknown) => typeof item === 'string' ? item.trim() : '')
+      .filter(Boolean)
+    : []
+  if (tags.length === 0) return ''
+  if (tags.length <= limit) return tags.join(' / ')
+  return `${tags.slice(0, limit).join(' / ')} 等${tags.length}项`
+}
+
 function recordSubtitle(record: any) {
-  if (record.type === 'illness') return record.details?.condition || record.notes || null
+  if (record.type === 'illness') return illnessPrimaryCondition(record) || record.notes || null
   if (record.type === 'vaccination') {
     const vaccineType = record.details?.vaccine_type || record.details?.vaccine_name
     return vaccineType ? `疫苗 · ${vaccineType}` : (record.notes || null)
@@ -2019,7 +2045,7 @@ function statusTitle(s: DeriveStatus): string {
     nameOverride: s.type === '用药中'
       ? splitStatusDetail(s.detail).primary
       : s.type === '生病中'
-        ? (s.label || latestActiveIllnessRecord.value?.details?.condition || '')
+        ? (s.label || illnessPrimaryCondition(latestActiveIllnessRecord.value) || '')
         : undefined,
   })
 }
@@ -2030,7 +2056,8 @@ function statusSub(s: DeriveStatus): string {
   }
   if (s.type === '生病中') {
     const treatmentStatus = latestActiveIllnessRecord.value?.details?.treatment_status
-    return treatmentStatus || s.detail || latestActiveIllnessRecord.value?.notes || '查看症状与治疗状态'
+    const symptomSummary = illnessSymptomSummary(latestActiveIllnessRecord.value)
+    return symptomSummary || treatmentStatus || s.detail || latestActiveIllnessRecord.value?.notes || '查看症状与治疗状态'
   }
   if (s.type === '发情中') {
     const startTs = activeCycle.value?.start_date || activeCycle.value?.created_at

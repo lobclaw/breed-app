@@ -99,6 +99,7 @@
 - latest token 保护
 - suppression 防闪回
 - 本地承接与后台刷新
+- 首页任务日历继续复用 `BDateTimePicker`，通过纯日期模式与日期计数缓存展示任务红点
 - 统一处理路由、云调用、banner/弱提示
 
 首页不应该：

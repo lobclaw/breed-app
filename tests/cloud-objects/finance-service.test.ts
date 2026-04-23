@@ -503,6 +503,114 @@ describe('finance-service', () => {
     })
   })
 
+  it('历史收入类型应按当前口径归一后参与筛选、统计与详情展示', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+    seedCollection('incomes', [
+      {
+        _id: 'income_deposit_legacy',
+        family_id: familyId,
+        dog_id: 'dog_1',
+        type: '定金',
+        amount: 500,
+        deleted_at: null,
+        date: aprilTs,
+      },
+      {
+        _id: 'income_adoption_legacy',
+        family_id: familyId,
+        dog_id: 'dog_2',
+        type: '领养费',
+        amount: 800,
+        deleted_at: null,
+        date: aprilTs,
+      },
+      {
+        _id: 'income_service_legacy',
+        family_id: familyId,
+        type: '配种费收入',
+        amount: 300,
+        deleted_at: null,
+        date: aprilTs,
+      },
+    ])
+
+    const listResult = await financeService.getTransactionList.call(ctx, {
+      type: 'income',
+      incomeTypes: ['定金保留', '领养', '其他'],
+      year: 2026,
+      month: 4,
+    })
+    const summaryResult = await financeService.getFinancialSummary.call(ctx, {
+      period: 'monthly',
+      year: 2026,
+      month: 4,
+      incomeTypes: ['定金保留', '领养', '其他'],
+    })
+    const detailResult = await financeService.getIncomeDetail.call(ctx, { id: 'income_adoption_legacy' })
+
+    expect(listResult.data.map((item: any) => item.type).sort()).toEqual(['定金保留', '领养', '其他'].sort())
+    expect(summaryResult.data.incomeBreakdown).toEqual({
+      定金保留: 500,
+      领养: 800,
+      其他: 300,
+    })
+    expect(detailResult.data).toMatchObject({
+      type: '领养',
+      type_label: '领养',
+    })
+  })
+
+  it('退款应作为独立收入类型参与筛选与统计', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+    seedCollection('incomes', [
+      {
+        _id: 'income_sale',
+        family_id: familyId,
+        dog_id: 'dog_1',
+        type: '销售',
+        amount: 3000,
+        deleted_at: null,
+        date: aprilTs,
+      },
+      {
+        _id: 'income_refund',
+        family_id: familyId,
+        dog_id: 'dog_1',
+        type: '退款',
+        amount: -600,
+        deleted_at: null,
+        date: aprilTs,
+      },
+    ])
+
+    const listResult = await financeService.getTransactionList.call(ctx, {
+      type: 'income',
+      incomeTypes: ['退款'],
+      year: 2026,
+      month: 4,
+    })
+    const summaryResult = await financeService.getFinancialSummary.call(ctx, {
+      period: 'monthly',
+      year: 2026,
+      month: 4,
+      incomeTypes: ['退款'],
+    })
+
+    expect(listResult.data).toHaveLength(1)
+    expect(listResult.data[0]).toMatchObject({
+      _id: 'income_refund',
+      type: '退款',
+    })
+    expect(summaryResult.data).toMatchObject({
+      totalIncome: -600,
+      incomeBreakdown: {
+        退款: -600,
+      },
+    })
+  })
+
   it('单窝利润应避免同一笔生产费用在周期和窝级别重复统计', async () => {
     const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
 

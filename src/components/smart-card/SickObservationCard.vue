@@ -37,6 +37,7 @@
         <text class="sick-row__name">{{ dog.dogName }}</text>
         <view class="sick-row__info">
           <text v-if="dog.illness" class="sick-row__illness">{{ dog.illness }}</text>
+          <text v-if="dog.symptomSummary" class="sick-row__symptoms">{{ dog.symptomSummary }}</text>
           <text class="sick-row__badge sick-row__badge--amber">{{ dog.treatmentStatus || '观察中' }}</text>
           <text class="sick-row__days">第{{ dog.daysSick || 1 }}天</text>
         </view>
@@ -206,6 +207,7 @@ function onBatchAction() {
   flex-wrap: wrap; min-width: 0;
 }
 .sick-row__illness { font-size: 12px; font-weight: 700; color: var(--red); }
+.sick-row__symptoms { font-size: 11px; color: var(--text-3); }
 .sick-row__badge {
   font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 4px;
   &--amber { background: var(--amber-soft); color: var(--amber); }

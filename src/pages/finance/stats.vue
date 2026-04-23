@@ -56,12 +56,10 @@
         <view class="summary-card summary-card--income">
           <text class="summary-card__label">总收入</text>
           <text class="summary-card__value summary-card__value--income">{{ formatFinanceAmount(data.totalIncome, { scene: 'report' }) }}</text>
-          <text class="summary-card__subtext">{{ periodSummaryHint }}</text>
         </view>
         <view class="summary-card summary-card--expense">
           <text class="summary-card__label">总支出</text>
           <text class="summary-card__value summary-card__value--expense">{{ formatFinanceAmount(-data.totalExpense, { scene: 'report' }) }}</text>
-          <text class="summary-card__subtext">{{ periodSummaryHint }}</text>
         </view>
       </view>
 
@@ -451,16 +449,11 @@ onShow(() => load())
   }
 
   &__rate,
-  &__subtext,
   &__hint {
     font-size: 12px;
     font-weight: 600;
     color: var(--text-3);
     display: block;
-  }
-
-  &__subtext {
-    margin-top: 6px;
   }
 
   &__hint {

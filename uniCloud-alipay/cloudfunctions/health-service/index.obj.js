@@ -115,6 +115,9 @@ function normalizeMedicationTaskDetail(task, protocolName) {
 
   return {
     ...task,
+    source_record_id: typeof task?.source_record_id === 'string' && task.source_record_id.trim()
+      ? task.source_record_id.trim()
+      : null,
     start_date: startDate,
     end_date: endDate,
     status: mapMedicationStatus(task?.status),
@@ -213,10 +216,41 @@ function validateDetails(type, details) {
   if (type === 'deworming' && !details.deworming_type) {
     throw new Error('请选择驱虫类型')
   }
+  if (type === 'illness' && !getIllnessPrimaryCondition(details)) {
+    throw new Error('请填写主疾病')
+  }
 }
 
 function normalizeIllnessCondition(condition) {
   return typeof condition === 'string' ? condition.trim() : ''
+}
+
+function normalizeIllnessSymptomTags(value) {
+  if (!Array.isArray(value)) return []
+  return [...new Set(value
+    .map(item => typeof item === 'string' ? item.trim() : '')
+    .filter(Boolean))]
+}
+
+function getIllnessPrimaryCondition(source) {
+  const details = source?.details && typeof source.details === 'object' ? source.details : source
+  return normalizeIllnessCondition(details?.primary_condition || details?.condition)
+}
+
+function normalizeIllnessDetails(details = {}) {
+  const normalized = details && typeof details === 'object' ? { ...details } : {}
+  const primaryCondition = getIllnessPrimaryCondition(normalized)
+
+  if (primaryCondition) {
+    normalized.primary_condition = primaryCondition
+    normalized.condition = primaryCondition
+  } else {
+    delete normalized.primary_condition
+    delete normalized.condition
+  }
+
+  normalized.symptom_tags = normalizeIllnessSymptomTags(normalized.symptom_tags)
+  return normalized
 }
 
 function isActiveIllnessRecord(record) {
@@ -240,13 +274,13 @@ async function findDuplicateActiveIllnesses(familyId, { dogIds = [], condition, 
       family_id: familyId,
       dog_id: dbCmd.in(dogIds),
       type: 'illness',
-      'details.condition': normalizedCondition,
       deleted_at: null,
     })
     .get()
 
   return (records || [])
     .filter(record => record._id !== excludeRecordId)
+    .filter(record => getIllnessPrimaryCondition(record) === normalizedCondition)
     .filter(isActiveIllnessRecord)
 }
 
@@ -272,7 +306,7 @@ async function cleanupDuplicateIllnessesForFamily(familyId, { dogId } = {}) {
   const groups = new Map()
 
   for (const record of activeRecords) {
-    const condition = normalizeIllnessCondition(record.details?.condition || '生病中')
+    const condition = getIllnessPrimaryCondition(record) || '生病中'
     const key = `${record.dog_id}:${condition}`
     if (!groups.has(key)) groups.set(key, [])
     groups.get(key).push(record)
@@ -382,7 +416,7 @@ function getHealthVariantKey(type, details = {}) {
     return `deworming:${details.deworming_type || ''}:${details.drug_name || ''}`
   }
   if (type === 'illness') {
-    return `illness:${details.condition || ''}`
+    return `illness:${getIllnessPrimaryCondition(details) || ''}`
   }
   return type || ''
 }
@@ -422,7 +456,7 @@ function getHealthTaskTitle(type, details = {}) {
     return '驱虫'
   }
   if (type === 'illness') {
-    return `${details.condition || '疾病'}复查`
+    return `${getIllnessPrimaryCondition(details) || '疾病'}复查`
   }
   return type || '任务'
 }
@@ -549,7 +583,9 @@ async function generateReminders(familyId, type, data, dog, recordId, preloadedS
       family_id: familyId,
       postpone_count: 0,
       details: {
+        primary_condition: getIllnessPrimaryCondition(data.details || {}) || null,
         condition: data.details?.condition || null,
+        symptom_tags: normalizeIllnessSymptomTags(data.details?.symptom_tags),
         severity: data.details?.severity || null,
         treatment_status: data.details?.treatment_status || null,
       },
@@ -638,7 +674,7 @@ module.exports = {
         duplicates: duplicates.map(record => ({
           recordId: record._id,
           dogId: record.dog_id,
-          condition: normalizeIllnessCondition(record.details?.condition || '生病中'),
+          condition: getIllnessPrimaryCondition(record) || '生病中',
         })),
       },
     }
@@ -670,12 +706,16 @@ module.exports = {
     const dog = dogs[0]
 
     // 类型特有字段校验
-    validateDetails(data.type, data.details || {})
+    const normalizedDetails = data.type === 'illness'
+      ? normalizeIllnessDetails(data.details || {})
+      : (data.details || {})
 
-    if (data.type === 'illness' && (data.details?.treatment_status || '观察中') !== '已康复') {
+    validateDetails(data.type, normalizedDetails)
+
+    if (data.type === 'illness' && (normalizedDetails?.treatment_status || '观察中') !== '已康复') {
       await assertNoDuplicateActiveIllness(familyId, {
         dogIds: [data.dog_id],
-        condition: data.details?.condition,
+        condition: getIllnessPrimaryCondition(normalizedDetails),
       })
     }
 
@@ -687,7 +727,7 @@ module.exports = {
       date: data.date,
       cost: data.cost || null,
       notes: data.notes || null,
-      details: data.details || {},
+      details: normalizedDetails,
       created_by: this.uid,
       created_at: now,
       updated_at: now,
@@ -695,14 +735,14 @@ module.exports = {
     const { id: recordId } = await db.collection('health_records').add(recordData)
 
     // 保存自定义类型到家庭设置（如果是新类型）
-    await saveCustomType(familyId, data.type, data.details)
+    await saveCustomType(familyId, data.type, normalizedDetails)
 
     // 自动完成该犬同类型的 pending 待办（在创建新提醒之前）
-    const completedTasks = await autoCompletePendingTasks(familyId, data.dog_id, data.type, data.details)
+    const completedTasks = await autoCompletePendingTasks(familyId, data.dog_id, data.type, normalizedDetails)
 
     // 生成下次提醒任务（skip_reminder 时跳过）
     if (shouldCreateReminder(data)) {
-      await generateReminders(familyId, data.type, data, dog, recordId)
+      await generateReminders(familyId, data.type, { ...data, details: normalizedDetails }, dog, recordId)
     }
 
     // 如有费用 → 创建 expense
@@ -740,12 +780,16 @@ module.exports = {
     const familyId = this.familyId
     const uid = this.uid
 
-    validateDetails(data.type, data.details || {})
+    const normalizedDetails = data.type === 'illness'
+      ? normalizeIllnessDetails(data.details || {})
+      : (data.details || {})
 
-    if (data.type === 'illness' && (data.details?.treatment_status || '观察中') !== '已康复') {
+    validateDetails(data.type, normalizedDetails)
+
+    if (data.type === 'illness' && (normalizedDetails?.treatment_status || '观察中') !== '已康复') {
       await assertNoDuplicateActiveIllness(familyId, {
         dogIds: data.dog_ids,
-        condition: data.details?.condition,
+        condition: getIllnessPrimaryCondition(normalizedDetails),
       })
     }
 
@@ -759,7 +803,7 @@ module.exports = {
     const settings = await getFamilySettings(familyId)
 
     // ③ 一次保存自定义类型
-    await saveCustomType(familyId, data.type, data.details)
+    await saveCustomType(familyId, data.type, normalizedDetails)
 
     // ④ 费用分摊
     const totalCost = data.cost || null
@@ -776,7 +820,7 @@ module.exports = {
         date: data.date,
         cost: perDogCost && perDogCost > 0 ? perDogCost : null,
         notes: data.notes || null,
-        details: data.details || {},
+        details: normalizedDetails,
         created_by: uid,
         created_at: now,
         updated_at: now,
@@ -784,11 +828,11 @@ module.exports = {
       const { id: recordId } = await db.collection('health_records').add(recordData)
 
       // 自动完成该犬同类型的 pending 待办
-      const completedTasks = await autoCompletePendingTasks(familyId, dog._id, data.type, data.details)
+      const completedTasks = await autoCompletePendingTasks(familyId, dog._id, data.type, normalizedDetails)
 
       // 生成下次提醒任务（传入预加载的 settings）
       if (shouldCreateReminder(data)) {
-        await generateReminders(familyId, data.type, data, dog, recordId, settings)
+        await generateReminders(familyId, data.type, { ...data, details: normalizedDetails }, dog, recordId, settings)
       }
 
       // 创建费用
@@ -836,7 +880,15 @@ module.exports = {
       .orderBy('date', 'desc')
       .get()
 
-    return { data: records }
+    return {
+      data: (records || []).map((record) => {
+        if (record?.type !== 'illness') return record
+        return {
+          ...record,
+          details: normalizeIllnessDetails(record.details || {}),
+        }
+      })
+    }
   },
 
   /**
@@ -987,6 +1039,7 @@ module.exports = {
         dog_id: dog._id,
         dog_name: dog.name,
         family_id: familyId,
+        source_record_id: data.illnessRecordId || null,
         protocol_id: data.protocol_id || null,
         drug_name: data.drug_name,
         dosage: data.dosage || null,
@@ -1093,6 +1146,7 @@ module.exports = {
       dog_id: data.dog_id,
       dog_name: dog.name,
       family_id: familyId,
+      source_record_id: data.illnessRecordId || null,
       protocol_id: data.protocol_id || null,
       drug_name: data.drug_name,
       dosage: data.dosage || null,
@@ -1647,6 +1701,10 @@ module.exports = {
       }
     }
 
+    if (record.type === 'illness') {
+      record.details = normalizeIllnessDetails(record.details || {})
+    }
+
     return record
   },
 
@@ -1662,9 +1720,13 @@ module.exports = {
     if (!records || records.length === 0) throw new Error('记录不存在')
     const record = records[0]
 
-    if (record.type === 'illness' && details !== undefined) {
-      const nextCondition = normalizeIllnessCondition(details?.condition || record.details?.condition)
-      const nextTreatmentStatus = details?.treatment_status || record.details?.treatment_status || '观察中'
+    const normalizedDetails = record.type === 'illness' && details !== undefined
+      ? normalizeIllnessDetails(details)
+      : details
+
+    if (record.type === 'illness' && normalizedDetails !== undefined) {
+      const nextCondition = getIllnessPrimaryCondition(normalizedDetails) || getIllnessPrimaryCondition(record)
+      const nextTreatmentStatus = normalizedDetails?.treatment_status || record.details?.treatment_status || '观察中'
       if (nextCondition && nextTreatmentStatus !== '已康复') {
         await assertNoDuplicateActiveIllness(this.familyId, {
           dogIds: [record.dog_id],
@@ -1678,7 +1740,7 @@ module.exports = {
     if (date !== undefined) updateData.date = date
     if (cost !== undefined) updateData.cost = cost
     if (notes !== undefined) updateData.notes = notes
-    if (details !== undefined) updateData.details = details
+    if (normalizedDetails !== undefined) updateData.details = normalizedDetails
 
     await db.collection('health_records').doc(id).update(updateData)
 

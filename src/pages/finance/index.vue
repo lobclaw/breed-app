@@ -504,10 +504,13 @@ import {
   buildExpenseCategoryGroups,
   FINANCE_DATE_RANGE_OPTIONS,
   FINANCE_SORT_OPTIONS,
-  INCOME_TYPES,
+  INCOME_FILTER_TYPES,
+  getExpenseCategoryMeta,
   getExpenseCategoryGroupColor,
   getExpenseCategoryGroupLabel,
+  getIncomeTypeMeta,
   groupExpenseCategories,
+  normalizeIncomeType,
   normalizeExpenseCategories,
 } from '@/constants/financeCategories'
 import type { ExpenseCategory, ExpenseCategoryGroup, ExpenseCategoryGroupKey } from '@/types/finance'
@@ -551,7 +554,7 @@ const typeFilters: Array<{ label: string; value: FinanceFilterType }> = [
 
 const dateRangeOptions = FINANCE_DATE_RANGE_OPTIONS
 const sortOptions = FINANCE_SORT_OPTIONS
-const incomeTypeOptions = [...INCOME_TYPES]
+const incomeTypeOptions = [...INCOME_FILTER_TYPES]
 
 const transactions = ref<any[]>([])
 const loading = ref(false)
@@ -654,7 +657,10 @@ function uniqStrings(values: string[] = []) {
 function normalizeFilters(input: FinanceFilterState): FinanceFilterState {
   const next = {
     ...input,
-    selectedIncomeTypes: uniqStrings(input.selectedIncomeTypes).filter(type => incomeTypeOptions.includes(type as any)),
+    selectedIncomeTypes: uniqStrings(input.selectedIncomeTypes)
+      .map(type => normalizeIncomeType(type))
+      .filter((type, index, list) => list.indexOf(type) === index)
+      .filter(type => incomeTypeOptions.includes(type as any)),
     selectedExpenseGroups: uniqStrings(input.selectedExpenseGroups).filter((group): group is ExpenseCategoryGroupKey => {
       return expenseGroups.value.some(item => item.key === group)
     }),
@@ -1018,17 +1024,9 @@ function toggleExpenseGroupExpansion(groupKey: ExpenseCategoryGroupKey) {
 
 function getFlowIcon(tx: any) {
   if (tx._txType === 'income') {
-    if (tx.type === '定金保留') return 'savings'
-    return 'paid'
+    return getIncomeTypeMeta(tx.type).icon
   }
-  const map: Record<string, string> = {
-    食品: 'restaurant',
-    营养品: 'medication',
-    医疗: 'local_hospital',
-    配种费: 'favorite',
-    固定开销: 'home',
-  }
-  return map[tx.category] || 'receipt_long'
+  return getExpenseCategoryMeta(tx.category).icon || 'receipt_long'
 }
 
 function getFlowIconColor(tx: any): 'red' | 'amber' | 'green' | 'blue' | 'plum' | 'rose' | 'teal' {
@@ -1036,7 +1034,7 @@ function getFlowIconColor(tx: any): 'red' | 'amber' | 'green' | 'blue' | 'plum' 
 }
 
 function getFlowTitle(tx: any) {
-  return tx._txType === 'expense' ? tx.category : tx.type
+  return tx._txType === 'expense' ? tx.category : normalizeIncomeType(tx.type)
 }
 
 function getFlowSubTitle(tx: any) {

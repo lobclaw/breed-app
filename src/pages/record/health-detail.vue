@@ -149,6 +149,14 @@
 
             <!-- 疾病特有字段 -->
             <template v-if="record.type === 'illness'">
+              <view class="info-row">
+                <text class="info-row-label">主疾病</text>
+                <text class="info-row-value">{{ illnessPrimaryCondition || '—' }}</text>
+              </view>
+              <view class="info-row" v-if="illnessSymptomSummary">
+                <text class="info-row-label">症状表现</text>
+                <text class="info-row-value">{{ illnessSymptomSummary }}</text>
+              </view>
               <view class="info-row" v-if="record.details?.severity">
                 <text class="info-row-label">严重程度</text>
                 <view class="info-row-value">
@@ -306,6 +314,20 @@ const severityColor = computed(() => {
   if (s === '中等') return 'amber'
   return 'green'
 })
+const illnessPrimaryCondition = computed(() => {
+  const details = record.value?.details || {}
+  return String(details.primary_condition || details.condition || '').trim()
+})
+const illnessSymptomSummary = computed(() => {
+  const tags = Array.isArray(record.value?.details?.symptom_tags)
+    ? record.value.details.symptom_tags
+      .map((item: unknown) => typeof item === 'string' ? item.trim() : '')
+      .filter(Boolean)
+    : []
+  if (tags.length === 0) return ''
+  if (tags.length <= 2) return tags.join(' / ')
+  return `${tags.slice(0, 2).join(' / ')} 等${tags.length}项`
+})
 
 const summaryTitle = computed(() => {
   if (record.value?.type === 'vaccination') return record.value?.details?.vaccine_type || record.value?.details?.vaccine_name || '疫苗记录'
@@ -316,7 +338,8 @@ const summaryTitle = computed(() => {
 const summarySubtitle = computed(() => {
   if (record.value?.type === 'illness') {
     const parts = [
-      record.value?.details?.condition || '疾病',
+      illnessPrimaryCondition.value || '疾病',
+      illnessSymptomSummary.value || '',
       record.value?.details?.severity || '',
       record.value?.date ? `发病 ${formatDate(record.value.date)}` : '',
     ].filter(Boolean)
@@ -325,7 +348,7 @@ const summarySubtitle = computed(() => {
   return `${record.value?.dog_name || '未知犬只'} · ${formatDate(record.value?.date)}`
 })
 const illnessTitleText = computed(() => {
-  const condition = record.value?.details?.condition || '疾病'
+  const condition = illnessPrimaryCondition.value || '疾病'
   const courseDay = getIllnessCourseDay(record.value?.date)
   return courseDay ? `${condition}第${courseDay}天` : condition
 })

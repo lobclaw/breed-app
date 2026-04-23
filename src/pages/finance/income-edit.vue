@@ -190,6 +190,7 @@ import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BIncomeTypeSheet from '@/components/form/BIncomeTypeSheet.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
+import { INCOME_TYPES, getIncomeTypeMeta } from '@/constants/financeCategories'
 
 let incomeId = ''
 
@@ -211,16 +212,8 @@ const form = reactive({
   notes: '',
 })
 
-const incomeTypes = ['销售', '定金保留', '领养', '其他']
-
-const typeIcons: Record<string, string> = {
-  '销售': 'sell',
-  '定金保留': 'savings',
-  '领养': 'volunteer_activism',
-  '其他': 'more_horiz',
-}
-
-const typeIcon = computed(() => typeIcons[form.type] || 'more_horiz')
+const incomeTypes: string[] = [...INCOME_TYPES]
+const typeIcon = computed(() => getIncomeTypeMeta(form.type).icon)
 
 function readRecentIncomeTypes() {
   try {

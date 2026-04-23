@@ -201,7 +201,11 @@ import { ref, reactive, computed } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
-import { DEFAULT_EXPENSE_CATEGORIES, normalizeExpenseCategories } from '@/constants/financeCategories'
+import {
+  DEFAULT_EXPENSE_CATEGORIES,
+  getExpenseCategoryMeta,
+  normalizeExpenseCategories,
+} from '@/constants/financeCategories'
 import { buildTimestampFromDayOffset, formatDateInputValue } from '@/utils/date'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
@@ -241,19 +245,7 @@ const linkedDogs = ref<any[]>([])
 const linkedLitter = ref<any | null>(null)
 const linkedCycle = ref<any | null>(null)
 
-const categoryIcons: Record<string, string> = {
-  '食品': 'restaurant',
-  '营养品': 'medication',
-  '消耗品': 'shopping_bag',
-  '日常用品': 'home',
-  '固定开销': 'pin_drop',
-  '交通': 'directions_car',
-  '医疗': 'local_hospital',
-  '配种费': 'favorite',
-  '其他': 'more_horiz',
-}
-
-const categoryIcon = computed(() => categoryIcons[form.category] || 'more_horiz')
+const categoryIcon = computed(() => getExpenseCategoryMeta(form.category).icon)
 const currentLinkText = computed(() => {
   if (linkedDogs.value.length) {
     return linkedDogs.value.length === 1 ? linkedDogs.value[0].name : `${linkedDogs.value.length}只犬`

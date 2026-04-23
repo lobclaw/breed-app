@@ -552,7 +552,7 @@ describe('task-service', () => {
       details: { drug_name: drugName, dosage: '2', dosage_unit: 'mg', method: '口服', frequency: 1, day, total_days: totalDays },
     })
 
-    const makeIllness = (dogId: string, condition: string, treatmentStatus = '观察中') => ({
+    const makeIllness = (dogId: string, condition: string, treatmentStatus = '观察中', symptomTags: string[] = []) => ({
       _id: `ill_${dogId}_${condition}`,
       dog_id: dogId,
       dog_name: dogId,
@@ -560,7 +560,7 @@ describe('task-service', () => {
       date: now - 2 * DAY_MS,
       family_id: familyId,
       created_at: now - 2 * DAY_MS,
-      details: { condition, treatment_status: treatmentStatus, severity: '轻微' },
+      details: { primary_condition: condition, condition, symptom_tags: symptomTags, treatment_status: treatmentStatus, severity: '轻微' },
     })
 
     it('单犬：观察中疾病 → 仅出现在疾病观察卡', () => {
@@ -592,6 +592,40 @@ describe('task-service', () => {
       const cardTypes = cards.map((c: any) => c.cardType)
       expect(cardTypes).toContain('medication')
       expect(cardTypes).toContain('sick_observation')
+    })
+
+    it('单犬多疾病时，应优先按 source_record_id 关联到正确疾病', () => {
+      const illnesses = [
+        makeIllness('肉肉', '感冒', '治疗中'),
+        makeIllness('肉肉', '皮肤病', '观察中', ['抓挠', '皮屑']),
+      ]
+      const medItems = [{
+        _id: 'med_linked_1',
+        dog_id: '肉肉',
+        dog_name: '肉肉',
+        drug_name: '药A',
+        dosage: '2',
+        dosage_unit: 'mg',
+        method: '口服',
+        frequency: 1,
+        duration_days: 5,
+        currentDay: 1,
+        todayDoses: 0,
+        isDoneToday: false,
+        created_at: now,
+        source_record_id: 'ill_肉肉_感冒',
+      }]
+
+      const cards = mergeTasks([], [], illnesses, medItems)
+      const medCard = cards.find((card: any) => card.cardType === 'medication')
+      const sickCard = cards.find((card: any) => card.cardType === 'sick_observation')
+
+      expect(medCard?.dogs[0].state).toBe('sick_with_med')
+      expect(medCard?.dogs[0].illness).toBe('感冒')
+      expect(medCard?.dogs[0].illnessId).toBe('ill_肉肉_感冒')
+      expect(sickCard?.dogs).toHaveLength(1)
+      expect(sickCard?.dogs[0].illness).toBe('皮肤病')
+      expect(sickCard?.dogs[0].symptomSummary).toBe('抓挠 / 皮屑')
     })
 
     it('单犬：两个活跃用药 → 用药卡显示"2种用药"', () => {
@@ -1099,6 +1133,55 @@ describe('task-service', () => {
       expect(dateCountRes.data[targetDay]).toBe(1)
       expect(weekRes.data[targetDay].sections.workflow).toHaveLength(1)
       expect(weekRes.data[targetDay].sections.workflow[0].tasks[0]._id).toBe('flow_duplicate_new')
+    })
+
+    it('月历范围查询时，同一周期残留重复繁育里程碑也应只返回一个红点', async () => {
+      const now = Date.now()
+      const todayStart = new Date(now)
+      todayStart.setHours(0, 0, 0, 0)
+      const targetDay = todayStart.getTime() + 10 * DAY_MS
+      const monthStart = new Date(targetDay)
+      monthStart.setDate(1)
+      const nextMonthStart = new Date(monthStart)
+      nextMonthStart.setMonth(nextMonthStart.getMonth() + 1)
+
+      seedCollection('tasks', [
+        {
+          _id: 'flow_month_duplicate_old',
+          family_id: familyId,
+          dog_id: 'dog_1',
+          dog_name: '花花',
+          cycle_id: 'cycle_month_duplicate_1',
+          type: 'breeding_milestone',
+          title: '花花 · 建议卵泡检查',
+          details: { step_type: 'follicle_check' },
+          status: 'pending',
+          due_date: targetDay,
+          created_at: now - 2000,
+          updated_at: now - 2000,
+        },
+        {
+          _id: 'flow_month_duplicate_new',
+          family_id: familyId,
+          dog_id: 'dog_1',
+          dog_name: '花花',
+          cycle_id: 'cycle_month_duplicate_1',
+          type: 'breeding_milestone',
+          title: '花花 · 建议卵泡检查',
+          details: { step_type: 'follicle_check' },
+          status: 'pending',
+          due_date: targetDay,
+          created_at: now - 1000,
+          updated_at: now - 1000,
+        },
+      ])
+      seedCollection('health_records', [])
+      seedCollection('medication_tasks', [])
+
+      const ctx = createCloudObjectContext({ familyId })
+      const res = await taskService.getDateCounts.call(ctx, monthStart.getTime(), nextMonthStart.getTime() - 1)
+
+      expect(res.data[targetDay]).toBe(1)
     })
 
     it('超过建议日期的繁育节点仍应留在繁育区，不进入逾期区', async () => {
