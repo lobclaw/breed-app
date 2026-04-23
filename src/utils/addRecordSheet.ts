@@ -5,6 +5,8 @@ import {
   HEALTH_RECORD_ITEMS,
   MEDICATION_RECORD_ITEMS,
 } from '@/utils/iconRegistry'
+import type { CycleStatus } from '@/types/breeding'
+import type { DeriveStatus, DogGender, DogRole } from '@/types/dog'
 
 export type AddRecordItem = {
   icon: string
@@ -23,6 +25,16 @@ export type AddRecordGroup = {
   title: string
   hint?: string
   items: AddRecordItem[]
+}
+
+type DogDetailBreedingStatus = Extract<DeriveStatus['type'], '发情中' | '怀孕中' | '哺乳中'>
+
+type CreateDogDetailAddRecordGroupsOptions = {
+  role?: DogRole | string | null
+  gender?: DogGender | string | null
+  activeCycleStatus?: CycleStatus | string | null
+  statuses?: DeriveStatus[]
+  includeBreedingHint?: boolean
 }
 
 const breedingItems: AddRecordItem[] = BREEDING_RECORD_ITEMS.map(item => ({
@@ -76,6 +88,81 @@ export function createAllAddRecordGroups({
       hint: includeBreedingHint ? '将自动带入当前周期' : '',
       items: breedingItems,
     })
+  }
+
+  groups.push(
+    {
+      key: 'health',
+      title: '健康',
+      items: healthItems,
+    },
+    {
+      key: 'medication',
+      title: '用药',
+      items: medicationItems,
+    },
+  )
+
+  return groups
+}
+
+function resolveDogDetailBreedingStatus({
+  activeCycleStatus,
+  statuses = [],
+}: Pick<CreateDogDetailAddRecordGroupsOptions, 'activeCycleStatus' | 'statuses'>): DogDetailBreedingStatus | '' {
+  if (activeCycleStatus === '发情中' || activeCycleStatus === '怀孕中') {
+    return activeCycleStatus
+  }
+
+  const breedingStatuses = Array.isArray(statuses)
+    ? statuses.map(status => status?.type).filter(Boolean)
+    : []
+
+  if (breedingStatuses.includes('怀孕中')) return '怀孕中'
+  if (breedingStatuses.includes('哺乳中')) return '哺乳中'
+  if (breedingStatuses.includes('发情中')) return '发情中'
+  return ''
+}
+
+function getDogDetailBreedingPages(status: DogDetailBreedingStatus | '') {
+  if (status === '发情中') {
+    return ['heat-observation', 'breeding-follicle', 'breeding-mating', 'breeding-termination']
+  }
+
+  if (status === '怀孕中') {
+    return ['breeding-pregnancy', 'breeding-prenatal', 'breeding-prelabor', 'birth-wizard', 'breeding-termination']
+  }
+
+  if (status === '哺乳中') {
+    return []
+  }
+
+  return ['breeding-heat']
+}
+
+export function createDogDetailAddRecordGroups({
+  role,
+  gender,
+  activeCycleStatus,
+  statuses = [],
+  includeBreedingHint = false,
+}: CreateDogDetailAddRecordGroupsOptions): AddRecordGroup[] {
+  const groups: AddRecordGroup[] = []
+  const allowBreeding = role === '种狗' && gender === '母'
+
+  if (allowBreeding) {
+    const breedingStatus = resolveDogDetailBreedingStatus({ activeCycleStatus, statuses })
+    const breedingPages = getDogDetailBreedingPages(breedingStatus)
+    const filteredBreedingItems = breedingItems.filter(item => breedingPages.includes(item.page))
+
+    if (filteredBreedingItems.length > 0) {
+      groups.push({
+        key: 'breeding',
+        title: '繁育',
+        hint: includeBreedingHint && breedingStatus !== '' ? '将自动带入当前周期' : '',
+        items: filteredBreedingItems,
+      })
+    }
   }
 
   groups.push(

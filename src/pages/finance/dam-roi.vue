@@ -99,7 +99,7 @@
               <text class="roi-conclusion__note">{{ roiConclusionNote }}</text>
             </view>
             <view class="roi-conclusion__values">
-              <text class="roi-conclusion__value" :class="roiToneClass">{{ formatSignedMoney(roiData.netProfit) }}</text>
+              <text class="roi-conclusion__value" :class="roiToneClass">{{ formatFinanceAmount(roiData.netProfit, { scene: 'report' }) }}</text>
               <text class="roi-conclusion__roi" :class="roiToneClass">{{ formatPercent(roiData.roiPercent) }}</text>
             </view>
           </view>
@@ -179,6 +179,7 @@ import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
+import { formatFinanceAmount } from '@/utils/financeDisplay'
 
 const selectedDam = ref<any>(null)
 const showDamPickerVisible = ref(false)
@@ -219,13 +220,13 @@ const totalInvestment = computed(() => {
 
 const roiHeadline = computed(() => {
   if (!roiData.value) return ''
-  return formatSignedMoney(roiData.value.netProfit)
+  return formatFinanceAmount(roiData.value.netProfit, { scene: 'report' })
 })
 
 const roiInsight = computed(() => {
   if (!roiData.value) return ''
-  if (roiData.value.netProfit > 0) return `当前累计已超过回本线 ¥${formatMoney(roiData.value.netProfit)}`
-  if (roiData.value.netProfit < 0) return `距离回本还差 ¥${formatMoney(Math.abs(roiData.value.netProfit))}`
+  if (roiData.value.netProfit > 0) return `当前累计已超过回本线 ${formatFinanceAmount(roiData.value.netProfit, { scene: 'report', absolute: true })}`
+  if (roiData.value.netProfit < 0) return `距离回本还差 ${formatFinanceAmount(roiData.value.netProfit, { scene: 'report', absolute: true })}`
   return '当前累计刚好持平'
 })
 
@@ -253,20 +254,20 @@ const breakdownSections = computed(() => {
       key: 'investment',
       title: '累计投入',
       tone: 'negative',
-      totalText: `-¥${formatMoney(totalInvestment.value)}`,
+      totalText: formatFinanceAmount(-totalInvestment.value, { scene: 'report' }),
       items: [
-        { label: '购入成本', value: `-¥${formatMoney(roiData.value.purchaseCost)}`, tone: 'negative' },
-        { label: '繁育投入', value: `-¥${formatMoney(roiData.value.totalBreedingCost)}`, tone: 'negative' },
-        { label: '健康相关支出', value: `-¥${formatMoney(roiData.value.healthCost)}`, tone: 'negative' },
+        { label: '购入成本', value: formatFinanceAmount(-roiData.value.purchaseCost, { scene: 'report' }), tone: 'negative' },
+        { label: '繁育投入', value: formatFinanceAmount(-roiData.value.totalBreedingCost, { scene: 'report' }), tone: 'negative' },
+        { label: '健康相关支出', value: formatFinanceAmount(-roiData.value.healthCost, { scene: 'report' }), tone: 'negative' },
       ],
     },
     {
       key: 'income',
       title: '累计收入',
       tone: 'positive',
-      totalText: `+¥${formatMoney(roiData.value.totalBreedingIncome)}`,
+      totalText: formatFinanceAmount(roiData.value.totalBreedingIncome, { scene: 'report' }),
       items: [
-        { label: '繁育收入', value: `+¥${formatMoney(roiData.value.totalBreedingIncome)}`, tone: 'positive' },
+        { label: '繁育收入', value: formatFinanceAmount(roiData.value.totalBreedingIncome, { scene: 'report' }), tone: 'positive' },
       ],
     },
   ]
@@ -282,20 +283,20 @@ const litterList = computed(() => {
 
   return sortedLitters.map((litter: any) => {
     let profitTone = 'positive'
-    let profitText = `+¥${formatMoney(litter.profit)}`
+    let profitText = formatFinanceAmount(litter.profit, { scene: 'report' })
     let profitHint = '当前累计盈利'
     let statusTone = 'positive'
     let statusLabel = '已结算'
 
     if (litter.status === 'failed') {
       profitTone = 'negative'
-      profitText = `-¥${formatMoney(Math.abs(litter.profit))}`
+      profitText = formatFinanceAmount(litter.profit, { scene: 'report' })
       profitHint = '当前累计亏损'
       statusTone = 'negative'
       statusLabel = '亏损'
     } else if (litter.status === 'in_progress') {
       profitTone = 'neutral'
-      profitText = `${litter.profit >= 0 ? '暂估 +¥' : '暂估 -¥'}${formatMoney(Math.abs(litter.profit))}`
+      profitText = `暂估 ${formatFinanceAmount(litter.profit, { scene: 'report' })}`
       profitHint = '当前仍在进行中'
       statusTone = 'neutral'
       statusLabel = '进行中'
@@ -314,17 +315,6 @@ const litterList = computed(() => {
     }
   })
 })
-
-function formatMoney(val: number): string {
-  if (!val && val !== 0) return '0'
-  return val.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
-}
-
-function formatSignedMoney(val: number): string {
-  if (!val) return '¥0'
-  const sign = val > 0 ? '+' : '-'
-  return `${sign}¥${formatMoney(Math.abs(val))}`
-}
 
 function formatPercent(val: number): string {
   if (!val) return '0%'

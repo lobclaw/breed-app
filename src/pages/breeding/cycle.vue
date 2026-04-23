@@ -1,13 +1,103 @@
 <template>
   <view class="page">
     <!-- 骨架屏 -->
-    <BSkeleton v-if="!cycle && loading" :rows="4" />
+    <template v-if="!cycle && loading">
+      <BPageHeader :title="pageTitle">
+        <template #right>
+          <view class="primary-page-header__actions">
+            <view class="cycle-skeleton-action cycle-skeleton-action--primary" />
+            <view class="cycle-skeleton-action" />
+          </view>
+        </template>
+      </BPageHeader>
+
+      <view class="card-feed cycle-skeleton-feed">
+        <view class="cycle-skeleton-card cycle-skeleton-card--summary">
+          <view class="dam-row">
+            <view class="cycle-skeleton cycle-skeleton--avatar" />
+            <view class="dam-info">
+              <view class="dam-title-row">
+                <view class="cycle-skeleton cycle-skeleton--title" />
+                <view class="cycle-skeleton cycle-skeleton--pill" />
+              </view>
+              <view class="cycle-skeleton cycle-skeleton--sub" />
+            </view>
+          </view>
+          <view class="info-rows">
+            <view v-for="row in 5" :key="`cycle-summary-${row}`" class="info-row">
+              <view class="cycle-skeleton cycle-skeleton--label" :class="{ 'cycle-skeleton--label-short': row > 3 }" />
+              <view class="cycle-skeleton cycle-skeleton--value" :class="{ 'cycle-skeleton--value-strong': row === 4 }" />
+            </view>
+          </view>
+        </view>
+
+        <view class="cycle-skeleton-section">
+          <view class="cycle-skeleton-section__dot cycle-skeleton-section__dot--amber" />
+          <view class="cycle-skeleton cycle-skeleton--section-label" />
+        </view>
+        <view class="cycle-skeleton-card cycle-skeleton-card--cost">
+          <view class="cost-row">
+            <view class="cycle-skeleton cycle-skeleton--cost-label" />
+            <view class="cycle-skeleton cycle-skeleton--cost-value" />
+          </view>
+          <view class="cost-divider" />
+          <view class="cost-row" style="padding-top: 6px;">
+            <view class="cycle-skeleton cycle-skeleton--cost-label cycle-skeleton--cost-label-strong" />
+            <view class="cycle-skeleton cycle-skeleton--cost-total" />
+          </view>
+        </view>
+
+        <view class="cycle-skeleton-section">
+          <view class="cycle-skeleton-section__dot cycle-skeleton-section__dot--teal" />
+          <view class="cycle-skeleton cycle-skeleton--section-label cycle-skeleton--section-label-wide" />
+        </view>
+        <view class="cycle-skeleton-timeline">
+          <view
+            v-for="item in 3"
+            :key="`cycle-timeline-${item}`"
+            class="cycle-skeleton-timeline-item"
+          >
+            <view class="cycle-skeleton-timeline-track">
+              <view
+                class="cycle-skeleton-timeline-dot"
+                :class="{
+                  'cycle-skeleton-timeline-dot--current': item === 1,
+                  'cycle-skeleton-timeline-dot--rose': item === 2,
+                  'cycle-skeleton-timeline-dot--teal': item === 3,
+                }"
+              />
+              <view v-if="item < 3" class="cycle-skeleton-timeline-line" />
+            </view>
+            <view class="cycle-skeleton-card cycle-skeleton-card--timeline">
+              <view class="timeline-head">
+                <view class="cycle-skeleton cycle-skeleton--timeline-date" />
+              </view>
+              <view class="cycle-skeleton-timeline-main">
+                <view class="cycle-skeleton-timeline-copy">
+                  <view class="cycle-skeleton cycle-skeleton--timeline-title" />
+                  <view class="cycle-skeleton cycle-skeleton--timeline-detail" />
+                  <view v-if="item === 1" class="cycle-skeleton cycle-skeleton--timeline-detail cycle-skeleton--timeline-detail-short" />
+                </view>
+                <view v-if="item > 1" class="cycle-skeleton cycle-skeleton--timeline-chevron" />
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+    </template>
 
     <template v-if="cycle">
       <!-- 顶栏 -->
       <BPageHeader :title="pageTitle">
         <template #right>
-          <BTag :label="cycle.status" :color="statusColor(cycle.status)" />
+          <view v-if="hasHeaderActions" class="primary-page-header__actions">
+            <view v-if="canAddRecord" class="primary-page-header__action primary-page-header__action--primary" @click="addRecord">
+              <text class="primary-page-header__icon primary-page-header__icon--primary">add</text>
+            </view>
+            <view v-if="hasMoreActions" class="primary-page-header__action" @click="showMoreActions = true">
+              <text class="primary-page-header__icon">more_horiz</text>
+            </view>
+          </view>
         </template>
       </BPageHeader>
       <BSubmitBanner :message="submitBannerMessage" />
@@ -20,7 +110,10 @@
               <BEntityIcon :size="17" color="#fff" />
             </view>
             <view class="dam-info">
-              <text class="dam-name">{{ cycle.dam_name }}</text>
+              <view class="dam-title-row">
+                <text class="dam-name">{{ cycle.dam_name }}</text>
+                <BTag :label="cycle.status" :color="currentStatusTagColor" />
+              </view>
               <text class="dam-breed">马尔济斯 · 种母</text>
             </view>
           </view>
@@ -30,12 +123,16 @@
               <text class="info-value">{{ cycle.sire_name || '未知' }}</text>
             </view>
             <view class="info-row">
-              <text class="info-label">开始日期</text>
+              <text class="info-label">发情日期</text>
               <text class="info-value">{{ formatDate(cycle.start_date || cycle.created_at) }}</text>
+            </view>
+            <view v-if="firstMatingDateText" class="info-row">
+              <text class="info-label">首配日期</text>
+              <text class="info-value">{{ firstMatingDateText }}</text>
             </view>
             <view class="info-row">
               <text class="info-label">当前状态</text>
-              <text class="info-value info-value--highlight" :style="{ color: `var(--${statusColor(cycle.status)})` }">
+              <text class="info-value info-value--highlight" :style="{ color: `var(--${currentStatusTone})` }">
                 {{ currentStatusText }}
               </text>
             </view>
@@ -45,6 +142,22 @@
             </view>
           </view>
         </BCard>
+
+        <!-- 费用 -->
+        <template v-if="totalCost > 0">
+          <BSectionLabel title="周期费用" color="amber" />
+          <BCard color="amber" :pressable="false">
+            <view v-for="item in costItems" :key="item.id" class="cost-row">
+              <text class="cost-label">{{ item.label }}</text>
+              <text class="cost-value">¥{{ item.amount.toLocaleString() }}</text>
+            </view>
+            <view class="cost-divider" />
+            <view class="cost-row" style="padding-top: 6px;">
+              <text class="cost-label" style="font-weight: 700;">合计</text>
+              <text class="cost-total">¥{{ totalCost.toLocaleString() }}</text>
+            </view>
+          </BCard>
+        </template>
 
         <!-- 时间线 -->
         <BSectionLabel title="繁育时间线" color="teal" />
@@ -122,24 +235,8 @@
           v-if="timelineItems.length === 0"
           icon="timeline"
           title="暂无记录"
-          description="点击下方按钮添加繁育记录"
+          description="点击右上角按钮添加繁育记录"
         />
-
-        <!-- 费用 -->
-        <template v-if="totalCost > 0">
-          <BSectionLabel title="周期费用" color="amber" />
-          <BCard color="amber" :pressable="false">
-            <view v-for="item in costItems" :key="item.id" class="cost-row">
-              <text class="cost-label">{{ item.label }}</text>
-              <text class="cost-value">¥{{ item.amount.toLocaleString() }}</text>
-            </view>
-            <view class="cost-divider" />
-            <view class="cost-row" style="padding-top: 6px;">
-              <text class="cost-label" style="font-weight: 700;">合计</text>
-              <text class="cost-total">¥{{ totalCost.toLocaleString() }}</text>
-            </view>
-          </BCard>
-        </template>
 
         <!-- 窝信息 -->
         <template v-if="litter">
@@ -167,22 +264,6 @@
             </view>
           </BCard>
         </template>
-
-        <!-- 操作按钮 -->
-        <view v-if="!isTerminal" class="action-col">
-          <BButton color="primary" size="large" @click="addRecord" style="width: 100%;">
-            <text class="material-icons-round" style="font-size: 16px; margin-right: 6px;">add_circle</text>
-            添加记录
-          </BButton>
-          <BButton v-if="cycle.status === '怀孕中'" color="green" size="large" @click="addBirth" style="width: 100%;">
-            <text class="material-icons-round" style="font-size: 16px; margin-right: 6px;">child_care</text>
-            录入生产
-          </BButton>
-          <BButton variant="ghost" size="large" @click="closeCycleAction" style="width: 100%; color: var(--red);">
-            <text class="material-icons-round" style="font-size: 16px; margin-right: 6px;">warning</text>
-            记录异常终止
-          </BButton>
-        </view>
       </view>
 
       <BAddRecordSheet
@@ -193,6 +274,19 @@
         :groups="cycleAddRecordGroups"
         @select="navigateToRecord"
       />
+
+      <BSheet v-model:visible="showMoreActions" title="更多操作">
+        <view class="more-actions">
+          <view v-if="canAddBirth" class="more-action-item" @click="handleAddBirthFromMore">
+            <text class="material-icons-round" style="font-size: 20px; color: var(--green);">child_care</text>
+            <text class="more-action-label">录入生产</text>
+          </view>
+          <view v-if="canCloseCycle" class="more-action-item" @click="handleCloseCycleFromMore">
+            <text class="material-icons-round" style="font-size: 20px; color: var(--red);">warning</text>
+            <text class="more-action-label more-action-label--danger">记录异常终止</text>
+          </view>
+        </view>
+      </BSheet>
     </template>
   </view>
 </template>
@@ -203,15 +297,14 @@ import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import type { BreedingCycleDetailResponse, BreedingCycleExpense } from '@/types/breeding'
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
+import BTag from '@/components/base/BTag.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BCard from '@/components/base/BCard.vue'
-import BTag from '@/components/base/BTag.vue'
-import BButton from '@/components/base/BButton.vue'
 import BSectionLabel from '@/components/base/BSectionLabel.vue'
-import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
 import BAddRecordSheet from '@/components/record/BAddRecordSheet.vue'
+import BSheet from '@/components/layout/BSheet.vue'
 import { consumeSubmitFeedback } from '@/composables/useSubmitFeedback'
 import type { AddRecordItem } from '@/utils/addRecordSheet'
 import { createCycleBreedingAddRecordGroups } from '@/utils/addRecordSheet'
@@ -231,10 +324,12 @@ const litter = ref<any>(null)
 const expenses = ref<BreedingCycleExpense[]>([])
 const loading = ref(true)
 const showAddRecordSheet = ref(false)
+const showMoreActions = ref(false)
 let cycleId = ''
 const submitBannerMessage = ref('')
 let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
 let hasLoadedOnce = false
+const MORE_ACTION_CLOSE_DELAY_MS = 180
 
 const { run: fetchDetail } = useCloudCall<{ data: BreedingCycleDetailResponse }>('breeding-service', 'getCycleDetail')
 const { run: doClose } = useCloudCall('breeding-service', 'closeCycle', { successMessage: '已关闭' })
@@ -250,6 +345,11 @@ const isTerminal = computed(() => {
 })
 
 const cycleAddRecordGroups = computed(() => createCycleBreedingAddRecordGroups(cycle.value?.status))
+const canAddRecord = computed(() => !loading.value && !!cycle.value && !isTerminal.value)
+const canAddBirth = computed(() => canAddRecord.value && cycle.value?.status === '怀孕中')
+const canCloseCycle = computed(() => canAddRecord.value)
+const hasMoreActions = computed(() => canAddBirth.value || canCloseCycle.value)
+const hasHeaderActions = computed(() => canAddRecord.value || hasMoreActions.value)
 
 const timelineRecords = computed(() => {
   return [...records.value].sort((a, b) => {
@@ -288,6 +388,23 @@ const currentStatusText = computed(() => {
   if (!cycle.value?.status) return '-'
   return buildBreedingTimelineCurrentTitle(cycle.value, timelineRecords.value, Date.now()) || cycle.value.status
 })
+const currentStatusTone = computed(() => {
+  if (!cycle.value?.status) return 'rose'
+  return getBreedingTimelineStatusTone(cycle.value.status)
+})
+const currentStatusTagColor = computed<'primary' | 'red' | 'amber' | 'green' | 'blue' | 'plum' | 'rose' | 'teal'>(() => {
+  return currentStatusTone.value === 'gray' ? 'plum' : currentStatusTone.value
+})
+const firstMatingDate = computed(() => {
+  const matingDates = records.value
+    .filter(record => record?.type === 'mating' && Number(record?.date) > 0)
+    .map(record => Number(record.date))
+    .sort((a, b) => a - b)
+  return matingDates[0] || null
+})
+const firstMatingDateText = computed(() => {
+  return typeof firstMatingDate.value === 'number' ? formatDate(firstMatingDate.value) : ''
+})
 
 const costItems = computed(() => {
   if (!expenses.value.length) return []
@@ -309,10 +426,6 @@ const TYPE_LABELS: Record<string, string> = {
 }
 
 function typeLabel(type: string) { return TYPE_LABELS[type] || type }
-
-function statusColor(status: string) {
-  return getBreedingTimelineStatusTone(status) as any
-}
 
 function formatDate(ts: number) {
   if (!ts) return '-'
@@ -418,7 +531,13 @@ function onTimelineItemTap(item: CycleTimelineItem) {
 }
 
 function addRecord() {
+  showMoreActions.value = false
   showAddRecordSheet.value = true
+}
+
+function runAfterMoreSheetClose(task: () => void) {
+  showMoreActions.value = false
+  setTimeout(task, MORE_ACTION_CLOSE_DELAY_MS)
 }
 
 function navigateToRecord(item: AddRecordItem) {
@@ -434,6 +553,18 @@ function navigateToRecord(item: AddRecordItem) {
 
 function addBirth() {
   uni.navigateTo({ url: `/pages/breeding/birth-wizard?cycleId=${cycleId}&damName=${encodeURIComponent(cycle.value.dam_name)}` })
+}
+
+function handleAddBirthFromMore() {
+  runAfterMoreSheetClose(() => {
+    addBirth()
+  })
+}
+
+function handleCloseCycleFromMore() {
+  runAfterMoreSheetClose(() => {
+    closeCycleAction()
+  })
 }
 
 async function closeCycleAction() {
@@ -481,6 +612,269 @@ onShow(() => {
   padding-bottom: 40px;
 }
 
+.cycle-skeleton-card,
+.cycle-skeleton,
+.cycle-skeleton-action {
+  position: relative;
+  overflow: hidden;
+}
+
+.cycle-skeleton-card,
+.cycle-skeleton-action {
+  background: var(--card);
+  box-shadow: 0 4px 14px rgba(45, 27, 20, 0.04);
+}
+
+.cycle-skeleton-card::after,
+.cycle-skeleton::after,
+.cycle-skeleton-action::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.58) 50%, transparent 100%);
+  animation: cycle-skeleton-shimmer 1.5s infinite;
+}
+
+.cycle-skeleton-feed {
+  gap: 12px;
+}
+
+.cycle-skeleton-action {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.cycle-skeleton-action--primary {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, var(--primary-soft) 100%);
+}
+
+.cycle-skeleton-card {
+  border-radius: 18px;
+  border: 1px solid rgba(216, 203, 189, 0.16);
+}
+
+.cycle-skeleton-card--summary {
+  padding: 16px 14px;
+}
+
+.cycle-skeleton-card--cost {
+  padding: 14px;
+}
+
+.cycle-skeleton-card--timeline {
+  flex: 1;
+  padding: 12px 48px 12px 14px;
+}
+
+.cycle-skeleton {
+  border-radius: 999px;
+  background: var(--card-dim);
+}
+
+.cycle-skeleton--avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(234, 62, 119, 0.18), rgba(232, 155, 62, 0.18));
+}
+
+.cycle-skeleton--title {
+  width: 82px;
+  max-width: 46%;
+  height: 18px;
+}
+
+.cycle-skeleton--sub {
+  width: 112px;
+  max-width: 70%;
+  height: 11px;
+  margin-top: 6px;
+}
+
+.cycle-skeleton--pill {
+  width: 56px;
+  height: 24px;
+}
+
+.cycle-skeleton--label {
+  width: 54px;
+  height: 12px;
+}
+
+.cycle-skeleton--label-short {
+  width: 44px;
+}
+
+.cycle-skeleton--value {
+  width: 88px;
+  height: 13px;
+}
+
+.cycle-skeleton--value-strong {
+  width: 74px;
+  background: rgba(234, 62, 119, 0.15);
+}
+
+.cycle-skeleton-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0 0 2px;
+}
+
+.cycle-skeleton-section__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.cycle-skeleton-section__dot--amber {
+  background: rgba(232, 155, 62, 0.78);
+}
+
+.cycle-skeleton-section__dot--teal {
+  background: rgba(61, 168, 160, 0.78);
+}
+
+.cycle-skeleton--section-label {
+  width: 48px;
+  height: 11px;
+}
+
+.cycle-skeleton--section-label-wide {
+  width: 64px;
+}
+
+.cycle-skeleton--cost-label {
+  width: 52px;
+  height: 13px;
+}
+
+.cycle-skeleton--cost-label-strong {
+  width: 40px;
+}
+
+.cycle-skeleton--cost-value {
+  width: 72px;
+  height: 16px;
+}
+
+.cycle-skeleton--cost-total {
+  width: 86px;
+  height: 20px;
+  background: rgba(234, 62, 119, 0.15);
+}
+
+.cycle-skeleton-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cycle-skeleton-timeline-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.cycle-skeleton-timeline-track {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  width: 16px;
+  align-self: stretch;
+  padding-top: 30px;
+}
+
+.cycle-skeleton-timeline-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(216, 203, 189, 0.56);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.92);
+  position: relative;
+  z-index: 2;
+}
+
+.cycle-skeleton-timeline-dot--current {
+  background: rgba(234, 62, 119, 0.9);
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: -5px;
+    border-radius: 999px;
+    border: 2px solid rgba(234, 62, 119, 0.34);
+  }
+}
+
+.cycle-skeleton-timeline-dot--rose {
+  background: rgba(234, 62, 119, 0.82);
+}
+
+.cycle-skeleton-timeline-dot--teal {
+  background: rgba(61, 168, 160, 0.82);
+}
+
+.cycle-skeleton-timeline-line {
+  width: 2px;
+  flex: 1;
+  margin-top: 5px;
+  border-radius: 999px;
+  background: rgba(216, 203, 189, 0.38);
+}
+
+.cycle-skeleton-timeline-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.cycle-skeleton-timeline-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.cycle-skeleton--timeline-date {
+  width: 48px;
+  height: 22px;
+}
+
+.cycle-skeleton--timeline-title {
+  width: 88px;
+  height: 16px;
+}
+
+.cycle-skeleton--timeline-detail {
+  width: 132px;
+  max-width: 88%;
+  height: 11px;
+  margin-top: 6px;
+}
+
+.cycle-skeleton--timeline-detail-short {
+  width: 98px;
+}
+
+.cycle-skeleton--timeline-chevron {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255, 240, 232, 0.76);
+  flex-shrink: 0;
+}
+
+@keyframes cycle-skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
 .card-feed {
   padding: 0 var(--space-page);
   display: flex;
@@ -512,6 +906,13 @@ onShow(() => {
   font-weight: 700;
   color: var(--text-1);
   display: block;
+}
+
+.dam-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .dam-breed {
@@ -801,11 +1202,37 @@ onShow(() => {
   font-family: var(--font-display);
 }
 
-/* 操作按钮 */
-.action-col {
+/* 更多操作 */
+.more-actions {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 2px;
+  padding-bottom: 12px;
+}
+
+.more-action-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 4px;
+  border-bottom: 1px solid rgba(216, 203, 189, 0.2);
+  transition: transform 0.12s ease;
+
+  &:active {
+    transform: scale(0.97);
+  }
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.more-action-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.more-action-label--danger {
+  color: var(--red);
 }
 </style>

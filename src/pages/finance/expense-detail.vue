@@ -13,7 +13,7 @@
     <template v-if="!loading && record">
       <!-- 金额展示 -->
       <view class="amount-card">
-        <text class="amount-value expense">-¥{{ formatAmount(record.amount) }}</text>
+        <text class="amount-value expense">{{ formatFinanceAmount(-record.amount, { scene: 'detail' }) }}</text>
         <view class="amount-meta">
           <BTag :label="record.category || '其他'" color="green" />
           <text class="amount-date">{{ formatDate(record.date) }}</text>
@@ -131,6 +131,7 @@ import BButton from '@/components/base/BButton.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 import BModal from '@/components/layout/BModal.vue'
+import { formatFinanceAmount } from '@/utils/financeDisplay'
 
 const record = ref<any>(null)
 const loading = ref(true)
@@ -151,10 +152,6 @@ function formatDateTime(ts: number | undefined): string {
   if (!ts) return ''
   const d = new Date(ts)
   return `${formatDate(ts)} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-}
-
-function formatAmount(n: number): string {
-  return n.toLocaleString('zh-CN')
 }
 
 const { run: fetchRecord } = useCloudCall('finance-service', 'getExpenseDetail')

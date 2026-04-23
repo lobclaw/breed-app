@@ -28,20 +28,43 @@
       </view>
     </view>
 
-    <view class="summary-card">
-      <view class="summary-card__item">
-        <text class="summary-card__label">{{ summaryPrefix }}收入</text>
-        <text class="summary-card__amount summary-card__amount--income">+¥{{ formatNum(summary.totalIncome) }}</text>
+    <view class="summary-board">
+      <view class="summary-board__top">
+        <view class="summary-board__copy">
+          <text class="summary-board__eyebrow">{{ summaryPrefix }}</text>
+          <text class="summary-board__title">净利润</text>
+        </view>
+        <view class="summary-board__badge" :class="summaryBoardBadgeClass">
+          <text>{{ summaryBoardBadgeText }}</text>
+        </view>
       </view>
-      <view class="summary-card__divider" />
-      <view class="summary-card__item">
-        <text class="summary-card__label">{{ summaryPrefix }}支出</text>
-        <text class="summary-card__amount summary-card__amount--expense">-¥{{ formatNum(summary.totalExpense) }}</text>
+
+      <view class="summary-board__main">
+        <text class="summary-board__number" :class="netProfitToneClass">{{ netProfitDisplay.value }}</text>
       </view>
-      <view class="summary-card__divider" />
-      <view class="summary-card__item">
-        <text class="summary-card__label">净利润</text>
-        <text class="summary-card__amount" :class="profitAmountClass">{{ formatSignedAmount(summary.netProfit) }}</text>
+
+      <text v-if="netProfitDisplay.detail" class="summary-board__detail">{{ netProfitDisplay.detail }}</text>
+
+      <view class="summary-board__stats">
+        <view class="summary-stat summary-stat--income">
+          <view class="summary-stat__row">
+            <text class="summary-stat__label">收入</text>
+            <view class="summary-stat__amount">
+              <text class="summary-stat__number summary-stat__number--income">{{ incomeDisplay.value }}</text>
+            </view>
+          </view>
+          <text v-if="incomeDisplay.detail" class="summary-stat__detail">{{ incomeDisplay.detail }}</text>
+        </view>
+
+        <view class="summary-stat summary-stat--expense">
+          <view class="summary-stat__row">
+            <text class="summary-stat__label">支出</text>
+            <view class="summary-stat__amount">
+              <text class="summary-stat__number summary-stat__number--expense">{{ expenseDisplay.value }}</text>
+            </view>
+          </view>
+          <text v-if="expenseDisplay.detail" class="summary-stat__detail">{{ expenseDisplay.detail }}</text>
+        </view>
       </view>
     </view>
 
@@ -83,27 +106,39 @@
       <BSkeleton :rows="4" />
     </view>
 
-    <view v-else-if="transactions.length > 0" class="card-feed">
+    <view v-else-if="groupedTransactions.length > 0" class="card-feed">
       <view
-        v-for="tx in transactions"
-        :key="tx._id"
-        class="flow-card"
-        :class="tx._txType === 'income' ? 'flow-card--income' : 'flow-card--expense'"
-        @click="goToTxDetail(tx)"
+        v-for="group in groupedTransactions"
+        :key="group.key"
+        class="flow-section"
       >
-        <view class="flow-item">
-          <view class="flow-dot" :class="tx._txType === 'income' ? 'flow-dot--income' : 'flow-dot--expense'" />
-          <BIconBox :icon="getFlowIcon(tx)" :color="getFlowIconColor(tx)" />
-          <view class="flow-middle">
-            <text class="flow-desc">{{ tx._txType === 'expense' ? tx.category : tx.type }}</text>
-            <text class="flow-sub">{{ getFlowSubTitle(tx) }}</text>
-            <text v-if="getFlowMeta(tx)" class="flow-meta">{{ getFlowMeta(tx) }}</text>
-          </view>
-          <view class="flow-right">
-            <text class="flow-amount" :class="tx._txType === 'income' ? 'flow-amount--income' : 'flow-amount--expense'">
-              {{ tx._txType === 'income' ? '+' : '-' }}¥{{ formatNum(getTransactionAmount(tx)) }}
-            </text>
-            <text class="flow-date">{{ formatDate(tx.date) }}</text>
+        <view class="flow-section__header">
+          <text class="flow-section__title">{{ group.label }}</text>
+        </view>
+        <view class="flow-group">
+          <view
+            v-for="tx in group.items"
+            :key="tx._id"
+            class="flow-row"
+            @click="goToTxDetail(tx)"
+          >
+            <BIconBox
+              class="flow-row__icon"
+              :icon="getFlowIcon(tx)"
+              :color="getFlowIconColor(tx)"
+              :size="28"
+            />
+            <view class="flow-middle">
+              <text class="flow-desc">{{ getFlowTitle(tx) }}</text>
+              <text v-if="getFlowSubTitle(tx)" class="flow-sub">{{ getFlowSubTitle(tx) }}</text>
+              <text v-if="getFlowMeta(tx)" class="flow-meta">{{ getFlowMeta(tx) }}</text>
+            </view>
+            <view class="flow-right">
+              <text class="flow-amount" :class="tx._txType === 'income' ? 'flow-amount--income' : 'flow-amount--expense'">
+                {{ formatTransactionAmount(tx) }}
+              </text>
+              <text class="flow-time">{{ formatTransactionTime(tx.date) }}</text>
+            </view>
           </view>
         </view>
       </view>
@@ -237,25 +272,37 @@
                 class="grouped-category-card"
                 :class="{
                   'grouped-category-card--active': draftFilters.selectedExpenseGroups.includes(group.key) || getGroupSelectionCount(group.key) > 0,
+                  'grouped-category-card--expanded': isExpenseGroupExpanded(group.key),
                 }"
               >
-                <view class="grouped-category-card__head">
-                  <view class="grouped-category-card__title-wrap">
-                    <view class="grouped-category-card__dot" :style="{ background: getExpenseCategoryGroupColor(group.key) }" />
-                    <text class="grouped-category-card__title">{{ group.label }}</text>
+                <view class="grouped-category-card__head" @click="toggleExpenseGroupExpansion(group.key)">
+                  <view class="grouped-category-card__main">
+                    <view class="grouped-category-card__title-wrap">
+                      <view class="grouped-category-card__dot" :style="{ background: getExpenseCategoryGroupColor(group.key) }" />
+                      <text class="grouped-category-card__title">{{ group.label }}</text>
+                    </view>
+                    <text
+                      v-if="getGroupSelectedSummary(group.key)"
+                      class="grouped-category-card__summary"
+                    >{{ getGroupSelectedSummary(group.key) }}</text>
                   </view>
-                  <text
-                    v-if="getGroupSelectionBadge(group.key)"
-                    class="grouped-category-card__badge"
-                  >{{ getGroupSelectionBadge(group.key) }}</text>
+                  <view class="grouped-category-card__tail">
+                    <text
+                      v-if="getGroupSelectionBadge(group.key)"
+                      class="grouped-category-card__badge"
+                    >{{ getGroupSelectionBadge(group.key) }}</text>
+                    <text class="material-icons-round grouped-category-card__arrow">
+                      {{ isExpenseGroupExpanded(group.key) ? 'expand_less' : 'expand_more' }}
+                    </text>
+                  </view>
                 </view>
-                <view class="filter-chip-row filter-chip-row--sub">
+                <view v-if="isExpenseGroupExpanded(group.key)" class="filter-chip-row filter-chip-row--sub grouped-category-card__body">
                   <view
                     v-for="category in group.items"
                     :key="category.name"
                     class="filter-chip filter-chip--soft"
                     :class="{ 'filter-chip--active-soft': draftFilters.selectedExpenseCategories.includes(category.name) }"
-                    @click="toggleDraftExpenseCategory(category.name)"
+                    @click="toggleDraftExpenseCategory(group.key, category.name)"
                   >
                     <text>{{ category.name }}</text>
                   </view>
@@ -421,7 +468,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import BNavBar from '@/components/layout/BNavBar.vue'
@@ -445,6 +492,7 @@ import {
   normalizeExpenseCategories,
 } from '@/constants/financeCategories'
 import type { ExpenseCategory, ExpenseCategoryGroup, ExpenseCategoryGroupKey } from '@/types/finance'
+import { formatFinanceAmount, getFinanceAmountDisplay } from '@/utils/financeDisplay'
 
 type FinanceFilterType = '' | 'income' | 'expense'
 type FinanceDateRangeValue = typeof FINANCE_DATE_RANGE_OPTIONS[number]['value']
@@ -466,6 +514,12 @@ interface FinanceFilterState {
   sort: FinanceSortValue
   customStartDate: number
   customEndDate: number
+}
+
+interface TransactionGroup {
+  key: string
+  label: string
+  items: any[]
 }
 
 const typeFilters: Array<{ label: string; value: FinanceFilterType }> = [
@@ -491,6 +545,8 @@ const currentMonth = ref(new Date())
 const expenseGroups = ref<ExpenseCategoryGroup[]>(buildExpenseCategoryGroups())
 const categories = ref<ExpenseCategory[]>(normalizeExpenseCategories(DEFAULT_EXPENSE_CATEGORIES, expenseGroups.value))
 const expenseGroupOptions = computed(() => expenseGroups.value)
+const expandedExpenseGroupKey = ref<ExpenseCategoryGroupKey | ''>('')
+const lastInteractedExpenseGroupKey = ref<ExpenseCategoryGroupKey | ''>('')
 
 const summary = reactive({
   totalIncome: 0,
@@ -619,15 +675,54 @@ const summaryPrefix = computed(() => {
   return option?.label || '当前范围'
 })
 
-const profitAmountClass = computed(() => {
-  if (summary.netProfit > 0) return 'summary-card__amount--profit-positive'
-  if (summary.netProfit < 0) return 'summary-card__amount--profit-negative'
-  return 'summary-card__amount--profit-neutral'
+const netProfitToneClass = computed(() => {
+  if (summary.netProfit > 0) return 'summary-tone--positive'
+  if (summary.netProfit < 0) return 'summary-tone--negative'
+  return 'summary-tone--neutral'
+})
+
+const summaryBoardBadgeClass = computed(() => {
+  if (summary.netProfit > 0) return 'summary-board__badge--positive'
+  if (summary.netProfit < 0) return 'summary-board__badge--negative'
+  return 'summary-board__badge--neutral'
+})
+
+const summaryBoardBadgeText = computed(() => {
+  if (summary.netProfit > 0) return '本期结余'
+  if (summary.netProfit < 0) return '本期亏损'
+  return '收支持平'
+})
+
+const incomeDisplay = computed(() => getFinanceAmountDisplay(summary.totalIncome, { scene: 'overview' }))
+const expenseDisplay = computed(() => getFinanceAmountDisplay(-summary.totalExpense, { scene: 'overview' }))
+const netProfitDisplay = computed(() => getFinanceAmountDisplay(summary.netProfit, { scene: 'overview' }))
+const groupedTransactions = computed<TransactionGroup[]>(() => {
+  const groups = new Map<string, TransactionGroup>()
+
+  transactions.value.forEach((tx) => {
+    const key = getDayGroupKey(tx.date)
+    const existing = groups.get(key)
+    if (existing) {
+      existing.items.push(tx)
+      return
+    }
+    groups.set(key, {
+      key,
+      label: formatDayGroupLabel(tx.date),
+      items: [tx],
+    })
+  })
+
+  return Array.from(groups.values())
+})
+
+watch(showFilterSheet, (visible) => {
+  if (!visible) return
+  syncExpandedExpenseGroup()
 })
 
 const hasActiveFilters = computed(() => {
-  return appliedFilters.type !== ''
-    || appliedFilters.dateRange !== 'this_month'
+  return appliedFilters.dateRange !== 'this_month'
     || appliedFilters.selectedIncomeTypes.length > 0
     || appliedFilters.selectedExpenseGroups.length > 0
     || appliedFilters.selectedExpenseCategories.length > 0
@@ -640,12 +735,6 @@ const hasActiveFilters = computed(() => {
 
 const activeFilterChips = computed(() => {
   const chips: Array<{ key: string; label: string }> = []
-  if (appliedFilters.type) {
-    chips.push({
-      key: 'type',
-      label: typeFilters.find(item => item.value === appliedFilters.type)?.label || '全部',
-    })
-  }
   if (appliedFilters.dateRange !== 'this_month') {
     chips.push({
       key: 'dateRange',
@@ -728,21 +817,47 @@ function getTransactionAmount(tx: any) {
   return tx._txType === 'expense' ? (tx.total_amount || 0) : Math.abs(tx.amount || 0)
 }
 
-function formatNum(n: number) {
-  if (n == null) return '0'
-  return n.toLocaleString()
+function formatTransactionAmount(tx: any) {
+  const amount = getTransactionAmount(tx)
+  return formatFinanceAmount(tx._txType === 'expense' ? -amount : amount, { scene: 'list' })
 }
 
-function formatSignedAmount(n: number) {
-  if (!n) return '¥0'
-  const sign = n > 0 ? '+' : '-'
-  return `${sign}¥${formatNum(Math.abs(n))}`
+function isSameDay(left: Date, right: Date) {
+  return left.getFullYear() === right.getFullYear()
+    && left.getMonth() === right.getMonth()
+    && left.getDate() === right.getDate()
 }
 
-function formatDate(ts: number) {
+function getDayGroupKey(ts: number) {
+  if (!ts) return 'unknown'
+  const d = new Date(ts)
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function formatDayGroupLabel(ts: number) {
+  if (!ts) return '未设置日期'
+  const target = new Date(ts)
+  const today = new Date()
+  const yesterday = new Date(today)
+  yesterday.setDate(today.getDate() - 1)
+
+  if (isSameDay(target, today)) return '今天'
+  if (isSameDay(target, yesterday)) return '昨天'
+  if (target.getFullYear() === today.getFullYear()) {
+    return `${target.getMonth() + 1}月${target.getDate()}日`
+  }
+  return `${target.getFullYear()}年${target.getMonth() + 1}月${target.getDate()}日`
+}
+
+function formatTransactionTime(ts: number) {
   if (!ts) return ''
   const d = new Date(ts)
-  return `${d.getMonth() + 1}月${d.getDate()}日`
+  const hours = String(d.getHours()).padStart(2, '0')
+  const minutes = String(d.getMinutes()).padStart(2, '0')
+  return `${hours}:${minutes}`
 }
 
 function formatDateInput(ts: number) {
@@ -777,10 +892,61 @@ function getGroupSelectionCount(groupKey: ExpenseCategoryGroupKey) {
 function getGroupSelectionBadge(groupKey: ExpenseCategoryGroupKey) {
   const count = getGroupSelectionCount(groupKey)
   const groupSelected = draftFilters.selectedExpenseGroups.includes(groupKey)
-  if (groupSelected && count > 0) return `分组 + ${count}项`
+  if (count > 0) return `已选 ${count}项`
   if (groupSelected) return '分组已选'
-  if (count > 0) return `${count}项已选`
   return ''
+}
+
+function getGroupSelectedCategoryNames(groupKey: ExpenseCategoryGroupKey) {
+  const group = groupedExpenseCategories.value.find(item => item.key === groupKey)
+  if (!group) return []
+  return group.items
+    .filter(item => draftFilters.selectedExpenseCategories.includes(item.name))
+    .map(item => item.name)
+}
+
+function getGroupSelectedSummary(groupKey: ExpenseCategoryGroupKey) {
+  const selectedNames = getGroupSelectedCategoryNames(groupKey)
+  if (!selectedNames.length) return ''
+  if (selectedNames.length <= 2) return `已选：${selectedNames.join('、')}`
+  return `已选：${selectedNames.slice(0, 2).join('、')} +${selectedNames.length - 2}`
+}
+
+function isExpenseGroupExpanded(groupKey: ExpenseCategoryGroupKey) {
+  return expandedExpenseGroupKey.value === groupKey
+}
+
+function syncExpandedExpenseGroup() {
+  if (draftFilters.type === 'income') {
+    expandedExpenseGroupKey.value = ''
+    return
+  }
+
+  const groupsWithSelectedCategories = groupedExpenseCategories.value
+    .filter(group => getGroupSelectionCount(group.key) > 0)
+    .map(group => group.key)
+
+  if (groupsWithSelectedCategories.length) {
+    if (lastInteractedExpenseGroupKey.value && groupsWithSelectedCategories.includes(lastInteractedExpenseGroupKey.value)) {
+      expandedExpenseGroupKey.value = lastInteractedExpenseGroupKey.value
+      return
+    }
+    expandedExpenseGroupKey.value = groupsWithSelectedCategories[0]
+    return
+  }
+
+  const selectedGroupKeys = draftFilters.selectedExpenseGroups.filter(groupKey => expenseGroups.value.some(item => item.key === groupKey))
+  if (lastInteractedExpenseGroupKey.value && selectedGroupKeys.includes(lastInteractedExpenseGroupKey.value)) {
+    expandedExpenseGroupKey.value = lastInteractedExpenseGroupKey.value
+    return
+  }
+
+  expandedExpenseGroupKey.value = selectedGroupKeys[0] || ''
+}
+
+function toggleExpenseGroupExpansion(groupKey: ExpenseCategoryGroupKey) {
+  lastInteractedExpenseGroupKey.value = groupKey
+  expandedExpenseGroupKey.value = expandedExpenseGroupKey.value === groupKey ? '' : groupKey
 }
 
 function getFlowIcon(tx: any) {
@@ -800,6 +966,10 @@ function getFlowIcon(tx: any) {
 
 function getFlowIconColor(tx: any): 'red' | 'amber' | 'green' | 'blue' | 'plum' | 'rose' | 'teal' {
   return tx._txType === 'income' ? 'red' : 'green'
+}
+
+function getFlowTitle(tx: any) {
+  return tx._txType === 'expense' ? tx.category : tx.type
 }
 
 function getFlowSubTitle(tx: any) {
@@ -890,6 +1060,12 @@ function setDraftDateRange(value: FinanceDateRangeValue) {
 function setDraftType(value: FinanceFilterType) {
   draftFilters.type = value
   Object.assign(draftFilters, normalizeFilters(draftFilters))
+  if (value === 'income') {
+    expandedExpenseGroupKey.value = ''
+    lastInteractedExpenseGroupKey.value = ''
+    return
+  }
+  syncExpandedExpenseGroup()
 }
 
 function toggleArrayValue<T extends string>(list: T[], value: T) {
@@ -903,11 +1079,24 @@ function toggleDraftIncomeType(value: string) {
 }
 
 function toggleDraftExpenseGroup(value: ExpenseCategoryGroupKey) {
+  const willSelect = !draftFilters.selectedExpenseGroups.includes(value)
   draftFilters.selectedExpenseGroups = toggleArrayValue(draftFilters.selectedExpenseGroups, value)
+  lastInteractedExpenseGroupKey.value = value
+
+  if (willSelect) {
+    expandedExpenseGroupKey.value = value
+    return
+  }
+
+  if (expandedExpenseGroupKey.value === value && getGroupSelectionCount(value) === 0) {
+    syncExpandedExpenseGroup()
+  }
 }
 
-function toggleDraftExpenseCategory(value: string) {
+function toggleDraftExpenseCategory(groupKey: ExpenseCategoryGroupKey, value: string) {
   draftFilters.selectedExpenseCategories = toggleArrayValue(draftFilters.selectedExpenseCategories, value)
+  lastInteractedExpenseGroupKey.value = groupKey
+  expandedExpenseGroupKey.value = groupKey
 }
 
 function toggleDraftUnlinkedOnly() {
@@ -970,6 +1159,8 @@ function applyDraftFilters() {
 
 function resetDraftFilters() {
   Object.assign(draftFilters, createDefaultFilters(currentMonth.value))
+  expandedExpenseGroupKey.value = ''
+  lastInteractedExpenseGroupKey.value = ''
 }
 
 function clearFilterChip(key: string) {
@@ -1001,7 +1192,10 @@ function clearFilterChip(key: string) {
 }
 
 function clearAllFilters() {
-  syncAndReload(createDefaultFilters(currentMonth.value))
+  syncAndReload({
+    ...createDefaultFilters(currentMonth.value),
+    type: appliedFilters.type,
+  })
 }
 
 function goToStats() {
@@ -1071,23 +1265,23 @@ onShow(async () => {
   }
 }
 
-.summary-card {
+.summary-board {
   margin: 0 var(--space-page);
-  background: var(--card);
-  border-radius: var(--radius-card);
-  padding: 18px 20px;
-  box-shadow: var(--shadow);
-  display: flex;
-  justify-content: space-between;
+  padding: 14px 16px 12px;
   position: relative;
   overflow: hidden;
-  border-left: 3.5px solid var(--primary);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.985) 0%, rgba(255, 250, 247, 0.98) 100%);
+  border: 1px solid rgba(234, 62, 119, 0.12);
+  box-shadow: 0 8px 18px rgba(99, 70, 49, 0.05);
 
   &::before {
     content: '';
     position: absolute;
     inset: 0;
-    background: linear-gradient(135deg, var(--rose-soft) 0%, transparent 40%);
+    background:
+      radial-gradient(circle at top right, rgba(234, 62, 119, 0.08), transparent 28%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.28), transparent 48%);
     pointer-events: none;
   }
 
@@ -1096,38 +1290,180 @@ onShow(async () => {
     z-index: 1;
   }
 
-  &__item {
+  &__top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  &__copy {
     flex: 1;
-    text-align: center;
+    min-width: 0;
+  }
+
+  &__eyebrow {
+    display: block;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    color: var(--primary);
+  }
+
+  &__title {
+    display: block;
+    margin-top: 3px;
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--text-1);
+  }
+
+  &__badge {
+    flex-shrink: 0;
+    min-height: 24px;
+    padding: 0 10px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 800;
+    white-space: nowrap;
+
+    &--positive {
+      color: var(--primary);
+      background: rgba(240, 88, 136, 0.1);
+      border: 1px solid rgba(240, 88, 136, 0.14);
+    }
+
+    &--negative {
+      color: var(--red);
+      background: rgba(224, 82, 82, 0.1);
+      border: 1px solid rgba(224, 82, 82, 0.14);
+    }
+
+    &--neutral {
+      color: var(--text-2);
+      background: rgba(216, 203, 189, 0.14);
+      border: 1px solid rgba(216, 203, 189, 0.18);
+    }
+  }
+
+  &__main {
+    min-width: 0;
+    margin-top: 8px;
+    white-space: nowrap;
+  }
+
+  &__number,
+  &__detail {
+    font-family: var(--font-display);
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+
+  &__number {
+    display: block;
+    min-width: 0;
+    font-size: 31px;
+    font-weight: 800;
+    line-height: 0.95;
+    letter-spacing: -0.03em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__detail {
+    display: block;
+    min-width: 0;
+    margin-top: 6px;
+    font-size: 11px;
+    line-height: 1.35;
+    color: var(--text-3);
+    text-align: right;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__stats {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(216, 203, 189, 0.24);
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+}
+
+.summary-stat {
+  min-width: 0;
+
+  &--income {
+    .summary-stat__label,
+    .summary-stat__number {
+      color: var(--red);
+    }
+  }
+
+  &--expense {
+    .summary-stat__label,
+    .summary-stat__number {
+      color: var(--green);
+    }
+  }
+
+  &__row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    min-width: 0;
   }
 
   &__label {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--text-3);
-    display: block;
-    margin-bottom: 4px;
-  }
-
-  &__amount {
-    font-family: var(--font-display);
-    font-size: 18px;
+    flex-shrink: 0;
+    font-size: 12px;
     font-weight: 800;
   }
 
-  &__amount--income { color: var(--red); }
-  &__amount--expense { color: var(--green); }
-  &__amount--profit-positive { color: var(--primary); }
-  &__amount--profit-negative { color: var(--red); }
-  &__amount--profit-neutral { color: var(--text-2); }
+  &__amount {
+    display: block;
+    min-width: 0;
+    white-space: nowrap;
+  }
 
-  &__divider {
-    width: 1px;
-    background: var(--text-4);
-    opacity: 0.5;
-    margin: 0 8px;
+  &__number {
+    font-family: var(--font-display);
+    font-variant-numeric: tabular-nums lining-nums;
+    line-height: 1;
+  }
+
+  &__number {
+    display: block;
+    min-width: 0;
+    font-size: 21px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__detail {
+    display: block;
+    min-height: 14px;
+    margin-top: 5px;
+    font-size: 10px;
+    line-height: 1.3;
+    color: var(--text-3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
+
+.summary-tone--positive { color: var(--primary); }
+.summary-tone--negative { color: var(--red); }
+.summary-tone--neutral { color: var(--text-2); }
 
 .filter-tabs {
   &__spacer {
@@ -1181,65 +1517,52 @@ onShow(async () => {
   margin-top: var(--primary-page-section-gap);
 }
 
-.flow-card {
-  background: var(--card);
-  border-radius: var(--primary-page-card-radius);
-  padding: var(--space-card);
-  padding-left: var(--space-card-left);
-  position: relative;
-  box-shadow: var(--primary-page-card-shadow);
-  overflow: hidden;
-  border-left: var(--primary-page-card-bar-width) solid transparent;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-
-  &:active {
-    transform: scale(var(--primary-page-card-active-scale));
-    box-shadow: var(--primary-page-card-shadow-active);
+.flow-section {
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 0 2px 6px;
   }
 
-  &::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-  }
-
-  & > * {
-    position: relative;
-    z-index: 1;
-  }
-
-  &--income {
-    border-left-color: var(--red);
-
-    &::before {
-      background: linear-gradient(135deg, var(--red-soft) 0%, transparent 40%);
-    }
-  }
-
-  &--expense {
-    border-left-color: var(--green);
-
-    &::before {
-      background: linear-gradient(135deg, var(--green-soft) 0%, transparent 40%);
-    }
+  &__title {
+    display: block;
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--text-2);
+    letter-spacing: 0.02em;
   }
 }
 
-.flow-item {
+.flow-group {
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(216, 203, 189, 0.28);
+  border-radius: 18px;
+  box-shadow: 0 5px 12px rgba(99, 70, 49, 0.035);
+  overflow: hidden;
+}
+
+.flow-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-}
+  gap: 10px;
+  padding: 11px 13px;
+  background: rgba(255, 255, 255, 0.96);
+  transition: background 0.15s ease, transform 0.15s ease;
 
-.flow-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
+  &:active {
+    background: rgba(255, 247, 243, 0.92);
+    transform: scale(0.995);
+  }
 
-  &--income { background: var(--red); }
-  &--expense { background: var(--green); }
+  & + & {
+    border-top: 1px solid rgba(216, 203, 189, 0.18);
+  }
+
+  &__icon {
+    flex-shrink: 0;
+  }
 }
 
 .flow-middle {
@@ -1248,48 +1571,62 @@ onShow(async () => {
 }
 
 .flow-desc {
-  font-size: var(--primary-page-card-title-size);
+  font-size: 15px;
   font-weight: var(--primary-page-card-title-weight);
   color: var(--text-1);
-  line-height: var(--primary-page-card-title-line-height);
+  line-height: 1.15;
   display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .flow-sub {
-  font-size: var(--primary-page-card-subtitle-size);
+  font-size: 12px;
   color: var(--primary-page-card-subtitle-color);
-  margin-top: 2px;
+  margin-top: 1px;
   display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .flow-meta {
-  font-size: var(--primary-page-card-meta-size);
+  font-size: 11px;
   color: var(--primary-page-card-meta-color);
-  line-height: var(--primary-page-card-meta-line-height);
-  margin-top: 2px;
+  line-height: 1.2;
+  margin-top: 1px;
   display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .flow-right {
   text-align: right;
   flex-shrink: 0;
+  padding-left: 6px;
 }
 
 .flow-amount {
   font-family: var(--font-display);
-  font-size: var(--primary-page-card-accent-size);
+  font-variant-numeric: tabular-nums lining-nums;
+  font-size: 15px;
   font-weight: var(--primary-page-card-accent-weight);
   display: block;
+  white-space: nowrap;
 
   &--income { color: var(--red); }
   &--expense { color: var(--green); }
 }
 
-.flow-date {
-  font-size: var(--primary-page-card-meta-size);
-  color: var(--primary-page-card-meta-color);
-  margin-top: 2px;
+.flow-time {
   display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 1.1;
+  color: var(--text-3);
+  white-space: nowrap;
 }
 
 .add-sheet {
@@ -1456,7 +1793,7 @@ onShow(async () => {
   background: rgba(255, 249, 245, 0.96);
   border: 1px solid rgba(216, 203, 189, 0.3);
   border-radius: 18px;
-  padding: 13px 12px 12px;
+  padding: 12px;
   transition: all 0.18s ease;
 
   &--active {
@@ -1465,12 +1802,21 @@ onShow(async () => {
     box-shadow: 0 8px 18px rgba(240, 88, 136, 0.08);
   }
 
+  &--expanded {
+    background: linear-gradient(180deg, rgba(255, 247, 249, 0.98) 0%, rgba(255, 252, 250, 1) 100%);
+  }
+
   &__head {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
     gap: 10px;
-    margin-bottom: 10px;
+    cursor: pointer;
+  }
+
+  &__main {
+    flex: 1;
+    min-width: 0;
   }
 
   &__title-wrap {
@@ -1499,6 +1845,24 @@ onShow(async () => {
     color: var(--text-1);
   }
 
+  &__summary {
+    display: block;
+    margin-top: 5px;
+    font-size: 11px;
+    line-height: 1.35;
+    color: var(--text-3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__tail {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
   &__badge {
     flex-shrink: 0;
     font-size: 11px;
@@ -1507,6 +1871,17 @@ onShow(async () => {
     background: rgba(240, 88, 136, 0.1);
     border-radius: 999px;
     padding: 4px 8px;
+  }
+
+  &__arrow {
+    font-family: 'Material Icons Round';
+    font-size: 18px;
+    color: var(--text-3);
+    flex-shrink: 0;
+  }
+
+  &__body {
+    margin-top: 10px;
   }
 }
 
@@ -1810,6 +2185,251 @@ onShow(async () => {
       opacity: 0.45;
       color: #fff;
     }
+  }
+}
+
+@media (max-width: 360px) {
+  .page {
+    padding-bottom: 96px;
+  }
+
+  .month-selector {
+    gap: 10px;
+
+    &__text {
+      display: block;
+      max-width: calc(100vw - 160px);
+      font-size: 15px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    &__arrow {
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+  }
+
+  .summary-board {
+    padding: 12px 14px 10px;
+
+    &__badge {
+      min-height: 22px;
+      padding: 0 8px;
+      font-size: 9px;
+    }
+
+    &__main {
+      margin-top: 6px;
+    }
+
+    &__sign,
+    &__currency {
+      font-size: 15px;
+    }
+
+    &__number {
+      font-size: 27px;
+    }
+
+    &__detail {
+      font-size: 10px;
+    }
+
+    &__detail {
+      display: none;
+    }
+
+    &__stats {
+      margin-top: 10px;
+      padding-top: 10px;
+      gap: 10px;
+    }
+  }
+
+  .summary-stat {
+    &__row {
+      gap: 8px;
+    }
+
+    &__label {
+      font-size: 11px;
+    }
+
+    &__sign,
+    &__currency {
+      font-size: 12px;
+    }
+
+    &__number {
+      font-size: 18px;
+    }
+
+    &__detail {
+      display: none;
+    }
+  }
+
+  .filter-tabs {
+    gap: 6px;
+  }
+
+  .active-filters {
+    gap: 6px;
+
+    &__track {
+      gap: 6px;
+    }
+
+    &__clear-all {
+      min-height: 30px;
+      font-size: 10px;
+    }
+  }
+
+  .card-feed {
+    gap: 10px;
+  }
+
+  .flow-section {
+    &__header {
+      padding: 0 2px 6px;
+    }
+
+    &__title {
+      font-size: 11px;
+    }
+  }
+
+  .flow-group {
+    border-radius: 16px;
+  }
+
+  .flow-row {
+    gap: 9px;
+    padding: 10px 11px;
+  }
+
+  .flow-desc,
+  .flow-sub,
+  .flow-meta {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .flow-desc {
+    font-size: 13px;
+  }
+
+  .flow-sub {
+    font-size: 10px;
+  }
+
+  .flow-meta {
+    font-size: 10px;
+  }
+
+  .flow-right {
+    padding-left: 4px;
+  }
+
+  .flow-amount {
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .flow-time {
+    font-size: 10px;
+  }
+
+  .grouped-category-card {
+    padding: 10px 10px 9px;
+
+    &__head {
+      gap: 8px;
+    }
+
+    &__title {
+      font-size: 12px;
+    }
+
+    &__summary {
+      font-size: 10px;
+    }
+
+    &__tail {
+      gap: 6px;
+    }
+
+    &__badge {
+      font-size: 10px;
+      padding: 3px 7px;
+    }
+
+    &__arrow {
+      font-size: 16px;
+    }
+
+    &__body {
+      margin-top: 8px;
+    }
+  }
+
+  :deep(.primary-page-header) {
+    --primary-page-header-top-offset: 6px;
+    --primary-page-header-bottom-gap: 10px;
+    --primary-page-section-gap: 12px;
+    --primary-page-subsection-gap: 6px;
+  }
+
+  :deep(.primary-page-header__row) {
+    gap: 10px;
+  }
+
+  :deep(.primary-page-header__title) {
+    font-size: 22px;
+  }
+
+  :deep(.primary-page-header__actions) {
+    gap: 4px;
+  }
+
+  :deep(.primary-page-header__action),
+  :deep(.primary-page-filter-action) {
+    width: 36px;
+    height: 36px;
+  }
+
+  :deep(.primary-page-header__icon) {
+    font-size: 20px;
+  }
+
+  :deep(.primary-page-header__icon--primary) {
+    font-size: 22px;
+  }
+
+  :deep(.primary-page-tab) {
+    font-size: 12px;
+    padding: 6px 13px;
+  }
+
+  :deep(.primary-page-filter-icon) {
+    font-size: 20px;
+  }
+
+  :deep(.primary-page-applied-chip) {
+    gap: 4px;
+    padding: 5px 9px;
+  }
+
+  :deep(.primary-page-applied-chip-text) {
+    font-size: 10px;
+  }
+
+  :deep(.primary-page-applied-chip-icon) {
+    font-size: 13px;
   }
 }
 </style>

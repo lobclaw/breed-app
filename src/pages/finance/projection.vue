@@ -83,15 +83,15 @@
           <text class="projection-year">{{ year.year }}年</text>
           <view class="projection-row">
             <text class="p-label">收入</text>
-            <text class="p-value income">+¥{{ formatMoney(year.income) }}</text>
+            <text class="p-value income">{{ formatFinanceAmount(year.income, { scene: 'report' }) }}</text>
           </view>
           <view class="projection-row">
             <text class="p-label">支出</text>
-            <text class="p-value expense">-¥{{ formatMoney(year.cost) }}</text>
+            <text class="p-value expense">{{ formatFinanceAmount(-year.cost, { scene: 'report' }) }}</text>
           </view>
           <view class="projection-row">
             <text class="p-label">利润</text>
-            <text class="p-value" :class="getProfitClass(year.profit)">{{ formatSignedMoney(year.profit) }}</text>
+            <text class="p-value" :class="getProfitClass(year.profit)">{{ formatFinanceAmount(year.profit, { scene: 'report' }) }}</text>
           </view>
           <view class="projection-bars">
             <view
@@ -118,6 +118,7 @@ import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
+import { formatFinanceAmount } from '@/utils/financeDisplay'
 
 const DEFAULT_PARAMS = {
   activeDams: '5',
@@ -166,17 +167,6 @@ const projectionYears = computed(() => {
 
   return years
 })
-
-function formatMoney(val: number): string {
-  if (!val && val !== 0) return '0'
-  return val.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
-}
-
-function formatSignedMoney(val: number): string {
-  if (!val) return '¥0'
-  const sign = val > 0 ? '+' : '-'
-  return `${sign}¥${formatMoney(Math.abs(val))}`
-}
 
 function getProfitClass(val: number) {
   if (val > 0) return 'primary'

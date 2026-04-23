@@ -47,7 +47,7 @@
       <view class="summary-grid">
         <view class="summary-card summary-card--profit">
           <text class="summary-card__label">净利润</text>
-          <text class="summary-card__value" :class="netProfitClass">{{ formatSignedAmount(data.netProfit) }}</text>
+          <text class="summary-card__value" :class="netProfitClass">{{ formatFinanceAmount(data.netProfit, { scene: 'report' }) }}</text>
           <view class="summary-card__meta-row">
             <text class="summary-card__rate">利润率 {{ profitRate }}</text>
             <text class="summary-card__hint">{{ periodSummaryHint }}</text>
@@ -55,12 +55,12 @@
         </view>
         <view class="summary-card summary-card--income">
           <text class="summary-card__label">总收入</text>
-          <text class="summary-card__value summary-card__value--income">+¥{{ formatNum(data.totalIncome) }}</text>
+          <text class="summary-card__value summary-card__value--income">{{ formatFinanceAmount(data.totalIncome, { scene: 'report' }) }}</text>
           <text class="summary-card__subtext">{{ periodSummaryHint }}</text>
         </view>
         <view class="summary-card summary-card--expense">
           <text class="summary-card__label">总支出</text>
-          <text class="summary-card__value summary-card__value--expense">-¥{{ formatNum(data.totalExpense) }}</text>
+          <text class="summary-card__value summary-card__value--expense">{{ formatFinanceAmount(-data.totalExpense, { scene: 'report' }) }}</text>
           <text class="summary-card__subtext">{{ periodSummaryHint }}</text>
         </view>
       </view>
@@ -90,7 +90,7 @@
             <view class="bar-row__header">
               <text class="bar-row__name">{{ item.cat }}</text>
               <view class="bar-row__value-group">
-                <text class="bar-row__amount">¥{{ formatNum(item.amount) }}</text>
+                <text class="bar-row__amount">{{ formatFinanceAmount(-item.amount, { scene: 'report' }) }}</text>
                 <text class="bar-row__share">{{ formatPercentLabel(item.sharePct) }}</text>
               </view>
             </view>
@@ -132,7 +132,7 @@
             <view class="bar-row__header">
               <text class="bar-row__name">{{ item.cat }}</text>
               <view class="bar-row__value-group">
-                <text class="bar-row__amount">¥{{ formatNum(item.amount) }}</text>
+                <text class="bar-row__amount">{{ formatFinanceAmount(item.amount, { scene: 'report' }) }}</text>
                 <text class="bar-row__share">{{ formatPercentLabel(item.sharePct) }}</text>
               </view>
             </view>
@@ -199,6 +199,7 @@ import { onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
+import { formatFinanceAmount } from '@/utils/financeDisplay'
 
 const period = ref('monthly')
 const loading = ref(true)
@@ -257,17 +258,6 @@ function changeMonth(delta: number) {
   }
   currentMonth.value = d
   load()
-}
-
-function formatNum(n: number) {
-  if (n == null) return '0'
-  return n.toLocaleString()
-}
-
-function formatSignedAmount(n: number) {
-  if (!n) return '¥0'
-  const sign = n > 0 ? '+' : '-'
-  return `${sign}¥${formatNum(Math.abs(n))}`
 }
 
 function formatPercentLabel(n: number) {

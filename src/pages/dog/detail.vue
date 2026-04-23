@@ -636,22 +636,22 @@
           <view class="dog-detail__fin-grid">
             <view class="dog-detail__fin-cell">
               <text class="dog-detail__fin-cell-label">购入成本</text>
-              <text class="dog-detail__fin-cell-value dog-detail__fin-cell-value--red">{{ formatAmount(dogFinance.purchaseCost || 0) }}</text>
+              <text class="dog-detail__fin-cell-value dog-detail__fin-cell-value--red">{{ formatFinanceOverviewAmount(-(dogFinance.purchaseCost || 0)) }}</text>
             </view>
             <view class="dog-detail__fin-cell">
               <text class="dog-detail__fin-cell-label">直接费用</text>
-              <text class="dog-detail__fin-cell-value dog-detail__fin-cell-value--red">{{ formatAmount(dogFinance.directExpenses || 0) }}</text>
+              <text class="dog-detail__fin-cell-value dog-detail__fin-cell-value--red">{{ formatFinanceOverviewAmount(-(dogFinance.directExpenses || 0)) }}</text>
             </view>
             <view class="dog-detail__fin-cell">
               <text class="dog-detail__fin-cell-label">销售收入</text>
-              <text class="dog-detail__fin-cell-value dog-detail__fin-cell-value--green">{{ formatAmount(dogFinance.salesIncome || 0) }}</text>
+              <text class="dog-detail__fin-cell-value dog-detail__fin-cell-value--green">{{ formatFinanceOverviewAmount(dogFinance.salesIncome || 0) }}</text>
             </view>
             <view class="dog-detail__fin-cell">
               <text class="dog-detail__fin-cell-label">净利润</text>
               <text
                 class="dog-detail__fin-cell-value"
                 :class="(dogFinance.netProfit || 0) >= 0 ? 'dog-detail__fin-cell-value--green' : 'dog-detail__fin-cell-value--red'"
-              >{{ formatAmount(dogFinance.netProfit || 0) }}</text>
+              >{{ formatFinanceOverviewAmount(dogFinance.netProfit || 0) }}</text>
             </view>
           </view>
         </view>
@@ -672,7 +672,7 @@
               <text
                 class="dog-detail__rec-amount"
                 :class="tx._txType === 'income' ? 'dog-detail__rec-amount--green' : 'dog-detail__rec-amount--red'"
-              >{{ tx._txType === 'income' ? '+' : '-' }}¥{{ (tx.amount || 0).toLocaleString() }}</text>
+              >{{ formatFinanceTransactionAmount(tx) }}</text>
             </view>
           </view>
         </view>
@@ -1151,10 +1151,11 @@ import { formatMedicationDosage } from '@/utils/medicationDisplay'
 import { buildCompactDeriveStatusTitle } from '@/utils/dogStatusCopy'
 import { getDogStatusTone, getHealthTypeTone } from '@/utils/themeSemantics'
 import type { AddRecordItem } from '@/utils/addRecordSheet'
-import { createAllAddRecordGroups } from '@/utils/addRecordSheet'
+import { createDogDetailAddRecordGroups } from '@/utils/addRecordSheet'
 import type { BreedingCycleDetailResponse } from '@/types/breeding'
 import { buildActiveCycleSummaryViewModel, buildHistoryCycleSummaryViewModel } from '@/utils/dogBreedingSummary'
 import { buildTimestampFromDayOffset, formatDateInputValue } from '@/utils/date'
+import { formatFinanceAmount } from '@/utils/financeDisplay'
 
 const dog = ref<Dog | null>(null)
 const statuses = ref<DeriveStatus[]>([])
@@ -1268,6 +1269,16 @@ const TERMINAL_CYCLE_STATUSES = ['已生产', '失败', '放弃']
 const activeCycle = computed(() => cycles.value.find((c: any) => !TERMINAL_CYCLE_STATUSES.includes(c.status)))
 const pastCycles = computed(() => cycles.value.filter((c: any) => TERMINAL_CYCLE_STATUSES.includes(c.status)))
 const activeCycleId = computed(() => activeCycle.value?._id || '')
+const currentBreedingCycleId = computed(() => {
+  if (activeCycleId.value) return activeCycleId.value
+  const breedingStatus = statuses.value.find(status => ['发情中', '怀孕中'].includes(status?.type))
+  const legacyCycleId = (breedingStatus as Record<string, any> | undefined)?.cycle_id
+  return typeof breedingStatus?.cycleId === 'string'
+    ? breedingStatus.cycleId
+    : typeof legacyCycleId === 'string'
+      ? legacyCycleId
+      : ''
+})
 
 const illnessRecords = computed(() => healthRecords.value.filter((r: any) => r.type === 'illness'))
 const latestIllnessRecord = computed(() => illnessRecords.value[0] || null)
@@ -1455,6 +1466,19 @@ const activeCycleSummary = computed(() => buildActiveCycleSummaryViewModel(
   activeCycleSummaryDetail.value?.cycle || activeCycle.value || null,
   activeCycleSummaryDetail.value?.records || [],
 ))
+const currentCycleLitter = computed(() => {
+  if (activeCycleSummaryDetail.value?.litter) return activeCycleSummaryDetail.value.litter
+  const nursingStatus = statuses.value.find(status => status?.type === '哺乳中')
+  const legacyCycleId = (nursingStatus as Record<string, any> | undefined)?.cycle_id
+  const cycleId = typeof nursingStatus?.cycleId === 'string'
+    ? nursingStatus.cycleId
+    : typeof legacyCycleId === 'string'
+      ? legacyCycleId
+      : activeCycleId.value
+
+  if (!cycleId) return null
+  return litterByCycleId.value.get(cycleId) || null
+})
 const historyCycleCards = computed(() => {
   return pastCycles.value.map((cycle: any) => {
     const summary = buildHistoryCycleSummaryViewModel(cycle, litterByCycleId.value.get(cycle._id) || null)
@@ -1803,6 +1827,22 @@ function statusProgressText(s: DeriveStatus): string {
 }
 
 function statusMeta(s: DeriveStatus): Array<{ icon: string; text: string }> {
+  if (s.type === '哺乳中') {
+    const items: Array<{ icon: string; text: string }> = []
+    const litter = currentCycleLitter.value
+    const birthDate = typeof litter?.birth_date === 'number' ? litter.birth_date : null
+    const keptCount = Number(litter?.pupStats?.kept)
+
+    if (typeof birthDate === 'number') {
+      items.push({ icon: 'event', text: `生产于 ${formatDate(birthDate)}` })
+    }
+    if (Number.isFinite(keptCount) && keptCount > 0) {
+      items.push({ icon: 'pets', text: `在养${keptCount}只` })
+    }
+
+    return items
+  }
+
   if (Array.isArray(s.meta) && s.meta.length > 0) return s.meta
 
   if (s.type === '生病中') {
@@ -1878,9 +1918,13 @@ async function ensureActiveCycleSummary(force = false) {
   activeCycleSummaryDetail.value = detail
 }
 
-function formatAmount(amount: number) {
-  if (!amount) return '¥0'
-  return amount >= 10000 ? `¥${(amount / 10000).toFixed(1)}万` : `¥${amount.toLocaleString()}`
+function formatFinanceOverviewAmount(amount: number) {
+  return formatFinanceAmount(amount, { scene: 'overview' })
+}
+
+function formatFinanceTransactionAmount(tx: any) {
+  const amount = tx?._txType === 'expense' ? -(tx.amount || 0) : (tx.amount || 0)
+  return formatFinanceAmount(amount, { scene: 'list' })
 }
 
 function goBack() {
@@ -1913,9 +1957,12 @@ function editDog() {
   uni.navigateTo({ url: `/pages/dog/add?id=${dogId}` })
 }
 
-const addRecordGroups = computed(() => createAllAddRecordGroups({
+const addRecordGroups = computed(() => createDogDetailAddRecordGroups({
+  role: dog.value?.role,
+  gender: dog.value?.gender,
+  activeCycleStatus: activeCycle.value?.status,
+  statuses: statuses.value,
   includeBreedingHint: !!activeCycle.value?._id,
-  allowBreeding: dog.value?.role !== '幼崽',
 }))
 
 function addRecord() {
@@ -1923,11 +1970,6 @@ function addRecord() {
 }
 
 function navigateToRecord(item: AddRecordItem) {
-  if (item.url === '/pages/breeding/birth-wizard' && !activeCycle.value?._id) {
-    uni.showToast({ title: '当前无可记录的繁育周期', icon: 'none' })
-    return
-  }
-
   showAddRecordSheet.value = false
   if (item.page === 'batch-weight' || item.url === '/pages/health/batch-weight') {
     nextTick(() => {
@@ -1937,7 +1979,7 @@ function navigateToRecord(item: AddRecordItem) {
   }
 
   const dogName = encodeURIComponent(dog.value?.name || '')
-  const cycleQuery = item.kind === 'breeding' && activeCycle.value?._id ? `&cycleId=${activeCycle.value._id}` : ''
+  const cycleQuery = item.kind === 'breeding' && currentBreedingCycleId.value ? `&cycleId=${currentBreedingCycleId.value}` : ''
   const damNameQuery = item.url === '/pages/breeding/birth-wizard'
     ? `&damName=${dogName}`
     : ''

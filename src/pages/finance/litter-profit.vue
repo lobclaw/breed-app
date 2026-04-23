@@ -27,20 +27,20 @@
     <view v-if="profitData" class="profit-card">
       <view class="profit-row">
         <text class="profit-label">收入</text>
-        <text class="profit-value income">+¥{{ formatMoney(profitData.totalIncome) }}</text>
+        <text class="profit-value income">{{ formatFinanceAmount(profitData.totalIncome, { scene: 'report' }) }}</text>
       </view>
       <view class="profit-row">
         <text class="profit-label">支出</text>
-        <text class="profit-value expense">-¥{{ formatMoney(profitData.totalCost) }}</text>
+        <text class="profit-value expense">{{ formatFinanceAmount(-profitData.totalCost, { scene: 'report' }) }}</text>
       </view>
       <view class="profit-divider" />
       <view class="profit-big">
         <text class="profit-label">净利润</text>
-        <text class="profit-value" :class="netProfitClass">{{ formatSignedMoney(profitData.netProfit) }}</text>
+        <text class="profit-value" :class="netProfitClass">{{ formatFinanceAmount(profitData.netProfit, { scene: 'report' }) }}</text>
       </view>
       <view class="profit-sub-row">
         <text class="profit-label">每只均摊成本</text>
-        <text class="profit-value">-¥{{ formatMoney(profitData.costPerPuppy) }}</text>
+        <text class="profit-value">{{ formatFinanceAmount(-profitData.costPerPuppy, { scene: 'report' }) }}</text>
       </view>
       <view class="profit-sub-row">
         <text class="profit-label">存活幼崽</text>
@@ -85,7 +85,7 @@
         <view class="expense-items">
           <view v-for="item in breedingCosts" :key="item.name" class="expense-item">
             <text class="expense-item-name">{{ item.name }}</text>
-            <text class="expense-item-amount">-¥{{ formatMoney(item.amount) }}</text>
+            <text class="expense-item-amount">{{ formatFinanceAmount(-item.amount, { scene: 'report' }) }}</text>
           </view>
         </view>
       </view>
@@ -96,7 +96,7 @@
         <view class="expense-items">
           <view v-for="item in litterCosts" :key="item.name" class="expense-item">
             <text class="expense-item-name">{{ item.name }}</text>
-            <text class="expense-item-amount">-¥{{ formatMoney(item.amount) }}</text>
+            <text class="expense-item-amount">{{ formatFinanceAmount(-item.amount, { scene: 'report' }) }}</text>
           </view>
         </view>
       </view>
@@ -107,7 +107,7 @@
         <view class="expense-items">
           <view v-for="item in puppyCosts" :key="item.name" class="expense-item">
             <text class="expense-item-name">{{ item.name }}</text>
-            <text class="expense-item-amount">-¥{{ formatMoney(item.amount) }}</text>
+            <text class="expense-item-amount">{{ formatFinanceAmount(-item.amount, { scene: 'report' }) }}</text>
           </view>
         </view>
       </view>
@@ -138,6 +138,7 @@ import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BLitterSelector from '@/components/form/BLitterSelector.vue'
+import { formatFinanceAmount } from '@/utils/financeDisplay'
 
 const showLitterPickerVisible = ref(false)
 
@@ -181,19 +182,19 @@ const incomeItems = computed(() => {
       statusText = '已售'
       statusHint = '已完成成交并计入收入'
       amountClass = 'income'
-      amountText = `+¥${formatMoney(item.amount)}`
+      amountText = formatFinanceAmount(item.amount, { scene: 'report' })
     } else if (item.status === 'reserved') {
       statusClass = 'reserved'
       statusText = '已预定'
       statusHint = item.estimated_amount ? '预计按当前约定金额成交' : '已进入预定流程'
       amountClass = item.estimated_amount ? 'estimated' : 'dash'
-      amountText = item.estimated_amount ? `预计 +¥${formatMoney(item.estimated_amount)}` : '—'
+      amountText = item.estimated_amount ? `预计 ${formatFinanceAmount(item.estimated_amount, { scene: 'report' })}` : '—'
     } else if (item.status === 'pending') {
       statusClass = 'pending'
       statusText = '待售'
       statusHint = item.estimated_amount ? '预计按当前底价或意向价成交' : '待进入销售流程'
       amountClass = item.estimated_amount ? 'estimated' : 'dash'
-      amountText = item.estimated_amount ? `预计 +¥${formatMoney(item.estimated_amount)}` : '—'
+      amountText = item.estimated_amount ? `预计 ${formatFinanceAmount(item.estimated_amount, { scene: 'report' })}` : '—'
     }
 
     return {
@@ -212,17 +213,6 @@ const incomeItems = computed(() => {
 const breedingCosts = computed(() => profitData.value?.breedingCosts || [])
 const litterCosts = computed(() => profitData.value?.litterCosts || [])
 const puppyCosts = computed(() => profitData.value?.puppyCosts || [])
-
-function formatMoney(val: number): string {
-  if (!val && val !== 0) return '0'
-  return val.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
-}
-
-function formatSignedMoney(val: number): string {
-  if (!val) return '¥0'
-  const sign = val > 0 ? '+' : '-'
-  return `${sign}¥${formatMoney(Math.abs(val))}`
-}
 
 function formatPuppyGender(gender?: string) {
   if (gender === '公') return '公'
