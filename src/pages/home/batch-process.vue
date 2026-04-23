@@ -97,12 +97,10 @@
         <!-- 日期 -->
         <view class="field-group">
           <view class="field-label"><text>日期</text></view>
-          <picker mode="date" :value="dateStr" @change="onDateChange">
-            <view class="form-input form-input--picker">
-              <text>{{ dateStr }}</text>
-              <text class="material-icons-round form-input__suffix">calendar_today</text>
-            </view>
-          </picker>
+          <view class="form-input form-input--picker" @click="showDatePicker = true">
+            <text>{{ dateStr }}</text>
+            <text class="material-icons-round form-input__suffix">calendar_today</text>
+          </view>
         </view>
 
         <!-- 费用（选填） -->
@@ -128,6 +126,14 @@
         确认完成 ({{ selected.size }}只)
       </BSubmitButton>
     </view>
+
+    <BDateTimePicker
+      v-model:visible="showDatePicker"
+      :model-value="formDate"
+      mode="date"
+      value-type="timestamp"
+      @confirm="onDateConfirm"
+    />
   </view>
 </template>
 
@@ -139,8 +145,10 @@ import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
+import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
 import { useCloudCall } from '@/composables/useCloudCall'
 import { getHealthTypeTone } from '@/utils/themeSemantics'
+import { buildTimestampFromDayOffset, formatDateInputValue } from '@/utils/date'
 
 interface TaskItem {
   id: string
@@ -163,6 +171,7 @@ const taskGroups = ref<TaskGroup[]>([])
 const selected = reactive(new Set<string>())
 let passedTaskIds: string[] = []
 let passedType = ''
+const showDatePicker = ref(false)
 
 const formData = reactive({
   vaccine_type: '',
@@ -181,12 +190,12 @@ const dewormingTypes = [
 ]
 
 const dateStr = computed(() => {
-  const d = new Date(formDate.value)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  return formatDateInputValue(formDate.value)
 })
 
-function onDateChange(e: any) {
-  formDate.value = new Date(e.detail.value + 'T00:00:00+08:00').getTime()
+function onDateConfirm(value: number | string) {
+  if (typeof value !== 'number') return
+  formDate.value = value
 }
 
 const perDogCost = computed(() => {
@@ -314,9 +323,7 @@ async function loadData() {
 onLoad((query) => {
   passedType = query?.type || ''
   passedTaskIds = query?.taskIds ? query.taskIds.split(',') : []
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  formDate.value = today.getTime()
+  formDate.value = buildTimestampFromDayOffset(0)
   loadData()
 })
 </script>

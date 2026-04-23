@@ -61,5 +61,7 @@ export interface Family extends Timestamped {
   creator_id: string
   members: FamilyMember[]
   care_rules: CareRule[]
+  invite_code?: string
+  invite_expires?: number
   settings: FamilySettings
 }

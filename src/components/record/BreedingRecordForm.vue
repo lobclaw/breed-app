@@ -89,7 +89,22 @@
       <template v-if="breedingType === 'heat_observation'">
         <view class="field-group">
           <view class="field-label"><text>选择种母</text></view>
-          <BDogPicker v-model="selectedDog" roleFilter="种狗" genderFilter="母" title="选择种母" :readonly="dogLocked" />
+          <BDogPicker
+            v-model="selectedDog"
+            :candidate-dogs="breedingCandidateDogs"
+            title="选择种母"
+            :readonly="dogLocked"
+            :empty-title="breedingPickerEmptyState.title"
+            :empty-description="breedingPickerEmptyState.description"
+          />
+        </view>
+
+        <view class="field-group">
+          <view class="field-label"><text>日期</text></view>
+          <view class="form-input form-input--picker" @click="showRecordDateTimePicker = true">
+            <text>{{ recordDateTimeStr || '请选择日期时间' }}</text>
+            <text class="material-icons-round form-input__suffix">calendar_today</text>
+          </view>
         </view>
 
         <view class="heat-observation__section">
@@ -173,32 +188,29 @@
             v-if="isHeatMultiCreate"
             v-model="selectedDogs"
             :multiple="true"
-            roleFilter="种狗"
-            genderFilter="母"
+            :candidate-dogs="breedingCandidateDogs"
             title="选择种母"
             placeholder="点击选择种母"
-            :exclude-ids="excludedHeatDogIds"
-            empty-title="暂无可录入的种母"
-            :empty-description="heatDogPickerEmptyDescription"
+            :empty-title="breedingPickerEmptyState.title"
+            :empty-description="breedingPickerEmptyState.description"
           />
           <BDogPicker
             v-else
             v-model="selectedDog"
-            roleFilter="种狗"
-            genderFilter="母"
+            :candidate-dogs="breedingCandidateDogs"
             title="选择种母"
             :readonly="dogLocked"
+            :empty-title="breedingPickerEmptyState.title"
+            :empty-description="breedingPickerEmptyState.description"
           />
         </view>
 
         <view class="field-group">
           <view class="field-label"><text>{{ dateLabel }}</text></view>
-          <picker mode="date" :value="dateStr" @change="onDateChange">
-            <view class="form-input form-input--picker">
-              <text>{{ dateStr || '请选择日期' }}</text>
-              <text class="material-icons-round form-input__suffix">calendar_today</text>
-            </view>
-          </picker>
+          <view class="form-input form-input--picker" @click="showDatePicker = true">
+            <text>{{ dateStr || '请选择日期' }}</text>
+            <text class="material-icons-round form-input__suffix">calendar_today</text>
+          </view>
           <view class="date-chips">
             <text class="date-chip" :class="{ active: dateChipActive === 'today' }" @click="setDateChip('today')">今天</text>
             <text class="date-chip" :class="{ active: dateChipActive === 'yesterday' }" @click="setDateChip('yesterday')">昨天</text>
@@ -283,14 +295,12 @@
                 <text class="auto-card__label">预计孕检日</text>
                 <text class="auto-card__value">{{ estimatedCheckDate }}</text>
               </view>
-              <picker mode="date" :value="manualDueDateStr" @change="onDueDateChange">
-                <view class="auto-card__row">
-                  <text class="material-icons-round auto-card__icon">child_friendly</text>
-                  <text class="auto-card__label">预计预产期</text>
-                  <text class="auto-card__value" :style="manualDueDate ? 'color: var(--primary);' : ''">{{ estimatedDueDate }}</text>
-                  <text class="material-icons-round auto-card__edit">edit</text>
-                </view>
-              </picker>
+              <view class="auto-card__row" @click="showDueDatePicker = true">
+                <text class="material-icons-round auto-card__icon">child_friendly</text>
+                <text class="auto-card__label">预计预产期</text>
+                <text class="auto-card__value" :style="manualDueDate ? 'color: var(--primary);' : ''">{{ estimatedDueDate }}</text>
+                <text class="material-icons-round auto-card__edit">edit</text>
+              </view>
               <view class="auto-card__hint">
                 <text class="material-icons-round auto-card__hint-icon">info_outline</text>
                 <text>可手动修改预产期</text>
@@ -435,15 +445,31 @@
       >
         {{ submitButtonText }}
       </BSubmitButton>
-      <view v-if="!loading && breedingType === 'heat_observation'" class="heat-observation__time" @click="pickTime">
-        <text class="material-icons-round" style="font-size: 14px; color: var(--text-3);">schedule</text>
-        <text class="heat-observation__time-text">{{ displayTime }}</text>
-      </view>
-      <view v-else-if="loading && breedingType === 'heat_observation'" class="record-form-skeleton__time">
-        <view class="record-form-skeleton__time-dot record-form-skeleton__shimmer" />
-        <view class="record-form-skeleton__time-line record-form-skeleton__shimmer" />
-      </view>
     </view>
+
+    <BDateTimePicker
+      v-model:visible="showDatePicker"
+      :model-value="date"
+      mode="date"
+      value-type="timestamp"
+      @confirm="onDateConfirm"
+    />
+
+    <BDateTimePicker
+      v-model:visible="showRecordDateTimePicker"
+      :model-value="recordTime"
+      mode="date"
+      value-type="timestamp"
+      @confirm="onRecordDateTimeConfirm"
+    />
+
+    <BDateTimePicker
+      v-model:visible="showDueDatePicker"
+      :model-value="manualDueDate || (date ? date + 59 * 86400000 : null)"
+      mode="date"
+      value-type="timestamp"
+      @confirm="onDueDateConfirm"
+    />
   </view>
 </template>
 
@@ -454,8 +480,11 @@ import { useRecordSubmitState } from '@/composables/useRecordSubmitState'
 import { buildRecordFeedbackMessage, queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
 import { resolveBreedingRouteQuery } from '@/utils/recordFormRoutes'
 import { getDefaultExtraArrangementDate, type ExtraArrangementKind } from '@/utils/breedingExtraArrangement'
+import { getBreedingDogPickerEmptyState, getEligibleBreedingDogs } from '@/utils/breedingDogEligibility'
+import { buildTimestampFromDayOffset, formatDateInputValue } from '@/utils/date'
 import { useDogStore } from '@/stores/dogStore'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
+import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 import BExtraArrangementSection from '@/components/form/BExtraArrangementSection.vue'
 import BImageUpload from '@/components/form/BImageUpload.vue'
@@ -519,7 +548,7 @@ const dogLocked = ref(false)
 const cycleId = ref('')
 const prefillTaskId = ref('')
 const date = ref<number | null>(null)
-const recordTime = ref(new Date())
+const recordTime = ref<number>(Date.now())
 const notes = ref('')
 const costInput = ref('')
 const images = ref<string[]>([])
@@ -530,6 +559,9 @@ const extraArrangementKind = ref<ExtraArrangementKind>('contact_doctor')
 const extraArrangementDate = ref<number | null>(getDefaultExtraArrangementDate())
 const extraArrangementNotes = ref('')
 const dateChipActive = ref<'today' | 'yesterday' | 'dayBefore' | ''>('today')
+const showDatePicker = ref(false)
+const showRecordDateTimePicker = ref(false)
+const showDueDatePicker = ref(false)
 const vulvaStatus = ref('')
 const dischargeStatus = ref('')
 const selectedSymptoms = ref<string[]>([])
@@ -541,7 +573,6 @@ const terminationTypes = ['流产', '死胎', '医疗终止', '确认未怀孕']
 const vulvaOptions = ['硬/肿胀', '开始软化', '明显松软']
 const dischargeOptions = ['鲜红较多', '暗红减少', '淡粉/草黄色', '接近透明']
 const symptoms = ['主动靠近公犬', '接受爬跨', '翘尾侧偏', '频繁排尿', '舔舐外阴增多']
-const blockedHeatStatuses = new Set(['发情中', '怀孕中', '哺乳中'])
 const dogStore = useDogStore()
 
 const pageTitle = computed(() => {
@@ -561,20 +592,16 @@ const pageSubtitle = computed(() => {
 
 const isHeatMultiCreate = computed(() => !isEdit.value && breedingType.value === 'heat' && !dogLocked.value)
 
-const excludedHeatDogIds = computed(() => {
-  if (!isHeatMultiCreate.value) return []
-  return dogStore.list
-    .filter((dog: any) => dog.role === '种狗' && dog.gender === '母')
-    .filter((dog: any) => Array.isArray(dog.statuses) && dog.statuses.some((status: any) => blockedHeatStatuses.has(status.type)))
-    .map((dog: any) => dog._id)
+const breedingCandidateDogs = computed(() => {
+  if (!breedingType.value) return []
+  return getEligibleBreedingDogs(dogStore.list, breedingType.value)
 })
 
-const heatDogPickerEmptyDescription = computed(() => {
-  const allDams = dogStore.list.filter((dog: any) => dog.role === '种狗' && dog.gender === '母')
-  if (allDams.length > 0 && excludedHeatDogIds.value.length >= allDams.length) {
-    return '发情中、怀孕中、哺乳中的犬只已自动隐藏'
+const breedingPickerEmptyState = computed(() => {
+  if (!breedingType.value) {
+    return { title: '暂无犬只', description: '没有符合条件的犬只' }
   }
-  return '没有符合条件的种母'
+  return getBreedingDogPickerEmptyState(breedingType.value, dogStore.list, breedingCandidateDogs.value)
 })
 
 const submitIdleLabel = computed(() => isEdit.value ? '保存修改' : '保存记录')
@@ -644,11 +671,7 @@ const manualDueDateStr = computed(() => {
   return `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}-${String(targetDate.getDate()).padStart(2, '0')}`
 })
 
-const displayTime = computed(() => {
-  const hours = String(recordTime.value.getHours()).padStart(2, '0')
-  const minutes = String(recordTime.value.getMinutes()).padStart(2, '0')
-  return `${hours}:${minutes}`
-})
+const recordDateTimeStr = computed(() => formatDateInputValue(recordTime.value))
 
 const extraArrangementPayload = computed(() => {
   if (breedingType.value === 'heat_observation') return undefined
@@ -706,6 +729,7 @@ const skeletonBlocks = computed<BreedingSkeletonBlock[]>(() => {
     return [
       ...blocks,
       { kind: 'picker' },
+      { kind: 'display' },
       { kind: 'choice', count: 3 },
       { kind: 'choice', count: 4, grid: true },
       { kind: 'symptoms' },
@@ -800,7 +824,7 @@ function resetDetails() {
   extraArrangementDate.value = getDefaultExtraArrangementDate()
   extraArrangementNotes.value = ''
   dateChipActive.value = 'today'
-  recordTime.value = new Date()
+  recordTime.value = Date.now()
   vulvaStatus.value = ''
   dischargeStatus.value = ''
   selectedSymptoms.value = []
@@ -823,20 +847,24 @@ function resetDetails() {
 
 function setDateChip(chip: 'today' | 'yesterday' | 'dayBefore') {
   dateChipActive.value = chip
-  const targetDate = new Date()
-  targetDate.setHours(0, 0, 0, 0)
-  if (chip === 'yesterday') targetDate.setDate(targetDate.getDate() - 1)
-  if (chip === 'dayBefore') targetDate.setDate(targetDate.getDate() - 2)
-  date.value = targetDate.getTime()
+  const offsetMap = { today: 0, yesterday: -1, dayBefore: -2 }
+  date.value = buildTimestampFromDayOffset(offsetMap[chip], date.value || Date.now())
 }
 
-function onDateChange(event: any) {
-  date.value = new Date(event.detail.value + 'T00:00:00+08:00').getTime()
+function onDateConfirm(value: number | string) {
+  if (typeof value !== 'number') return
+  date.value = value
   dateChipActive.value = ''
 }
 
-function onDueDateChange(event: any) {
-  manualDueDate.value = new Date(event.detail.value + 'T00:00:00+08:00').getTime()
+function onRecordDateTimeConfirm(value: number | string) {
+  if (typeof value !== 'number') return
+  recordTime.value = value
+}
+
+function onDueDateConfirm(value: number | string) {
+  if (typeof value !== 'number') return
+  manualDueDate.value = value
 }
 
 function toggleSymptom(symptom: string) {
@@ -846,17 +874,6 @@ function toggleSymptom(symptom: string) {
   } else {
     selectedSymptoms.value.push(symptom)
   }
-}
-
-function pickTime() {
-  // #ifdef APP-PLUS || MP
-  uni.showActionSheet({
-    itemList: ['使用当前时间'],
-    success: () => {
-      recordTime.value = new Date()
-    },
-  })
-  // #endif
 }
 
 function buildDetails() {
@@ -1001,12 +1018,12 @@ async function loadCreateState() {
   dogLocked.value = routeQuery.dogLocked
 
   if (breedingType.value === 'heat_observation') {
-    recordTime.value = new Date()
+    recordTime.value = Date.now()
   } else {
     setDateChip('today')
   }
 
-  if (breedingType.value === 'heat' && !dogLocked.value) {
+  if (!dogLocked.value && breedingType.value) {
     await dogStore.ensure().catch(() => {})
   }
 
@@ -1041,7 +1058,7 @@ async function loadEditState() {
     costInput.value = record.cost ? String(record.cost) : ''
 
     if (record.type === 'heat_observation') {
-      recordTime.value = new Date(record.date || Date.now())
+      recordTime.value = record.date || Date.now()
       vulvaStatus.value = record.details?.vulva_status || ''
       dischargeStatus.value = record.details?.discharge_status || ''
       selectedSymptoms.value = [...(record.details?.symptoms || [])]
@@ -1117,7 +1134,7 @@ async function submitCreate() {
   }
 
   if (breedingType.value === 'heat_observation') {
-    payload.date = recordTime.value.getTime()
+    payload.date = recordTime.value
     payload.details = detailPayload
   } else {
     payload.date = date.value
@@ -1161,7 +1178,7 @@ async function submitEdit() {
   }
 
   if (breedingType.value === 'heat_observation') {
-    payload.date = recordTime.value.getTime()
+    payload.date = recordTime.value
     payload.cost = null
   } else {
     payload.date = date.value
@@ -1696,20 +1713,6 @@ watch(
   font-size: 14px;
   color: var(--text-1);
   width: 100%;
-}
-
-.heat-observation__time {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  margin-top: 8px;
-  width: 100%;
-}
-
-.heat-observation__time-text {
-  font-size: 13px;
-  color: var(--text-3);
 }
 
 .fixed-bottom--heat-observation {

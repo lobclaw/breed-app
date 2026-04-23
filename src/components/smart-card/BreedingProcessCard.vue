@@ -2,7 +2,7 @@
   <view
     class="card card--amber"
     :class="{ 'card--window-passed': milestone.suggestionStatus === 'window_passed' }"
-    @click="goProcess"
+    @click="onCardTap"
   >
     <view class="card-header">
       <view class="card-icon card-icon--amber">
@@ -17,13 +17,13 @@
     <view class="process-body">
       <view class="process-copy">
         <text class="process-stage" :class="`process-stage--${milestone.suggestionStatus}`">{{ milestone.stageTitle }}</text>
-        <text class="process-day">{{ primaryLabel }}</text>
-        <text v-if="secondaryLabel" class="process-reference">{{ secondaryLabel }}</text>
+        <text class="process-day">{{ milestoneSummary.primaryLabel }}</text>
+        <text v-if="milestoneSummary.secondaryLabel" class="process-reference">{{ milestoneSummary.secondaryLabel }}</text>
         <text
-          v-if="alertLabel"
+          v-if="milestoneSummary.alertLabel"
           class="process-alert"
           :class="milestone.isAlertDanger ? 'process-alert--window_passed' : ''"
-        >{{ alertLabel }}</text>
+        >{{ milestoneSummary.alertLabel }}</text>
       </view>
       <view v-if="showSuggestionChip" class="process-chip" :class="`process-chip--${milestone.suggestionStatus}`">
         <text class="process-chip__text" :class="`process-chip__text--${milestone.suggestionStatus}`">{{ milestone.suggestionLabel }}</text>
@@ -31,28 +31,7 @@
     </view>
 
     <view class="card-actions">
-      <view
-        v-if="canContinueMating"
-        class="btn btn--text"
-        @click.stop="goContinueMating"
-      >
-        <text class="btn-text btn-text--muted">继续配种</text>
-      </view>
-      <view
-        v-if="canPrenatal"
-        class="btn btn--text"
-        @click.stop="goPrenatal"
-      >
-        <text class="btn-text btn-text--muted">产检</text>
-      </view>
-      <view
-        v-if="canPreLabor"
-        class="btn btn--text"
-        @click.stop="goPreLabor"
-      >
-        <text class="btn-text btn-text--muted">临产</text>
-      </view>
-      <view class="btn btn--primary btn--primary-amber" @click.stop="goProcess">
+      <view class="btn btn--primary btn--primary-amber" @click.stop="onPrimaryActionTap">
         <text class="material-icons-round btn-icon btn-icon--white">arrow_forward</text>
         <text class="btn-text btn-text--white">处理</text>
       </view>
@@ -65,104 +44,42 @@ import { computed } from 'vue'
 
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import { deriveBreedingMilestoneViewModel } from '@/utils/breedingMilestone'
+import { buildBreedingMilestoneSummary } from '@/utils/breedingMilestoneSummary'
 import {
-  buildHomeContinueMatingUrl,
-  buildHomePreLaborUrl,
-  buildHomePrenatalUrl,
-  canOpenHomeContinueMating,
-  canOpenHomePreLabor,
-  canOpenHomePrenatal,
-} from '@/utils/homeHeatObservation'
+  hasMultipleHomeBreedingActions,
+  openHomeBreedingAction,
+  openHomeBreedingDetail,
+} from '@/utils/homeBreedingActions'
 
 const props = defineProps<{ card: any }>()
+const emit = defineEmits<{
+  (e: 'action', payload: { type: string; data: any }): void
+}>()
 
 const milestone = computed(() => deriveBreedingMilestoneViewModel(props.card?.tasks?.[0] || {}))
-const primaryLabel = computed(() => {
-  if ((milestone.value.stepType === 'mating' || milestone.value.stepType === 'follicle_check') && milestone.value.heatDayLabel) {
-    return milestone.value.heatDayLabel
-  }
-  if (milestone.value.stepType === 'weaning_confirm') return milestone.value.stageDayLabel
-  return milestone.value.dayLabel
-})
-const secondaryLabel = computed(() => {
-  if (milestone.value.stepType === 'weaning_confirm') return milestone.value.referenceDateLabel
-  if (milestone.value.stepType === 'mating') return milestone.value.stageDayLabel
-  if (milestone.value.stepType === 'follicle_check' && milestone.value.stageDayLabel) return milestone.value.stageDayLabel
-  return milestone.value.referenceDateLabel
-})
-const alertLabel = computed(() => milestone.value.alertLabel)
+const milestoneSummary = computed(() => buildBreedingMilestoneSummary(milestone.value))
 const showSuggestionChip = computed(() => {
+  if (milestone.value.stepType === 'follicle_check') return false
   return !(milestone.value.stepType === 'mating' && milestone.value.suggestionStatus === 'window_passed')
 })
-const canContinueMating = computed(() => canOpenHomeContinueMating(props.card))
-const canPrenatal = computed(() => canOpenHomePrenatal(props.card))
-const canPreLabor = computed(() => canOpenHomePreLabor(props.card))
+const hasMultipleActions = computed(() => hasMultipleHomeBreedingActions(props.card))
 
-const typeMap: Record<string, string> = {
-  vaccination: '/pages/record/health-vaccination',
-  deworming: '/pages/record/health-deworming',
-  illness: '/pages/record/health-illness',
-  heat: '/pages/record/breeding-heat',
-  follicle_check: '/pages/record/breeding-follicle',
-  mating: '/pages/record/breeding-mating',
-  pregnancy_check: '/pages/record/breeding-pregnancy',
-  birth: '/pages/breeding/birth-wizard',
-  prenatal_check: '/pages/record/breeding-prenatal',
-  pre_labor: '/pages/record/breeding-prelabor',
-}
-
-function goProcess() {
-  const task = props.card?.tasks?.[0]
-  if (!task) return
-
-  const params: string[] = []
-  if (props.card.dogId) params.push(`dogId=${props.card.dogId}`)
-  if (props.card.dogName) params.push(`dogName=${encodeURIComponent(props.card.dogName)}`)
-  if (task._id) params.push(`taskId=${task._id}`)
-  if (task.cycle_id) params.push(`cycleId=${task.cycle_id}`)
-
-  let url = typeMap[task.type] || '/pages/record/health-vaccination'
-  if (task.type === 'breeding_milestone') {
-    params.push('locked=true')
-    const stepType = task.details?.step_type
-    if (stepType === 'follicle_check') {
-      url = '/pages/record/breeding-follicle'
-    } else if (stepType === 'mating') {
-      url = '/pages/record/breeding-mating'
-    } else if (stepType === 'pregnancy_check') {
-      url = '/pages/record/breeding-pregnancy'
-    } else if (stepType === 'birth') {
-      const birthParams: string[] = []
-      if (task.cycle_id) birthParams.push(`cycleId=${task.cycle_id}`)
-      if (props.card.dogName) birthParams.push(`damName=${encodeURIComponent(props.card.dogName)}`)
-      uni.navigateTo({ url: `/pages/breeding/birth-wizard?${birthParams.join('&')}` })
-      return
-    } else if (stepType === 'weaning_confirm' && task.litter_id) {
-      const litterParams = [`id=${task.litter_id}`]
-      if (task._id) litterParams.push(`taskId=${task._id}`)
-      uni.navigateTo({ url: `/pages/breeding/litter?${litterParams.join('&')}` })
-      return
-    } else {
-      url = '/pages/record/breeding-heat'
-    }
+function onCardTap() {
+  if (hasMultipleActions.value) {
+    openHomeBreedingDetail(props.card)
+    return
   }
 
-  uni.navigateTo({ url: `${url}?${params.join('&')}` })
+  openHomeBreedingAction(props.card, 'process')
 }
 
-function goContinueMating() {
-  if (!canOpenHomeContinueMating(props.card)) return
-  uni.navigateTo({ url: buildHomeContinueMatingUrl(props.card) })
-}
+function onPrimaryActionTap() {
+  if (hasMultipleActions.value) {
+    emit('action', { type: 'show_breeding_actions', data: { card: props.card } })
+    return
+  }
 
-function goPrenatal() {
-  if (!canOpenHomePrenatal(props.card)) return
-  uni.navigateTo({ url: buildHomePrenatalUrl(props.card) })
-}
-
-function goPreLabor() {
-  if (!canOpenHomePreLabor(props.card)) return
-  uni.navigateTo({ url: buildHomePreLaborUrl(props.card) })
+  openHomeBreedingAction(props.card, 'process')
 }
 </script>
 

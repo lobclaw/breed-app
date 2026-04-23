@@ -6,7 +6,7 @@
     <text class="material-icons-round overdue-badge-icon">schedule</text>
     <text class="overdue-badge-text">逾期{{ card.overdueDays }}天</text>
   </view>
-  <BreedingProcessCard v-if="isBreedingProcessCard" :card="card" />
+  <BreedingProcessCard v-if="isBreedingProcessCard" :card="card" @action="onAction" />
   <DogCard v-else-if="card.cardType === 'dog'" :card="card" @complete="onComplete" @postpone="onPostpone" @action="onAction" />
   <CareGroupCard v-else-if="card.cardType === 'care_group'" :card="card" @complete="onComplete" @batch-complete="onBatchComplete" />
   <BatchCard v-else-if="card.cardType === 'batch'" :card="card" @complete="onComplete" @postpone="onPostpone" @batch-complete="onBatchComplete" @batch-skip="onBatchSkip" />

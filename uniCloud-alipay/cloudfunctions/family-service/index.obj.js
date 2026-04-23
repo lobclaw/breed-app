@@ -532,12 +532,13 @@ module.exports = {
     const crypto = require('crypto')
     const code = crypto.randomBytes(4).toString('hex').substring(0, 6).toUpperCase()
     const now = Date.now()
+    const inviteExpires = now + 24 * 60 * 60 * 1000
 
     await db.collection('families')
       .doc(this.familyId)
       .update({
         invite_code: code,
-        invite_expires: now + 24 * 60 * 60 * 1000,
+        invite_expires: inviteExpires,
         updated_at: now,
       })
 
@@ -553,7 +554,7 @@ module.exports = {
       createdAt: now,
     })
 
-    return { data: { code } }
+    return { data: { code, invite_expires: inviteExpires } }
   },
 
   /**

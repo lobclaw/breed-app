@@ -1,3 +1,5 @@
+import { buildTimestampFromDayOffset } from './date'
+
 export const EXTRA_ARRANGEMENT_OPTIONS = [
   { value: 'contact_doctor', label: '联系医生' },
   { value: 'recheck_observe', label: '复测观察' },
@@ -13,8 +15,5 @@ export function getExtraArrangementTitle(kind?: string | null) {
 }
 
 export function getDefaultExtraArrangementDate() {
-  const now = new Date()
-  now.setHours(0, 0, 0, 0)
-  now.setDate(now.getDate() + 1)
-  return now.getTime()
+  return buildTimestampFromDayOffset(1)
 }

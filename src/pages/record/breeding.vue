@@ -30,9 +30,9 @@
         <!-- 发情开始日期 -->
         <view class="field-group">
           <view class="field-label"><text>发情开始日期</text></view>
-          <picker mode="date" :value="dateStr" @change="onDateChange">
+          <view @click="showDatePicker = true">
             <input type="text" class="form-input" :value="dateStr" placeholder="请选择日期" disabled />
-          </picker>
+          </view>
           <view class="date-chips">
             <text
               class="date-chip"
@@ -75,9 +75,9 @@
 
         <view class="field-group">
           <view class="field-label"><text>检查日期</text></view>
-          <picker mode="date" :value="dateStr" @change="onDateChange">
+          <view @click="showDatePicker = true">
             <input type="text" class="form-input" :value="dateStr" placeholder="请选择日期" disabled />
-          </picker>
+          </view>
           <view class="date-chips">
             <text class="date-chip" :class="{ active: dateChipActive === 'today' }" @click="setDateChip('today')">今天</text>
             <text class="date-chip" :class="{ active: dateChipActive === 'yesterday' }" @click="setDateChip('yesterday')">昨天</text>
@@ -163,9 +163,9 @@
 
         <view class="field-group">
           <view class="field-label"><text>配种日期</text></view>
-          <picker mode="date" :value="dateStr" @change="onDateChange">
+          <view @click="showDatePicker = true">
             <input type="text" class="form-input" :value="dateStr" placeholder="请选择日期" disabled />
-          </picker>
+          </view>
           <view class="date-chips">
             <text class="date-chip" :class="{ active: dateChipActive === 'today' }" @click="setDateChip('today')">今天</text>
             <text class="date-chip" :class="{ active: dateChipActive === 'yesterday' }" @click="setDateChip('yesterday')">昨天</text>
@@ -245,9 +245,9 @@
 
         <view class="field-group">
           <view class="field-label"><text>检查日期</text></view>
-          <picker mode="date" :value="dateStr" @change="onDateChange">
+          <view @click="showDatePicker = true">
             <input type="text" class="form-input" :value="dateStr" placeholder="请选择日期" disabled />
-          </picker>
+          </view>
           <view class="date-chips">
             <text class="date-chip" :class="{ active: dateChipActive === 'today' }" @click="setDateChip('today')">今天</text>
             <text class="date-chip" :class="{ active: dateChipActive === 'yesterday' }" @click="setDateChip('yesterday')">昨天</text>
@@ -303,9 +303,9 @@
 
         <view class="field-group">
           <view class="field-label"><text>检查日期</text></view>
-          <picker mode="date" :value="dateStr" @change="onDateChange">
+          <view @click="showDatePicker = true">
             <input type="text" class="form-input" :value="dateStr" placeholder="请选择日期" disabled />
-          </picker>
+          </view>
           <view class="date-chips">
             <text class="date-chip" :class="{ active: dateChipActive === 'today' }" @click="setDateChip('today')">今天</text>
             <text class="date-chip" :class="{ active: dateChipActive === 'yesterday' }" @click="setDateChip('yesterday')">昨天</text>
@@ -347,9 +347,9 @@
 
         <view class="field-group">
           <view class="field-label"><text>日期</text></view>
-          <picker mode="date" :value="dateStr" @change="onDateChange">
+          <view @click="showDatePicker = true">
             <input type="text" class="form-input" :value="dateStr" placeholder="请选择日期" disabled />
-          </picker>
+          </view>
           <view class="date-chips">
             <text class="date-chip" :class="{ active: dateChipActive === 'today' }" @click="setDateChip('today')">今天</text>
             <text class="date-chip" :class="{ active: dateChipActive === 'yesterday' }" @click="setDateChip('yesterday')">昨天</text>
@@ -410,9 +410,9 @@
 
         <view class="field-group">
           <view class="field-label"><text>日期</text></view>
-          <picker mode="date" :value="dateStr" @change="onDateChange">
+          <view @click="showDatePicker = true">
             <input type="text" class="form-input" :value="dateStr" placeholder="请选择日期" disabled />
-          </picker>
+          </view>
           <view class="date-chips">
             <text class="date-chip" :class="{ active: dateChipActive === 'today' }" @click="setDateChip('today')">今天</text>
             <text class="date-chip" :class="{ active: dateChipActive === 'yesterday' }" @click="setDateChip('yesterday')">昨天</text>
@@ -461,6 +461,14 @@
       </BSubmitButton>
     </view>
 
+    <BDateTimePicker
+      v-model:visible="showDatePicker"
+      :model-value="form.date"
+      mode="date"
+      value-type="timestamp"
+      @confirm="onDateConfirm"
+    />
+
   </view>
 </template>
 
@@ -469,9 +477,11 @@ import { ref, reactive, computed, watch } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import { buildRecordFeedbackMessage, queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
+import { buildTimestampFromDayOffset } from '@/utils/date'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
+import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
 
 const cycleId = ref('')
 const selectedDog = ref<any>(null)
@@ -489,6 +499,7 @@ const costInput = ref('')
 const details = reactive<Record<string, any>>({})
 const submitState = ref<'idle' | 'submitting' | 'success'>('idle')
 const dateChipActive = ref('today')
+const showDatePicker = ref(false)
 
 const typeOptions = [
   { label: '发情', value: 'heat' },
@@ -558,15 +569,13 @@ const matingNumberPreviewText = computed(() => `第 ${details.mating_number || 1
 
 function setDateChip(chip: string) {
   dateChipActive.value = chip
-  const now = new Date()
-  now.setHours(0, 0, 0, 0)
-  if (chip === 'yesterday') now.setDate(now.getDate() - 1)
-  if (chip === 'dayBefore') now.setDate(now.getDate() - 2)
-  form.date = now.getTime()
+  const offsetMap: Record<string, number> = { today: 0, yesterday: -1, dayBefore: -2 }
+  form.date = buildTimestampFromDayOffset(offsetMap[chip] || 0, form.date || Date.now())
 }
 
-function onDateChange(e: any) {
-  form.date = new Date(e.detail.value + 'T00:00:00+08:00').getTime()
+function onDateConfirm(value: number | string) {
+  if (typeof value !== 'number') return
+  form.date = value
   dateChipActive.value = ''
 }
 
@@ -692,9 +701,7 @@ onLoad((query) => {
   }
 
   // 默认日期为今天
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  form.date = today.getTime()
+  form.date = buildTimestampFromDayOffset(0)
 })
 
 watch(

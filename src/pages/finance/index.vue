@@ -166,18 +166,14 @@
             </view>
             </view>
             <view v-if="draftFilters.dateRange === 'custom'" class="custom-date-row">
-              <picker mode="date" :value="draftStartDateStr" @change="onDraftDateChange('start', $event)">
-                <view class="custom-date-card">
-                  <text class="custom-date-card__label">开始日期</text>
-                  <text class="custom-date-card__value">{{ draftStartDateStr || '请选择' }}</text>
-                </view>
-              </picker>
-              <picker mode="date" :value="draftEndDateStr" @change="onDraftDateChange('end', $event)">
-                <view class="custom-date-card">
-                  <text class="custom-date-card__label">结束日期</text>
-                  <text class="custom-date-card__value">{{ draftEndDateStr || '请选择' }}</text>
-                </view>
-              </picker>
+              <view class="custom-date-card" @click="showDraftStartDatePicker = true">
+                <text class="custom-date-card__label">开始日期</text>
+                <text class="custom-date-card__value">{{ draftStartDateStr || '请选择' }}</text>
+              </view>
+              <view class="custom-date-card" @click="showDraftEndDatePicker = true">
+                <text class="custom-date-card__label">结束日期</text>
+                <text class="custom-date-card__value">{{ draftEndDateStr || '请选择' }}</text>
+              </view>
             </view>
           </view>
 
@@ -404,6 +400,22 @@
       @selectMultiple="onCycleFiltersSelected"
     />
 
+    <BDateTimePicker
+      v-model:visible="showDraftStartDatePicker"
+      :model-value="draftFilters.customStartDate"
+      mode="date"
+      value-type="timestamp"
+      @confirm="onDraftDateConfirm('start', $event)"
+    />
+
+    <BDateTimePicker
+      v-model:visible="showDraftEndDatePicker"
+      :model-value="draftFilters.customEndDate"
+      mode="date"
+      value-type="timestamp"
+      @confirm="onDraftDateConfirm('end', $event)"
+    />
+
     <BNavBar current="finance" />
   </view>
 </template>
@@ -420,6 +432,7 @@ import BSheet from '@/components/layout/BSheet.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 import BLitterSelector from '@/components/form/BLitterSelector.vue'
 import BCycleSelector from '@/components/form/BCycleSelector.vue'
+import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
 import {
   DEFAULT_EXPENSE_CATEGORIES,
   buildExpenseCategoryGroups,
@@ -472,6 +485,8 @@ const showFilterSheet = ref(false)
 const showDogPicker = ref(false)
 const showLitterPicker = ref(false)
 const showCyclePicker = ref(false)
+const showDraftStartDatePicker = ref(false)
+const showDraftEndDatePicker = ref(false)
 const currentMonth = ref(new Date())
 const expenseGroups = ref<ExpenseCategoryGroup[]>(buildExpenseCategoryGroups())
 const categories = ref<ExpenseCategory[]>(normalizeExpenseCategories(DEFAULT_EXPENSE_CATEGORIES, expenseGroups.value))
@@ -736,17 +751,15 @@ function formatDateInput(ts: number) {
   const year = d.getFullYear()
   const month = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
+  const hours = String(d.getHours()).padStart(2, '0')
+  const minutes = String(d.getMinutes()).padStart(2, '0')
+  return `${year}-${month}-${day} ${hours}:${minutes}`
 }
 
 function formatDateRangeLabel(ts: number) {
   if (!ts) return ''
   const d = new Date(ts)
   return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`
-}
-
-function toPickerTimestamp(dateStr: string) {
-  return new Date(`${dateStr}T00:00:00+08:00`).getTime()
 }
 
 function formatSelectionSummary(names: string[], placeholder: string) {
@@ -902,8 +915,8 @@ function toggleDraftUnlinkedOnly() {
   Object.assign(draftFilters, normalizeFilters(draftFilters))
 }
 
-function onDraftDateChange(kind: 'start' | 'end', event: any) {
-  const value = toPickerTimestamp(event.detail.value)
+function onDraftDateConfirm(kind: 'start' | 'end', value: number | string) {
+  if (typeof value !== 'number') return
   if (kind === 'start') draftFilters.customStartDate = value
   else draftFilters.customEndDate = value
 }

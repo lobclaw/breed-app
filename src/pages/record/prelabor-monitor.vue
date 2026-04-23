@@ -12,6 +12,14 @@
       <BDogPicker v-model="selectedDog" roleFilter="种狗" genderFilter="母" title="选择种母" />
     </view>
 
+    <view class="prelabor-monitor__datetime-field">
+      <view class="field-label"><text>记录日期</text></view>
+      <view class="form-input form-input--picker" @click="showDateTimePicker = true">
+        <text>{{ recordDateTimeStr || '请选择日期时间' }}</text>
+        <text class="material-icons-round form-input__suffix">calendar_today</text>
+      </view>
+    </view>
+
     <!-- 主要内容 -->
     <view class="prelabor-monitor__content">
 
@@ -78,7 +86,7 @@
           </view>
           <view class="prelabor-monitor__temp-right">
             <text class="prelabor-monitor__temp-time-label">测量时间</text>
-            <text class="prelabor-monitor__temp-time" @click="pickTime">{{ displayTime }}</text>
+            <text class="prelabor-monitor__temp-time">{{ displayTime }}</text>
           </view>
         </view>
       </view>
@@ -127,12 +135,16 @@
         <view class="prelabor-monitor__save-btn" @click="handleSave">
           <text class="prelabor-monitor__save-text">{{ submitting ? '提交中...' : '保存记录' }}</text>
         </view>
-        <view class="prelabor-monitor__time-display" @click="pickTime">
-          <text class="material-icons-round" style="font-size: 14px; color: var(--text-3);">schedule</text>
-          <text class="prelabor-monitor__time-display-text">{{ displayTime }}</text>
-        </view>
       </view>
     </view>
+
+    <BDateTimePicker
+      v-model:visible="showDateTimePicker"
+      :model-value="recordTime"
+      mode="date"
+      value-type="timestamp"
+      @confirm="onDateTimeConfirm"
+    />
   </view>
 </template>
 
@@ -143,6 +155,8 @@ import { useCloudCall } from '@/composables/useCloudCall'
 import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
+import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
+import { formatDateInputValue, formatTimeInputValue } from '@/utils/date'
 
 interface TempRecord {
   temp: number
@@ -154,13 +168,11 @@ const selectedDog = ref<any>(null)
 
 // 体温
 const temperature = ref('')
-const recordTime = ref(new Date())
+const recordTime = ref<number>(Date.now())
 const submitting = ref(false)
-const displayTime = computed(() => {
-  const h = String(recordTime.value.getHours()).padStart(2, '0')
-  const m = String(recordTime.value.getMinutes()).padStart(2, '0')
-  return `${h}:${m}`
-})
+const showDateTimePicker = ref(false)
+const displayTime = computed(() => formatTimeInputValue(recordTime.value))
+const recordDateTimeStr = computed(() => formatDateInputValue(recordTime.value))
 
 // 历史体温趋势（最近4-6次）
 const tempHistory = ref<TempRecord[]>([])
@@ -265,13 +277,9 @@ function toggleSymptom(s: string) {
   }
 }
 
-function pickTime() {
-  uni.showActionSheet({
-    itemList: ['使用当前时间'],
-    success: () => {
-      recordTime.value = new Date()
-    },
-  })
+function onDateTimeConfirm(value: number | string) {
+  if (typeof value !== 'number') return
+  recordTime.value = value
 }
 
 const { run: addBreedingRecord } = useCloudCall('breeding-service', 'addBreedingRecord', {
@@ -297,7 +305,7 @@ async function handleSave() {
     const res = await addBreedingRecord({
       type: 'pre_labor',
       dog_id: selectedDog.value._id,
-      date: recordTime.value.getTime(),
+      date: recordTime.value,
       details: {
         temperature: temp,
         symptoms: selectedSymptoms.value,
@@ -326,6 +334,10 @@ async function handleSave() {
 
   /* 犬只选择器区域 */
   &__dog-picker {
+    padding: 0 var(--space-page) 12px;
+  }
+
+  &__datetime-field {
     padding: 0 var(--space-page) 12px;
   }
 
@@ -606,8 +618,6 @@ async function handleSave() {
   /* 底部 */
   &__bottom {
     display: flex;
-    flex-direction: column;
-    gap: 12px;
     margin-top: 4px;
   }
 
@@ -628,19 +638,6 @@ async function handleSave() {
     font-size: 15px;
     font-weight: 700;
     color: #FFFFFF;
-  }
-
-  &__time-display {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 4px;
-  }
-
-  &__time-display-text {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-3);
   }
 }
 </style>

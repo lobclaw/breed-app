@@ -34,6 +34,9 @@
 
 - 所有业务日期与系统时间统一使用 timestamp 毫秒数（`Number`）
 - 业务判断统一按北京时间（UTC+8）
+- 除每日触发模板类字段外，业务日期字段不再要求写到 `00:00:00.000`
+- 用户只选择“日期”时，前端默认使用“所选年月日 + 选择当下的当前时分秒毫秒”生成 timestamp
+- 任何按“天”消费的逻辑，必须在读取 timestamp 后再按北京时间换算日边界
 - 前端负责展示格式化
 
 ### 软删除
@@ -240,6 +243,11 @@
 
 - 首页提醒、额外安排、主链里程碑与手动待办统一由该集合承载
 - 任务是否完成只表达“待处理事实”，不替代真实业务记录
+- `breeding_milestone(details.step_type=follicle_check)` 额外维护：
+  `follicle_check_count`（本周期累计卵泡检查次数）、
+  `follicle_result`（最近一次检查结果）、
+  `latest_follicle_check_date`（最近一次检查日期）、
+  `abnormal_result`（最近一次是否为发育不良）
 
 ### 3.8 `operation_logs`
 
@@ -344,6 +352,16 @@
 - `dog_weights`：体重历史
 - `medication_protocols`：用药方案库
 
+其中 `families` 至少包含：
+
+- `name`
+- `creator_id`
+- `members`
+- `care_rules`
+- `settings`
+- `invite_code`
+- `invite_expires`
+
 其中 `families.settings` 至少包含：
 
 - `default_weaning_days`
@@ -381,7 +399,10 @@
 规则：
 
 - 通知设置统一存放在 `families.settings`
+- `invite_code` 表示当前家庭有效邀请码；可为空或缺失
+- `invite_expires` 表示邀请码失效时间，使用 timestamp 毫秒数
 - `morning_summary_time` 使用北京时间 `HH:MM` 字符串
+- `morning_summary_time` 是唯一保留为 `HH:MM` 的每日触发模板字段，不参与 timestamp 统一口径
 - `notification_types.overdue` 固定为 `true`
 - 自定义支出分组统一存放在 `custom_expense_category_groups`
 - 自定义支出分组使用 `{ key, label }`；`key` 由服务端生成且不可变，`label` 可编辑
@@ -409,6 +430,8 @@
 - 主链固定为 `发情 → 建议卵泡检查 → 配种 → 建议孕检 → 生产 → 确认断奶`
 - `follicle_check` 只有在 `details.result === 已成熟` 时才推进到 `配种`
 - 当前首页下一步取最近一次卵泡检查结果；`发育中 / 发育不良 / 其他` 继续停留在 `建议卵泡检查`
+- 首页 `建议卵泡检查` 卡片固定表达“发情第 X 天 + 最近一次检查摘要 + 最近一次异常提示”，不再显示 `卵泡检查后第 X 天`
+- 多次复查时首页只显示累计检查次数与最近一次距今天数，不展开历史复查明细
 - 额外安排只影响任务，不推进主流程
 - 生产后只自动生成“确认断奶”，不再静默铺首驱/首免链
 

@@ -49,9 +49,14 @@ function getIdArg(input, ...keys) {
 }
 
 function startOfDay(ts) {
-  const date = new Date(ts)
-  date.setHours(0, 0, 0, 0)
-  return date.getTime()
+  const offsetMs = 8 * 60 * 60 * 1000
+  const sourceTs = Number.isFinite(Number(ts)) ? Number(ts) : Date.now()
+  const beijingNow = new Date(sourceTs + offsetMs)
+  const year = beijingNow.getUTCFullYear()
+  const month = beijingNow.getUTCMonth()
+  const day = beijingNow.getUTCDate()
+
+  return Date.UTC(year, month, day, 0, 0, 0, 0) - offsetMs
 }
 
 function mapMedicationStatus(status) {
@@ -941,7 +946,8 @@ module.exports = {
     const now = Date.now()
     const familyId = this.familyId
     const uid = this.uid
-    const startDate = data.actual_start_date || now
+    const startDate = Number.isFinite(Number(data.actual_start_date)) ? Number(data.actual_start_date) : now
+    const endDate = startDate + ((durationDays - 1) * DAY_MS)
 
     // ① 一次校验所有犬只
     const { data: dogs } = await db.collection('dogs')
@@ -988,7 +994,9 @@ module.exports = {
         method: data.method || '口服',
         frequency: data.frequency || 1,
         duration_days: durationDays,
+        start_date: startDate,
         actual_start_date: startDate,
+        end_date: endDate,
         status: '进行中',
         daily_doses: {},
         notes: data.notes || null,
@@ -1077,7 +1085,8 @@ module.exports = {
     if (!dogs || dogs.length === 0) throw new Error('犬只不存在')
     const dog = dogs[0]
 
-    const startDate = data.actual_start_date || now
+    const startDate = Number.isFinite(Number(data.actual_start_date)) ? Number(data.actual_start_date) : now
+    const endDate = startDate + ((durationDays - 1) * DAY_MS)
 
     // 创建用药任务（单条记录，不预生成每日 task）
     const medicationData = {
@@ -1091,7 +1100,9 @@ module.exports = {
       method: data.method || '口服',
       frequency: data.frequency || 1,
       duration_days: durationDays,
+      start_date: startDate,
       actual_start_date: startDate,
+      end_date: endDate,
       status: '进行中',
       daily_doses: {},
       notes: data.notes || null,
@@ -1186,9 +1197,9 @@ module.exports = {
     const frequency = med.frequency || 1
 
     // 计算今天是第几天
-    const startDate = new Date(med.actual_start_date); startDate.setHours(0, 0, 0, 0)
-    const today = new Date(); today.setHours(0, 0, 0, 0)
-    const currentDay = Math.floor((today.getTime() - startDate.getTime()) / 86400000) + 1
+    const startDate = startOfDay(med.actual_start_date || med.start_date || med.created_at)
+    const today = startOfDay(now)
+    const currentDay = Math.floor((today - startDate) / DAY_MS) + 1
     if (currentDay < 1 || currentDay > med.duration_days) {
       return { data: { completed: false, out_of_range: true } }
     }
@@ -1251,15 +1262,15 @@ module.exports = {
 
     const familyId = this.familyId
     const now = Date.now()
-    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const today = startOfDay(now)
 
     const { data: meds } = await db.collection('medication_tasks')
       .where({ _id: dbCmd.in(medicationTaskIds), family_id: familyId, status: '进行中' })
       .get()
 
     for (const med of meds) {
-      const startDate = new Date(med.actual_start_date); startDate.setHours(0, 0, 0, 0)
-      const currentDay = Math.floor((today.getTime() - startDate.getTime()) / 86400000) + 1
+      const startDate = startOfDay(med.actual_start_date || med.start_date || med.created_at)
+      const currentDay = Math.floor((today - startDate) / DAY_MS) + 1
       if (currentDay < 1 || currentDay > med.duration_days) continue
 
       const dayKey = String(currentDay)

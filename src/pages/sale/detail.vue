@@ -237,9 +237,9 @@
         </view>
         <view class="modal-field">
           <text class="modal-label">交付日期</text>
-          <picker mode="date" :value="completeForm.delivery_date" @change="completeForm.delivery_date = $event.detail.value">
-            <input :value="completeForm.delivery_date" placeholder="选填" class="modal-input" disabled />
-          </picker>
+          <view @click="showDeliveryDatePicker = true">
+            <input :value="deliveryDateText" placeholder="选填" class="modal-input" disabled />
+          </view>
         </view>
         <view class="modal-actions">
           <button class="modal-btn" @click="showCompleteModal = false">取消</button>
@@ -305,14 +305,12 @@
         <!-- 退款日期 -->
         <view class="sheet-field">
           <text class="sheet-label">退款日期</text>
-          <picker mode="date" :value="refundSheetForm.refund_date" @change="refundSheetForm.refund_date = $event.detail.value">
-            <view class="sheet-select">
-              <text :style="{ color: refundSheetForm.refund_date ? 'var(--text-1)' : 'var(--text-3)' }">
-                {{ refundSheetForm.refund_date || '选择日期' }}
-              </text>
-              <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
-            </view>
-          </picker>
+          <view class="sheet-select" @click="showRefundDatePicker = true">
+            <text :style="{ color: refundDateText ? 'var(--text-1)' : 'var(--text-3)' }">
+              {{ refundDateText || '选择日期' }}
+            </text>
+            <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
+          </view>
         </view>
         <!-- 确认退款 -->
         <button
@@ -406,6 +404,22 @@
       </view>
     </BModal>
 
+    <BDateTimePicker
+      v-model:visible="showDeliveryDatePicker"
+      :model-value="completeForm.delivery_date"
+      mode="date"
+      value-type="timestamp"
+      @confirm="onDeliveryDateConfirm"
+    />
+
+    <BDateTimePicker
+      v-model:visible="showRefundDatePicker"
+      :model-value="refundSheetForm.refund_date"
+      mode="date"
+      value-type="timestamp"
+      @confirm="onRefundDateConfirm"
+    />
+
     <!-- 退款弹窗已迁移到 S-6 BSheet -->
   </view>
 </template>
@@ -421,12 +435,16 @@ import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import BModal from '@/components/layout/BModal.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
+import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
+import { formatDateInputValue } from '@/utils/date'
 
 const sale = ref<any>(null)
 const saleId = ref('')
 
 const showDepositModal = ref(false)
 const showCompleteModal = ref(false)
+const showDeliveryDatePicker = ref(false)
+const showRefundDatePicker = ref(false)
 
 const platforms = [
   { label: '线下', icon: 'storefront' },
@@ -446,7 +464,7 @@ const refundSheetForm = reactive({
   type: 'full' as 'full' | 'partial',
   refund_amount: '',
   refund_reason: '',
-  refund_date: '',
+  refund_date: null as number | null,
 })
 
 /* S-7: 定金取消 */
@@ -460,7 +478,7 @@ function openRefundSheet() {
   refundSheetForm.type = 'full'
   refundSheetForm.refund_amount = String(sale.value?.received_amount || '')
   refundSheetForm.refund_reason = ''
-  refundSheetForm.refund_date = ''
+  refundSheetForm.refund_date = null
   showRefundSheet.value = true
 }
 
@@ -498,8 +516,21 @@ const completeForm = reactive({
   agreed_price: '',
   buyer_info: '',
   platform: '',
-  delivery_date: '',
+  delivery_date: null as number | null,
 })
+
+const deliveryDateText = computed(() => formatDateInputValue(completeForm.delivery_date))
+const refundDateText = computed(() => formatDateInputValue(refundSheetForm.refund_date))
+
+function onDeliveryDateConfirm(value: number | string) {
+  if (typeof value !== 'number') return
+  completeForm.delivery_date = value
+}
+
+function onRefundDateConfirm(value: number | string) {
+  if (typeof value !== 'number') return
+  refundSheetForm.refund_date = value
+}
 
 // cancelForm 和 refundForm 已迁移到 S-6/S-7 BSheet
 
@@ -583,9 +614,7 @@ async function doComplete() {
   const receivedAmount = parseFloat(completeForm.received_amount)
 
   // 到手价低于底价时触发价格预警
-  const deliveryDate = completeForm.delivery_date
-    ? new Date(completeForm.delivery_date + 'T00:00:00+08:00').getTime()
-    : null
+  const deliveryDate = completeForm.delivery_date || null
 
   if (sale.value?.floor_price && receivedAmount < sale.value.floor_price) {
     checkPriceWarning(receivedAmount, async () => {
@@ -628,7 +657,7 @@ async function doRefundSheet() {
   const res = await cancelSale(saleId.value, {
     refund_amount: amount,
     refund_reason: refundSheetForm.refund_reason || null,
-    refund_date: refundSheetForm.refund_date ? new Date(refundSheetForm.refund_date + 'T00:00:00+08:00').getTime() : Date.now(),
+    refund_date: refundSheetForm.refund_date || Date.now(),
   })
   if (res) {
     showRefundSheet.value = false

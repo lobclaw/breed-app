@@ -1,4 +1,5 @@
 import type { BreedingCycle, BreedingRecord } from '@/types/breeding'
+import { getBeijingDayStart } from '@/utils/date'
 import { buildCompactBreedingCycleStatusTitle, getBreedingCycleCurrentDayCount } from '@/utils/dogStatusCopy'
 
 export type BreedingTimelineKind = 'upcoming' | 'current' | 'record'
@@ -17,9 +18,7 @@ export interface BreedingTimelineSyntheticItem {
 const DAY_MS = 86400000
 
 function startOfDay(ts: number) {
-  const date = new Date(ts)
-  date.setHours(0, 0, 0, 0)
-  return date.getTime()
+  return getBeijingDayStart(ts)
 }
 
 function formatDate(ts?: number | null) {

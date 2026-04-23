@@ -47,6 +47,29 @@ const BREEDING_RECORD_LABEL_MAP = {
   abnormal_termination: '异常终止记录',
 }
 
+const STRICT_CYCLE_STATUS_RULES = {
+  heat_observation: {
+    allowedStatuses: ['发情中'],
+    errorMessage: '当前不在发情中，无法记录发情观察',
+  },
+  pregnancy_check: {
+    allowedStatuses: ['怀孕中'],
+    errorMessage: '当前不在怀孕中，无法记录孕检',
+  },
+  prenatal_check: {
+    allowedStatuses: ['怀孕中'],
+    errorMessage: '当前不在怀孕中，无法记录产检',
+  },
+  pre_labor: {
+    allowedStatuses: ['怀孕中'],
+    errorMessage: '当前不在怀孕中，无法记录临产监测',
+  },
+  abnormal_termination: {
+    allowedStatuses: ['发情中', '怀孕中'],
+    errorMessage: '当前不在进行中的繁育周期，无法记录异常终止',
+  },
+}
+
 const FOLLICLE_READY_RESULT = '已成熟'
 const FOLLICLE_ABNORMAL_RESULT = '发育不良'
 
@@ -345,6 +368,20 @@ async function getLatestFollicleCheckRecord(cycleId, familyId) {
     })[0] || null
 }
 
+async function countCycleFollicleCheckRecords(familyId, cycleId) {
+  if (!cycleId) return 0
+
+  const { total } = await db.collection('breeding_records')
+    .where({
+      cycle_id: cycleId,
+      family_id: familyId,
+      type: 'follicle_check',
+    })
+    .count()
+
+  return total || 0
+}
+
 async function getCycleById(cycleId, familyId) {
   if (!cycleId) return null
 
@@ -365,7 +402,10 @@ async function syncEstrusCycleMilestone(familyId, cycleId, dog, sourceRecordId =
 
   const now = Date.now()
   const heatDate = await getCycleHeatDate(cycleId, familyId) || cycle.start_date || cycle.created_at || now
-  const latestFollicleRecord = await getLatestFollicleCheckRecord(cycleId, familyId)
+  const [latestFollicleRecord, follicleCheckCount] = await Promise.all([
+    getLatestFollicleCheckRecord(cycleId, familyId),
+    countCycleFollicleCheckRecords(familyId, cycleId),
+  ])
 
   await clearPendingBreedingMilestones(familyId, { cycleId })
 
@@ -395,6 +435,7 @@ async function syncEstrusCycleMilestone(familyId, cycleId, dog, sourceRecordId =
       details: {
         step_type: 'follicle_check',
         heat_date: heatDate,
+        follicle_check_count: follicleCheckCount,
         follicle_result: follicleResult || null,
         latest_follicle_check_date: latestFollicleRecord.date || null,
         abnormal_result: isFollicleAbnormal(latestFollicleRecord.details),
@@ -411,6 +452,7 @@ async function syncEstrusCycleMilestone(familyId, cycleId, dog, sourceRecordId =
     details: {
       step_type: 'follicle_check',
       heat_date: heatDate,
+      follicle_check_count: 0,
       follicle_result: null,
       latest_follicle_check_date: null,
       abnormal_result: false,
@@ -659,9 +701,8 @@ async function addBreedingRecordCore({
   rejectActiveCycleForHeat = false,
 }) {
   const now = Date.now()
-  const activeCycleStatuses = data.type === 'heat_observation'
-    ? ['发情中']
-    : ['发情中', '怀孕中']
+  const strictCycleRule = STRICT_CYCLE_STATUS_RULES[data.type] || null
+  const activeCycleStatuses = strictCycleRule?.allowedStatuses || ['发情中', '怀孕中']
 
   // 查找或创建繁育周期
   let cycleId = data.cycle_id
@@ -695,14 +736,11 @@ async function addBreedingRecordCore({
     }
   }
 
-  if (data.type === 'heat_observation') {
-    const { data: cycles } = await db.collection('breeding_cycles')
-      .where({ _id: cycleId, family_id: familyId })
-      .limit(1)
-      .get()
-    if (!cycles || cycles.length === 0) throw new Error('繁育周期不存在')
-    if (cycles[0].status !== '发情中') {
-      throw new Error('当前不在发情中，无法记录发情观察')
+  if (strictCycleRule) {
+    const cycle = await getCycleById(cycleId, familyId)
+    if (!cycle) throw new Error('繁育周期不存在')
+    if (!strictCycleRule.allowedStatuses.includes(cycle.status)) {
+      throw new Error(strictCycleRule.errorMessage)
     }
   }
 

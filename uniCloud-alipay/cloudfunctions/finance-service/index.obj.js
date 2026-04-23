@@ -1406,13 +1406,14 @@ module.exports = {
     if (sale.status === '已成交') {
       // 退款处理
       const refundAmount = data.refund_amount || sale.received_amount
+      const refundDate = Number.isFinite(Number(data.refund_date)) ? Number(data.refund_date) : now
       const isFullRefund = refundAmount >= sale.received_amount
 
       await db.collection('sale_records').doc(saleId).update({
         status: '已退款',
         refund_amount: refundAmount,
         refund_reason: data.refund_reason || null,
-        refund_date: now,
+        refund_date: refundDate,
         updated_at: now,
       })
 
@@ -1422,7 +1423,7 @@ module.exports = {
         dog_name: sale.dog_name,
         type: '退款',
         amount: -refundAmount,
-        date: now,
+        date: refundDate,
         source_sale_id: saleId,
         notes: data.refund_reason || null,
         family_id: familyId,
@@ -1443,11 +1444,13 @@ module.exports = {
     } else if (sale.status === '已预定') {
       // 定金取消
       const keptAmount = data.deposit_kept_amount || 0
+      const refundDate = Number.isFinite(Number(data.refund_date)) ? Number(data.refund_date) : now
 
       await db.collection('sale_records').doc(saleId).update({
         status: '定金取消',
         deposit_kept_amount: keptAmount,
         refund_reason: data.refund_reason || null,
+        refund_date: refundDate,
         updated_at: now,
       })
 
@@ -1458,7 +1461,7 @@ module.exports = {
           dog_name: sale.dog_name,
           type: '定金保留',
           amount: keptAmount,
-          date: now,
+          date: refundDate,
           source_sale_id: saleId,
           notes: data.refund_reason || null,
           family_id: familyId,

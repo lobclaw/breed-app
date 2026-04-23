@@ -73,12 +73,10 @@
       <view class="date-row-wrap">
         <view class="date-main">
           <text class="form-label">日期</text>
-          <picker mode="date" :value="dateStr" @change="onDateChange">
-            <view class="form-right">
-              <text>{{ dateStr }}</text>
-              <text class="material-icons-round" style="font-size:18px;color:var(--text-3);">calendar_today</text>
-            </view>
-          </picker>
+          <view class="form-right" @click="showDatePicker = true">
+            <text>{{ dateStr }}</text>
+            <text class="material-icons-round" style="font-size:18px;color:var(--text-3);">calendar_today</text>
+          </view>
         </view>
         <view class="date-chips">
           <text
@@ -170,6 +168,14 @@
       title="选择犬只"
       @select="onDogSelect"
     />
+
+    <BDateTimePicker
+      v-model:visible="showDatePicker"
+      :model-value="form.date"
+      mode="date"
+      value-type="timestamp"
+      @confirm="onDateConfirm"
+    />
   </view>
 </template>
 
@@ -178,10 +184,12 @@ import { ref, reactive, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
+import { buildTimestampFromDayOffset, formatDateInputValue } from '@/utils/date'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BIncomeTypeSheet from '@/components/form/BIncomeTypeSheet.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
+import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
 
 let incomeId = ''
 
@@ -191,6 +199,7 @@ const photos = ref<string[]>([])
 const loading = ref(true)
 const showTypeSheet = ref(false)
 const showDogPicker = ref(false)
+const showDatePicker = ref(false)
 const dateChipActive = ref('')
 const recentIncomeTypes = ref<string[]>([])
 const RECENT_INCOME_TYPE_KEY = 'finance_recent_income_types'
@@ -229,8 +238,7 @@ function saveRecentIncomeType(name: string) {
 }
 
 const dateStr = computed(() => {
-  const d = new Date(form.date)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  return formatDateInputValue(form.date)
 })
 
 const canSubmit = computed(() => {
@@ -240,15 +248,13 @@ const canSubmit = computed(() => {
 
 function setDateChip(chip: string) {
   dateChipActive.value = chip
-  const now = new Date()
-  now.setHours(0, 0, 0, 0)
-  if (chip === 'yesterday') now.setDate(now.getDate() - 1)
-  if (chip === 'dayBefore') now.setDate(now.getDate() - 2)
-  form.date = now.getTime()
+  const offsetMap: Record<string, number> = { today: 0, yesterday: -1, dayBefore: -2 }
+  form.date = buildTimestampFromDayOffset(offsetMap[chip] || 0, form.date)
 }
 
-function onDateChange(e: any) {
-  form.date = new Date(e.detail.value + 'T00:00:00+08:00').getTime()
+function onDateConfirm(value: number | string) {
+  if (typeof value !== 'number') return
+  form.date = value
   dateChipActive.value = ''
 }
 

@@ -26,12 +26,10 @@
 
       <view class="field-group field-group--compact">
         <view class="field-label"><text>安排日期</text></view>
-        <picker mode="date" :value="dateStr" @change="onDateChange">
-          <view class="form-input form-input--picker">
-            <text>{{ dateStr || '请选择日期' }}</text>
-            <text class="material-icons-round form-input__suffix">calendar_today</text>
-          </view>
-        </picker>
+        <view class="form-input form-input--picker" @click="showDatePicker = true">
+          <text>{{ dateStr || '请选择日期' }}</text>
+          <text class="material-icons-round form-input__suffix">calendar_today</text>
+        </view>
         <view class="date-chips">
           <text class="date-chip" :class="{ active: chipActive === 'today' }" @click="setChip('today')">今天</text>
           <text class="date-chip" :class="{ active: chipActive === 'tomorrow' }" @click="setChip('tomorrow')">明天</text>
@@ -54,6 +52,14 @@
       </view>
     </template>
   </view>
+
+  <BDateTimePicker
+    v-model:visible="showDatePicker"
+    :model-value="dueDate"
+    mode="date"
+    value-type="timestamp"
+    @confirm="onDateConfirm"
+  />
 </template>
 
 <script setup lang="ts">
@@ -63,6 +69,12 @@ import {
   getDefaultExtraArrangementDate,
   type ExtraArrangementKind,
 } from '@/utils/breedingExtraArrangement'
+import {
+  buildTimestampFromDayOffset,
+  formatDateInputValue,
+  getLocalCalendarDayDiff,
+} from '@/utils/date'
+import BDateTimePicker from './BDateTimePicker.vue'
 
 const props = withDefaults(defineProps<{
   enabled: boolean
@@ -84,11 +96,10 @@ const emit = defineEmits<{
 
 const arrangementOptions = EXTRA_ARRANGEMENT_OPTIONS
 const chipActive = ref('tomorrow')
+const showDatePicker = ref(false)
 
 const dateStr = computed(() => {
-  if (!props.dueDate) return ''
-  const d = new Date(props.dueDate)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  return formatDateInputValue(props.dueDate)
 })
 
 function toggleEnabled() {
@@ -107,16 +118,14 @@ function selectKind(value: ExtraArrangementKind) {
 
 function setChip(chip: 'today' | 'tomorrow' | 'dayAfter') {
   chipActive.value = chip
-  const date = new Date()
-  date.setHours(0, 0, 0, 0)
-  if (chip === 'tomorrow') date.setDate(date.getDate() + 1)
-  if (chip === 'dayAfter') date.setDate(date.getDate() + 2)
-  emit('update:dueDate', date.getTime())
+  const offsetMap = { today: 0, tomorrow: 1, dayAfter: 2 }
+  emit('update:dueDate', buildTimestampFromDayOffset(offsetMap[chip], props.dueDate || Date.now()))
 }
 
-function onDateChange(e: any) {
+function onDateConfirm(value: number | string) {
+  if (typeof value !== 'number') return
   chipActive.value = ''
-  emit('update:dueDate', new Date(e.detail.value + 'T00:00:00+08:00').getTime())
+  emit('update:dueDate', value)
 }
 
 function onNotesInput(e: any) {
@@ -125,11 +134,7 @@ function onNotesInput(e: any) {
 
 watch(() => props.dueDate, (value) => {
   if (!value) return
-  const target = new Date(value)
-  target.setHours(0, 0, 0, 0)
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const diff = Math.round((target.getTime() - today.getTime()) / 86400000)
+  const diff = getLocalCalendarDayDiff(value)
   if (diff === 0) chipActive.value = 'today'
   else if (diff === 1) chipActive.value = 'tomorrow'
   else if (diff === 2) chipActive.value = 'dayAfter'

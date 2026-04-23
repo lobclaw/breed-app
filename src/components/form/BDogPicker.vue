@@ -161,6 +161,8 @@ const props = withDefaults(defineProps<{
   placeholder?: string
   /** 排除的犬只 ID */
   excludeIds?: string[]
+  /** 显式候选犬只；传入后不再从 store 自行筛选 */
+  candidateDogs?: Dog[] | undefined
   /** 空态标题 */
   emptyTitle?: string
   /** 空态描述 */
@@ -177,6 +179,7 @@ const props = withDefaults(defineProps<{
   placeholder: '点击选择犬只',
   readonly: false,
   excludeIds: () => [],
+  candidateDogs: undefined,
   emptyTitle: '暂无犬只',
   emptyDescription: '没有符合条件的犬只',
 })
@@ -239,6 +242,7 @@ const activeFilter = ref('all')
 const searchKeyword = ref('')
 
 const filterTabs = computed(() => {
+  if (props.candidateDogs !== undefined) return []
   if (props.roleFilter || props.genderFilter) return []
   return [
     { label: '全部', value: 'all' },
@@ -264,11 +268,13 @@ const filteredDogs = computed(() => {
   return list
 })
 
+const sourceDogs = computed(() => props.candidateDogs !== undefined ? props.candidateDogs : dogs.value)
+
 const visibleDogs = computed(() => (
   (
     props.includeExternalSires
-      ? dogs.value
-      : dogs.value.filter(d => d.role !== '外部种公')
+      ? sourceDogs.value
+      : sourceDogs.value.filter(d => d.role !== '外部种公')
   ).filter(d => !props.excludeIds.includes(d._id))
 ))
 
@@ -294,6 +300,11 @@ watch(() => props.selectedIds, (val) => {
 }, { deep: true })
 
 async function loadDogs() {
+  if (props.candidateDogs !== undefined) {
+    loading.value = false
+    return
+  }
+
   if (dogStore.loaded) {
     dogs.value = dogStore.getFiltered(props.roleFilter, props.genderFilter)
     loading.value = false

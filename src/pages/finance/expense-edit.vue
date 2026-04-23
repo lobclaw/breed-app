@@ -73,12 +73,10 @@
       <view class="date-row-wrap">
         <view class="date-main">
           <text class="form-label">日期</text>
-          <picker mode="date" :value="dateStr" @change="onDateChange">
-            <view class="form-right">
-              <text>{{ dateStr }}</text>
-              <text class="material-icons-round" style="font-size:18px;color:var(--text-3);">calendar_today</text>
-            </view>
-          </picker>
+          <view class="form-right" @click="showDatePicker = true">
+            <text>{{ dateStr }}</text>
+            <text class="material-icons-round" style="font-size:18px;color:var(--text-3);">calendar_today</text>
+          </view>
         </view>
         <view class="date-chips">
           <text
@@ -187,6 +185,14 @@
       v-model:visible="showCyclePicker"
       @select="onCycleSelected"
     />
+
+    <BDateTimePicker
+      v-model:visible="showDatePicker"
+      :model-value="form.date"
+      mode="date"
+      value-type="timestamp"
+      @confirm="onDateConfirm"
+    />
   </view>
 </template>
 
@@ -196,6 +202,7 @@ import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
 import { DEFAULT_EXPENSE_CATEGORIES, normalizeExpenseCategories } from '@/constants/financeCategories'
+import { buildTimestampFromDayOffset, formatDateInputValue } from '@/utils/date'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BExpenseCategorySheet from '@/components/form/BExpenseCategorySheet.vue'
@@ -203,6 +210,7 @@ import BFinanceLinkSheet from '@/components/form/BFinanceLinkSheet.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 import BLitterSelector from '@/components/form/BLitterSelector.vue'
 import BCycleSelector from '@/components/form/BCycleSelector.vue'
+import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
 import type { ExpenseCategory } from '@/types/finance'
 
 let expenseId = ''
@@ -216,6 +224,7 @@ const showLinkSheet = ref(false)
 const showDogPicker = ref(false)
 const showLitterPicker = ref(false)
 const showCyclePicker = ref(false)
+const showDatePicker = ref(false)
 const dateChipActive = ref('')
 const RECENT_EXPENSE_CATEGORY_KEY = 'finance_recent_expense_categories'
 
@@ -263,8 +272,7 @@ const currentLinkText = computed(() => {
 })
 
 const dateStr = computed(() => {
-  const d = new Date(form.date)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  return formatDateInputValue(form.date)
 })
 
 const canSubmit = computed(() => {
@@ -274,15 +282,13 @@ const canSubmit = computed(() => {
 
 function setDateChip(chip: string) {
   dateChipActive.value = chip
-  const now = new Date()
-  now.setHours(0, 0, 0, 0)
-  if (chip === 'yesterday') now.setDate(now.getDate() - 1)
-  if (chip === 'dayBefore') now.setDate(now.getDate() - 2)
-  form.date = now.getTime()
+  const offsetMap: Record<string, number> = { today: 0, yesterday: -1, dayBefore: -2 }
+  form.date = buildTimestampFromDayOffset(offsetMap[chip] || 0, form.date)
 }
 
-function onDateChange(e: any) {
-  form.date = new Date(e.detail.value + 'T00:00:00+08:00').getTime()
+function onDateConfirm(value: number | string) {
+  if (typeof value !== 'number') return
+  form.date = value
   dateChipActive.value = ''
 }
 

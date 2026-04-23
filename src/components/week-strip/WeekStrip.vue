@@ -50,6 +50,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { getBeijingDayStart } from '@/utils/date'
 
 const props = defineProps<{
   selectedDate: number
@@ -64,9 +65,7 @@ const emit = defineEmits<{
 const WEEK_LABELS = ['日', '一', '二', '三', '四', '五', '六']
 
 function startOfDay(ts: number): number {
-  const d = new Date(ts)
-  d.setHours(0, 0, 0, 0)
-  return d.getTime()
+  return getBeijingDayStart(ts)
 }
 
 // 依赖 selectedDate，确保 onShow 重置日期时重新计算（Date.now() 无响应式依赖）
@@ -81,8 +80,7 @@ function getMonday(ts: number): number {
   const day = d.getDay() // 0=日 1=一 ... 6=六
   const diff = day === 0 ? -6 : 1 - day // 周日时回退6天，其他回退到周一
   d.setDate(d.getDate() + diff)
-  d.setHours(0, 0, 0, 0)
-  return d.getTime()
+  return startOfDay(d.getTime())
 }
 
 const days = computed(() => {

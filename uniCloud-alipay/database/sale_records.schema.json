@@ -41,6 +41,22 @@
       "bsonType": "number",
       "description": "定金金额（元）"
     },
+    "deposit_date": {
+      "bsonType": ["number", "null"],
+      "description": "定金日期（时间戳毫秒）"
+    },
+    "date": {
+      "bsonType": ["number", "null"],
+      "description": "成交日期（时间戳毫秒）"
+    },
+    "delivery_date": {
+      "bsonType": ["number", "null"],
+      "description": "交付日期（时间戳毫秒）"
+    },
+    "refund_date": {
+      "bsonType": ["number", "null"],
+      "description": "退款日期（时间戳毫秒）"
+    },
     "status": {
       "bsonType": "string",
       "enum": ["待售", "已预定", "已成交", "已退款", "定金取消"],

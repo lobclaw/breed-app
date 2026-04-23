@@ -32,12 +32,10 @@
       <!-- 日期 -->
       <view class="field-group">
         <view class="field-label"><text>日期</text></view>
-        <picker mode="date" :value="dateStr" @change="onDateChange">
-          <view class="form-input form-input--picker">
-            <text>{{ dateStr || '请选择日期' }}</text>
-            <text class="material-icons-round form-input__suffix">calendar_today</text>
-          </view>
-        </picker>
+        <view class="form-input form-input--picker" @click="showDatePicker = true">
+          <text>{{ dateStr || '请选择日期' }}</text>
+          <text class="material-icons-round form-input__suffix">calendar_today</text>
+        </view>
         <view class="date-chips">
           <text class="date-chip" :class="{ active: chipActive === 'today' }" @click="setChip('today')">今天</text>
           <text class="date-chip" :class="{ active: chipActive === 'yesterday' }" @click="setChip('yesterday')">昨天</text>
@@ -115,6 +113,14 @@
       title="选择犬只"
       @select="onDogSelect"
     />
+
+    <BDateTimePicker
+      v-model:visible="showDatePicker"
+      :model-value="date"
+      mode="date"
+      value-type="timestamp"
+      @confirm="onDateConfirm"
+    />
   </view>
 </template>
 
@@ -122,8 +128,10 @@
 import { ref, reactive, computed } from 'vue'
 import { useCloudCall } from '@/composables/useCloudCall'
 import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
+import { buildTimestampFromDayOffset, formatDateInputValue, getLocalCalendarDayDiff } from '@/utils/date'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
+import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
 import BIncomeTypeSheet from '@/components/form/BIncomeTypeSheet.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 
@@ -132,36 +140,32 @@ const submitState = ref<'idle' | 'submitting' | 'success'>('idle')
 const photos = ref<string[]>([])
 const showTypeSheet = ref(false)
 const showDogPicker = ref(false)
+const showDatePicker = ref(false)
 const recentIncomeTypes = ref<string[]>([])
 const RECENT_INCOME_TYPE_KEY = 'finance_recent_income_types'
 const linkedDog = ref<any | null>(null)
 
 // 日期
-const today = new Date()
-today.setHours(0, 0, 0, 0)
-const date = ref<number>(today.getTime())
+const date = ref<number>(buildTimestampFromDayOffset(0))
 const chipActive = ref('today')
 
 const dateStr = computed(() => {
-  if (!date.value) return ''
-  const d = new Date(date.value)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  return formatDateInputValue(date.value)
 })
 
-function onDateChange(e: any) {
-  date.value = new Date(e.detail.value + 'T00:00:00+08:00').getTime()
+function onDateConfirm(value: number | string) {
+  if (typeof value !== 'number') return
+  date.value = value
   chipActive.value = ''
-  const now = new Date(); now.setHours(0, 0, 0, 0)
-  const diff = (now.getTime() - date.value) / 86400000
+  const diff = getLocalCalendarDayDiff(date.value)
   if (diff === 0) chipActive.value = 'today'
-  else if (diff === 1) chipActive.value = 'yesterday'
-  else if (diff === 2) chipActive.value = 'dayBefore'
+  else if (diff === -1) chipActive.value = 'yesterday'
+  else if (diff === -2) chipActive.value = 'dayBefore'
 }
 
 function setChip(chip: string) {
-  const now = new Date(); now.setHours(0, 0, 0, 0)
   const map: Record<string, number> = { today: 0, yesterday: -1, dayBefore: -2 }
-  date.value = now.getTime() + (map[chip] || 0) * 86400000
+  date.value = buildTimestampFromDayOffset(map[chip] || 0, date.value)
   chipActive.value = chip
 }
 

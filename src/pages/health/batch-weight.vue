@@ -124,25 +124,16 @@
       <view class="bottom-area">
         <view class="record-time-card">
           <view class="record-time-card__header">
-            <text class="record-time-card__label">记录日期</text>
-            <picker mode="date" :value="dateStr" @change="onDateChange">
-              <view class="record-time-card__picker">
-                <text class="material-icons-round record-time-card__picker-icon">event</text>
-                <text class="record-time-card__picker-text">{{ dateStr }}</text>
-              </view>
-            </picker>
+            <text class="record-time-card__label">记录时间</text>
+            <view class="record-time-card__picker" @click="showDateTimePicker = true">
+              <text class="material-icons-round record-time-card__picker-icon">event</text>
+              <text class="record-time-card__picker-text">{{ recordDateTimeText }}</text>
+            </view>
           </view>
           <view class="date-chips">
             <text class="date-chip" :class="{ active: dateChipActive === 'today' }" @click="setDateChip('today')">今天</text>
             <text class="date-chip" :class="{ active: dateChipActive === 'yesterday' }" @click="setDateChip('yesterday')">昨天</text>
             <text class="date-chip" :class="{ active: dateChipActive === 'dayBefore' }" @click="setDateChip('dayBefore')">前天</text>
-          </view>
-          <view class="time-display">
-            <text class="material-icons-round time-display__icon">schedule</text>
-            <text class="time-display__label">记录时间</text>
-            <picker mode="time" :value="timeStr" @change="onTimeChange">
-              <text class="time-value">{{ timeStr }}</text>
-            </picker>
           </view>
         </view>
 
@@ -166,6 +157,14 @@
       :selected-ids="selectedLitter ? [selectedLitter._id] : []"
       @select="handleLitterSelect"
     />
+
+    <BDateTimePicker
+      v-model:visible="showDateTimePicker"
+      :model-value="recordDateTime"
+      mode="datetime"
+      value-type="timestamp"
+      @confirm="onDateTimeConfirm"
+    />
   </view>
 </template>
 
@@ -179,6 +178,8 @@ import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 import BLitterSelector from '@/components/form/BLitterSelector.vue'
+import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
+import { buildTimestampFromDayOffset, formatDateTimeInputValue } from '@/utils/date'
 
 type DateChipKey = 'today' | 'yesterday' | 'dayBefore' | ''
 
@@ -206,9 +207,9 @@ const weights = ref<string[]>([])
 const submitState = ref<'idle' | 'submitting' | 'success'>('idle')
 const submitError = ref('')
 const dateChipActive = ref<DateChipKey>('today')
-const weightDate = ref(getStartOfDay(Date.now()))
-const timeStr = ref(buildTimeString(new Date()))
+const recordDateTime = ref(Date.now())
 const showLitterSelector = ref(false)
+const showDateTimePicker = ref(false)
 
 const pageTitle = computed(() => {
   if (!selectedLitter.value) return '幼犬体重记录'
@@ -220,7 +221,7 @@ const pageSubtitle = computed(() => {
   return `出生第${daysSinceBirth.value}天 · ${puppies.value.length}只存活`
 })
 
-const dateStr = computed(() => formatDate(weightDate.value))
+const recordDateTimeText = computed(() => formatDateTimeInputValue(recordDateTime.value))
 const filledCount = computed(() => weights.value.filter(w => parseWeightValue(w) > 0).length)
 const hasAnyWeight = computed(() => filledCount.value > 0)
 const submitButtonText = computed(() => {
@@ -264,10 +265,6 @@ function getStartOfDay(ts: number) {
   const date = new Date(ts)
   date.setHours(0, 0, 0, 0)
   return date.getTime()
-}
-
-function buildTimeString(date: Date) {
-  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
 }
 
 function parseWeightValue(value: string) {
@@ -327,35 +324,29 @@ function selectLitter(litter: any) {
   puppies.value = buildNormalizedPuppies(litter.puppies || [])
   weights.value = puppies.value.map(() => '')
   submitError.value = ''
-  setDateChip('today')
-  timeStr.value = buildTimeString(new Date())
+  recordDateTime.value = Date.now()
+  syncDateChipActive()
 }
 
 function setDateChip(chip: Exclude<DateChipKey, ''>) {
   dateChipActive.value = chip
-  const target = new Date()
-  target.setHours(0, 0, 0, 0)
-  if (chip === 'yesterday') target.setDate(target.getDate() - 1)
-  if (chip === 'dayBefore') target.setDate(target.getDate() - 2)
-  weightDate.value = target.getTime()
+  const offsetMap = { today: 0, yesterday: -1, dayBefore: -2 }
+  recordDateTime.value = buildTimestampFromDayOffset(offsetMap[chip], recordDateTime.value)
 }
 
 function syncDateChipActive() {
   const today = getStartOfDay(Date.now())
-  const diffDays = Math.round((today - weightDate.value) / 86400000)
+  const diffDays = Math.round((today - getStartOfDay(recordDateTime.value)) / 86400000)
   if (diffDays === 0) dateChipActive.value = 'today'
   else if (diffDays === 1) dateChipActive.value = 'yesterday'
   else if (diffDays === 2) dateChipActive.value = 'dayBefore'
   else dateChipActive.value = ''
 }
 
-function onDateChange(e: any) {
-  weightDate.value = new Date(`${e.detail.value}T00:00:00+08:00`).getTime()
+function onDateTimeConfirm(value: number | string) {
+  if (typeof value !== 'number') return
+  recordDateTime.value = value
   syncDateChipActive()
-}
-
-function onTimeChange(e: any) {
-  timeStr.value = e.detail.value
 }
 
 function onWeightInput(e: any, idx: number) {
@@ -386,12 +377,7 @@ function focusNext(idx: number) {
 }
 
 function buildFinalDate() {
-  let finalDate = weightDate.value
-  if (!timeStr.value) return finalDate
-  const [hours, minutes] = timeStr.value.split(':').map(Number)
-  if (Number.isNaN(hours) || Number.isNaN(minutes)) return finalDate
-  finalDate += hours * 3600000 + minutes * 60000
-  return finalDate
+  return recordDateTime.value
 }
 
 function applyLocalWeightUpdates(weightEntries: Array<{ dog_id: string; weight: number; date: number }>) {

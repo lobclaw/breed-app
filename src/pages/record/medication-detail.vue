@@ -3,9 +3,92 @@
     <BPageHeader title="用药任务详情" />
     <BSubmitBanner :message="submitBannerMessage" />
 
-    <view v-if="loading" class="card-feed">
-      <BSkeleton :rows="8" />
-    </view>
+    <template v-if="loading">
+      <view class="card-feed">
+        <view class="detail-skeleton-card detail-skeleton-card--summary">
+          <view class="detail-skeleton-card__main">
+            <view class="detail-skeleton detail-skeleton--tag" />
+            <view class="detail-skeleton detail-skeleton--title" />
+            <view class="detail-skeleton detail-skeleton--sub" />
+            <view class="detail-skeleton detail-skeleton--completion" />
+          </view>
+          <view class="detail-skeleton-card__meta">
+            <view class="detail-skeleton detail-skeleton--meta-value" />
+            <view class="detail-skeleton detail-skeleton--meta-label" />
+          </view>
+        </view>
+      </view>
+
+      <view class="detail-skeleton-banner">
+        <view class="detail-skeleton detail-skeleton--banner-main" />
+        <view class="detail-skeleton detail-skeleton--banner-side" />
+      </view>
+
+      <view class="progress-wrapper">
+        <view class="detail-skeleton-progress">
+          <view class="detail-skeleton detail-skeleton--progress-fill" />
+        </view>
+      </view>
+
+      <view class="section-label">
+        <view class="section-dot" style="background: var(--plum);" />
+        <text class="section-text">核心信息</text>
+      </view>
+      <view class="card-feed">
+        <view class="detail-skeleton-panel">
+          <view v-for="row in 7" :key="`medication-info-${row}`" class="detail-skeleton-row">
+            <view class="detail-skeleton detail-skeleton--label" :class="{ 'detail-skeleton--label-short': row > 5 }" />
+            <view class="detail-skeleton-row__value" :class="{ 'detail-skeleton-row__value--stack': row === 1 || row === 7 }">
+              <template v-if="row === 1">
+                <view class="detail-skeleton detail-skeleton--avatar" />
+                <view class="detail-skeleton detail-skeleton--value" />
+              </template>
+              <template v-else-if="row === 7">
+                <view class="detail-skeleton detail-skeleton--note-wide" />
+              </template>
+              <template v-else>
+                <view class="detail-skeleton detail-skeleton--value" />
+              </template>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view class="section-label">
+        <view class="section-dot" style="background: var(--plum);" />
+        <text class="section-text">执行记录</text>
+      </view>
+      <view class="card-feed">
+        <view class="detail-skeleton-panel detail-skeleton-panel--timeline">
+          <view v-for="item in 4" :key="`medication-log-${item}`" class="detail-skeleton-timeline">
+            <view class="detail-skeleton detail-skeleton--timeline-dot" />
+            <view class="detail-skeleton-timeline__body">
+              <view class="detail-skeleton-timeline__head">
+                <view class="detail-skeleton detail-skeleton--timeline-day" />
+                <view class="detail-skeleton detail-skeleton--timeline-date" />
+                <view class="detail-skeleton detail-skeleton--pill" />
+              </view>
+              <view class="detail-skeleton detail-skeleton--timeline-detail" />
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view class="section-label">
+        <view class="section-dot" style="background: var(--red);" />
+        <text class="section-text">操作</text>
+      </view>
+      <view class="action-area">
+        <view class="detail-skeleton-action">
+          <view class="detail-skeleton-action__glow" />
+          <view class="detail-skeleton-action__row">
+            <view class="detail-skeleton detail-skeleton--button detail-skeleton--button-secondary" />
+            <view class="detail-skeleton detail-skeleton--button detail-skeleton--button-primary" />
+          </view>
+          <view class="detail-skeleton detail-skeleton--action-note" />
+        </view>
+      </view>
+    </template>
 
     <template v-if="!loading && task">
       <view class="card-feed">
@@ -201,11 +284,11 @@ import BCard from '@/components/base/BCard.vue'
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BProgress from '@/components/base/BProgress.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
-import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BModal from '@/components/layout/BModal.vue'
 import { resolveMedicationDetailId } from '@/utils/dogDetailNavigation'
+import { getBeijingDayStart } from '@/utils/date'
 import { formatMedicationDosage, formatMedicationFrequency } from '@/utils/medicationDisplay'
 import { getMedicationDayState, getMedicationTodayProgress, getMedicationFrequency } from '@/utils/medicationState'
 
@@ -221,9 +304,7 @@ let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
 const DAY_MS = 86400000
 
 function startOfDay(ts: number) {
-  const d = new Date(ts)
-  d.setHours(0, 0, 0, 0)
-  return d.getTime()
+  return getBeijingDayStart(ts)
 }
 
 const todayTs = computed(() => startOfDay(Date.now()))
@@ -444,6 +525,245 @@ onShow(() => {
 <style lang="scss" scoped>
 .page {
   padding-bottom: 40px;
+}
+
+.detail-skeleton-card,
+.detail-skeleton-panel,
+.detail-skeleton-action,
+.detail-skeleton-banner,
+.detail-skeleton-progress {
+  position: relative;
+  overflow: hidden;
+  background: var(--card);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+}
+.detail-skeleton-card::after,
+.detail-skeleton-panel::after,
+.detail-skeleton-action::after,
+.detail-skeleton-banner::after,
+.detail-skeleton-progress::after,
+.detail-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.56) 50%, transparent 100%);
+  animation: detail-skeleton-shimmer 1.5s infinite;
+}
+.detail-skeleton-card--summary {
+  padding: 16px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.detail-skeleton-card__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.detail-skeleton-card__meta {
+  min-width: 68px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+}
+.detail-skeleton-banner {
+  margin: 4px 16px 12px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--plum-soft);
+}
+.detail-skeleton-progress {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(134, 104, 176, 0.14);
+  box-shadow: none;
+}
+.detail-skeleton-panel {
+  padding: 2px 0;
+}
+.detail-skeleton-panel--timeline {
+  padding: 10px 16px;
+}
+.detail-skeleton-row {
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.detail-skeleton-row + .detail-skeleton-row {
+  border-top: 1px solid rgba(216, 203, 189, 0.12);
+}
+.detail-skeleton-row__value {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 120px;
+}
+.detail-skeleton-row__value--stack {
+  min-width: 140px;
+}
+.detail-skeleton-timeline {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 0;
+}
+.detail-skeleton-timeline + .detail-skeleton-timeline {
+  border-top: 1px solid rgba(216, 203, 189, 0.12);
+}
+.detail-skeleton-timeline__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.detail-skeleton-timeline__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.detail-skeleton-action {
+  padding: 14px 16px 16px;
+}
+.detail-skeleton-action__glow {
+  position: absolute;
+  right: -18px;
+  bottom: -22px;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(243, 237, 255, 0.95) 0%, rgba(243, 237, 255, 0) 72%);
+}
+.detail-skeleton-action__row {
+  position: relative;
+  display: flex;
+  gap: 12px;
+}
+.detail-skeleton {
+  position: relative;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--card-dim);
+}
+.detail-skeleton--tag {
+  width: 56px;
+  height: 24px;
+}
+.detail-skeleton--title {
+  width: 130px;
+  max-width: 58%;
+  height: 20px;
+}
+.detail-skeleton--sub {
+  width: 166px;
+  max-width: 72%;
+  height: 13px;
+}
+.detail-skeleton--completion {
+  width: 108px;
+  height: 12px;
+}
+.detail-skeleton--meta-value {
+  width: 42px;
+  height: 18px;
+}
+.detail-skeleton--meta-label {
+  width: 38px;
+  height: 11px;
+}
+.detail-skeleton--banner-main {
+  width: 62%;
+  height: 14px;
+}
+.detail-skeleton--banner-side {
+  width: 34px;
+  height: 14px;
+}
+.detail-skeleton--progress-fill {
+  width: 58%;
+  height: 100%;
+  border-radius: inherit;
+  background: rgba(134, 104, 176, 0.32);
+}
+.detail-skeleton--label {
+  width: 72px;
+  height: 12px;
+}
+.detail-skeleton--label-short {
+  width: 52px;
+}
+.detail-skeleton--value {
+  width: 88px;
+  height: 14px;
+}
+.detail-skeleton--avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+}
+.detail-skeleton--note-wide {
+  width: 124px;
+  height: 14px;
+}
+.detail-skeleton--timeline-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-top: 4px;
+}
+.detail-skeleton--timeline-day {
+  width: 48px;
+  height: 12px;
+}
+.detail-skeleton--timeline-date {
+  width: 42px;
+  height: 12px;
+}
+.detail-skeleton--timeline-detail {
+  width: 120px;
+  max-width: 72%;
+  height: 12px;
+}
+.detail-skeleton--pill {
+  width: 52px;
+  height: 22px;
+}
+.detail-skeleton--button {
+  height: 46px;
+  border-radius: 999px;
+}
+.detail-skeleton--button-primary {
+  flex: 1;
+}
+.detail-skeleton--button-secondary {
+  width: 126px;
+}
+.detail-skeleton--action-note {
+  width: 210px;
+  max-width: 90%;
+  height: 12px;
+  margin-top: 14px;
+}
+
+@keyframes detail-skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 .detail-summary {

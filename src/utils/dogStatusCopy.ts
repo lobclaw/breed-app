@@ -1,5 +1,6 @@
 import type { BreedingCycle, BreedingRecord } from '@/types/breeding'
 import type { DeriveStatus } from '@/types/dog'
+import { getBeijingDayStart } from '@/utils/date'
 
 const DAY_MS = 86400000
 
@@ -10,9 +11,7 @@ const BREEDING_STATUS_BASE_TITLE: Record<string, string> = {
 }
 
 function startOfDay(ts: number) {
-  const date = new Date(ts)
-  date.setHours(0, 0, 0, 0)
-  return date.getTime()
+  return getBeijingDayStart(ts)
 }
 
 function normalizeDayCount(dayCount?: number | null) {

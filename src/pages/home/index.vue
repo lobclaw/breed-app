@@ -68,7 +68,7 @@
                     <text class="subsection-text">{{ group.title }}</text>
                     <view class="subsection-badge"><text class="subsection-badge-text">{{ group.cards.length }}</text></view>
                   </view>
-                  <BreedingProcessGroupCard v-if="isBreedingMilestoneGroup(group)" :group="group" />
+                  <BreedingProcessGroupCard v-if="isBreedingMilestoneGroup(group)" :group="group" @action="onAction" />
                   <view v-else class="card-feed">
                     <view
                       v-for="card in group.cards"
@@ -146,7 +146,7 @@
                     <text class="subsection-text">{{ group.title }}</text>
                     <view class="subsection-badge"><text class="subsection-badge-text">{{ group.cards.length }}</text></view>
                   </view>
-                  <BreedingProcessGroupCard v-if="isBreedingMilestoneGroup(group)" :group="group" />
+                  <BreedingProcessGroupCard v-if="isBreedingMilestoneGroup(group)" :group="group" @action="onAction" />
                   <view v-else class="card-feed">
                     <view
                       v-for="card in group.cards"
@@ -219,12 +219,10 @@
         </view>
         <view class="task-sheet__field">
           <text class="task-sheet__label">完成日期</text>
-          <picker mode="date" :value="quickCompleteDateStr" @change="onQuickCompleteDateChange">
-            <view class="task-sheet__picker">
-              <text>{{ quickCompleteDateStr }}</text>
-              <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
-            </view>
-          </picker>
+          <view class="task-sheet__picker" @click="showQuickCompleteDatePicker = true">
+            <text>{{ quickCompleteDateStr }}</text>
+            <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
+          </view>
         </view>
         <view class="task-sheet__actions">
           <view class="task-sheet__btn task-sheet__btn--cancel" @click="showQuickComplete = false">
@@ -250,12 +248,10 @@
 
         <view class="task-sheet__field">
           <text class="task-sheet__label">推迟到</text>
-          <picker mode="date" :value="postponeDateStr" @change="onPostponeDateChange">
-            <view class="form-input form-input--picker">
-              <text>{{ postponeDateStr }}</text>
-              <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
-            </view>
-          </picker>
+          <view class="form-input form-input--picker" @click="showPostponeDatePicker = true">
+            <text>{{ postponeDateStr }}</text>
+            <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
+          </view>
           <view class="task-sheet__quick-dates">
             <view class="task-sheet__quick-date" :class="{ active: postponeQuick === 'tomorrow' }" @click="setPostponeQuick('tomorrow')">
               <text>明天</text>
@@ -433,6 +429,58 @@
       </view>
     </BSheet>
 
+    <BSheet v-model:visible="showBreedingActionSheet" :title="breedingActionCard?.dogName || '繁育流程'">
+      <view class="breeding-action-sheet">
+        <view v-if="breedingActionCard" class="breeding-action-sheet__context">
+          <view class="breeding-action-sheet__badge">
+            <BEntityIcon :role="breedingActionCard?.role" color="var(--amber)" :size="18" />
+          </view>
+          <view class="breeding-action-sheet__copy">
+            <view class="breeding-action-sheet__meta-row">
+              <text class="breeding-action-sheet__eyebrow">当前阶段</text>
+              <text v-if="breedingActionSummary.stageTag" class="breeding-action-sheet__status">{{ breedingActionSummary.stageTag }}</text>
+            </view>
+            <text class="breeding-action-sheet__title">{{ breedingActionStageTitle || '繁育流程' }}</text>
+            <text class="breeding-action-sheet__primary">{{ breedingActionSummary.primaryLabel || '时间待确认' }}</text>
+            <text v-if="breedingActionSummary.secondaryLabel" class="breeding-action-sheet__sub">{{ breedingActionSummary.secondaryLabel }}</text>
+            <text
+              v-if="breedingActionSummary.alertLabel"
+              class="breeding-action-sheet__alert"
+              :class="{ 'breeding-action-sheet__alert--danger': breedingActionAlertDanger }"
+            >
+              {{ breedingActionSummary.alertLabel }}
+            </text>
+          </view>
+        </view>
+        <view class="breeding-action-sheet__list">
+          <view
+            v-for="item in breedingActionItems"
+            :key="item.key"
+            class="breeding-action-sheet__item"
+            :class="`breeding-action-sheet__item--${item.tone}`"
+            @click="selectBreedingAction(item.key)"
+          >
+            <view
+              class="breeding-action-sheet__icon-wrap"
+              :class="`breeding-action-sheet__icon-wrap--${item.tone}`"
+              :style="{ background: item.iconBg }"
+            >
+              <text
+                class="material-icons-round breeding-action-sheet__icon"
+                :class="`breeding-action-sheet__icon--${item.tone}`"
+                :style="{ color: item.iconColor }"
+              >{{ item.icon }}</text>
+            </view>
+            <view class="breeding-action-sheet__item-copy">
+              <text class="breeding-action-sheet__label">{{ item.label }}</text>
+              <text class="breeding-action-sheet__hint">{{ item.description }}</text>
+            </view>
+            <text class="material-icons-round breeding-action-sheet__arrow">arrow_forward</text>
+          </view>
+        </view>
+      </view>
+    </BSheet>
+
     <!-- 健康关注卡：操作菜单 -->
     <BSheet v-model:visible="showSickMenu" :title="sickMenuDog?.dogName || ''">
       <view class="sick-menu-body">
@@ -470,6 +518,22 @@
         </view>
       </view>
     </BSheet>
+
+    <BDateTimePicker
+      v-model:visible="showQuickCompleteDatePicker"
+      :model-value="quickCompleteDate"
+      mode="date"
+      value-type="timestamp"
+      @confirm="onQuickCompleteDateConfirm"
+    />
+
+    <BDateTimePicker
+      v-model:visible="showPostponeDatePicker"
+      :model-value="postponeDate"
+      mode="date"
+      value-type="timestamp"
+      @confirm="onPostponeDateConfirm"
+    />
   </view>
 </template>
 
@@ -488,9 +552,18 @@ import BNavBar from '@/components/layout/BNavBar.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BIconBox from '@/components/base/BIconBox.vue'
+import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
 import { useTaskStore } from '@/stores/taskStore'
 import { consumeSubmitFeedback } from '@/composables/useSubmitFeedback'
+import { deriveBreedingMilestoneViewModel } from '@/utils/breedingMilestone'
+import { buildBreedingMilestoneSummary } from '@/utils/breedingMilestoneSummary'
+import type { HomeBreedingActionKey } from '@/utils/homeBreedingActions'
+import {
+  getHomeBreedingActionItems,
+  openHomeBreedingAction,
+} from '@/utils/homeBreedingActions'
 import { buildHomeWorkbench } from '@/utils/homeWorkbench'
+import { buildTimestampFromDayOffset, formatDateInputValue, getBeijingDayStart } from '@/utils/date'
 
 const { hasFamily, loadFamily } = useAuth()
 const taskStore = useTaskStore()
@@ -518,8 +591,8 @@ const pageInstance = getCurrentInstance()
 const HOME_SUBMIT_TOAST_DURATION_MS = 1800
 
 // 选中日期（0点 timestamp）
-const selectedDate = ref(startOfDay(Date.now()))
-const isSelectedToday = computed(() => selectedDate.value === startOfDay(Date.now()))
+const selectedDate = ref(getBeijingDayStart(Date.now()))
+const isSelectedToday = computed(() => selectedDate.value === getBeijingDayStart(Date.now()))
 const todayWorkbench = computed(() => buildHomeWorkbench(cards.value, { visibleRowLimit: 2 }))
 const dayWorkbench = computed(() => buildHomeWorkbench(dayCards.value, { visibleRowLimit: 2 }))
 const breedingGroups = computed(() => mapWorkbenchGroupsToCards(todayWorkbench.value.sections.breeding.groups))
@@ -642,35 +715,36 @@ const showQuickComplete = ref(false)
 const quickCompleteTask = ref<any>(null)
 const quickCompleteNotes = ref('')
 const quickCompleteDate = ref(Date.now())
+const showQuickCompleteDatePicker = ref(false)
 
 const quickCompleteDateStr = computed(() => {
-  const d = new Date(quickCompleteDate.value)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  return formatDateInputValue(quickCompleteDate.value)
 })
 
-function onQuickCompleteDateChange(e: any) {
-  quickCompleteDate.value = new Date(e.detail.value + 'T00:00:00+08:00').getTime()
+function onQuickCompleteDateConfirm(value: number | string) {
+  if (typeof value !== 'number') return
+  quickCompleteDate.value = value
 }
 
 // H-4: 推迟弹窗
 const showPostponeModal = ref(false)
 const postponeTaskId = ref<string | string[]>('')
-const postponeDate = ref(Date.now() + 86400000)
+const postponeDate = ref(buildTimestampFromDayOffset(1))
 const postponeQuick = ref('tomorrow')
+const showPostponeDatePicker = ref(false)
 
 const postponeDateStr = computed(() => {
-  const d = new Date(postponeDate.value)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  return formatDateInputValue(postponeDate.value)
 })
 
 function setPostponeQuick(option: string) {
   postponeQuick.value = option
-  const now = new Date()
-  now.setHours(0, 0, 0, 0)
-  if (option === 'tomorrow') now.setDate(now.getDate() + 1)
-  else if (option === 'dayAfter') now.setDate(now.getDate() + 2)
-  else if (option === 'nextWeek') now.setDate(now.getDate() + 7)
-  postponeDate.value = now.getTime()
+  const offsetMap: Record<string, number> = {
+    tomorrow: 1,
+    dayAfter: 2,
+    nextWeek: 7,
+  }
+  postponeDate.value = buildTimestampFromDayOffset(offsetMap[option] || 1, postponeDate.value)
 }
 
 // H-5: 批量完成
@@ -685,6 +759,8 @@ const sickBatchSelected = reactive<Record<string, boolean>>({})
 const showMedBatch = ref(false)
 const medBatchList = ref<Array<{ id: string; dogId: string; name: string; detail: string; medicationTaskIds: string[]; illnessId: string }>>([])
 const medBatchSelected = reactive<Record<string, boolean>>({})
+const showBreedingActionSheet = ref(false)
+const breedingActionCard = ref<any>(null)
 
 const batchSelectedCount = computed(() => Object.values(batchSelected).filter(Boolean).length)
 const isAllSelected = computed(() => {
@@ -696,6 +772,25 @@ const isAllSickBatchSelected = computed(() => sickBatchList.value.length > 0 && 
 const medBatchSelectedCount = computed(() => Object.values(medBatchSelected).filter(Boolean).length)
 const isAllMedBatchSelected = computed(() => medBatchList.value.length > 0 && medBatchList.value.every(item => medBatchSelected[item.id]))
 const medBatchRecoverCount = computed(() => medBatchList.value.filter(item => medBatchSelected[item.id] && !!item.illnessId).length)
+const breedingActionTask = computed(() => breedingActionCard.value?.tasks?.[0] || null)
+const breedingActionMilestone = computed(() => {
+  return breedingActionTask.value ? deriveBreedingMilestoneViewModel(breedingActionTask.value) : null
+})
+const breedingActionItems = computed(() => getHomeBreedingActionItems(breedingActionCard.value))
+const breedingActionStageTitle = computed(() => breedingActionMilestone.value?.stageTitle || '')
+const breedingActionAlertDanger = computed(() => !!breedingActionMilestone.value?.isAlertDanger)
+const breedingActionSummary = computed(() => {
+  const milestone = breedingActionMilestone.value
+  if (!milestone) {
+    return {
+      stageTag: '',
+      primaryLabel: '选择要执行的繁育动作',
+      secondaryLabel: '',
+      alertLabel: '',
+    }
+  }
+  return buildBreedingMilestoneSummary(milestone)
+})
 
 function toggleSelectAll() {
   const uncompleted = batchDogList.value.filter(d => !d.completed)
@@ -735,9 +830,7 @@ function toggleMedBatchItem(id: string) {
 }
 
 function startOfDay(ts: number) {
-  const d = new Date(ts)
-  d.setHours(0, 0, 0, 0)
-  return d.getTime()
+  return getBeijingDayStart(ts)
 }
 
 function getOverdueDays(dueDate?: number | null) {
@@ -1113,8 +1206,9 @@ function onPostpone(taskIds: string | string[], title?: string) {
   showPostponeModal.value = true
 }
 
-function onPostponeDateChange(e: any) {
-  postponeDate.value = new Date(e.detail.value + 'T00:00:00+08:00').getTime()
+function onPostponeDateConfirm(value: number | string) {
+  if (typeof value !== 'number') return
+  postponeDate.value = value
   postponeQuick.value = ''
 }
 
@@ -1258,9 +1352,19 @@ type SickBatchAction = 'recover' | 'update_status' | 'start_medication'
 const showStopConfirm = ref(false)
 const stopConfirmData = ref<any>(null)
 
+function selectBreedingAction(actionKey: HomeBreedingActionKey) {
+  const card = breedingActionCard.value
+  showBreedingActionSheet.value = false
+  if (!card) return
+  openHomeBreedingAction(card, actionKey)
+}
+
 function onAction(payload: { type: string; data: any }) {
   if (payload.type === 'viewDog' && payload.data?.dogId) {
     uni.navigateTo({ url: `/pages/dog/detail?id=${payload.data.dogId}` })
+  } else if (payload.type === 'show_breeding_actions' && payload.data?.card) {
+    breedingActionCard.value = payload.data.card
+    showBreedingActionSheet.value = true
   } else if (payload.type === 'show_sick_menu') {
     // 打开操作菜单 BSheet
     sickMenuDog.value = payload.data.dog
@@ -1904,6 +2008,207 @@ onShow(async () => {
   background: var(--green-soft);
   padding: 2px 8px;
   border-radius: var(--radius-tag);
+}
+
+/* 繁育动作菜单 */
+.breeding-action-sheet {
+  padding: 2px 0 16px;
+}
+
+.breeding-action-sheet__context {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 12px 14px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 249, 240, 0.94), rgba(255, 246, 235, 0.88));
+  border: 1px solid rgba(232, 155, 62, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.breeding-action-sheet__badge {
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(242, 167, 62, 0.16), rgba(242, 167, 62, 0.1));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.breeding-action-sheet__copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.breeding-action-sheet__meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.breeding-action-sheet__eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: var(--text-3);
+}
+
+.breeding-action-sheet__title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.breeding-action-sheet__status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: rgba(242, 167, 62, 0.12);
+  color: var(--amber);
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.breeding-action-sheet__primary {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--text-1);
+}
+
+.breeding-action-sheet__sub {
+  display: block;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-3);
+}
+
+.breeding-action-sheet__alert {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--text-3);
+}
+
+.breeding-action-sheet__alert--danger {
+  color: var(--red);
+}
+
+.breeding-action-sheet__list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.breeding-action-sheet__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 12px;
+  min-height: 68px;
+  padding: 0 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(216, 203, 189, 0.2);
+  background: rgba(255, 255, 255, 0.96);
+  transition: transform 0.12s ease, opacity 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+
+  &:active {
+    transform: scale(0.98);
+    opacity: 0.9;
+  }
+
+  &--primary {
+    background: linear-gradient(135deg, #f3b45a, #eaa552);
+    border-color: rgba(232, 155, 62, 0.2);
+    box-shadow: 0 12px 22px rgba(232, 155, 62, 0.18);
+  }
+
+  &--amber {
+    border-color: rgba(242, 167, 62, 0.16);
+    box-shadow: 0 4px 12px rgba(242, 167, 62, 0.06);
+  }
+
+  &--rose {
+    border-color: rgba(234, 62, 119, 0.14);
+    box-shadow: 0 4px 12px rgba(234, 62, 119, 0.05);
+  }
+
+  &--blue {
+    border-color: rgba(78, 150, 226, 0.14);
+    box-shadow: 0 4px 12px rgba(78, 150, 226, 0.05);
+  }
+
+  &--green {
+    border-color: rgba(72, 190, 137, 0.14);
+    box-shadow: 0 4px 12px rgba(72, 190, 137, 0.05);
+  }
+}
+
+.breeding-action-sheet__icon-wrap {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+
+  .breeding-action-sheet__item--primary & {
+    background: rgba(255, 255, 255, 0.22);
+  }
+}
+
+.breeding-action-sheet__icon {
+  font-size: 18px;
+}
+
+.breeding-action-sheet__item-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.breeding-action-sheet__label {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-1);
+
+  .breeding-action-sheet__item--primary & {
+    color: #fff;
+  }
+}
+
+.breeding-action-sheet__hint {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-3);
+
+  .breeding-action-sheet__item--primary & {
+    color: rgba(255, 255, 255, 0.82);
+  }
+}
+
+.breeding-action-sheet__arrow {
+  font-size: 18px;
+  color: var(--text-4);
+  flex-shrink: 0;
+
+  .breeding-action-sheet__item--primary & {
+    color: rgba(255, 255, 255, 0.86);
+  }
 }
 
 /* 健康关注操作菜单 */

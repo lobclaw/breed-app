@@ -69,9 +69,7 @@ function highestPriority(tasks) {
 }
 
 function startOfDay(ts) {
-  const date = new Date(ts)
-  date.setHours(0, 0, 0, 0)
-  return date.getTime()
+  return getBeijingDayContext(ts).dayStart
 }
 
 function getOverdueDays(dueDate, now = Date.now()) {
@@ -220,10 +218,14 @@ function getBeijingDayContext(now = Date.now()) {
   }
 }
 
+function getBeijingDayDiff(laterTs, earlierTs) {
+  return Math.floor((startOfDay(laterTs) - startOfDay(earlierTs)) / DAY_MS)
+}
+
 function computeMedItemsForBeijingDay(activeMedications, targetDate) {
   const targetDayStart = getBeijingDayContext(targetDate).dayStart
   return (activeMedications || []).map((med) => {
-    const startDayStart = getBeijingDayContext(med.actual_start_date).dayStart
+    const startDayStart = getBeijingDayContext(med.actual_start_date || med.start_date || med.created_at || targetDate).dayStart
     const currentDay = Math.floor((targetDayStart - startDayStart) / 86400000) + 1
     if (currentDay < 1 || currentDay > med.duration_days) return null
     const frequency = med.frequency || 1
@@ -392,6 +394,7 @@ async function ensureEstrusCycleMilestones(familyId, now = Date.now()) {
             details: {
               step_type: 'follicle_check',
               heat_date: heatDate,
+              follicle_check_count: follicleRecords.length,
               follicle_result: getFollicleResult(latestFollicleRecord.details) || null,
               latest_follicle_check_date: latestFollicleRecord.date || null,
               abnormal_result: isFollicleAbnormal(latestFollicleRecord.details),
@@ -400,14 +403,15 @@ async function ensureEstrusCycleMilestones(familyId, now = Date.now()) {
       : {
           title: `${cycle.dam_name} · 建议卵泡检查`,
           due_date: heatDate + 10 * DAY_MS,
-          details: {
-            step_type: 'follicle_check',
-            heat_date: heatDate,
-            follicle_result: null,
-            latest_follicle_check_date: null,
-            abnormal_result: false,
-          },
-        }
+        details: {
+          step_type: 'follicle_check',
+          heat_date: heatDate,
+          follicle_check_count: 0,
+          follicle_result: null,
+          latest_follicle_check_date: null,
+          abnormal_result: false,
+        },
+      }
 
     const { id } = await db.collection('tasks').add({
       card_type: 'individual',
@@ -530,26 +534,15 @@ async function createAutoHealthRecord({ familyId, uid, task, now }) {
  * 从 medication_tasks 计算指定日期的用药状态
  */
 function computeMedItemsForDay(activeMedications, targetDate) {
-  const target = new Date(targetDate); target.setHours(0, 0, 0, 0)
-  return activeMedications.map(med => {
-    const start = new Date(med.actual_start_date); start.setHours(0, 0, 0, 0)
-    const currentDay = Math.floor((target.getTime() - start.getTime()) / DAY_MS) + 1
-    if (currentDay < 1 || currentDay > med.duration_days) return null
-    const frequency = med.frequency || 1
-    const todayDoses = med.daily_doses?.[String(currentDay)] || 0
-    return {
-      ...med,
-      currentDay,
-      todayDoses,
-      isDoneToday: todayDoses >= frequency,
-    }
-  }).filter(Boolean)
+  return computeMedItemsForBeijingDay(activeMedications || [], targetDate)
 }
 
 function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems = []) {
   const cards = []
   const consumed = new Set()
   const completedConsumed = new Set()
+
+  const todayDayStart = startOfDay(Date.now())
 
   for (const task of [...tasks, ...todayCompleted]) {
     task.display_title = getTaskDisplayTitle(task)
@@ -568,9 +561,8 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
     const status = ill.details?.treatment_status || '观察中'
     const dogId = ill.dog_id
     const cond = ill.details?.condition || '生病'
-    const illStart = new Date(ill.date || ill.created_at); illStart.setHours(0, 0, 0, 0)
-    const todayMid = new Date(); todayMid.setHours(0, 0, 0, 0)
-    const daysSick = Math.max(1, Math.round((todayMid.getTime() - illStart.getTime()) / DAY_MS) + 1)
+    const illStart = startOfDay(ill.date || ill.created_at)
+    const daysSick = Math.max(1, getBeijingDayDiff(todayDayStart, illStart) + 1)
 
     if (!illnessesByDog.has(dogId)) {
       illnessesByDog.set(dogId, [])
@@ -605,9 +597,8 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
       const status = ill.details?.treatment_status || '观察中'
       if (status === '治疗中' && medDogIds.has(ill.dog_id)) return null
 
-      const illStart = new Date(ill.date || ill.created_at); illStart.setHours(0, 0, 0, 0)
-      const todayMid = new Date(); todayMid.setHours(0, 0, 0, 0)
-      const daysSick = Math.max(1, Math.round((todayMid.getTime() - illStart.getTime()) / DAY_MS) + 1)
+      const illStart = startOfDay(ill.date || ill.created_at)
+      const daysSick = Math.max(1, getBeijingDayDiff(todayDayStart, illStart) + 1)
 
       return {
         dogId: ill.dog_id,
@@ -784,7 +775,7 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
   ]
   const batchGroups = new Map()
   for (const t of allForBatch) {
-    const dayKey = new Date(t.due_date).toDateString()
+    const dayKey = String(startOfDay(t.due_date))
     const key = `${getTaskVariantKey(t)}__${dayKey}`
     if (!batchGroups.has(key)) batchGroups.set(key, [])
     batchGroups.get(key).push(t)
@@ -886,23 +877,22 @@ module.exports = {
   async getHomeCards() {
     const familyId = this.familyId
 
-    const todayStart = new Date()
-    todayStart.setHours(0, 0, 0, 0)
-    const todayEnd = new Date()
-    todayEnd.setHours(23, 59, 59, 999)
+    const todayContext = getBeijingDayContext(Date.now())
+    const todayStartTs = todayContext.dayStart
+    const todayEndTs = todayContext.dayEnd
 
     await ensureEstrusCycleMilestones(familyId, Date.now())
 
     // 并行查询：首页到期任务 + 主流程任务（允许未来） + 今日已完成 + 当前生病犬只 + 进行中的用药
     const [pendingRes, workflowRes, completedRes, illnessRes, medRes] = await Promise.all([
       db.collection('tasks')
-        .where({ family_id: familyId, status: 'pending', due_date: dbCmd.lte(todayEnd.getTime()) })
+        .where({ family_id: familyId, status: 'pending', due_date: dbCmd.lte(todayEndTs) })
         .orderBy('due_date', 'asc').limit(200).get(),
       db.collection('tasks')
         .where({ family_id: familyId, status: 'pending', type: 'breeding_milestone' })
         .orderBy('due_date', 'asc').limit(200).get(),
       db.collection('tasks')
-        .where({ family_id: familyId, status: 'completed', completed_at: dbCmd.gte(todayStart.getTime()).and(dbCmd.lte(todayEnd.getTime())) })
+        .where({ family_id: familyId, status: 'completed', completed_at: dbCmd.gte(todayStartTs).and(dbCmd.lte(todayEndTs)) })
         .limit(100).get(),
       db.collection('health_records')
         .where({ family_id: familyId, type: 'illness', 'details.treatment_status': dbCmd.neq('已康复') })
@@ -941,7 +931,7 @@ module.exports = {
     }
 
     for (const task of normalizedPendingTasks) {
-      task.priority = getTaskPriority(task, todayStart.getTime(), todayEnd.getTime())
+      task.priority = getTaskPriority(task, todayStartTs, todayEndTs)
       task._completed = false
     }
     for (const task of todayCompletedTasks) {
@@ -954,23 +944,19 @@ module.exports = {
     const allCards = sectioned.cards
 
     // 计算 本周 和 30天 的 pending 任务数
-    const sundayEnd = new Date(todayStart)
-    const dayOfWeek = sundayEnd.getDay() // 0=日
+    const beijingToday = new Date(todayStartTs + (8 * 60 * 60 * 1000))
+    const dayOfWeek = beijingToday.getUTCDay() // 0=日
     const daysToSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek
-    sundayEnd.setDate(sundayEnd.getDate() + daysToSunday)
-    sundayEnd.setHours(23, 59, 59, 999)
-
-    const day30End = new Date(todayStart)
-    day30End.setDate(day30End.getDate() + 30)
-          day30End.setHours(23, 59, 59, 999)
+    const sundayEndTs = todayStartTs + (daysToSunday * DAY_MS) + DAY_MS - 1
+    const day30EndTs = todayStartTs + (30 * DAY_MS) + DAY_MS - 1
 
     // 并行查询 本周 和 30天 的 pending count
     const [weekRes, month30Res] = await Promise.all([
       db.collection('tasks')
-        .where({ family_id: familyId, status: 'pending', due_date: dbCmd.lte(sundayEnd.getTime()) })
+        .where({ family_id: familyId, status: 'pending', due_date: dbCmd.lte(sundayEndTs) })
         .count(),
       db.collection('tasks')
-        .where({ family_id: familyId, status: 'pending', due_date: dbCmd.lte(day30End.getTime()) })
+        .where({ family_id: familyId, status: 'pending', due_date: dbCmd.lte(day30EndTs) })
         .count(),
     ])
 
@@ -1016,17 +1002,13 @@ module.exports = {
     // 按天聚合
     const counts = {}
     for (const task of dedupeBreedingMilestones(tasks)) {
-      const d = new Date(task.due_date)
-      d.setHours(0, 0, 0, 0)
-      const key = d.getTime()
+      const key = startOfDay(task.due_date)
       counts[key] = (counts[key] || 0) + 1
     }
 
     // 疗程状态也会出现在未来日期页：只要当天有用药卡，就给该天一个红点计数
     const seenMedicationDays = new Set()
-    for (let d = new Date(startDate); d.getTime() <= endDate; d.setDate(d.getDate() + 1)) {
-      const dayTs = new Date(d); dayTs.setHours(0, 0, 0, 0)
-      const key = dayTs.getTime()
+    for (let key = startOfDay(startDate); key <= endDate; key += DAY_MS) {
       const dayMedItems = computeMedItemsForDay(activeMedications || [], key)
       if (dayMedItems.length > 0 && !seenMedicationDays.has(key)) {
         counts[key] = Math.max(counts[key] || 0, 1)
@@ -1073,21 +1055,19 @@ module.exports = {
     }
 
     // 按天分组，正确标记 overdue
-    const realTodayStart = new Date()
-    realTodayStart.setHours(0, 0, 0, 0)
+    const realTodayStart = startOfDay(Date.now())
+    const realTodayEnd = realTodayStart + DAY_MS - 1
     const dayGroups = new Map()
     for (const task of tasks) {
-      const d = new Date(task.due_date)
-      d.setHours(0, 0, 0, 0)
-      const key = d.getTime()
+      const key = startOfDay(task.due_date)
       if (!dayGroups.has(key)) dayGroups.set(key, [])
-      task.priority = getTaskPriority(task, realTodayStart.getTime(), realTodayStart.getTime() + DAY_MS - 1)
+      task.priority = getTaskPriority(task, realTodayStart, realTodayEnd)
       task._completed = false
       dayGroups.get(key).push(task)
     }
 
     // 每天独立合并为卡片
-    const todayMs = realTodayStart.getTime()
+    const todayMs = realTodayStart
     const result = {}
     for (const [dayTs, dayTasks] of dayGroups) {
       const dayMedItems = computeMedItemsForDay(activeMedications, dayTs)
@@ -1122,9 +1102,7 @@ module.exports = {
     }
 
     // 补充没有其他任务但有用药的日期
-    for (let d = new Date(startDate); d.getTime() <= endDate; d.setDate(d.getDate() + 1)) {
-      const dayTs = new Date(d); dayTs.setHours(0, 0, 0, 0)
-      const key = dayTs.getTime()
+    for (let key = startOfDay(startDate); key <= endDate; key += DAY_MS) {
       if (!result[key]) {
         const dayMedItems = computeMedItemsForDay(activeMedications, key)
         if (dayMedItems.length > 0) {

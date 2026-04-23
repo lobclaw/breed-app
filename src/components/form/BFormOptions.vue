@@ -29,12 +29,10 @@
   <slot name="before-date" />
   <view class="field-group">
     <view class="field-label"><text>{{ isTodo ? '计划日期' : dateLabel }}</text></view>
-    <picker mode="date" :value="dateStr" @change="onDateChange">
-      <view class="form-input form-input--picker">
-        <text>{{ dateStr || '请选择日期' }}</text>
-        <text class="material-icons-round form-input__suffix">calendar_today</text>
-      </view>
-    </picker>
+    <view class="form-input form-input--picker" @click="showDatePicker = true">
+      <text>{{ dateStr || '请选择日期' }}</text>
+      <text class="material-icons-round form-input__suffix">calendar_today</text>
+    </view>
     <view class="date-chips">
       <template v-if="isTodo">
         <text class="date-chip" :class="{ active: chipActive === 'today' }" @click="setChip('today')">今天</text>
@@ -59,19 +57,39 @@
       </view>
     </view>
     <template v-if="enableReminder">
-      <picker mode="date" :value="reminderDateStr" @change="onReminderDateChange">
-        <view class="form-input form-input--picker">
-          <text>{{ reminderDateStr }}</text>
-          <text class="material-icons-round form-input__suffix">calendar_today</text>
-        </view>
-      </picker>
+      <view class="form-input form-input--picker" @click="showReminderDatePicker = true">
+        <text>{{ reminderDateStr }}</text>
+        <text class="material-icons-round form-input__suffix">calendar_today</text>
+      </view>
       <text class="helper-text">{{ reminderHint || `自动计算：+${reminderDays}天，可手动修改` }}</text>
     </template>
   </view>
+
+  <BDateTimePicker
+    v-model:visible="showDatePicker"
+    :model-value="date"
+    mode="date"
+    value-type="timestamp"
+    @confirm="onDateConfirm"
+  />
+
+  <BDateTimePicker
+    v-model:visible="showReminderDatePicker"
+    :model-value="reminderDate || (date ? date + reminderDays * DAY : null)"
+    mode="date"
+    value-type="timestamp"
+    @confirm="onReminderDateConfirm"
+  />
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import {
+  buildTimestampFromDayOffset,
+  formatDateInputValue,
+  getLocalCalendarDayDiff,
+} from '@/utils/date'
+import BDateTimePicker from './BDateTimePicker.vue'
 
 const props = withDefaults(defineProps<{
   date: number | null
@@ -100,42 +118,43 @@ const emit = defineEmits<{
 }>()
 
 const chipActive = ref('today')
+const showDatePicker = ref(false)
+const showReminderDatePicker = ref(false)
 const DAY = 86400000
 
 // 日期显示
 const dateStr = computed(() => {
-  if (!props.date) return ''
-  const d = new Date(props.date)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  return formatDateInputValue(props.date)
 })
 
 // 提醒日期显示
 const reminderDateStr = computed(() => {
   const ts = props.reminderDate || (props.date ? props.date + props.reminderDays * DAY : null)
-  if (!ts) return ''
-  const d = new Date(ts)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  return formatDateInputValue(ts)
 })
 
 // 快捷日期
 function setChip(chip: string) {
   chipActive.value = chip
-  const now = new Date()
-  now.setHours(0, 0, 0, 0)
-  if (chip === 'yesterday') now.setDate(now.getDate() - 1)
-  if (chip === 'dayBefore') now.setDate(now.getDate() - 2)
-  if (chip === 'tomorrow') now.setDate(now.getDate() + 1)
-  if (chip === 'dayAfter') now.setDate(now.getDate() + 2)
-  emit('update:date', now.getTime())
+  const offsetMap: Record<string, number> = {
+    today: 0,
+    yesterday: -1,
+    dayBefore: -2,
+    tomorrow: 1,
+    dayAfter: 2,
+  }
+  emit('update:date', buildTimestampFromDayOffset(offsetMap[chip] || 0, props.date || Date.now()))
 }
 
-function onDateChange(e: any) {
-  emit('update:date', new Date(e.detail.value + 'T00:00:00+08:00').getTime())
+function onDateConfirm(value: number | string) {
+  if (typeof value !== 'number') return
+  emit('update:date', value)
   chipActive.value = ''
 }
 
-function onReminderDateChange(e: any) {
-  emit('update:reminderDate', new Date(e.detail.value + 'T00:00:00+08:00').getTime())
+function onReminderDateConfirm(value: number | string) {
+  if (typeof value !== 'number') return
+  emit('update:reminderDate', value)
 }
 
 function toggleTodo() {
@@ -148,23 +167,36 @@ function toggleReminder() {
 
 // 切换待办模式时自动调整日期和 chip
 watch(() => props.isTodo, (val) => {
-  const d = new Date()
-  d.setHours(0, 0, 0, 0)
   if (val) {
-    d.setDate(d.getDate() + 1)
     chipActive.value = 'tomorrow'
+    emit('update:date', buildTimestampFromDayOffset(1, props.date || Date.now()))
   } else {
     chipActive.value = 'today'
+    emit('update:date', buildTimestampFromDayOffset(0, props.date || Date.now()))
   }
-  emit('update:date', d.getTime())
 })
 
 // 初始化
-const today = new Date()
-today.setHours(0, 0, 0, 0)
 if (!props.date) {
-  emit('update:date', today.getTime())
+  emit('update:date', buildTimestampFromDayOffset(0))
 }
+
+watch(() => props.date, (value) => {
+  if (!value) return
+  const diff = getLocalCalendarDayDiff(value)
+  if (props.isTodo) {
+    if (diff === 0) chipActive.value = 'today'
+    else if (diff === 1) chipActive.value = 'tomorrow'
+    else if (diff === 2) chipActive.value = 'dayAfter'
+    else chipActive.value = ''
+    return
+  }
+
+  if (diff === 0) chipActive.value = 'today'
+  else if (diff === -1) chipActive.value = 'yesterday'
+  else if (diff === -2) chipActive.value = 'dayBefore'
+  else chipActive.value = ''
+}, { immediate: true })
 </script>
 
 <style lang="scss" scoped>

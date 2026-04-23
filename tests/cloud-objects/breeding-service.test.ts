@@ -542,6 +542,137 @@ describe('breeding-service', () => {
       })).rejects.toThrow('当前不在发情中，无法记录发情观察')
     })
 
+    it('孕检在没有怀孕中周期时应拒绝', async () => {
+      const now = Date.now()
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+      await expect(breedingService.addBreedingRecord.call(ctx, {
+        type: 'pregnancy_check',
+        dog_id: 'dam_1',
+        date: now,
+        details: {
+          confirmed: '是',
+          puppy_count: 3,
+        },
+      })).rejects.toThrow('没有进行中的繁育周期，请先录入发情或配种记录')
+    })
+
+    it('孕检挂到发情中周期时应拒绝', async () => {
+      const now = Date.now()
+      seedCollection('breeding_cycles', [{
+        _id: 'cycle_heat_for_pregnancy',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        status: '发情中',
+        created_at: now,
+        updated_at: now,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      await expect(breedingService.addBreedingRecord.call(ctx, {
+        type: 'pregnancy_check',
+        dog_id: 'dam_1',
+        cycle_id: 'cycle_heat_for_pregnancy',
+        date: now,
+        details: {
+          confirmed: '是',
+          puppy_count: 2,
+        },
+      })).rejects.toThrow('当前不在怀孕中，无法记录孕检')
+    })
+
+    it('产检和临产挂到终态周期时应拒绝', async () => {
+      const now = Date.now()
+      seedCollection('breeding_cycles', [{
+        _id: 'cycle_closed',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        status: '已生产',
+        created_at: now,
+        updated_at: now,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+      await expect(breedingService.addBreedingRecord.call(ctx, {
+        type: 'prenatal_check',
+        dog_id: 'dam_1',
+        cycle_id: 'cycle_closed',
+        date: now,
+        details: {
+          results: '状态稳定',
+        },
+      })).rejects.toThrow('当前不在怀孕中，无法记录产检')
+
+      await expect(breedingService.addBreedingRecord.call(ctx, {
+        type: 'pre_labor',
+        dog_id: 'dam_1',
+        cycle_id: 'cycle_closed',
+        date: now,
+        details: {
+          temperature: 37,
+        },
+      })).rejects.toThrow('当前不在怀孕中，无法记录临产监测')
+    })
+
+    it('异常终止在无周期或终态周期下应拒绝，但进行中周期允许', async () => {
+      const now = Date.now()
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+      await expect(breedingService.addBreedingRecord.call(ctx, {
+        type: 'abnormal_termination',
+        dog_id: 'dam_1',
+        date: now,
+        details: {
+          termination_type: '医疗终止',
+        },
+      })).rejects.toThrow('没有进行中的繁育周期，请先录入发情或配种记录')
+
+      seedCollection('breeding_cycles', [{
+        _id: 'cycle_terminated_closed',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        status: '失败',
+        created_at: now,
+        updated_at: now,
+      }])
+
+      await expect(breedingService.addBreedingRecord.call(ctx, {
+        type: 'abnormal_termination',
+        dog_id: 'dam_1',
+        cycle_id: 'cycle_terminated_closed',
+        date: now,
+        details: {
+          termination_type: '医疗终止',
+        },
+      })).rejects.toThrow('当前不在进行中的繁育周期，无法记录异常终止')
+
+      seedCollection('breeding_cycles', [{
+        _id: 'cycle_terminated_active',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        status: '怀孕中',
+        created_at: now,
+        updated_at: now,
+      }])
+
+      const res = await breedingService.addBreedingRecord.call(ctx, {
+        type: 'abnormal_termination',
+        dog_id: 'dam_1',
+        cycle_id: 'cycle_terminated_active',
+        date: now,
+        details: {
+          termination_type: '医疗终止',
+        },
+      })
+
+      expect(res.data.recordId).toBeTruthy()
+    })
+
     it('应支持删除发情观察记录', async () => {
       const now = Date.now()
       seedCollection('breeding_records', [{
@@ -624,18 +755,18 @@ describe('breeding-service', () => {
         dam_id: 'dam_1',
         dam_name: '花花',
         family_id: familyId,
-        status: '发情中',
+        status: '怀孕中',
         created_at: now,
         updated_at: now,
       }])
 
       const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
       await breedingService.addBreedingRecord.call(ctx, {
-        type: 'follicle_check',
+        type: 'pregnancy_check',
         dog_id: 'dam_1',
         cycle_id: 'cycle_dup',
         date: now,
-        details: { left_count: 2, right_count: 1 },
+        details: { confirmed: '是', puppy_count: 3 },
         extra_arrangement: {
           kind: 'contact_doctor',
           due_date: now + 2 * 86400000,

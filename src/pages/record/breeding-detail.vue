@@ -6,7 +6,7 @@
           <view v-if="canEdit" class="header-action" @click="goEdit">
             <text class="material-icons-round" style="font-size: 22px; color: var(--text-2);">edit</text>
           </view>
-          <view class="header-action" @click="showMore = true">
+          <view v-if="hasMoreActions" class="header-action" @click="showMore = true">
             <text class="material-icons-round" style="font-size: 22px; color: var(--text-2);">more_horiz</text>
           </view>
         </view>
@@ -16,9 +16,61 @@
     <BSubmitBanner :message="submitBannerMessage" />
 
     <!-- 加载中 -->
-    <view v-if="loading" class="card-feed">
-      <BSkeleton :rows="6" />
-    </view>
+    <template v-if="loading">
+      <view class="card-feed">
+        <view class="detail-skeleton-card detail-skeleton-card--summary">
+          <view class="detail-skeleton-card__main">
+            <view class="detail-skeleton detail-skeleton--tag" />
+            <view class="detail-skeleton detail-skeleton--title" />
+            <view class="detail-skeleton detail-skeleton--sub" />
+          </view>
+          <view class="detail-skeleton-card__meta">
+            <view class="detail-skeleton detail-skeleton--meta-value" />
+            <view class="detail-skeleton detail-skeleton--meta-label" />
+          </view>
+        </view>
+      </view>
+
+      <view class="section-label">
+        <view class="section-dot section-dot--amber" />
+        <text class="section-text">核心信息</text>
+      </view>
+      <view class="card-feed">
+        <view class="detail-skeleton-panel">
+          <view v-for="row in 7" :key="`breeding-info-${row}`" class="detail-skeleton-row">
+            <view class="detail-skeleton detail-skeleton--label" :class="{ 'detail-skeleton--label-short': row > 5 }" />
+            <view class="detail-skeleton-row__value" :class="{ 'detail-skeleton-row__value--stack': row === 2 }">
+              <template v-if="row === 1">
+                <view class="detail-skeleton detail-skeleton--pill" />
+              </template>
+              <template v-else-if="row === 2">
+                <view class="detail-skeleton detail-skeleton--avatar" />
+                <view class="detail-skeleton detail-skeleton--value" />
+              </template>
+              <template v-else>
+                <view class="detail-skeleton detail-skeleton--value" />
+              </template>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view class="section-label" style="margin-top: 8px;">
+        <view class="section-dot section-dot--blue" />
+        <text class="section-text">关联信息</text>
+      </view>
+      <view class="card-feed">
+        <view class="detail-skeleton-panel">
+          <view v-for="row in 2" :key="`breeding-related-${row}`" class="detail-skeleton-row">
+            <view class="detail-skeleton detail-skeleton--label" />
+            <view class="detail-skeleton-row__value">
+              <view class="detail-skeleton detail-skeleton--value" />
+            </view>
+          </view>
+        </view>
+      </view>
+
+    </template>
 
     <!-- 详情内容 -->
     <template v-if="!loading && record">
@@ -350,20 +402,6 @@
         <text>创建人: {{ record.created_by_name }} · {{ formatDateTime(record.created_at) }}</text>
       </view>
 
-      <!-- 操作按钮 -->
-      <view class="section-label">
-        <view class="section-dot section-dot--red" />
-        <text class="section-text">操作</text>
-      </view>
-      <view :class="['action-area', `action-area--${cardColor}`]">
-        <view class="detail-action-card">
-          <view class="detail-action-card__glow" />
-          <view class="detail-action-card__row">
-            <BButton v-if="canEdit" class="detail-action-card__primary" variant="filled" :color="cardColor" @click="goEdit">编辑记录</BButton>
-            <BButton v-if="canDelete" class="detail-action-card__secondary" variant="ghost" color="red" @click="confirmDelete">删除记录</BButton>
-          </view>
-        </view>
-      </view>
     </template>
 
     <!-- 空状态 -->
@@ -376,11 +414,7 @@
 
     <!-- 更多操作 Sheet -->
     <BSheet v-model:visible="showMore" title="更多操作">
-        <view class="more-actions">
-        <view v-if="canEdit" class="more-action-item" @click="handleEditFromMore">
-          <text class="material-icons-round" style="font-size: 20px; color: var(--text-2);">edit</text>
-          <text class="more-action-label">编辑记录</text>
-        </view>
+      <view class="more-actions">
         <view v-if="canDelete" class="more-action-item" @click="handleDeleteFromMore">
           <text class="material-icons-round" style="font-size: 20px; color: var(--red);">delete</text>
           <text class="more-action-label" style="color: var(--red);">删除记录</text>
@@ -409,10 +443,8 @@ import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BCard from '@/components/base/BCard.vue'
 import BTag from '@/components/base/BTag.vue'
-import BButton from '@/components/base/BButton.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import BModal from '@/components/layout/BModal.vue'
-import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 
 const record = ref<any>(null)
@@ -440,8 +472,9 @@ const typeMap: Record<string, { label: string; tagColor: any; cardColor: any }> 
 const typeLabel = computed(() => typeMap[record.value?.type]?.label || record.value?.type || '未知')
 const tagColor = computed(() => typeMap[record.value?.type]?.tagColor || 'green')
 const cardColor = computed(() => typeMap[record.value?.type]?.cardColor || 'green')
-const canEdit = computed(() => record.value?.type !== 'heat_observation')
-const canDelete = computed(() => record.value?.type === 'heat_observation')
+const canEdit = computed(() => !loading.value && !!record.value && record.value.type !== 'heat_observation')
+const canDelete = computed(() => !loading.value && !!record.value && record.value.type === 'heat_observation')
+const hasMoreActions = computed(() => canDelete.value)
 
 function getMatingSireName(details: Record<string, any> = {}) {
   return details.sire_name || details.male_name || ''
@@ -567,10 +600,6 @@ function goEdit() {
   uni.navigateTo({ url: `/pages/record/breeding-edit?id=${recordId}` })
 }
 
-function handleEditFromMore() {
-  goEdit()
-}
-
 function goToCycle() {
   if (record.value?.cycle_id) {
     uni.navigateTo({ url: `/pages/breeding/cycle?id=${record.value.cycle_id}` })
@@ -629,6 +658,155 @@ onShow(() => {
 
 .page {
   padding-bottom: 40px;
+}
+
+.detail-skeleton-card,
+.detail-skeleton-panel,
+.detail-skeleton-action {
+  position: relative;
+  overflow: hidden;
+  background: var(--card);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+}
+.detail-skeleton-card::after,
+.detail-skeleton-panel::after,
+.detail-skeleton-action::after,
+.detail-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.56) 50%, transparent 100%);
+  animation: detail-skeleton-shimmer 1.5s infinite;
+}
+.detail-skeleton-card--summary {
+  padding: 16px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.detail-skeleton-card__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.detail-skeleton-card__meta {
+  min-width: 68px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.76);
+}
+.detail-skeleton-panel {
+  padding: 2px 0;
+}
+.detail-skeleton-row {
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.detail-skeleton-row + .detail-skeleton-row {
+  border-top: 1px solid rgba(216, 203, 189, 0.12);
+}
+.detail-skeleton-row__value {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 120px;
+}
+.detail-skeleton-row__value--stack {
+  min-width: 140px;
+}
+.detail-skeleton-action {
+  padding: 14px 16px 16px;
+}
+.detail-skeleton-action__glow {
+  position: absolute;
+  right: -18px;
+  bottom: -22px;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 243, 225, 0.95) 0%, rgba(255, 243, 225, 0) 72%);
+}
+.detail-skeleton-action__row {
+  position: relative;
+  display: flex;
+  gap: 12px;
+}
+.detail-skeleton {
+  position: relative;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--card-dim);
+}
+.detail-skeleton--tag {
+  width: 58px;
+  height: 24px;
+}
+.detail-skeleton--title {
+  width: 132px;
+  max-width: 58%;
+  height: 20px;
+}
+.detail-skeleton--sub {
+  width: 168px;
+  max-width: 72%;
+  height: 13px;
+}
+.detail-skeleton--meta-value {
+  width: 52px;
+  height: 16px;
+}
+.detail-skeleton--meta-label {
+  width: 42px;
+  height: 11px;
+}
+.detail-skeleton--label {
+  width: 72px;
+  height: 12px;
+}
+.detail-skeleton--label-short {
+  width: 52px;
+}
+.detail-skeleton--value {
+  width: 88px;
+  height: 14px;
+}
+.detail-skeleton--pill {
+  width: 56px;
+  height: 24px;
+}
+.detail-skeleton--avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+}
+.detail-skeleton--button {
+  height: 46px;
+  border-radius: 999px;
+}
+.detail-skeleton--button-primary {
+  flex: 1;
+}
+.detail-skeleton--button-secondary {
+  width: 120px;
+}
+
+@keyframes detail-skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 .detail-summary {

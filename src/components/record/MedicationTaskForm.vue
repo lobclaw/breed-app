@@ -78,12 +78,10 @@
 
       <view class="field-group">
         <view class="field-label"><text>开始日期</text></view>
-        <picker mode="date" :value="dateStr" @change="onDateChange">
-          <view class="form-input form-input--picker">
-            <text>{{ dateStr || '请选择日期' }}</text>
-            <text class="material-icons-round form-input__suffix">calendar_today</text>
-          </view>
-        </picker>
+        <view class="form-input form-input--picker" @click="showDatePicker = true">
+          <text>{{ dateStr || '请选择日期' }}</text>
+          <text class="material-icons-round form-input__suffix">calendar_today</text>
+        </view>
         <view class="date-chips">
           <text class="date-chip" :class="{ active: chipActive === 'today' }" @click="setChip('today')">今天</text>
           <text class="date-chip" :class="{ active: chipActive === 'yesterday' }" @click="setChip('yesterday')">昨天</text>
@@ -252,6 +250,14 @@
         </view>
       </view>
     </BModal>
+
+    <BDateTimePicker
+      v-model:visible="showDatePicker"
+      :model-value="date"
+      mode="date"
+      value-type="timestamp"
+      @confirm="onDateConfirm"
+    />
   </view>
 </template>
 
@@ -262,8 +268,10 @@ import { useRecordSubmitState } from '@/composables/useRecordSubmitState'
 import { buildTaskFeedbackMessage, queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
 import { resolveMedicationRouteQuery } from '@/utils/recordFormRoutes'
 import { formatMedicationDosage } from '@/utils/medicationDisplay'
+import { buildTimestampFromDayOffset, formatDateInputValue, getLocalCalendarDayDiff } from '@/utils/date'
 import { useProtocolStore, type MedicationProtocol } from '@/stores/protocolStore'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
+import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSheet from '@/components/layout/BSheet.vue'
@@ -286,20 +294,18 @@ const notes = ref('')
 const costInput = ref('')
 const illnessRecordId = ref('')
 const saveAsProtocol = ref(false)
+const showDatePicker = ref(false)
 
 const { submitState, submitButtonText, markSubmitting, markSuccess, resetSubmitState } = useRecordSubmitState({
   idleLabel: '创建用药任务',
   successLabel: '已创建',
 })
 
-const today = new Date()
-today.setHours(0, 0, 0, 0)
-const date = ref<number>(today.getTime())
+const date = ref<number>(buildTimestampFromDayOffset(0))
 const chipActive = ref('today')
 
 const dateStr = computed(() => {
-  const targetDate = new Date(date.value)
-  return `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}-${String(targetDate.getDate()).padStart(2, '0')}`
+  return formatDateInputValue(date.value)
 })
 
 const dosageUnits = [
@@ -329,22 +335,19 @@ const canSubmit = computed(() => {
     && !!date.value
 })
 
-function onDateChange(event: any) {
-  date.value = new Date(event.detail.value + 'T00:00:00+08:00').getTime()
+function onDateConfirm(value: number | string) {
+  if (typeof value !== 'number') return
+  date.value = value
   chipActive.value = ''
-  const now = new Date()
-  now.setHours(0, 0, 0, 0)
-  const diff = (now.getTime() - date.value) / 86400000
+  const diff = getLocalCalendarDayDiff(date.value)
   if (diff === 0) chipActive.value = 'today'
-  else if (diff === 1) chipActive.value = 'yesterday'
-  else if (diff === 2) chipActive.value = 'dayBefore'
+  else if (diff === -1) chipActive.value = 'yesterday'
+  else if (diff === -2) chipActive.value = 'dayBefore'
 }
 
 function setChip(chip: string) {
-  const now = new Date()
-  now.setHours(0, 0, 0, 0)
   const offsets: Record<string, number> = { today: 0, yesterday: -1, dayBefore: -2 }
-  date.value = now.getTime() + (offsets[chip] || 0) * 86400000
+  date.value = buildTimestampFromDayOffset(offsets[chip] || 0, date.value)
   chipActive.value = chip
 }
 

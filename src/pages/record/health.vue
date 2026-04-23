@@ -51,12 +51,10 @@
         <!-- 接种日期 -->
         <view class="field-group">
           <view class="field-label"><text>接种日期</text></view>
-          <picker mode="date" :value="dateStr" @change="onDateChange">
-            <view class="form-input form-input--picker">
-              <text>{{ dateStr || '请选择日期' }}</text>
-              <text class="material-icons-round form-input__suffix">calendar_today</text>
-            </view>
-          </picker>
+          <view class="form-input form-input--picker" @click="showDatePicker = true">
+            <text>{{ dateStr || '请选择日期' }}</text>
+            <text class="material-icons-round form-input__suffix">calendar_today</text>
+          </view>
           <view class="date-chips">
             <text class="date-chip" :class="{ active: dateChipActive === 'today' }" @click="setDateChip('today')">今天</text>
             <text class="date-chip" :class="{ active: dateChipActive === 'yesterday' }" @click="setDateChip('yesterday')">昨天</text>
@@ -67,12 +65,10 @@
         <!-- 下次提醒日期 -->
         <view class="field-group">
           <view class="field-label"><text>下次提醒日期</text></view>
-          <picker mode="date" :value="nextVaccineDateStr" @change="onNextVaccineDateChange">
-            <view class="form-input form-input--picker">
-              <text>{{ nextVaccineDateStr || '默认21天后' }}</text>
-              <text class="material-icons-round form-input__suffix">calendar_today</text>
-            </view>
-          </picker>
+          <view class="form-input form-input--picker" @click="showNextVaccineDatePicker = true">
+            <text>{{ nextVaccineDateStr || '默认21天后' }}</text>
+            <text class="material-icons-round form-input__suffix">calendar_today</text>
+          </view>
           <text class="helper-text">自动计算：接种日期 + 21天，可手动修改</text>
         </view>
 
@@ -149,12 +145,10 @@
         <!-- 日期 -->
         <view class="field-group">
           <view class="field-label"><text>日期</text></view>
-          <picker mode="date" :value="dateStr" @change="onDateChange">
-            <view class="form-input form-input--picker">
-              <text>{{ dateStr || '请选择日期' }}</text>
-              <text class="material-icons-round form-input__suffix">calendar_today</text>
-            </view>
-          </picker>
+          <view class="form-input form-input--picker" @click="showDatePicker = true">
+            <text>{{ dateStr || '请选择日期' }}</text>
+            <text class="material-icons-round form-input__suffix">calendar_today</text>
+          </view>
           <view class="date-chips">
             <text class="date-chip" :class="{ active: dateChipActive === 'today' }" @click="setDateChip('today')">今天</text>
             <text class="date-chip" :class="{ active: dateChipActive === 'yesterday' }" @click="setDateChip('yesterday')">昨天</text>
@@ -165,12 +159,10 @@
         <!-- 下次提醒日期 -->
         <view class="field-group">
           <view class="field-label"><text>下次提醒日期</text></view>
-          <picker mode="date" :value="nextDewormDateStr" @change="onNextDewormDateChange">
-            <view class="form-input form-input--picker">
-              <text>{{ nextDewormDateStr || '默认90天后' }}</text>
-              <text class="material-icons-round form-input__suffix">calendar_today</text>
-            </view>
-          </picker>
+          <view class="form-input form-input--picker" @click="showNextDewormDatePicker = true">
+            <text>{{ nextDewormDateStr || '默认90天后' }}</text>
+            <text class="material-icons-round form-input__suffix">calendar_today</text>
+          </view>
           <text class="helper-text">自动计算：日期 + 90天，可手动修改</text>
         </view>
 
@@ -238,12 +230,10 @@
         <!-- 发病日期 -->
         <view class="field-group">
           <view class="field-label"><text>发病日期</text></view>
-          <picker mode="date" :value="dateStr" @change="onDateChange">
-            <view class="form-input form-input--picker">
-              <text>{{ dateStr || '请选择日期' }}</text>
-              <text class="material-icons-round form-input__suffix">calendar_today</text>
-            </view>
-          </picker>
+          <view class="form-input form-input--picker" @click="showDatePicker = true">
+            <text>{{ dateStr || '请选择日期' }}</text>
+            <text class="material-icons-round form-input__suffix">calendar_today</text>
+          </view>
           <view class="date-chips">
             <text class="date-chip" :class="{ active: dateChipActive === 'today' }" @click="setDateChip('today')">今天</text>
             <text class="date-chip" :class="{ active: dateChipActive === 'yesterday' }" @click="setDateChip('yesterday')">昨天</text>
@@ -356,6 +346,30 @@
         </view>
       </view>
     </BModal>
+
+    <BDateTimePicker
+      v-model:visible="showDatePicker"
+      :model-value="form.date"
+      mode="date"
+      value-type="timestamp"
+      @confirm="onDateConfirm"
+    />
+
+    <BDateTimePicker
+      v-model:visible="showNextVaccineDatePicker"
+      :model-value="details.next_reminder_date || (form.date ? form.date + 21 * 86400000 : null)"
+      mode="date"
+      value-type="timestamp"
+      @confirm="onNextVaccineDateConfirm"
+    />
+
+    <BDateTimePicker
+      v-model:visible="showNextDewormDatePicker"
+      :model-value="details.next_reminder_date || (form.date ? form.date + 90 * 86400000 : null)"
+      mode="date"
+      value-type="timestamp"
+      @confirm="onNextDewormDateConfirm"
+    />
   </view>
 </template>
 
@@ -364,11 +378,13 @@ import { ref, reactive, computed, watch } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import { buildRecordFeedbackMessage, queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
+import { buildTimestampFromDayOffset } from '@/utils/date'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import BModal from '@/components/layout/BModal.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
+import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
 
 const selectedDog = ref<any>(null)
 
@@ -382,6 +398,9 @@ const costInput = ref('')
 const details = reactive<Record<string, any>>({})
 const submitState = ref<'idle' | 'submitting' | 'success'>('idle')
 const dateChipActive = ref('today')
+const showDatePicker = ref(false)
+const showNextVaccineDatePicker = ref(false)
+const showNextDewormDatePicker = ref(false)
 
 const typeOptions = [
   { label: '疫苗', value: 'vaccination' },
@@ -443,20 +462,19 @@ const submitButtonText = computed(() => {
 
 function setDateChip(chip: string) {
   dateChipActive.value = chip
-  const now = new Date()
-  now.setHours(0, 0, 0, 0)
-  if (chip === 'yesterday') now.setDate(now.getDate() - 1)
-  if (chip === 'dayBefore') now.setDate(now.getDate() - 2)
-  form.date = now.getTime()
+  const offsetMap: Record<string, number> = { today: 0, yesterday: -1, dayBefore: -2 }
+  form.date = buildTimestampFromDayOffset(offsetMap[chip] || 0, form.date || Date.now())
 }
 
-function onDateChange(e: any) {
-  form.date = new Date(e.detail.value + 'T00:00:00+08:00').getTime()
+function onDateConfirm(value: number | string) {
+  if (typeof value !== 'number') return
+  form.date = value
   dateChipActive.value = ''
 }
 
-function onNextVaccineDateChange(e: any) {
-  details.next_reminder_date = new Date(e.detail.value + 'T00:00:00+08:00').getTime()
+function onNextVaccineDateConfirm(value: number | string) {
+  if (typeof value !== 'number') return
+  details.next_reminder_date = value
 }
 
 const nextDewormDateStr = computed(() => {
@@ -467,8 +485,9 @@ const nextDewormDateStr = computed(() => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 })
 
-function onNextDewormDateChange(e: any) {
-  details.next_reminder_date = new Date(e.detail.value + 'T00:00:00+08:00').getTime()
+function onNextDewormDateConfirm(value: number | string) {
+  if (typeof value !== 'number') return
+  details.next_reminder_date = value
 }
 
 function buildDetails() {
@@ -615,9 +634,7 @@ onLoad((query) => {
     form.type = query.type
   }
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  form.date = today.getTime()
+  form.date = buildTimestampFromDayOffset(0)
 })
 </script>
 

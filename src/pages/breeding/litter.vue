@@ -181,12 +181,10 @@
 
         <view v-if="editMode === 'birth_date'" class="edit-form-sheet__group">
           <text class="edit-form-sheet__label">生产日期</text>
-          <picker mode="date" :value="editBirthDateValue" @change="editBirthDateValue = $event.detail.value">
-            <view class="edit-form-sheet__picker">
-              <text class="edit-form-sheet__picker-text">{{ editBirthDateValue || '请选择生产日期' }}</text>
-              <text class="material-icons-round edit-form-sheet__picker-icon">calendar_today</text>
-            </view>
-          </picker>
+          <view class="edit-form-sheet__picker" @click="showBirthDatePicker = true">
+            <text class="edit-form-sheet__picker-text">{{ editBirthDateDisplayText || '请选择生产日期' }}</text>
+            <text class="material-icons-round edit-form-sheet__picker-icon">calendar_today</text>
+          </view>
         </view>
 
         <view v-else-if="editMode === 'notes'" class="edit-form-sheet__group">
@@ -224,6 +222,14 @@
       </view>
     </BSheet>
 
+    <BDateTimePicker
+      v-model:visible="showBirthDatePicker"
+      :model-value="editBirthDateValue"
+      mode="date"
+      value-type="timestamp"
+      @confirm="onBirthDateConfirm"
+    />
+
     <BModal
       v-model:visible="showWeaningConfirm"
       title="确认断奶"
@@ -250,6 +256,8 @@ import BEmpty from '@/components/feedback/BEmpty.vue'
 import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import BModal from '@/components/layout/BModal.vue'
+import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
+import { formatDateInputValue } from '@/utils/date'
 
 const litter = ref<any>(null)
 const puppies = ref<any[]>([])
@@ -272,34 +280,37 @@ const { run: completeTask } = useCloudCall('task-service', 'completeTask', {
 // 编辑表单 Sheet 状态
 const editMode = ref<'birth_date' | 'notes' | 'puppy_name' | ''>('')
 const showEditFormSheet = ref(false)
+const showBirthDatePicker = ref(false)
 const editFormTitle = ref('')
 const editFormHint = ref('')
-const editBirthDateValue = ref('')
+const editBirthDateValue = ref<number | null>(null)
 const editNotesValue = ref('')
 const editSingleLineValue = ref('')
 const promptSubmitting = ref(false)
 const showEditSheet = ref(false)
 const showWeaningConfirm = ref(false)
 const submitBannerMessage = ref('')
-let promptResolve: ((val: string) => Promise<void>) | null = null
+let promptResolve: ((val: string | number | null) => Promise<void>) | null = null
 let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
+
+const editBirthDateDisplayText = computed(() => formatDateInputValue(editBirthDateValue.value))
 
 function openPrompt(
   mode: 'birth_date' | 'notes' | 'puppy_name',
   title: string,
-  value: string,
-  callback: (val: string) => Promise<void>,
+  value: string | number | null,
+  callback: (val: string | number | null) => Promise<void>,
   hint = '',
 ) {
   editMode.value = mode
   editFormTitle.value = title
   editFormHint.value = hint
   if (mode === 'birth_date') {
-    editBirthDateValue.value = value
+    editBirthDateValue.value = typeof value === 'number' ? value : null
   } else if (mode === 'notes') {
-    editNotesValue.value = value
+    editNotesValue.value = typeof value === 'string' ? value : ''
   } else {
-    editSingleLineValue.value = value
+    editSingleLineValue.value = typeof value === 'string' ? value : ''
   }
   promptResolve = callback
   showEditFormSheet.value = true
@@ -307,6 +318,7 @@ function openPrompt(
 
 function closeEditFormSheet() {
   showEditFormSheet.value = false
+  showBirthDatePicker.value = false
   promptResolve = null
   editMode.value = ''
 }
@@ -327,6 +339,11 @@ async function handlePromptConfirm() {
   } finally {
     promptSubmitting.value = false
   }
+}
+
+function onBirthDateConfirm(value: number | string) {
+  if (typeof value !== 'number') return
+  editBirthDateValue.value = value
 }
 
 const soldCount = computed(() => puppies.value.filter(p => p.disposition === 'sold').length)
@@ -351,17 +368,12 @@ function editBirthDate() {
   openPrompt(
     'birth_date',
     '修改生产日期',
-    formatDate(litter.value?.birth_date),
+    litter.value?.birth_date || null,
     async (val) => {
-      const normalizedValue = (val || '').trim()
-      if (!normalizedValue) {
+      if (typeof val !== 'number' || !Number.isFinite(val)) {
         throw new Error('请输入生产日期')
       }
-      const newDate = new Date(`${normalizedValue}T00:00:00+08:00`).getTime()
-      if (Number.isNaN(newDate)) {
-        throw new Error('请输入正确的日期格式')
-      }
-      await doUpdateBirthDate(litterId, newDate)
+      await doUpdateBirthDate(litterId, val)
       await loadData()
     },
     '生产日期只能调整 ±3 天',

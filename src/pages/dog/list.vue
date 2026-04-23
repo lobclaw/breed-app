@@ -35,22 +35,25 @@
       >close</text>
     </view>
 
-    <scroll-view scroll-x class="dog-list__filters">
-      <view class="dog-list__filters-inner primary-page-chip-row">
-        <view
-          v-for="filter in filterOptions"
-          :key="filter.value"
-          class="dog-list__chip primary-page-tab"
-          :class="{
-            'dog-list__chip--active': activeFilter === filter.value,
-            'primary-page-tab--active': activeFilter === filter.value,
-          }"
-          @click="activeFilter = filter.value"
-        >
-          <text class="dog-list__chip-text">{{ filter.label }}</text>
+    <view class="dog-list__filters-wrap">
+      <scroll-view scroll-x class="dog-list__filters" show-scrollbar="false">
+        <view class="dog-list__filters-inner primary-page-chip-row">
+          <view
+            v-for="filter in filterOptions"
+            :key="filter.value"
+            class="dog-list__chip primary-page-tab"
+            :class="{
+              'dog-list__chip--active': activeFilter === filter.value,
+              'primary-page-tab--active': activeFilter === filter.value,
+            }"
+            @click="activeFilter = filter.value"
+          >
+            <text class="dog-list__chip-text">{{ filter.label }}</text>
+          </view>
         </view>
-      </view>
-    </scroll-view>
+      </scroll-view>
+      <view class="dog-list__filters-fade" />
+    </view>
 
     <view v-if="appliedFilterChips.length" class="dog-list__applied-filters">
       <view
@@ -858,10 +861,42 @@ onShow(() => {
 
 .dog-list__filters {
   white-space: nowrap;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+
+  :deep(::-webkit-scrollbar) {
+    display: none;
+  }
+}
+
+.dog-list__filters-wrap {
+  position: relative;
 }
 
 .dog-list__filters-inner {
+  display: inline-flex;
+  min-width: max-content;
   padding: var(--primary-page-subsection-gap) var(--space-page) 0;
+}
+
+.dog-list__filters-fade {
+  position: absolute;
+  top: var(--primary-page-subsection-gap);
+  right: 0;
+  bottom: 0;
+  width: 30px;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(250, 246, 246, 0) 0%, rgba(250, 246, 246, 0.88) 58%, var(--bg) 100%);
+}
+
+.dog-list__chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .dog-list__applied-filters {

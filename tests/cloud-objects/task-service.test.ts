@@ -139,6 +139,7 @@ describe('task-service', () => {
         .get()
       expect(tasks).toHaveLength(1)
       expect(tasks[0].details?.step_type).toBe('follicle_check')
+      expect(tasks[0].details?.follicle_check_count).toBe(0)
       expect(tasks[0].source_record_id).toBe('record_heat_missing')
     })
 
@@ -191,9 +192,73 @@ describe('task-service', () => {
 
       expect(tasks).toHaveLength(1)
       expect(tasks[0].details?.step_type).toBe('follicle_check')
+      expect(tasks[0].details?.follicle_check_count).toBe(1)
       expect(tasks[0].details?.follicle_result).toBe('发育中')
       expect(tasks[0].details?.latest_follicle_check_date).toBe(now - DAY_MS)
       expect(tasks[0].due_date).toBe(now)
+    })
+
+    it('多次卵泡检查时应记录累计检查次数并取最近一次结果', async () => {
+      const now = Date.now()
+      seedCollection('breeding_cycles', [{
+        _id: 'cycle_follicle_multi_missing',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        status: '发情中',
+        created_at: now - 5 * DAY_MS,
+        updated_at: now,
+      }])
+      seedCollection('breeding_records', [
+        {
+          _id: 'record_heat_multi_cycle',
+          cycle_id: 'cycle_follicle_multi_missing',
+          dog_id: 'dam_1',
+          family_id: familyId,
+          type: 'heat',
+          date: now - 5 * DAY_MS,
+          created_at: now - 5 * DAY_MS,
+          updated_at: now - 5 * DAY_MS,
+        },
+        {
+          _id: 'record_follicle_multi_1',
+          cycle_id: 'cycle_follicle_multi_missing',
+          dog_id: 'dam_1',
+          family_id: familyId,
+          type: 'follicle_check',
+          date: now - 3 * DAY_MS,
+          details: { result: '发育中' },
+          created_at: now - 3 * DAY_MS,
+          updated_at: now - 3 * DAY_MS,
+        },
+        {
+          _id: 'record_follicle_multi_2',
+          cycle_id: 'cycle_follicle_multi_missing',
+          dog_id: 'dam_1',
+          family_id: familyId,
+          type: 'follicle_check',
+          date: now - DAY_MS,
+          details: { result: '其他' },
+          created_at: now - DAY_MS,
+          updated_at: now - DAY_MS,
+        },
+      ])
+      seedCollection('tasks', [])
+      seedCollection('health_records', [])
+      seedCollection('medication_tasks', [])
+
+      const ctx = createCloudObjectContext({ familyId })
+      await taskService.getHomeCards.call(ctx)
+
+      const { data: tasks } = await db.collection('tasks')
+        .where({ cycle_id: 'cycle_follicle_multi_missing', type: 'breeding_milestone' })
+        .get()
+
+      expect(tasks).toHaveLength(1)
+      expect(tasks[0].details?.step_type).toBe('follicle_check')
+      expect(tasks[0].details?.follicle_check_count).toBe(2)
+      expect(tasks[0].details?.follicle_result).toBe('其他')
+      expect(tasks[0].details?.latest_follicle_check_date).toBe(now - DAY_MS)
     })
 
     it('应为发育不良的卵泡检查补生成异常强化标记', async () => {
@@ -243,8 +308,60 @@ describe('task-service', () => {
 
       expect(tasks).toHaveLength(1)
       expect(tasks[0].details?.step_type).toBe('follicle_check')
+      expect(tasks[0].details?.follicle_check_count).toBe(1)
       expect(tasks[0].details?.abnormal_result).toBe(true)
       expect(tasks[0].details?.follicle_result).toBe('发育不良')
+    })
+
+    it('最近一次卵泡检查已成熟时应迁移为配种 milestone', async () => {
+      const now = Date.now()
+      seedCollection('breeding_cycles', [{
+        _id: 'cycle_follicle_ready_missing',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        status: '发情中',
+        created_at: now - 4 * DAY_MS,
+        updated_at: now,
+      }])
+      seedCollection('breeding_records', [
+        {
+          _id: 'record_heat_ready_cycle',
+          cycle_id: 'cycle_follicle_ready_missing',
+          dog_id: 'dam_1',
+          family_id: familyId,
+          type: 'heat',
+          date: now - 4 * DAY_MS,
+          created_at: now - 4 * DAY_MS,
+          updated_at: now - 4 * DAY_MS,
+        },
+        {
+          _id: 'record_follicle_ready_cycle',
+          cycle_id: 'cycle_follicle_ready_missing',
+          dog_id: 'dam_1',
+          family_id: familyId,
+          type: 'follicle_check',
+          date: now - DAY_MS,
+          details: { result: '已成熟' },
+          created_at: now - DAY_MS,
+          updated_at: now - DAY_MS,
+        },
+      ])
+      seedCollection('tasks', [])
+      seedCollection('health_records', [])
+      seedCollection('medication_tasks', [])
+
+      const ctx = createCloudObjectContext({ familyId })
+      await taskService.getHomeCards.call(ctx)
+
+      const { data: tasks } = await db.collection('tasks')
+        .where({ cycle_id: 'cycle_follicle_ready_missing', type: 'breeding_milestone' })
+        .get()
+
+      expect(tasks).toHaveLength(1)
+      expect(tasks[0].details?.step_type).toBe('mating')
+      expect(tasks[0].details?.follicle_result).toBe('已成熟')
+      expect(tasks[0].details?.follicle_check_count).toBeUndefined()
     })
   })
 

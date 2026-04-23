@@ -1,3 +1,5 @@
+import { getBeijingDayStart } from '@/utils/date'
+
 const DAY_MS = 86400000
 
 export type BreedingMilestoneSuggestionStatus = 'normal' | 'window_due' | 'window_passed'
@@ -6,6 +8,8 @@ export interface BreedingMilestoneViewModel {
   stepType: string
   stageTitle: string
   anchorLabel: string
+  now: number
+  dueDate: number | null
   daysFromAnchor: number | null
   dayLabel: string
   suggestionStatus: BreedingMilestoneSuggestionStatus
@@ -16,6 +20,10 @@ export interface BreedingMilestoneViewModel {
   passedWindowLabel: string
   alertLabel: string
   isAlertDanger: boolean
+  follicleCheckCount: number
+  latestFollicleResult: string
+  latestFollicleCheckDate: number | null
+  isFollicleAbnormal: boolean
 }
 
 interface BreedingMilestoneTaskLike {
@@ -106,6 +114,8 @@ export function deriveBreedingMilestoneViewModel(
     stepType,
     stageTitle: meta?.stageTitle || getFallbackStageTitle(task.title),
     anchorLabel: meta?.anchorLabel || '流程',
+    now,
+    dueDate,
     daysFromAnchor,
     dayLabel: buildDayLabel(meta?.anchorLabel || '流程', daysFromAnchor),
     suggestionStatus,
@@ -116,6 +126,10 @@ export function deriveBreedingMilestoneViewModel(
     passedWindowLabel: buildPassedWindowLabel(stepType, suggestionStatus, dueDate, now),
     alertLabel: buildAlertLabel(stepType, task, suggestionStatus, dueDate, now),
     isAlertDanger: isDangerAlert(stepType, task, suggestionStatus),
+    follicleCheckCount: getFollicleCheckCount(task),
+    latestFollicleResult: getLatestFollicleResult(task),
+    latestFollicleCheckDate: getLatestFollicleCheckDate(task),
+    isFollicleAbnormal: !!task.details?.abnormal_result,
   }
 }
 
@@ -177,7 +191,7 @@ function buildReferenceDateLabel(stepType: string, dueDate: number | null): stri
 
 function buildDayLabel(anchorLabel: string, daysFromAnchor: number | null): string {
   if (!daysFromAnchor) return `${anchorLabel}时间待确认`
-  return `距${anchorLabel}第 ${daysFromAnchor} 天`
+  return `${anchorLabel}第 ${daysFromAnchor} 天`
 }
 
 function buildHeatDayLabel(task: BreedingMilestoneTaskLike, now: number): string {
@@ -194,14 +208,6 @@ function buildStageDayLabel(
   daysFromAnchor: number | null,
   now: number,
 ): string {
-  if (stepType === 'follicle_check') {
-    const latestFollicleDate = getNumber(task.details?.latest_follicle_check_date)
-    if (!latestFollicleDate) return ''
-
-    const delta = Math.max(1, Math.floor((startOfDay(now) - startOfDay(latestFollicleDate)) / DAY_MS) + 1)
-    return `卵泡检查后第 ${delta} 天`
-  }
-
   if (stepType === 'mating') {
     const follicleDate = getNumber(task.details?.follicle_check_date)
     const delta = typeof follicleDate === 'number'
@@ -214,7 +220,7 @@ function buildStageDayLabel(
   if (stepType === 'pregnancy_check' || stepType === 'birth') {
     const matingNumber = getNumber(task.details?.mating_number)
     if (matingNumber && daysFromAnchor) {
-      return `距第${matingNumber}脚配种第 ${daysFromAnchor} 天`
+      return `第${matingNumber}脚配种第 ${daysFromAnchor} 天`
     }
   }
 
@@ -284,11 +290,24 @@ function formatMonthDay(ts: number): string {
 }
 
 function startOfDay(ts: number): number {
-  const date = new Date(ts)
-  date.setHours(0, 0, 0, 0)
-  return date.getTime()
+  return getBeijingDayStart(ts)
 }
 
 function getNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function getLatestFollicleCheckDate(task: BreedingMilestoneTaskLike): number | null {
+  return getNumber(task.details?.latest_follicle_check_date)
+}
+
+function getLatestFollicleResult(task: BreedingMilestoneTaskLike): string {
+  return typeof task.details?.follicle_result === 'string' ? task.details.follicle_result : ''
+}
+
+function getFollicleCheckCount(task: BreedingMilestoneTaskLike): number {
+  const count = getNumber(task.details?.follicle_check_count)
+  if (typeof count === 'number' && count >= 0) return Math.floor(count)
+  if (getLatestFollicleCheckDate(task)) return 1
+  return 0
 }

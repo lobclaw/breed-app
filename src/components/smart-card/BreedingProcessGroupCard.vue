@@ -5,7 +5,7 @@
       :key="item.id"
       class="group-row"
       :class="{ 'group-row--passed': item.milestone.suggestionStatus === 'window_passed' }"
-      @click="goProcess(item.card)"
+      @click="onRowTap(item.card)"
     >
       <view
         class="group-avatar"
@@ -16,13 +16,19 @@
       </view>
       <view class="group-main">
         <view class="group-name-row">
-          <text
-            class="group-name"
-            :class="{ 'group-name--detail': !!item.card?.dogId }"
-            @click.stop="goDogDetail(item.card)"
-          >
-            {{ item.card.dogName }}
-          </text>
+          <view class="group-title-wrap">
+            <text
+              class="group-name"
+              :class="{ 'group-name--detail': !!item.card?.dogId }"
+              @click.stop="goDogDetail(item.card)"
+            >
+              {{ item.card.dogName }}
+            </text>
+            <template v-if="item.primaryLabel">
+              <text class="group-title-divider">·</text>
+              <text class="group-title-meta">{{ item.primaryLabel }}</text>
+            </template>
+          </view>
           <view
             class="group-tag"
             :class="{ 'group-tag--passed': item.milestone.suggestionStatus === 'window_passed' }"
@@ -30,12 +36,8 @@
             <text class="group-tag__text">{{ item.stageTag }}</text>
           </view>
         </view>
-        <text class="group-copy">
-          <text class="group-copy__strong">{{ item.primaryLabel }}</text>
-          <template v-if="item.secondaryLabel">
-            <text> · </text>
-            <text class="group-copy__secondary">{{ item.secondaryLabel }}</text>
-          </template>
+        <text v-if="item.secondaryLabel" class="group-copy">
+          <text class="group-copy__secondary">{{ item.secondaryLabel }}</text>
         </text>
         <text
           v-if="item.alertLabel"
@@ -47,49 +49,9 @@
       </view>
       <view class="group-actions">
         <view
-          v-if="item.canObserve || item.canDirectMating || item.canContinueMating || item.canPrenatal || item.canPreLabor"
-          class="group-secondary-actions"
-        >
-          <view
-            v-if="item.canObserve"
-            class="group-secondary-action"
-            @click.stop="goObserve(item.card)"
-          >
-            <text class="group-secondary-action__text">观察</text>
-          </view>
-          <view
-            v-if="item.canDirectMating"
-            class="group-secondary-action"
-            @click.stop="goDirectMating(item.card)"
-          >
-            <text class="group-secondary-action__text">直接配种</text>
-          </view>
-          <view
-            v-if="item.canContinueMating"
-            class="group-secondary-action"
-            @click.stop="goContinueMating(item.card)"
-          >
-            <text class="group-secondary-action__text">继续配种</text>
-          </view>
-          <view
-            v-if="item.canPrenatal"
-            class="group-secondary-action"
-            @click.stop="goPrenatal(item.card)"
-          >
-            <text class="group-secondary-action__text">产检</text>
-          </view>
-          <view
-            v-if="item.canPreLabor"
-            class="group-secondary-action"
-            @click.stop="goPreLabor(item.card)"
-          >
-            <text class="group-secondary-action__text">临产</text>
-          </view>
-        </view>
-        <view
           class="group-action"
           :class="{ 'group-action--passed': item.milestone.suggestionStatus === 'window_passed' }"
-          @click.stop="goProcess(item.card)"
+          @click.stop="onPrimaryActionTap(item.card)"
         >
           <text class="group-action__text">处理</text>
         </view>
@@ -111,20 +73,17 @@ import { computed, ref, watch } from 'vue'
 
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import { deriveBreedingMilestoneViewModel } from '@/utils/breedingMilestone'
+import { buildBreedingMilestoneSummary } from '@/utils/breedingMilestoneSummary'
 import {
-  buildHomeContinueMatingUrl,
-  buildHomeDirectMatingUrl,
-  buildHomeHeatObservationUrl,
-  buildHomePreLaborUrl,
-  buildHomePrenatalUrl,
-  canOpenHomeContinueMating,
-  canOpenHomeDirectMating,
-  canOpenHomeHeatObservation,
-  canOpenHomePreLabor,
-  canOpenHomePrenatal,
-} from '@/utils/homeHeatObservation'
+  hasMultipleHomeBreedingActions,
+  openHomeBreedingAction,
+  openHomeBreedingDetail,
+} from '@/utils/homeBreedingActions'
 
 const props = defineProps<{ group: any }>()
+const emit = defineEmits<{
+  (e: 'action', payload: { type: string; data: any }): void
+}>()
 const expanded = ref(false)
 
 watch(() => props.group?.key, () => {
@@ -155,15 +114,7 @@ const visibleItems = computed(() => {
       id: card?.id || task?._id,
       card,
       milestone,
-      stageTag: buildStageTag(milestone.stageTitle),
-      primaryLabel: buildPrimaryLabel(milestone),
-      secondaryLabel: buildSecondaryLabel(milestone),
-      alertLabel: buildAlertLabel(milestone),
-      canObserve: canOpenHomeHeatObservation(card),
-      canDirectMating: canOpenHomeDirectMating(card),
-      canContinueMating: canOpenHomeContinueMating(card),
-      canPrenatal: canOpenHomePrenatal(card),
-      canPreLabor: canOpenHomePreLabor(card),
+      ...buildBreedingMilestoneSummary(milestone),
     }
   })
 })
@@ -172,129 +123,27 @@ function toggleExpanded() {
   expanded.value = !expanded.value
 }
 
-const typeMap: Record<string, string> = {
-  vaccination: '/pages/record/health-vaccination',
-  deworming: '/pages/record/health-deworming',
-  illness: '/pages/record/health-illness',
-  heat: '/pages/record/breeding-heat',
-  follicle_check: '/pages/record/breeding-follicle',
-  mating: '/pages/record/breeding-mating',
-  pregnancy_check: '/pages/record/breeding-pregnancy',
-  birth: '/pages/breeding/birth-wizard',
-  prenatal_check: '/pages/record/breeding-prenatal',
-  pre_labor: '/pages/record/breeding-prelabor',
-}
-
-function buildStageTag(stageTitle: string) {
-  if (stageTitle === '待断奶') return '哺乳中'
-  return stageTitle
-    .replace(/^建议/, '')
-    .replace(/^确认/, '')
-    .trim() || '流程'
-}
-
-function buildPrimaryLabel(milestone: ReturnType<typeof deriveBreedingMilestoneViewModel>) {
-  if ((milestone.stepType === 'mating' || milestone.stepType === 'follicle_check') && milestone.heatDayLabel) {
-    return milestone.heatDayLabel
-  }
-  if (milestone.stepType === 'weaning_confirm') {
-    return milestone.stageDayLabel
-  }
-  return milestone.dayLabel
-}
-
-function buildSecondaryLabel(milestone: ReturnType<typeof deriveBreedingMilestoneViewModel>) {
-  if (milestone.stepType === 'mating') {
-    return milestone.stageDayLabel
-  }
-  if (milestone.stepType === 'follicle_check' && milestone.stageDayLabel) {
-    return milestone.stageDayLabel
-  }
-  if (milestone.stepType === 'weaning_confirm') {
-    return milestone.referenceDateLabel
-  }
-  if (milestone.suggestionStatus === 'window_due') {
-    return milestone.suggestionLabel
-  }
-  return milestone.referenceDateLabel.replace('建议日期 · ', '建议')
-}
-
-function buildAlertLabel(milestone: ReturnType<typeof deriveBreedingMilestoneViewModel>) {
-  if (milestone.alertLabel) return milestone.alertLabel
-  if (milestone.stepType === 'follicle_check' && milestone.stageDayLabel) {
-    if (milestone.suggestionStatus === 'window_due') return milestone.suggestionLabel
-    return milestone.referenceDateLabel.replace('建议日期 · ', '建议')
-  }
-  return ''
-}
-
 function goDogDetail(card: any) {
   if (!card?.dogId) return
   uni.navigateTo({ url: `/pages/dog/detail?id=${card.dogId}` })
 }
 
-function goProcess(card: any) {
-  const task = card?.tasks?.[0]
-  if (!task) return
-
-  const params: string[] = []
-  if (card.dogId) params.push(`dogId=${card.dogId}`)
-  if (card.dogName) params.push(`dogName=${encodeURIComponent(card.dogName)}`)
-  if (task._id) params.push(`taskId=${task._id}`)
-  if (task.cycle_id) params.push(`cycleId=${task.cycle_id}`)
-
-  let url = typeMap[task.type] || '/pages/record/health-vaccination'
-  if (task.type === 'breeding_milestone') {
-    params.push('locked=true')
-    const stepType = task.details?.step_type
-    if (stepType === 'follicle_check') {
-      url = '/pages/record/breeding-follicle'
-    } else if (stepType === 'mating') {
-      url = '/pages/record/breeding-mating'
-    } else if (stepType === 'pregnancy_check') {
-      url = '/pages/record/breeding-pregnancy'
-    } else if (stepType === 'birth') {
-      const birthParams: string[] = []
-      if (task.cycle_id) birthParams.push(`cycleId=${task.cycle_id}`)
-      if (card.dogName) birthParams.push(`damName=${encodeURIComponent(card.dogName)}`)
-      uni.navigateTo({ url: `/pages/breeding/birth-wizard?${birthParams.join('&')}` })
-      return
-    } else if (stepType === 'weaning_confirm' && task.litter_id) {
-      const litterParams = [`id=${task.litter_id}`]
-      if (task._id) litterParams.push(`taskId=${task._id}`)
-      uni.navigateTo({ url: `/pages/breeding/litter?${litterParams.join('&')}` })
-      return
-    } else {
-      url = '/pages/record/breeding-heat'
-    }
+function onRowTap(card: any) {
+  if (hasMultipleHomeBreedingActions(card)) {
+    openHomeBreedingDetail(card)
+    return
   }
 
-  uni.navigateTo({ url: `${url}?${params.join('&')}` })
+  openHomeBreedingAction(card, 'process')
 }
 
-function goObserve(card: any) {
-  if (!canOpenHomeHeatObservation(card)) return
-  uni.navigateTo({ url: buildHomeHeatObservationUrl(card) })
-}
+function onPrimaryActionTap(card: any) {
+  if (hasMultipleHomeBreedingActions(card)) {
+    emit('action', { type: 'show_breeding_actions', data: { card } })
+    return
+  }
 
-function goDirectMating(card: any) {
-  if (!canOpenHomeDirectMating(card)) return
-  uni.navigateTo({ url: buildHomeDirectMatingUrl(card) })
-}
-
-function goContinueMating(card: any) {
-  if (!canOpenHomeContinueMating(card)) return
-  uni.navigateTo({ url: buildHomeContinueMatingUrl(card) })
-}
-
-function goPrenatal(card: any) {
-  if (!canOpenHomePrenatal(card)) return
-  uni.navigateTo({ url: buildHomePrenatalUrl(card) })
-}
-
-function goPreLabor(card: any) {
-  if (!canOpenHomePreLabor(card)) return
-  uni.navigateTo({ url: buildHomePreLaborUrl(card) })
+  openHomeBreedingAction(card, 'process')
 }
 </script>
 
@@ -364,6 +213,15 @@ function goPreLabor(card: any) {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+}
+
+.group-title-wrap {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
 }
 
 .group-name {
@@ -371,6 +229,7 @@ function goPreLabor(card: any) {
   font-weight: 800;
   color: var(--text-1);
   line-height: 1.2;
+  flex-shrink: 0;
 }
 
 .group-name--detail {
@@ -379,6 +238,25 @@ function goPreLabor(card: any) {
   &:active {
     opacity: 0.72;
   }
+}
+
+.group-title-divider {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-3);
+  line-height: 1.2;
+}
+
+.group-title-meta {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-2);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .group-tag {

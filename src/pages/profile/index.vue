@@ -103,11 +103,6 @@
           <text class="mi-label">合作代理人</text>
           <text class="material-icons-round mi-arrow">chevron_right</text>
         </view>
-        <view class="menu-item" @click="goTo('/pages/profile/care-rules')">
-          <text class="material-icons-round mi-icon">rule</text>
-          <text class="mi-label">护理规则</text>
-          <text class="material-icons-round mi-arrow">chevron_right</text>
-        </view>
         <view class="menu-item" @click="goTo('/pages/profile/expense-categories')">
           <text class="material-icons-round mi-icon">category</text>
           <text class="mi-label">支出分类管理</text>

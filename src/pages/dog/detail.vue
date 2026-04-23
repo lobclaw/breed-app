@@ -551,124 +551,59 @@
         </view>
 
         <BEmpty
-          v-if="healthRecords.length === 0 && medicationRecords.length === 0"
+          v-if="!hasHealthTimeline"
           icon="healing"
           title="暂无健康记录"
           description="记录疫苗、驱虫、疾病、用药等信息"
         />
         <view v-else>
-          <!-- 用药 -->
-          <view v-if="medicationRecords.length > 0" class="dog-detail__health-group">
-            <view class="dog-detail__sec dog-detail__sec--plum">
-              <text class="dog-detail__sec-text">用药</text>
-              <view class="dog-detail__sec-badge">
-                <text class="dog-detail__sec-badge-text">{{ medicationRecords.length }}</text>
-              </view>
-            </view>
-            <view class="dog-detail__rec-list">
+          <scroll-view scroll-x class="dog-detail__health-filters-scroll" show-scrollbar="false">
+            <view class="dog-detail__health-filters">
               <view
-                v-for="record in medicationRecords"
-                :key="record._id || record.id"
-                class="dog-detail__rec-item"
-                @click="goToMedicationDetail(record._id || record.id)"
+                v-for="filter in healthFilters"
+                :key="filter.key"
+                class="dog-detail__health-filter"
+                :class="{ 'dog-detail__health-filter--active': activeHealthFilter === filter.key }"
+                @click="activeHealthFilter = filter.key"
               >
-                <view class="dog-detail__rec-icon dog-detail__rec-icon--plum">
-                  <text class="material-icons-round">medication</text>
-                </view>
-                <view class="dog-detail__rec-body">
-                  <text class="dog-detail__rec-title">{{ medicationRecordTitle(record) }}</text>
-                  <text class="dog-detail__rec-sub">{{ medicationRecordSub(record) }}</text>
-                </view>
-                <view class="dog-detail__rec-tag" :class="`dog-detail__rec-tag--${medicationRecordTagTone(record)}`">
-                  <text class="dog-detail__rec-tag-text">{{ medicationRecordTagText(record) }}</text>
-                </view>
-                <text class="material-icons-round dog-detail__rec-chevron">chevron_right</text>
-              </view>
-            </view>
-          </view>
-          <!-- 疫苗 -->
-          <view v-if="vaccineRecords.length > 0" class="dog-detail__health-group">
-            <view class="dog-detail__sec dog-detail__sec--blue">
-              <text class="dog-detail__sec-text">疫苗</text>
-              <view class="dog-detail__sec-badge">
-                <text class="dog-detail__sec-badge-text">{{ vaccineRecords.length }}</text>
-              </view>
-            </view>
-            <view class="dog-detail__rec-list">
-              <view
-                v-for="record in vaccineRecords"
-                :key="record._id || record.id"
-                class="dog-detail__rec-item"
-                @click="goToHealthDetail(record._id || record.id)"
-              >
-                <view class="dog-detail__rec-icon dog-detail__rec-icon--blue">
-                  <text class="material-icons-round">vaccines</text>
-                </view>
-                <view class="dog-detail__rec-body">
-                  <text class="dog-detail__rec-title">{{ recordSubtitle(record) || '疫苗接种' }}</text>
-                  <text class="dog-detail__rec-sub">{{ formatDate(record.date) }}</text>
-                </view>
-                <text class="material-icons-round dog-detail__rec-chevron">chevron_right</text>
-              </view>
-            </view>
-          </view>
-          <!-- 驱虫 -->
-          <view v-if="dewormingRecords.length > 0" class="dog-detail__health-group">
-            <view class="dog-detail__sec dog-detail__sec--teal">
-              <text class="dog-detail__sec-text">驱虫</text>
-              <view class="dog-detail__sec-badge">
-                <text class="dog-detail__sec-badge-text">{{ dewormingRecords.length }}</text>
-              </view>
-            </view>
-            <view class="dog-detail__rec-list">
-              <view
-                v-for="record in dewormingRecords"
-                :key="record._id || record.id"
-                class="dog-detail__rec-item"
-                @click="goToHealthDetail(record._id || record.id)"
-              >
-                <view class="dog-detail__rec-icon dog-detail__rec-icon--teal">
-                  <text class="material-icons-round">bug_report</text>
-                </view>
-                <view class="dog-detail__rec-body">
-                  <text class="dog-detail__rec-title">{{ recordSubtitle(record) || '驱虫处理' }}</text>
-                  <text class="dog-detail__rec-sub">{{ formatDate(record.date) }}</text>
-                </view>
-                <text class="material-icons-round dog-detail__rec-chevron">chevron_right</text>
-              </view>
-            </view>
-          </view>
-          <!-- 疾病 -->
-          <view v-if="illnessRecords.length > 0" class="dog-detail__health-group">
-            <view class="dog-detail__sec dog-detail__sec--red">
-              <text class="dog-detail__sec-text">疾病</text>
-              <view class="dog-detail__sec-badge">
-                <text class="dog-detail__sec-badge-text">{{ illnessRecords.length }}</text>
-              </view>
-            </view>
-            <view class="dog-detail__rec-list">
-              <view
-                v-for="record in illnessRecords"
-                :key="record._id || record.id"
-                class="dog-detail__rec-item"
-                @click="goToHealthDetail(record._id || record.id)"
-              >
-                <view class="dog-detail__rec-icon dog-detail__rec-icon--red">
-                  <text class="material-icons-round">healing</text>
-                </view>
-                <view class="dog-detail__rec-body">
-                  <text class="dog-detail__rec-title">{{ recordSubtitle(record) || '疾病记录' }}</text>
-                  <text class="dog-detail__rec-sub">{{ formatDate(record.date) }}</text>
-                </view>
-                <view
-                  v-if="illnessStatusLabel(record)"
-                  class="dog-detail__rec-tag"
-                  :class="`dog-detail__rec-tag--${illnessStatusTone(record)}`"
+                <text
+                  class="dog-detail__health-filter-text"
+                  :class="{ 'dog-detail__health-filter-text--active': activeHealthFilter === filter.key }"
                 >
-                  <text class="dog-detail__rec-tag-text">{{ illnessStatusLabel(record) }}</text>
-                </view>
-                <text class="material-icons-round dog-detail__rec-chevron">chevron_right</text>
+                  {{ filter.label }}
+                </text>
               </view>
+            </view>
+          </scroll-view>
+
+          <BEmpty
+            v-if="filteredHealthTimeline.length === 0"
+            :icon="healthEmptyState.icon"
+            :title="healthEmptyState.title"
+            :description="healthEmptyState.description"
+          />
+          <view v-else class="dog-detail__rec-list dog-detail__rec-list--health-timeline">
+            <view
+              v-for="item in filteredHealthTimeline"
+              :key="item.key"
+              class="dog-detail__rec-item dog-detail__rec-item--health-timeline"
+              @click="openHealthTimelineItem(item)"
+            >
+              <view class="dog-detail__rec-icon" :class="`dog-detail__rec-icon--${item.tone}`">
+                <text class="material-icons-round">{{ item.icon }}</text>
+              </view>
+              <view class="dog-detail__rec-body dog-detail__rec-body--health-timeline">
+                <text class="dog-detail__rec-title">{{ item.title }}</text>
+                <text class="dog-detail__rec-sub">{{ item.subtitle }}</text>
+              </view>
+              <view
+                v-if="item.tagText"
+                class="dog-detail__rec-tag"
+                :class="`dog-detail__rec-tag--${item.tagTone}`"
+              >
+                <text class="dog-detail__rec-tag-text">{{ item.tagText }}</text>
+              </view>
+              <text class="material-icons-round dog-detail__rec-chevron">chevron_right</text>
             </view>
           </view>
         </view>
@@ -866,12 +801,10 @@
         </view>
         <view class="sheet-form__group">
           <text class="sheet-form__label">退休日期 *</text>
-          <picker mode="date" :value="retireDate" @change="retireDate = $event.detail.value">
-            <view class="sheet-form__input">
-              <text class="sheet-form__input-text">{{ retireDate }}</text>
-              <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
-            </view>
-          </picker>
+          <view class="sheet-form__input" @click="openDatePicker('retire')">
+            <text class="sheet-form__input-text">{{ retireDateText }}</text>
+            <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
+          </view>
         </view>
         <view class="sheet-form__group">
           <text class="sheet-form__label">退休原因（选填）</text>
@@ -906,12 +839,10 @@
         </view>
         <view class="sheet-form__group">
           <text class="sheet-form__label">日期 *</text>
-          <picker mode="date" :value="deceasedDate" @change="deceasedDate = $event.detail.value">
-            <view class="sheet-form__input">
-              <text class="sheet-form__input-text">{{ deceasedDate }}</text>
-              <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
-            </view>
-          </picker>
+          <view class="sheet-form__input" @click="openDatePicker('deceased')">
+            <text class="sheet-form__input-text">{{ deceasedDateText }}</text>
+            <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
+          </view>
         </view>
         <view class="sheet-form__group">
           <text class="sheet-form__label">备注（可选）</text>
@@ -933,12 +864,10 @@
       <view class="sheet-form">
         <view class="sheet-form__group">
           <text class="sheet-form__label">领养日期 *</text>
-          <picker mode="date" :value="adoptionDate" @change="adoptionDate = $event.detail.value">
-            <view class="sheet-form__input">
-              <text class="sheet-form__input-text">{{ adoptionDate }}</text>
-              <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
-            </view>
-          </picker>
+          <view class="sheet-form__input" @click="openDatePicker('adoption')">
+            <text class="sheet-form__input-text">{{ adoptionDateText }}</text>
+            <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
+          </view>
         </view>
         <view class="sheet-form__group">
           <text class="sheet-form__label">领养说明（选填）</text>
@@ -968,12 +897,10 @@
       <view class="sheet-form">
         <view class="sheet-form__group">
           <text class="sheet-form__label">赠送日期 *</text>
-          <picker mode="date" :value="giftDate" @change="giftDate = $event.detail.value">
-            <view class="sheet-form__input">
-              <text class="sheet-form__input-text">{{ giftDate }}</text>
-              <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
-            </view>
-          </picker>
+          <view class="sheet-form__input" @click="openDatePicker('gift')">
+            <text class="sheet-form__input-text">{{ giftDateText }}</text>
+            <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
+          </view>
         </view>
         <view class="sheet-form__group">
           <text class="sheet-form__label">受赠人信息（选填）</text>
@@ -1022,12 +949,10 @@
         </view>
         <view class="sheet-form__group">
           <text class="sheet-form__label">康复日期</text>
-          <picker mode="date" :value="recoveryDate" @change="recoveryDate = $event.detail.value">
-            <view class="sheet-form__input">
-              <text class="sheet-form__input-text">{{ recoveryDate }}</text>
-              <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
-            </view>
-          </picker>
+          <view class="sheet-form__input" @click="openDatePicker('recovery')">
+            <text class="sheet-form__input-text">{{ recoveryDateText }}</text>
+            <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
+          </view>
         </view>
         <view class="sheet-form__actions">
           <view class="sheet-form__btn sheet-form__btn--cancel" @click="showRecoverySheet = false">
@@ -1079,12 +1004,10 @@
 
           <view class="weight-entry__field">
             <text class="weight-entry__label">日期</text>
-            <picker mode="date" :value="weightDateStr" @change="weightDateStr = $event.detail.value">
-              <view class="weight-entry__date-picker">
-                <text class="weight-entry__date-text">{{ weightDateStr }}</text>
-                <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
-              </view>
-            </picker>
+            <view class="weight-entry__date-picker" @click="openDatePicker('weight')">
+              <text class="weight-entry__date-text">{{ weightDateText }}</text>
+              <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
+            </view>
           </view>
 
           <view class="weight-entry__field">
@@ -1187,6 +1110,14 @@
       </view>
     </BSheet>
 
+    <BDateTimePicker
+      v-model:visible="showInlineDatePicker"
+      :model-value="activeDatePickerValue"
+      mode="date"
+      value-type="timestamp"
+      @confirm="onInlineDateConfirm"
+    />
+
     <BAddRecordSheet
       v-model:visible="showAddRecordSheet"
       :context-title="dog?.name || '当前犬只'"
@@ -1209,6 +1140,7 @@ import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import BModal from '@/components/layout/BModal.vue'
 import BDeleteConfirm from '@/components/layout/BDeleteConfirm.vue'
+import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
 import BAddRecordSheet from '@/components/record/BAddRecordSheet.vue'
 import { useCloudCall } from '@/composables/useCloudCall'
 import { consumeSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
@@ -1222,6 +1154,7 @@ import type { AddRecordItem } from '@/utils/addRecordSheet'
 import { createAllAddRecordGroups } from '@/utils/addRecordSheet'
 import type { BreedingCycleDetailResponse } from '@/types/breeding'
 import { buildActiveCycleSummaryViewModel, buildHistoryCycleSummaryViewModel } from '@/utils/dogBreedingSummary'
+import { buildTimestampFromDayOffset, formatDateInputValue } from '@/utils/date'
 
 const dog = ref<Dog | null>(null)
 const statuses = ref<DeriveStatus[]>([])
@@ -1229,6 +1162,23 @@ const cycles = ref<any[]>([])
 const healthRecords = ref<any[]>([])
 const medicationRecords = ref<any[]>([])
 const activeTab = ref('overview')
+type HealthFilterKey = 'all' | 'ongoing' | 'medication' | 'illness' | 'vaccination' | 'deworming'
+type UnifiedHealthItemKind = 'medication' | 'illness' | 'vaccination' | 'deworming'
+type UnifiedHealthTimelineItem = {
+  key: string
+  kind: UnifiedHealthItemKind
+  record: any
+  targetId: string
+  targetRoute: 'health' | 'medication'
+  icon: string
+  tone: 'blue' | 'teal' | 'plum' | 'red'
+  title: string
+  subtitle: string
+  tagText: string
+  tagTone: 'green' | 'amber' | 'red' | 'plum' | 'gray' | ''
+  isOngoing: boolean
+  sortTime: number
+}
 const pageLoadStage = ref<'bootstrapping' | 'ready'>('bootstrapping')
 const healthRecordsLoaded = ref(false)
 const medicationHistoryLoaded = ref(false)
@@ -1237,10 +1187,13 @@ const cyclesLoaded = ref(false)
 const littersLoaded = ref(false)
 const showMore = ref(false)
 const showAddRecordSheet = ref(false)
+const showInlineDatePicker = ref(false)
+const activeDatePicker = ref<'retire' | 'deceased' | 'adoption' | 'gift' | 'recovery' | 'weight' | ''>('')
 const infoExpanded = ref(false)
 const submitBannerMessage = ref('')
 const showCompactTopbarTitle = ref(false)
 const TOPBAR_TITLE_SCROLL_THRESHOLD = 36
+const activeHealthFilter = ref<HealthFilterKey>('all')
 const activeCycleSummaryDetail = ref<BreedingCycleDetailResponse | null>(null)
 const activeCycleSummaryCache = ref<Record<string, BreedingCycleDetailResponse>>({})
 let dogId = ''
@@ -1316,12 +1269,18 @@ const activeCycle = computed(() => cycles.value.find((c: any) => !TERMINAL_CYCLE
 const pastCycles = computed(() => cycles.value.filter((c: any) => TERMINAL_CYCLE_STATUSES.includes(c.status)))
 const activeCycleId = computed(() => activeCycle.value?._id || '')
 
-const vaccineRecords = computed(() => healthRecords.value.filter((r: any) => r.type === 'vaccination'))
-const dewormingRecords = computed(() => healthRecords.value.filter((r: any) => r.type === 'deworming'))
 const illnessRecords = computed(() => healthRecords.value.filter((r: any) => r.type === 'illness'))
 const latestIllnessRecord = computed(() => illnessRecords.value[0] || null)
 const latestActiveIllnessRecord = computed(() => illnessRecords.value.find((record: any) => illnessStatusLabel(record) !== '已康复') || null)
 const activeMedicationRecords = computed(() => medicationRecords.value.filter((record: any) => record.status === 'active'))
+const healthFilters: Array<{ key: HealthFilterKey; label: string }> = [
+  { key: 'all', label: '全部' },
+  { key: 'ongoing', label: '进行中' },
+  { key: 'medication', label: '用药' },
+  { key: 'illness', label: '疾病' },
+  { key: 'vaccination', label: '疫苗' },
+  { key: 'deworming', label: '驱虫' },
+]
 const canQuickStartMedication = computed(() => !!latestActiveIllnessRecord.value && activeMedicationRecords.value.length === 0)
 const canQuickRecover = computed(() => !!latestActiveIllnessRecord.value)
 type DispositionActionKey = 'promote' | 'deceased' | 'adoption' | 'gift' | 'retire' | 'cancel-retire'
@@ -1364,6 +1323,77 @@ const healthActions = computed(() => {
   }
 
   return actions
+})
+
+const healthTimeline = computed<UnifiedHealthTimelineItem[]>(() => {
+  const medicationItems = medicationRecords.value.map((record: any) => buildMedicationTimelineItem(record))
+  const healthItems = healthRecords.value
+    .map((record: any) => buildHealthTimelineItem(record))
+    .filter((item): item is UnifiedHealthTimelineItem => !!item)
+
+  return [...medicationItems, ...healthItems].sort((a, b) => {
+    if (a.isOngoing !== b.isOngoing) return a.isOngoing ? -1 : 1
+    return b.sortTime - a.sortTime
+  })
+})
+
+const hasHealthTimeline = computed(() => healthTimeline.value.length > 0)
+
+const filteredHealthTimeline = computed(() => {
+  if (activeHealthFilter.value === 'all') return healthTimeline.value
+  if (activeHealthFilter.value === 'ongoing') return healthTimeline.value.filter(item => item.isOngoing)
+  return healthTimeline.value.filter(item => item.kind === activeHealthFilter.value)
+})
+
+const healthEmptyState = computed(() => {
+  if (!hasHealthTimeline.value) {
+    return {
+      icon: 'healing',
+      title: '暂无健康记录',
+      description: '记录疫苗、驱虫、疾病、用药等信息',
+    }
+  }
+
+  if (activeHealthFilter.value === 'ongoing') {
+    return {
+      icon: 'schedule',
+      title: '当前没有进行中的健康事项',
+      description: '进行中的用药或疾病会优先显示在这里',
+    }
+  }
+
+  if (activeHealthFilter.value === 'all') {
+    return {
+      icon: 'healing',
+      title: '暂无健康记录',
+      description: '记录疫苗、驱虫、疾病、用药等信息',
+    }
+  }
+
+  const map: Record<Exclude<HealthFilterKey, 'all' | 'ongoing'>, { icon: string; title: string; description: string }> = {
+    medication: {
+      icon: 'medication',
+      title: '暂无用药记录',
+      description: '开始连续用药后，会在这里看到完整疗程',
+    },
+    illness: {
+      icon: 'healing',
+      title: '暂无疾病记录',
+      description: '记录病症和治疗状态后，会在这里显示',
+    },
+    vaccination: {
+      icon: 'vaccines',
+      title: '暂无疫苗记录',
+      description: '录入疫苗后，会在这里查看接种历史',
+    },
+    deworming: {
+      icon: 'bug_report',
+      title: '暂无驱虫记录',
+      description: '录入驱虫后，会在这里查看处理历史',
+    },
+  }
+
+  return map[activeHealthFilter.value as Exclude<HealthFilterKey, 'all' | 'ongoing'>]
 })
 const hasHealthActions = computed(() => healthActions.value.length > 0)
 const healthActionSummary = computed(() => {
@@ -1486,8 +1516,33 @@ function formatDate(ts: number) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-function todayStr() {
-  return formatDate(Date.now())
+function todayTs() {
+  return buildTimestampFromDayOffset(0)
+}
+
+const activeDatePickerValue = computed(() => {
+  if (activeDatePicker.value === 'retire') return retireDate.value
+  if (activeDatePicker.value === 'deceased') return deceasedDate.value
+  if (activeDatePicker.value === 'adoption') return adoptionDate.value
+  if (activeDatePicker.value === 'gift') return giftDate.value
+  if (activeDatePicker.value === 'recovery') return recoveryDate.value
+  if (activeDatePicker.value === 'weight') return weightDate.value
+  return todayTs()
+})
+
+function openDatePicker(key: 'retire' | 'deceased' | 'adoption' | 'gift' | 'recovery' | 'weight') {
+  activeDatePicker.value = key
+  showInlineDatePicker.value = true
+}
+
+function onInlineDateConfirm(value: number | string) {
+  if (typeof value !== 'number') return
+  if (activeDatePicker.value === 'retire') retireDate.value = value
+  else if (activeDatePicker.value === 'deceased') deceasedDate.value = value
+  else if (activeDatePicker.value === 'adoption') adoptionDate.value = value
+  else if (activeDatePicker.value === 'gift') giftDate.value = value
+  else if (activeDatePicker.value === 'recovery') recoveryDate.value = value
+  else if (activeDatePicker.value === 'weight') weightDate.value = value
 }
 
 function formatAge(birthTs: number) {
@@ -1572,6 +1627,84 @@ function medicationRecordSub(record: any) {
   return startText
 }
 
+function buildHealthRecordTitle(record: any) {
+  if (record?.type === 'vaccination') return recordSubtitle(record) || '疫苗接种'
+  if (record?.type === 'deworming') {
+    const drugName = recordSubtitle(record)
+    return drugName ? `驱虫 · ${drugName}` : '驱虫处理'
+  }
+  if (record?.type === 'illness') {
+    const condition = recordSubtitle(record)
+    return condition ? `疾病 · ${condition}` : '疾病记录'
+  }
+  return recentHealthRecordTitle(record)
+}
+
+function resolveMedicationSortTime(record: any) {
+  const candidate = [
+    record?.actual_start_date,
+    record?.start_date,
+    record?.updated_at,
+    record?.created_at,
+  ].find(value => typeof value === 'number')
+
+  return typeof candidate === 'number' ? candidate : 0
+}
+
+function resolveHealthRecordSortTime(record: any) {
+  const candidate = [
+    record?.date,
+    record?.updated_at,
+    record?.created_at,
+  ].find(value => typeof value === 'number')
+
+  return typeof candidate === 'number' ? candidate : 0
+}
+
+function buildMedicationTimelineItem(record: any): UnifiedHealthTimelineItem {
+  const targetId = `${record?._id || record?.id || ''}`.trim()
+  return {
+    key: `medication-${targetId || resolveMedicationSortTime(record)}`,
+    kind: 'medication',
+    record,
+    targetId,
+    targetRoute: 'medication',
+    icon: 'medication',
+    tone: 'plum',
+    title: medicationRecordTitle(record),
+    subtitle: medicationRecordSub(record),
+    tagText: medicationRecordTagText(record),
+    tagTone: medicationRecordTagTone(record),
+    isOngoing: record?.status === 'active',
+    sortTime: resolveMedicationSortTime(record),
+  }
+}
+
+function buildHealthTimelineItem(record: any): UnifiedHealthTimelineItem | null {
+  const type = record?.type
+  if (type !== 'vaccination' && type !== 'deworming' && type !== 'illness') return null
+
+  const targetId = `${record?._id || record?.id || ''}`.trim()
+  const tagText = type === 'illness' ? illnessStatusLabel(record) : ''
+  const isOngoing = type === 'illness' ? illnessStatusLabel(record) !== '已康复' : false
+
+  return {
+    key: `${type}-${targetId || resolveHealthRecordSortTime(record)}`,
+    kind: type,
+    record,
+    targetId,
+    targetRoute: 'health',
+    icon: healthIcon(type),
+    tone: healthIconColor(type) as 'blue' | 'teal' | 'red',
+    title: buildHealthRecordTitle(record),
+    subtitle: typeof record?.date === 'number' ? formatDate(record.date) : '日期未知',
+    tagText,
+    tagTone: type === 'illness' ? illnessStatusTone(record) : '',
+    isOngoing,
+    sortTime: resolveHealthRecordSortTime(record),
+  }
+}
+
 function illnessStatusLabel(record: any) {
   if (record?.type !== 'illness') return ''
   return record.details?.treatment_status || ''
@@ -1621,9 +1754,9 @@ function splitStatusDetail(detail?: string | null) {
 }
 
 function getIllnessStartTs() {
-  const startTs = latestIllnessRecord.value?.details?.start_date
+  const startTs = latestActiveIllnessRecord.value?.details?.start_date
   if (typeof startTs === 'number') return startTs
-  return typeof latestIllnessRecord.value?.date === 'number' ? latestIllnessRecord.value.date : null
+  return typeof latestActiveIllnessRecord.value?.date === 'number' ? latestActiveIllnessRecord.value.date : null
 }
 
 function getElapsedDaysFromTs(startTs?: number | null) {
@@ -1641,7 +1774,7 @@ function statusTitle(s: DeriveStatus): string {
     nameOverride: s.type === '用药中'
       ? splitStatusDetail(s.detail).primary
       : s.type === '生病中'
-        ? (s.label || latestIllnessRecord.value?.details?.condition || '')
+        ? (s.label || latestActiveIllnessRecord.value?.details?.condition || '')
         : undefined,
   })
 }
@@ -1651,8 +1784,8 @@ function statusSub(s: DeriveStatus): string {
     return splitStatusDetail(s.detail).secondary
   }
   if (s.type === '生病中') {
-    const treatmentStatus = latestIllnessRecord.value?.details?.treatment_status
-    return treatmentStatus || s.detail || latestIllnessRecord.value?.notes || '查看症状与治疗状态'
+    const treatmentStatus = latestActiveIllnessRecord.value?.details?.treatment_status
+    return treatmentStatus || s.detail || latestActiveIllnessRecord.value?.notes || '查看症状与治疗状态'
   }
   if (s.type === '发情中') {
     const startTs = activeCycle.value?.start_date || activeCycle.value?.created_at
@@ -1674,7 +1807,7 @@ function statusMeta(s: DeriveStatus): Array<{ icon: string; text: string }> {
 
   if (s.type === '生病中') {
     const items: Array<{ icon: string; text: string }> = []
-    const treatmentStatus = latestIllnessRecord.value?.details?.treatment_status
+    const treatmentStatus = latestActiveIllnessRecord.value?.details?.treatment_status
     const dateTs = getIllnessStartTs()
     const day = getElapsedDaysFromTs(dateTs)
     if (treatmentStatus) items.push({ icon: 'healing', text: treatmentStatus })
@@ -1855,6 +1988,14 @@ function goToMedicationDetail(taskId?: string) {
   })
 }
 
+function openHealthTimelineItem(item: UnifiedHealthTimelineItem) {
+  if (item.targetRoute === 'medication') {
+    goToMedicationDetail(item.targetId)
+    return
+  }
+  goToHealthDetail(item.targetId)
+}
+
 function goToOriginLitter(litterId: string) {
   uni.navigateTo({
     url: `/pages/breeding/litter?id=${litterId}`,
@@ -1917,23 +2058,23 @@ function handleDispositionAction(actionKey: DispositionActionKey) {
 
   switch (actionKey) {
     case 'deceased':
-      deceasedDate.value = todayStr()
+      deceasedDate.value = todayTs()
       deceasedCause.value = ''
       showDeceasedSheet.value = true
       return
     case 'adoption':
-      adoptionDate.value = todayStr()
+      adoptionDate.value = todayTs()
       adoptionNotes.value = ''
       adoptionFee.value = ''
       showAdoptionSheet.value = true
       return
     case 'gift':
-      giftDate.value = todayStr()
+      giftDate.value = todayTs()
       giftRecipient.value = ''
       showGiftSheet.value = true
       return
     case 'retire':
-      retireDate.value = todayStr()
+      retireDate.value = todayTs()
       retireReason.value = ''
       showRetireSheet.value = true
       return
@@ -1968,19 +2109,20 @@ function handleHealthAction(actionKey: 'start-medication' | 'recover') {
 // ==================== D-7: 退休确认 ====================
 
 const showRetireSheet = ref(false)
-const retireDate = ref(todayStr())
+const retireDate = ref(todayTs())
 const retireReason = ref('')
+const retireDateText = computed(() => formatDateInputValue(retireDate.value))
 
 function openRetireConfirm() {
   showStatusSheet.value = false
-  retireDate.value = todayStr()
+  retireDate.value = todayTs()
   retireReason.value = ''
   showRetireSheet.value = true
 }
 
 async function doRetire() {
   await updateDisposition(dogId, '已退休', {
-    date: new Date(retireDate.value + 'T00:00:00+08:00').getTime(),
+    date: retireDate.value,
     reason: retireReason.value || null,
   })
   showRetireSheet.value = false
@@ -1990,12 +2132,13 @@ async function doRetire() {
 // ==================== D-8: 已故确认 ====================
 
 const showDeceasedSheet = ref(false)
-const deceasedDate = ref(todayStr())
+const deceasedDate = ref(todayTs())
 const deceasedCause = ref('')
+const deceasedDateText = computed(() => formatDateInputValue(deceasedDate.value))
 
 async function doDeceased() {
   await updateDisposition(dogId, '已故', {
-    date: new Date(deceasedDate.value + 'T00:00:00+08:00').getTime(),
+    date: deceasedDate.value,
     cause: deceasedCause.value || null,
   })
   showDeceasedSheet.value = false
@@ -2005,13 +2148,14 @@ async function doDeceased() {
 // ==================== D-9: 领养表单 ====================
 
 const showAdoptionSheet = ref(false)
-const adoptionDate = ref(todayStr())
+const adoptionDate = ref(todayTs())
 const adoptionNotes = ref('')
 const adoptionFee = ref('')
+const adoptionDateText = computed(() => formatDateInputValue(adoptionDate.value))
 
 async function doAdoption() {
   await updateDisposition(dogId, '已领养', {
-    date: new Date(adoptionDate.value + 'T00:00:00+08:00').getTime(),
+    date: adoptionDate.value,
     notes: adoptionNotes.value || null,
     fee: adoptionFee.value ? Number(adoptionFee.value) : null,
   })
@@ -2022,12 +2166,13 @@ async function doAdoption() {
 // ==================== D-10: 赠送表单 ====================
 
 const showGiftSheet = ref(false)
-const giftDate = ref(todayStr())
+const giftDate = ref(todayTs())
 const giftRecipient = ref('')
+const giftDateText = computed(() => formatDateInputValue(giftDate.value))
 
 async function doGift() {
   await updateDisposition(dogId, '已赠送', {
-    date: new Date(giftDate.value + 'T00:00:00+08:00').getTime(),
+    date: giftDate.value,
     recipient: giftRecipient.value || null,
   })
   showGiftSheet.value = false
@@ -2057,17 +2202,18 @@ async function doPromote() {
 // ==================== D-13: 康复确认 ====================
 
 const showRecoverySheet = ref(false)
-const recoveryDate = ref(todayStr())
+const recoveryDate = ref(todayTs())
+const recoveryDateText = computed(() => formatDateInputValue(recoveryDate.value))
 
 function openRecoveryConfirm() {
   showStatusSheet.value = false
-  recoveryDate.value = todayStr()
+  recoveryDate.value = todayTs()
   showRecoverySheet.value = true
 }
 
 async function doRecovery() {
   await updateStatus(dogId, 'recover', {
-    date: new Date(recoveryDate.value + 'T00:00:00+08:00').getTime(),
+    date: recoveryDate.value,
   })
   showRecoverySheet.value = false
   await loadData()
@@ -2077,9 +2223,10 @@ async function doRecovery() {
 
 const showWeightEntry = ref(false)
 const weightInput = ref('')
-const weightDateStr = ref(todayStr())
+const weightDate = ref(todayTs())
 const weightNotes = ref('')
 const weightSubmitState = ref<'idle' | 'submitting' | 'success'>('idle')
+const weightDateText = computed(() => formatDateInputValue(weightDate.value))
 
 const weightSaveButtonText = computed(() => {
   if (weightSubmitState.value === 'submitting') return '保存中...'
@@ -2088,7 +2235,7 @@ const weightSaveButtonText = computed(() => {
 })
 const canSubmitWeight = computed(() => {
   const kg = parseFloat(weightInput.value)
-  return Number.isFinite(kg) && kg > 0 && !!weightDateStr.value
+  return Number.isFinite(kg) && kg > 0 && !!weightDate.value
 })
 
 const { run: addWeightRecord } = useCloudCall('health-service', 'addWeightRecord', {
@@ -2099,7 +2246,7 @@ const { run: addWeightRecord } = useCloudCall('health-service', 'addWeightRecord
 
 function openWeightEntry() {
   weightInput.value = ''
-  weightDateStr.value = todayStr()
+  weightDate.value = todayTs()
   weightNotes.value = ''
   weightSubmitState.value = 'idle'
   showWeightEntry.value = true
@@ -2114,7 +2261,7 @@ async function saveWeight() {
   }
   // 转换为克存储
   const grams = Math.round(kg * 1000)
-  const dateTs = new Date(weightDateStr.value + 'T00:00:00+08:00').getTime()
+  const dateTs = weightDate.value
   weightSubmitState.value = 'submitting'
   try {
     const res = await addWeightRecord({
@@ -2935,6 +3082,59 @@ onShow(() => {
   color: var(--text-2);
 }
 
+/* ==================== 健康筛选条 ==================== */
+.dog-detail__health-filters-scroll {
+  width: calc(100% + var(--space-page) * 2);
+  margin: 0 calc(var(--space-page) * -1);
+  margin-bottom: 10px;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+
+  :deep(::-webkit-scrollbar) {
+    display: none;
+  }
+}
+.dog-detail__health-filters {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 var(--space-page);
+}
+.dog-detail__health-filter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 56px;
+  padding: 7px 14px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--card);
+  box-shadow: var(--shadow);
+  transition: all 0.12s ease;
+  &:active {
+    transform: scale(0.96);
+    opacity: 0.86;
+  }
+}
+.dog-detail__health-filter--active {
+  background: rgba(234, 62, 119, 0.12);
+  box-shadow: none;
+}
+.dog-detail__health-filter-text {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.dog-detail__health-filter-text--active {
+  color: var(--primary);
+  font-weight: 700;
+}
+
 /* ==================== 合并状态卡片 ==================== */
 .dog-detail__status-merged {
   background: var(--card);
@@ -3072,6 +3272,9 @@ onShow(() => {
 .dog-detail__rec-list--skeleton {
   overflow: hidden;
 }
+.dog-detail__rec-list--health-timeline {
+  border-radius: 22px;
+}
 .dog-detail__rec-item {
   display: flex;
   align-items: center;
@@ -3085,6 +3288,10 @@ onShow(() => {
 .dog-detail__rec-item--skeleton {
   cursor: default;
   &:active { background: transparent; }
+}
+.dog-detail__rec-item--health-timeline {
+  padding-top: 10px;
+  padding-bottom: 10px;
 }
 .dog-detail__rec-icon {
   width: 34px;
@@ -3112,6 +3319,9 @@ onShow(() => {
   min-width: 0;
   display: flex;
   flex-direction: column;
+}
+.dog-detail__rec-body--health-timeline {
+  gap: 1px;
 }
 .dog-detail__rec-title {
   font-size: 13px;

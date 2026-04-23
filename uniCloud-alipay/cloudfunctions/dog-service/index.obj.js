@@ -199,9 +199,14 @@ function getMedicationTaskStartTs(task) {
 }
 
 function startOfDay(ts) {
-  const date = new Date(ts || Date.now())
-  date.setHours(0, 0, 0, 0)
-  return date.getTime()
+  const offsetMs = 8 * 60 * 60 * 1000
+  const sourceTs = Number.isFinite(Number(ts)) ? Number(ts) : Date.now()
+  const beijingNow = new Date(sourceTs + offsetMs)
+  const year = beijingNow.getUTCFullYear()
+  const month = beijingNow.getUTCMonth()
+  const day = beijingNow.getUTCDate()
+
+  return Date.UTC(year, month, day, 0, 0, 0, 0) - offsetMs
 }
 
 function getMedicationTaskProgress(task, nowTs = Date.now()) {

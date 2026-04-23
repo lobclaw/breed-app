@@ -49,21 +49,19 @@
 
         <view class="form-field">
           <text class="field-label">实际生产日期</text>
-          <picker mode="date" :value="birthDateStr" @change="onBirthDateChange">
-            <view class="field-input-wrap">
-              <text class="field-input-text" :class="{ 'field-input-text--empty': !form.birth_date }">
-                {{ form.birth_date ? birthDateStr : '请选择' }}
-              </text>
-              <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
-            </view>
-          </picker>
+          <view class="field-input-wrap" @click="showBirthDatePicker = true">
+            <text class="field-input-text" :class="{ 'field-input-text--empty': !form.birth_date }">
+              {{ form.birth_date ? birthDateStr : '请选择' }}
+            </text>
+            <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
+          </view>
           <view class="date-chips">
             <view
               v-for="chip in dateChips"
               :key="chip.label"
               class="date-chip"
-              :class="{ 'date-chip--active': chip.ts === form.birth_date }"
-              @click="form.birth_date = chip.ts"
+              :class="{ 'date-chip--active': chip.active }"
+              @click="form.birth_date = buildTimestampFromDayOffset(chip.offset, form.birth_date || Date.now())"
             >
               <text>{{ chip.label }}</text>
             </view>
@@ -278,6 +276,14 @@
       </button>
     </view>
   </view>
+
+  <BDateTimePicker
+    v-model:visible="showBirthDatePicker"
+    :model-value="form.birth_date"
+    mode="date"
+    value-type="timestamp"
+    @confirm="onBirthDateConfirm"
+  />
 </template>
 
 <script setup lang="ts">
@@ -285,7 +291,9 @@ import { ref, reactive, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
+import { buildTimestampFromDayOffset, formatDateInputValue, getLocalCalendarDayDiff } from '@/utils/date'
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
+import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
 
 let cycleId = ''
 const damName = ref('花花')
@@ -293,6 +301,7 @@ const damName = ref('花花')
 const step = ref(1)
 const submitState = ref<'idle' | 'submitting' | 'success'>('idle')
 const costInput = ref('')
+const showBirthDatePicker = ref(false)
 
 const form = reactive({
   birth_date: null as number | null,
@@ -321,18 +330,15 @@ const maleCount = computed(() => puppies.filter(p => p.gender === '公').length)
 const femaleCount = computed(() => puppies.filter(p => p.gender === '母').length)
 
 const birthDateStr = computed(() => {
-  if (!form.birth_date) return ''
-  const d = new Date(form.birth_date)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  return formatDateInputValue(form.birth_date)
 })
 
 const dateChips = computed(() => {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  const diff = form.birth_date ? getLocalCalendarDayDiff(form.birth_date) : null
   return [
-    { label: '今天', ts: today.getTime() },
-    { label: '昨天', ts: today.getTime() - 86400000 },
-    { label: '前天', ts: today.getTime() - 172800000 },
+    { label: '今天', offset: 0, active: diff === 0 },
+    { label: '昨天', offset: -1, active: diff === -1 },
+    { label: '前天', offset: -2, active: diff === -2 },
   ]
 })
 
@@ -356,8 +362,9 @@ function onBack() {
   }
 }
 
-function onBirthDateChange(e: any) {
-  form.birth_date = new Date(e.detail.value + 'T00:00:00+08:00').getTime()
+function onBirthDateConfirm(value: number | string) {
+  if (typeof value !== 'number') return
+  form.birth_date = value
 }
 
 function addPuppy() {
@@ -420,9 +427,7 @@ onLoad((query) => {
   if (query?.damName) damName.value = query.damName
 
   // 默认日期为今天
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  form.birth_date = today.getTime()
+  form.birth_date = buildTimestampFromDayOffset(0)
 })
 </script>
 

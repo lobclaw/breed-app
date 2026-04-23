@@ -108,14 +108,12 @@
           <text>出生日期</text>
           <text v-if="form.role === '外部种公'" class="field-label__optional">（选填）</text>
         </view>
-        <picker mode="date" :value="birthDateStr" @change="onBirthDateChange">
-          <view class="field-input field-input--picker">
-            <text :class="{ 'placeholder-text': !form.birth_date }">
-              {{ form.birth_date ? birthDateStr : '请选择日期' }}
-            </text>
-            <text class="material-icons-round field-input__icon">calendar_today</text>
-          </view>
-        </picker>
+        <view class="field-input field-input--picker" @click="showBirthDatePicker = true">
+          <text :class="{ 'placeholder-text': !form.birth_date }">
+            {{ form.birth_date ? birthDateStr : '请选择日期' }}
+          </text>
+          <text class="material-icons-round field-input__icon">calendar_today</text>
+        </view>
       </view>
 
       <!-- 购入日期（种狗） -->
@@ -124,14 +122,12 @@
           <text>购入日期</text>
           <text class="field-label__optional">（选填）</text>
         </view>
-        <picker mode="date" :value="purchaseDateStr" @change="onPurchaseDateChange">
-          <view class="field-input field-input--picker">
-            <text :class="{ 'placeholder-text': !form.purchase_date }">
-              {{ form.purchase_date ? purchaseDateStr : '年 / 月 / 日' }}
-            </text>
-            <text class="material-icons-round field-input__icon">calendar_today</text>
-          </view>
-        </picker>
+        <view class="field-input field-input--picker" @click="showPurchaseDatePicker = true">
+          <text :class="{ 'placeholder-text': !form.purchase_date }">
+            {{ form.purchase_date ? purchaseDateStr : '年 / 月 / 日' }}
+          </text>
+          <text class="material-icons-round field-input__icon">calendar_today</text>
+        </view>
       </view>
 
       <!-- 购入价格（种狗） -->
@@ -195,6 +191,22 @@
         />
       </view>
     </BModal>
+
+    <BDateTimePicker
+      v-model:visible="showBirthDatePicker"
+      :model-value="form.birth_date"
+      mode="date"
+      value-type="timestamp"
+      @confirm="onBirthDateConfirm"
+    />
+
+    <BDateTimePicker
+      v-model:visible="showPurchaseDatePicker"
+      :model-value="form.purchase_date"
+      mode="date"
+      value-type="timestamp"
+      @confirm="onPurchaseDateConfirm"
+    />
   </view>
 </template>
 
@@ -204,9 +216,11 @@ import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
 import { useAuth } from '@/composables/useAuth'
+import { formatDateInputValue } from '@/utils/date'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BModal from '@/components/layout/BModal.vue'
+import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
 import { useDogStore } from '@/stores/dogStore'
 
 const dogStore = useDogStore()
@@ -240,6 +254,8 @@ const breedOptions = computed(() => {
 })
 const customBreed = ref('')
 const showBreedModal = ref(false)
+const showBirthDatePicker = ref(false)
+const showPurchaseDatePicker = ref(false)
 const breedInput = ref('')
 const showDeleteConfirm = ref(false)
 const pendingDeleteVal = ref('')
@@ -323,24 +339,21 @@ const submitButtonText = computed(() => {
 })
 
 const birthDateStr = computed(() => {
-  if (!form.birth_date) return ''
-  const d = new Date(form.birth_date)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  return formatDateInputValue(form.birth_date)
 })
 
-function onBirthDateChange(e: any) {
-  const dateStr = e.detail.value
-  form.birth_date = new Date(dateStr + 'T00:00:00+08:00').getTime()
+function onBirthDateConfirm(value: number | string) {
+  if (typeof value !== 'number') return
+  form.birth_date = value
 }
 
 const purchaseDateStr = computed(() => {
-  if (!form.purchase_date) return ''
-  const d = new Date(form.purchase_date)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  return formatDateInputValue(form.purchase_date)
 })
 
-function onPurchaseDateChange(e: any) {
-  form.purchase_date = new Date(e.detail.value + 'T00:00:00+08:00').getTime()
+function onPurchaseDateConfirm(value: number | string) {
+  if (typeof value !== 'number') return
+  form.purchase_date = value
 }
 
 const { run: createDog } = useCloudCall('dog-service', 'createDog', { successMode: 'silent', loadingMode: 'local', throwOnError: true })

@@ -8,6 +8,12 @@
 - `docs/design/`：产品与工程的长期事实源
 - `docs/ROADMAP.md`：当前路线、阶段目标与验收重点
 
+## 当前高频口径
+
+- 除 `families.settings.morning_summary_time` 外，业务日期字段统一使用毫秒级 timestamp，并保留真实时分秒毫秒
+- 用户只选择“日期”时，前端按“所选年月日 + 当前本地时分秒毫秒”构造 timestamp
+- 任何按“天”消费的逻辑，统一在读取 timestamp 后按北京时间换算日边界，不依赖库里值是零点
+
 ## 推荐阅读顺序
 
 ### 新会话快速进入

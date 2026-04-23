@@ -46,12 +46,18 @@
         </view>
         <view class="option-row" v-if="summaryEnabled">
           <text class="option-row__text">推送时间</text>
-          <picker mode="time" :value="summaryTime" @change="onTimeChange">
-            <text class="time-value">{{ summaryTime }}</text>
-          </picker>
+          <text class="time-value" @click="showTimePicker = true">{{ summaryTime }}</text>
         </view>
       </view>
     </view>
+
+    <BDateTimePicker
+      v-model:visible="showTimePicker"
+      :model-value="summaryTime"
+      mode="time"
+      value-type="time-string"
+      @confirm="onTimeConfirm"
+    />
   </view>
 </template>
 
@@ -59,6 +65,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useCloudCall } from '@/composables/useCloudCall'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
+import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
 import type { FamilySettings, NotificationTypes } from '@/types/family'
 
 type NotificationTypeKey = keyof NotificationTypes
@@ -75,12 +82,12 @@ const pushEnabled = ref(true)
 const summaryEnabled = ref(true)
 const summaryTime = ref('09:00')
 const saveToken = ref(0)
+const showTimePicker = ref(false)
 
 const notifTypes = reactive<NotificationTypeItem[]>([
   { key: 'breeding', label: '繁育节点提醒', sub: '配种 / 孕检 / 预产期', enabled: true, disabled: false },
   { key: 'vaccination', label: '疫苗/驱虫提醒', sub: '', enabled: true, disabled: false },
   { key: 'medication', label: '每日用药提醒', sub: '', enabled: true, disabled: false },
-  { key: 'care_group', label: '护理群组提醒', sub: '', enabled: true, disabled: false },
   { key: 'overdue', label: '逾期提醒', sub: '不可关闭', enabled: true, disabled: true },
 ])
 
@@ -135,9 +142,10 @@ function applyState(state: NotificationFormState) {
   })
 }
 
-function onTimeChange(e: any) {
+function onTimeConfirm(value: number | string) {
+  if (typeof value !== 'string') return
   const prevState = captureState()
-  summaryTime.value = e.detail.value
+  summaryTime.value = value
   saveSettings(prevState)
 }
 

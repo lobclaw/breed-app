@@ -3,10 +3,10 @@
     <BPageHeader title="健康记录详情">
       <template #right>
         <view class="header-actions">
-          <view class="header-action" @click="goEdit">
+          <view v-if="canEdit" class="header-action" @click="goEdit">
             <text class="material-icons-round" style="font-size: 22px; color: var(--text-2);">edit</text>
           </view>
-          <view class="header-action" @click="showMore = true">
+          <view v-if="hasMoreActions" class="header-action" @click="showMore = true">
             <text class="material-icons-round" style="font-size: 22px; color: var(--text-2);">more_horiz</text>
           </view>
         </view>
@@ -16,9 +16,54 @@
     <BSubmitBanner :message="submitBannerMessage" />
 
     <!-- 加载中 -->
-    <view v-if="loading" class="card-feed">
-      <BSkeleton :rows="5" />
-    </view>
+    <template v-if="loading">
+      <view class="card-feed">
+        <view class="detail-skeleton-card detail-skeleton-card--summary">
+          <view class="detail-skeleton-card__main">
+            <view class="detail-skeleton detail-skeleton--tag" />
+            <view class="detail-skeleton detail-skeleton--title" />
+            <view class="detail-skeleton detail-skeleton--sub" />
+            <view class="detail-skeleton-card__fact">
+              <view class="detail-skeleton detail-skeleton--icon" />
+              <view class="detail-skeleton detail-skeleton--fact-label" />
+              <view class="detail-skeleton detail-skeleton--fact-value" />
+            </view>
+          </view>
+          <view class="detail-skeleton-card__meta">
+            <view class="detail-skeleton detail-skeleton--meta-value" />
+            <view class="detail-skeleton detail-skeleton--meta-label" />
+          </view>
+        </view>
+      </view>
+
+      <view class="section-label">
+        <view class="section-dot section-dot--red" />
+        <text class="section-text">核心信息</text>
+      </view>
+      <view class="card-feed">
+        <view class="detail-skeleton-panel">
+          <view v-for="row in 6" :key="`health-info-${row}`" class="detail-skeleton-row">
+            <view class="detail-skeleton detail-skeleton--label" :class="{ 'detail-skeleton--label-short': row > 4 }" />
+            <view class="detail-skeleton-row__value" :class="{ 'detail-skeleton-row__value--stack': row === 2 }">
+              <template v-if="row === 1 || row === 4">
+                <view class="detail-skeleton detail-skeleton--pill" />
+              </template>
+              <template v-else-if="row === 2">
+                <view class="detail-skeleton detail-skeleton--avatar" />
+                <view class="detail-skeleton detail-skeleton--value" />
+              </template>
+              <template v-else-if="row === 6">
+                <view class="detail-skeleton detail-skeleton--note" />
+              </template>
+              <template v-else>
+                <view class="detail-skeleton detail-skeleton--value" />
+              </template>
+            </view>
+          </view>
+        </view>
+      </view>
+
+    </template>
 
     <!-- 详情内容 -->
     <template v-if="!loading && record">
@@ -154,21 +199,6 @@
         <text>创建人: {{ record.created_by_name }} · {{ formatDateTime(record.created_at) }}</text>
       </view>
 
-      <!-- 操作按钮 -->
-      <view class="section-label">
-        <view class="section-dot section-dot--red" />
-        <text class="section-text">操作</text>
-      </view>
-      <view :class="['action-area', `action-area--${actionButtonColor}`]">
-        <view class="detail-action-card">
-          <view class="detail-action-card__glow" />
-          <view class="detail-action-card__row">
-            <BButton class="detail-action-card__primary" variant="filled" :color="actionButtonColor" @click="goEdit">编辑记录</BButton>
-            <BButton class="detail-action-card__secondary" variant="ghost" color="red" @click="confirmDelete">删除记录</BButton>
-          </view>
-          <text class="detail-action-card__note">删除后不可恢复；编辑会保留来源页承接与返回体验。</text>
-        </view>
-      </view>
     </template>
 
     <!-- 空状态 -->
@@ -182,13 +212,14 @@
     <!-- 更多操作 Sheet -->
     <BSheet v-model:visible="showMore" title="更多操作">
       <view class="more-actions">
-        <view class="more-action-item" @click="handleEditFromMore">
-          <text class="material-icons-round" style="font-size: 20px; color: var(--text-2);">edit</text>
-          <text class="more-action-label">编辑记录</text>
-        </view>
-        <view class="more-action-item" @click="handleDeleteFromMore">
-          <text class="material-icons-round" style="font-size: 20px; color: var(--red);">delete</text>
-          <text class="more-action-label" style="color: var(--red);">删除记录</text>
+        <view
+          v-for="action in moreActions"
+          :key="action.key"
+          class="more-action-item"
+          @click="handleMoreAction(action.key)"
+        >
+          <text class="material-icons-round" :style="{ fontSize: '20px', color: action.tone === 'danger' ? 'var(--red)' : 'var(--text-2)' }">{{ action.icon }}</text>
+          <text class="more-action-label" :class="{ 'more-action-label--danger': action.tone === 'danger' }">{{ action.label }}</text>
         </view>
       </view>
     </BSheet>
@@ -214,10 +245,8 @@ import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
 import BCard from '@/components/base/BCard.vue'
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BTag from '@/components/base/BTag.vue'
-import BButton from '@/components/base/BButton.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import BModal from '@/components/layout/BModal.vue'
-import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 
 const record = ref<any>(null)
@@ -245,6 +274,30 @@ const dewormingTypeMap: Record<string, string> = {
 const typeLabel = computed(() => typeMap[record.value?.type]?.label || record.value?.type || '未知')
 const tagColor = computed(() => typeMap[record.value?.type]?.tagColor || 'green')
 const cardColor = computed(() => typeMap[record.value?.type]?.cardColor || 'green')
+const canEdit = computed(() => !loading.value && !!record.value)
+const isIllnessRecord = computed(() => record.value?.type === 'illness')
+const illnessStatus = computed(() => record.value?.details?.treatment_status || '观察中')
+const canRecoverIllness = computed(() => isIllnessRecord.value && illnessStatus.value !== '已康复')
+const canStartMedication = computed(() => isIllnessRecord.value && illnessStatus.value !== '已康复')
+const canDeleteRecord = computed(() => !loading.value && !!record.value)
+const hasMoreActions = computed(() => moreActions.value.length > 0)
+const moreActions = computed(() => {
+  const actions: Array<{ key: 'recover' | 'start_medication' | 'delete'; label: string; icon: string; tone?: 'danger' }> = []
+
+  if (canRecoverIllness.value) {
+    actions.push({ key: 'recover', label: '标记康复', icon: 'check_circle' })
+  }
+
+  if (canStartMedication.value) {
+    actions.push({ key: 'start_medication', label: '开始用药', icon: 'medication' })
+  }
+
+  if (canDeleteRecord.value) {
+    actions.push({ key: 'delete', label: '删除记录', icon: 'delete', tone: 'danger' })
+  }
+
+  return actions
+})
 
 const dewormingTypeLabel = computed(() => {
   const t = record.value?.details?.deworming_type
@@ -279,11 +332,6 @@ const summaryMetaLabel = computed(() => {
   if (record.value?.type === 'illness') return '当前状态'
   if (record.value?.type === 'deworming') return '驱虫类型'
   return '当前记录'
-})
-const actionButtonColor = computed(() => {
-  if (cardColor.value === 'red') return 'red'
-  if (cardColor.value === 'teal') return 'teal'
-  return 'blue'
 })
 const summaryFact = computed(() => {
   if (!record.value) return null
@@ -355,6 +403,11 @@ const { run: deleteRecord } = useCloudCall('health-service', 'deleteHealthRecord
   loadingMode: 'local',
   throwOnError: true,
 })
+const { run: updateIllnessStatus } = useCloudCall('health-service', 'updateIllnessStatus', {
+  successMode: 'silent',
+  loadingMode: 'local',
+  throwOnError: true,
+})
 
 async function loadRecord() {
   loading.value = true
@@ -378,10 +431,6 @@ function goEdit() {
   uni.navigateTo({ url: `/pages/record/health-edit?id=${recordId}` })
 }
 
-function handleEditFromMore() {
-  goEdit()
-}
-
 function confirmDelete() {
   showMore.value = false
   showDeleteConfirm.value = true
@@ -396,7 +445,37 @@ async function handleDeleteConfirm() {
   }
 }
 
-function handleDeleteFromMore() {
+async function markRecovered() {
+  if (!recordId) return
+  showMore.value = false
+  const result = await updateIllnessStatus(recordId, '已康复')
+  if (result) {
+    showSubmitBanner('已标记康复')
+    await loadRecord()
+  }
+}
+
+function openMedicationFromIllness() {
+  if (!record.value?.dog_id) {
+    uni.showToast({ title: '犬只信息缺失', icon: 'none' })
+    return
+  }
+  showMore.value = false
+  const dogName = encodeURIComponent(record.value?.dog_name || '')
+  uni.navigateTo({
+    url: `/pages/record/health-medication?dogId=${record.value.dog_id}&dogName=${dogName}&illnessRecordId=${recordId}`,
+  })
+}
+
+function handleMoreAction(actionKey: 'recover' | 'start_medication' | 'delete') {
+  if (actionKey === 'recover') {
+    markRecovered()
+    return
+  }
+  if (actionKey === 'start_medication') {
+    openMedicationFromIllness()
+    return
+  }
   confirmDelete()
 }
 
@@ -434,6 +513,188 @@ onShow(() => {
 
 .page {
   padding-bottom: 40px;
+}
+
+.detail-skeleton-card,
+.detail-skeleton-panel,
+.detail-skeleton-action {
+  position: relative;
+  overflow: hidden;
+  background: var(--card);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+}
+.detail-skeleton-card::after,
+.detail-skeleton-panel::after,
+.detail-skeleton-action::after,
+.detail-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.56) 50%, transparent 100%);
+  animation: detail-skeleton-shimmer 1.5s infinite;
+}
+.detail-skeleton-card--summary {
+  padding: 16px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.detail-skeleton-card__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.detail-skeleton-card__fact {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  margin-top: 4px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.86);
+}
+.detail-skeleton-card__meta {
+  min-width: 68px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+}
+.detail-skeleton-panel {
+  padding: 2px 0;
+}
+.detail-skeleton-row {
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.detail-skeleton-row + .detail-skeleton-row {
+  border-top: 1px solid rgba(216, 203, 189, 0.12);
+}
+.detail-skeleton-row__value {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 120px;
+}
+.detail-skeleton-row__value--stack {
+  min-width: 140px;
+}
+.detail-skeleton-action {
+  padding: 14px 16px 16px;
+}
+.detail-skeleton-action__glow {
+  position: absolute;
+  right: -18px;
+  bottom: -22px;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 237, 237, 0.95) 0%, rgba(255, 237, 237, 0) 72%);
+}
+.detail-skeleton-action__row {
+  position: relative;
+  display: flex;
+  gap: 12px;
+}
+.detail-skeleton {
+  position: relative;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--card-dim);
+}
+.detail-skeleton--tag {
+  width: 52px;
+  height: 24px;
+}
+.detail-skeleton--title {
+  width: 120px;
+  max-width: 55%;
+  height: 20px;
+}
+.detail-skeleton--sub {
+  width: 150px;
+  max-width: 70%;
+  height: 13px;
+}
+.detail-skeleton--icon {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+}
+.detail-skeleton--fact-label {
+  width: 28px;
+  height: 10px;
+}
+.detail-skeleton--fact-value {
+  width: 52px;
+  height: 12px;
+}
+.detail-skeleton--meta-value {
+  width: 42px;
+  height: 18px;
+}
+.detail-skeleton--meta-label {
+  width: 38px;
+  height: 11px;
+}
+.detail-skeleton--label {
+  width: 72px;
+  height: 12px;
+}
+.detail-skeleton--label-short {
+  width: 52px;
+}
+.detail-skeleton--value {
+  width: 86px;
+  height: 14px;
+}
+.detail-skeleton--pill {
+  width: 50px;
+  height: 24px;
+}
+.detail-skeleton--avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+}
+.detail-skeleton--note {
+  width: 112px;
+  height: 14px;
+}
+.detail-skeleton--button {
+  height: 46px;
+  border-radius: 999px;
+}
+.detail-skeleton--button-primary {
+  flex: 1;
+}
+.detail-skeleton--button-secondary {
+  width: 120px;
+}
+.detail-skeleton--action-note {
+  width: 190px;
+  max-width: 88%;
+  height: 12px;
+  margin-top: 14px;
+}
+
+@keyframes detail-skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 .detail-summary {
@@ -657,5 +918,8 @@ onShow(() => {
   font-size: 15px;
   font-weight: 600;
   color: var(--text-1);
+}
+.more-action-label--danger {
+  color: var(--red);
 }
 </style>

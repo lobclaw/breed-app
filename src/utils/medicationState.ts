@@ -1,3 +1,5 @@
+import { getBeijingDayStart } from '@/utils/date'
+
 const DAY_MS = 86400000
 
 export type MedicationDayState = 'done' | 'pending' | 'missed' | 'future'
@@ -26,9 +28,7 @@ interface MedicationStateOptions {
 }
 
 export function startOfMedicationDay(ts: number): number {
-  const date = new Date(ts)
-  date.setHours(0, 0, 0, 0)
-  return date.getTime()
+  return getBeijingDayStart(ts)
 }
 
 export function getMedicationFrequency(task: MedicationStateTask | null | undefined): number {

@@ -17,12 +17,12 @@ describe('deriveBreedingMilestoneViewModel', () => {
     expect(viewModel.stageTitle).toBe('建议卵泡检查')
     expect(viewModel.anchorLabel).toBe('发情')
     expect(viewModel.daysFromAnchor).toBe(9)
-    expect(viewModel.dayLabel).toBe('距发情第 9 天')
+    expect(viewModel.dayLabel).toBe('发情第 9 天')
     expect(viewModel.suggestionStatus).toBe('normal')
     expect(viewModel.suggestionLabel).toBe('建议日期 4月18日')
   })
 
-  it('未成熟卵泡检查应保留建议卵泡检查并展示最近检查锚点', () => {
+  it('未成熟卵泡检查应保留建议卵泡检查并回到发情天数口径', () => {
     const heatDate = new Date('2026-04-10T00:00:00+08:00').getTime()
     const latestFollicleDate = new Date('2026-04-16T00:00:00+08:00').getTime()
     const dueDate = new Date('2026-04-17T00:00:00+08:00').getTime()
@@ -40,7 +40,7 @@ describe('deriveBreedingMilestoneViewModel', () => {
 
     expect(viewModel.stageTitle).toBe('建议卵泡检查')
     expect(viewModel.heatDayLabel).toBe('发情第 8 天')
-    expect(viewModel.stageDayLabel).toBe('卵泡检查后第 2 天')
+    expect(viewModel.stageDayLabel).toBe('发情第 7 天')
     expect(viewModel.referenceDateLabel).toBe('建议日期 · 4月17日')
     expect(viewModel.alertLabel).toBe('')
   })
@@ -77,7 +77,7 @@ describe('deriveBreedingMilestoneViewModel', () => {
 
     expect(viewModel.anchorLabel).toBe('配种')
     expect(viewModel.daysFromAnchor).toBe(25)
-    expect(viewModel.dayLabel).toBe('距配种第 25 天')
+    expect(viewModel.dayLabel).toBe('配种第 25 天')
   })
 
   it('配种节点应显示为卵泡检查后的当日推进', () => {
@@ -91,7 +91,7 @@ describe('deriveBreedingMilestoneViewModel', () => {
     expect(viewModel.stageTitle).toBe('配种')
     expect(viewModel.anchorLabel).toBe('卵泡检查')
     expect(viewModel.daysFromAnchor).toBe(1)
-    expect(viewModel.dayLabel).toBe('距卵泡检查第 1 天')
+    expect(viewModel.dayLabel).toBe('卵泡检查第 1 天')
     expect(viewModel.suggestionStatus).toBe('window_due')
     expect(viewModel.suggestionLabel).toBe('建议今日处理')
   })
@@ -125,7 +125,7 @@ describe('deriveBreedingMilestoneViewModel', () => {
     expect(viewModel.anchorLabel).toBe('配种')
     expect(viewModel.suggestionLabel).toBe('预产期 6月18日')
     expect(viewModel.referenceDateLabel).toBe('预产期 · 6月18日')
-    expect(viewModel.stageDayLabel).toBe('距第2脚配种第 1 天')
+    expect(viewModel.stageDayLabel).toBe('第2脚配种第 1 天')
   })
 
   it('断奶节点应显示待断奶、哺乳天数与预计断奶日', () => {
@@ -143,7 +143,7 @@ describe('deriveBreedingMilestoneViewModel', () => {
     expect(viewModel.stageTitle).toBe('待断奶')
     expect(viewModel.anchorLabel).toBe('出生')
     expect(viewModel.daysFromAnchor).toBe(1)
-    expect(viewModel.dayLabel).toBe('距出生第 1 天')
+    expect(viewModel.dayLabel).toBe('出生第 1 天')
     expect(viewModel.stageDayLabel).toBe('哺乳第 1 天')
     expect(viewModel.referenceDateLabel).toBe('预计 6月4日断奶')
     expect(viewModel.suggestionStatus).toBe('normal')
