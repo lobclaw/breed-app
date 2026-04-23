@@ -38,4 +38,16 @@ describe('home calendar picker contract', () => {
     expect(source).toContain('function mergeDateCountsRange(startDate: number, endDate: number, nextCounts?: Record<number, number>)')
     expect(source).toContain('loadedDateCountRanges.clear()')
   })
+
+  it('首页顶部副标题应随 selectedDate 在今日概览和当日安排之间切换', () => {
+    expect(source).toContain('<text class="greeting-sub">{{ greetingSubText }}</text>')
+    expect(source).toContain("const suffix = isSelectedToday.value ? '今日概览' : '当日安排'")
+    expect(source).toContain('return `${formatFullDate(selectedDate.value)} · ${suffix}`')
+  })
+
+  it('首页应接住 WeekStrip 的返回今日入口并复用日期切换链路', () => {
+    expect(source).toContain('@jump-today="jumpToToday"')
+    expect(source).toContain('function jumpToToday() {')
+    expect(source).toContain('void onDateSelect(startOfDay(Date.now()))')
+  })
 })

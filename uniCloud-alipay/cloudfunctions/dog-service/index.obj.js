@@ -118,7 +118,41 @@ function getIllnessSymptomSummary(source = {}, limit = 2) {
   return `${tags.slice(0, limit).join(' / ')} 等${tags.length}项`
 }
 
-function buildDetailIllnessStatuses(illnesses = []) {
+function buildMedicationRelationInfo(task, illnesses = []) {
+  const illnessById = new Map((illnesses || []).map(illness => [illness._id, illness]))
+  if (task?.source_record_id) {
+    return {
+      relationType: 'linked',
+      relationLabel: '关联疾病',
+      linkedIllness: illnessById.get(task.source_record_id) || null,
+    }
+  }
+  const latestIllness = [...(illnesses || [])].sort((a, b) => (b.updated_at || b.date || b.created_at || 0) - (a.updated_at || a.date || a.created_at || 0))[0]
+  if (latestIllness) {
+    return {
+      relationType: 'fallback',
+      relationLabel: '按当前治疗状态推断关联',
+      linkedIllness: latestIllness,
+    }
+  }
+  return {
+    relationType: 'standalone',
+    relationLabel: '独立用药',
+    linkedIllness: null,
+  }
+}
+
+function buildIllnessRelationInfo(illness, tasks = []) {
+  if ((tasks || []).some(task => task?.source_record_id === illness?._id)) {
+    return { relationType: 'linked', relationLabel: '已关联用药' }
+  }
+  if ((tasks || []).some(task => !task?.source_record_id)) {
+    return { relationType: 'fallback', relationLabel: '按当前治疗状态推断关联' }
+  }
+  return { relationType: 'standalone', relationLabel: '未关联用药' }
+}
+
+function buildDetailIllnessStatuses(illnesses = [], activeMedicationTasks = []) {
   const grouped = new Map()
 
   for (const illness of illnesses) {
@@ -130,16 +164,19 @@ function buildDetailIllnessStatuses(illnesses = []) {
   return Array.from(grouped.entries()).map(([label, records]) => {
     const sorted = [...records].sort((a, b) => (b.updated_at || b.date || b.created_at || 0) - (a.updated_at || a.date || a.created_at || 0))
     const latest = sorted[0]
+    const relation = buildIllnessRelationInfo(latest, activeMedicationTasks)
     return {
       type: '生病中',
       label,
       recordId: latest._id,
+      relationType: relation.relationType,
+      meta: relation.relationType === 'standalone' ? [] : [{ icon: 'link', text: relation.relationLabel }],
       activityTs: latest.updated_at || latest.date || latest.created_at || 0,
     }
   })
 }
 
-function buildListIllnessStatuses(illnesses = []) {
+function buildListIllnessStatuses(illnesses = [], activeMedicationTasks = []) {
   const sortedRecords = [...illnesses].sort((a, b) => (b.updated_at || b.date || b.created_at || 0) - (a.updated_at || a.date || a.created_at || 0))
   const labels = []
   const seen = new Set()
@@ -160,6 +197,10 @@ function buildListIllnessStatuses(illnesses = []) {
   const illnessStartTs = latest?.details?.start_date || latest?.date || latest?.created_at || 0
   const illnessDay = illnessStartTs ? Math.max(1, Math.floor((Date.now() - illnessStartTs) / 86400000) + 1) : null
   const illnessMeta = illnessDay ? [{ icon: 'schedule', text: `第${illnessDay}天` }] : []
+  const relation = buildIllnessRelationInfo(latest, activeMedicationTasks)
+  const meta = relation.relationType === 'standalone'
+    ? illnessMeta
+    : [{ icon: 'link', text: relation.relationLabel }, ...illnessMeta]
 
   if (labels.length === 1) {
     return [{
@@ -167,8 +208,9 @@ function buildListIllnessStatuses(illnesses = []) {
       label: labels[0],
       count: 1,
       recordId: firstRecordId,
+      relationType: relation.relationType,
       activityTs: latest?.updated_at || latest?.date || latest?.created_at || 0,
-      meta: illnessMeta,
+      meta,
     }]
   }
 
@@ -178,8 +220,9 @@ function buildListIllnessStatuses(illnesses = []) {
       label: `${labels[0]}/${labels[1]}`,
       count: 2,
       recordId: firstRecordId,
+      relationType: relation.relationType,
       activityTs: latest?.updated_at || latest?.date || latest?.created_at || 0,
-      meta: illnessMeta,
+      meta,
     }]
   }
 
@@ -188,23 +231,27 @@ function buildListIllnessStatuses(illnesses = []) {
     label: `${labels[0]}/${labels[1]}等${labels.length}项`,
     count: labels.length,
     recordId: firstRecordId,
+    relationType: relation.relationType,
     activityTs: latest?.updated_at || latest?.date || latest?.created_at || 0,
-    meta: illnessMeta,
+    meta,
   }]
 }
 
-function buildListMedicationStatus(tasks = [], nowTs = Date.now()) {
+function buildListMedicationStatus(tasks = [], nowTs = Date.now(), activeIllnesses = []) {
   if (!tasks.length) return []
   const preferredTask = tasks.reduce((currentTask, nextTask) => pickPreferredMedicationTask(currentTask, nextTask), null)
   const { currentDay, totalDays } = getMedicationTaskProgress(preferredTask, nowTs)
   const drugName = preferredTask?.drug_name || preferredTask?.details?.drug_name || '用药'
+  const relation = buildMedicationRelationInfo(preferredTask, activeIllnesses)
   return [{
     type: '用药中',
     label: '用药中',
     count: tasks.length,
     taskId: preferredTask?._id,
     detail: drugName,
+    relationType: relation.relationType,
     progress: { current: Math.min(currentDay, totalDays), total: totalDays },
+    meta: [{ icon: 'link', text: relation.relationLabel }],
     activityTs: preferredTask?.updated_at || preferredTask?.created_at || 0,
   }]
 }
@@ -411,9 +458,9 @@ module.exports = {
       ...dog,
       statuses: (() => {
         const statuses = [
-          ...(buildListIllnessStatuses(illnessMap[dog._id] || [])),
+          ...(buildListIllnessStatuses(illnessMap[dog._id] || [], medicationMap[dog._id] || [])),
           ...((breedingStatusMap[dog._id]) || []),
-          ...(buildListMedicationStatus(medicationMap[dog._id] || [], now)),
+          ...(buildListMedicationStatus(medicationMap[dog._id] || [], now, illnessMap[dog._id] || [])),
         ]
         const sorted = sortListStatuses(statuses)
         return sorted.length > 0 ? sorted : [{ type: '正常' }]
@@ -520,10 +567,10 @@ module.exports = {
 
     // 疾病状态（未康复的）
     const activeIllnesses = (illnessRes.data || []).filter(r => r.details?.treatment_status !== '已康复')
-    statuses.push(...buildDetailIllnessStatuses(activeIllnesses))
 
     // 用药状态（按药名去重，取进度最新的）
     const medTasks = getActiveMedicationTasks(medTasksRes.data || [], now)
+    statuses.push(...buildDetailIllnessStatuses(activeIllnesses, medTasks))
     const medDrugMap = {}
     for (const task of medTasks) {
       const drug = task.drug_name || task.details?.drug_name || '用药'
@@ -537,13 +584,16 @@ module.exports = {
       ].filter(Boolean)
       const { currentDay, totalDays } = getMedicationTaskProgress(task, now)
       const { completedDoseCount, totalDoseCount, frequency } = getMedicationCompletionSummary(task)
+      const relation = buildMedicationRelationInfo(task, activeIllnesses)
       statuses.push({
         type: '用药中',
         taskId: task._id,
         detail: parts.join(' · '),
+        relationType: relation.relationType,
         progress: task.duration_days ? { current: Math.min(currentDay, totalDays), total: totalDays } : null,
         activityTs: task.updated_at || task.created_at || 0,
         meta: [
+          { icon: 'link', text: relation.relationLabel },
           { icon: 'schedule', text: formatMedicationFrequency(frequency) },
           { icon: 'check_circle', text: `已执行 ${completedDoseCount}/${totalDoseCount} 次` },
         ],

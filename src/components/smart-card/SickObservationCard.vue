@@ -1,7 +1,7 @@
 <!--
   SickObservationCard — 疾病观察卡
   展示未进入用药流程的疾病观察项（sick_only），无 checkbox
-  操作：标记康复 / 开始治疗 / 开始用药
+  操作：标记康复 / 开始治疗 / 开始用药 / 查看用药
 -->
 <template>
   <view class="card" :class="cardClasses">
@@ -114,11 +114,13 @@ const summarySeverity = computed(() => {
 function onAction(dog: any) {
   const items: { icon: string; label: string; action: string }[] = [
     { icon: 'check_circle', label: '标记康复', action: 'recover' },
-    { icon: 'medication', label: '开始用药', action: 'start_medication' },
   ]
-  if (dog.treatmentStatus === '观察中') {
+  if (dog.treatmentStatus === '观察中' && !dog.linkedMedicationTaskId) {
     items.splice(1, 0, { icon: 'medical_services', label: '开始治疗', action: 'update_status' })
   }
+  items.push(dog.linkedMedicationTaskId
+    ? { icon: 'medication', label: '查看用药', action: 'view_medication' }
+    : { icon: 'medication', label: '开始用药', action: 'start_medication' })
   emit('action', { type: 'show_sick_menu', data: { dog, items } })
 }
 

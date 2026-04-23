@@ -580,6 +580,7 @@ describe('task-service', () => {
       expect(cardTypes).toContain('medication')
       expect(cardTypes).not.toContain('sick_observation')
       expect(cards.find((c: any) => c.cardType === 'medication')?.domain).toBe('medication')
+      expect(cards.find((c: any) => c.cardType === 'medication')?.dogs[0].relationType).toBe('fallback')
     })
 
     it('单犬：两个疾病（一个治疗中+用药，一个观察中）→ 两张卡都出现', () => {
@@ -623,6 +624,7 @@ describe('task-service', () => {
       expect(medCard?.dogs[0].state).toBe('sick_with_med')
       expect(medCard?.dogs[0].illness).toBe('感冒')
       expect(medCard?.dogs[0].illnessId).toBe('ill_肉肉_感冒')
+      expect(medCard?.dogs[0].relationType).toBe('linked')
       expect(sickCard?.dogs).toHaveLength(1)
       expect(sickCard?.dogs[0].illness).toBe('皮肤病')
       expect(sickCard?.dogs[0].symptomSummary).toBe('抓挠 / 皮屑')
@@ -643,6 +645,7 @@ describe('task-service', () => {
       expect(cards).toHaveLength(1)
       expect(cards[0].cardType).toBe('medication')
       expect(cards[0].dogs[0].state).toBe('med_only')
+      expect(cards[0].dogs[0].relationType).toBe('standalone')
     })
 
     it('不同疫苗类型的同日任务不应合并到同一批量卡', () => {

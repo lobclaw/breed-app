@@ -562,17 +562,31 @@ async function generateTasks(familyId, type, data, cycleId, dog, recordId) {
  */
 async function createExpense(familyId, uid, data, dog, cycleId, sourceRecordId) {
   const now = Date.now()
-  const typeLabels = {
+  const sourceLabels = {
     heat: '发情', heat_observation: '发情观察', follicle_check: '卵泡检查', mating: '配种',
     pregnancy_check: '孕检', prenatal_check: '产检',
     pre_labor: '临产监测', birth: '生产', abnormal_termination: '异常终止',
   }
+  const categoryMap = {
+    follicle_check: '检查化验',
+    mating: '配种费',
+    pregnancy_check: '孕检产检',
+    prenatal_check: '孕检产检',
+    pre_labor: '孕检产检',
+    birth: '生产育幼',
+    abnormal_termination: '生产育幼',
+  }
+  const sourceLabel = sourceLabels[data.type] || '繁育'
+  const category = categoryMap[data.type] || '其他'
+  const noteText = typeof data.notes === 'string' ? data.notes.trim() : ''
 
   await db.collection('expenses').add({
     total_amount: data.cost,
-    category: typeLabels[data.type] || '繁育',
+    category,
     date: data.date,
-    notes: data.notes || null,
+    notes: noteText
+      ? (sourceLabel !== category ? `${sourceLabel} · ${noteText}` : noteText)
+      : (sourceLabel !== category ? sourceLabel : null),
     linked_cycle_id: cycleId,
     linked_dog_ids: [data.dog_id],
     dog_names: [dog.name],
@@ -1289,11 +1303,14 @@ module.exports = {
 
     // 如有费用
     if (data.cost && data.cost > 0) {
+      const sourceLabel = '生产'
+      const category = '生产育幼'
+      const noteText = typeof data.birth_notes === 'string' ? data.birth_notes.trim() : ''
       await db.collection('expenses').add({
         total_amount: data.cost,
-        category: '生产',
+        category,
         date: data.birth_date,
-        notes: data.birth_notes || null,
+        notes: noteText ? `${sourceLabel} · ${noteText}` : sourceLabel,
         linked_cycle_id: data.cycle_id,
         linked_litter_id: litterId,
         linked_dog_ids: [cycle.dam_id],

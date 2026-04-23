@@ -1318,10 +1318,20 @@ const linkedActiveIllnessIds = computed(() => new Set(
     .map((record: any) => typeof record?.source_record_id === 'string' ? record.source_record_id.trim() : '')
     .filter(Boolean),
 ))
+const hasStandaloneActiveMedication = computed(() => activeMedicationRecords.value.some((record: any) => {
+  const sourceRecordId = typeof record?.source_record_id === 'string' ? record.source_record_id.trim() : ''
+  return !sourceRecordId
+}))
 const latestActiveIllnessRecord = computed(() => {
   const activeIllnesses = illnessRecords.value.filter((record: any) => illnessStatusLabel(record) !== '已康复')
   const linked = activeIllnesses.find((record: any) => linkedActiveIllnessIds.value.has(record._id))
   return linked || activeIllnesses[0] || null
+})
+const quickStartIllnessRecord = computed(() => {
+  if (hasStandaloneActiveMedication.value) return null
+  const activeIllnesses = illnessRecords.value.filter((record: any) => illnessStatusLabel(record) !== '已康复')
+  const candidate = activeIllnesses.find((record: any) => !linkedActiveIllnessIds.value.has(record._id))
+  return candidate || null
 })
 const healthFilters: Array<{ key: HealthFilterKey; label: string }> = [
   { key: 'all', label: '全部' },
@@ -1332,7 +1342,7 @@ const healthFilters: Array<{ key: HealthFilterKey; label: string }> = [
   { key: 'deworming', label: '驱虫' },
 ]
 const healthFilterChipId = (filterKey: HealthFilterKey) => `dog-detail-health-filter-${filterKey}`
-const canQuickStartMedication = computed(() => !!latestActiveIllnessRecord.value && activeMedicationRecords.value.length === 0)
+const canQuickStartMedication = computed(() => !!quickStartIllnessRecord.value)
 const canQuickRecover = computed(() => !!latestActiveIllnessRecord.value)
 type DispositionActionKey = 'promote' | 'deceased' | 'adoption' | 'gift' | 'retire' | 'cancel-retire'
 type DispositionAction = {
@@ -1352,7 +1362,7 @@ const healthActions = computed(() => {
   }> = []
 
   if (canQuickStartMedication.value) {
-    const illnessName = illnessPrimaryCondition(latestActiveIllnessRecord.value) || '当前疾病'
+    const illnessName = illnessPrimaryCondition(quickStartIllnessRecord.value) || '当前疾病'
     actions.push({
       key: 'start-medication',
       icon: 'medication',
@@ -2471,7 +2481,7 @@ function handleDispositionActionItem(action: DispositionAction) {
 function openMedication() {
   showStatusSheet.value = false
   const dogName = encodeURIComponent(dog.value?.name || '')
-  const illnessParam = latestActiveIllnessRecord.value?._id ? `&illnessRecordId=${latestActiveIllnessRecord.value._id}` : ''
+  const illnessParam = quickStartIllnessRecord.value?._id ? `&illnessRecordId=${quickStartIllnessRecord.value._id}` : ''
   uni.navigateTo({ url: `/pages/record/health-medication?dogId=${dogId}&dogName=${dogName}${illnessParam}` })
 }
 

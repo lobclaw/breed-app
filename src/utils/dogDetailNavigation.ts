@@ -20,6 +20,10 @@ export function buildMedicationDetailUrl(id: string) {
   return `/pages/record/medication-detail?id=${encodeURIComponent(id)}`
 }
 
+export function buildHealthDetailUrl(id: string) {
+  return `/pages/record/health-detail?id=${encodeURIComponent(id)}`
+}
+
 export function resolveMedicationDetailId(query?: Record<string, unknown> | null) {
   const id = normalizeRouteId(query?.id)
   if (id) return id
@@ -37,7 +41,7 @@ export function resolveDogDetailStatusRoute(status: StatusRouteSource | (Record<
   const cycleId = getStatusField(source, 'cycleId', 'cycle_id')
 
   if (status.type === '生病中' && recordId) {
-    return `/pages/record/health-detail?id=${encodeURIComponent(recordId)}`
+    return buildHealthDetailUrl(recordId)
   }
 
   if (status.type === '用药中' && taskId) {

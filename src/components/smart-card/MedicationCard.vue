@@ -57,9 +57,11 @@
           <view class="health-row__info">
             <template v-if="dog.state === 'sick_with_med'">
               <text class="health-row__illness">{{ dog.illnessNames || dog.illness }}</text>
+              <text v-if="relationLabel(dog)" class="health-row__badge health-row__badge--plum">{{ relationLabel(dog) }}</text>
               <text v-if="dog.treatmentStatus" class="health-row__badge health-row__badge--amber">{{ dog.treatmentStatus }}</text>
             </template>
             <text class="health-row__drug">{{ dog.drugName }}</text>
+            <text v-if="dog.state !== 'sick_with_med' && relationLabel(dog)" class="health-row__meta health-row__meta--relation">{{ relationLabel(dog) }}</text>
             <!-- 单药：内联显示详情 -->
             <template v-if="!hasMultiDrug(dog)">
               <text v-if="dog.dosageStr" class="health-row__dosage">{{ dog.dosageStr }}</text>
@@ -209,6 +211,12 @@ function taskStatusLabel(task: any): string {
   if (progress === 'partial') return '部分完成'
   if (progress === 'empty') return '待完成'
   return '已完成'
+}
+
+function relationLabel(dog: any): string {
+  if (dog?.relationType === 'linked') return '关联疾病'
+  if (dog?.relationType === 'fallback') return '推断关联'
+  return '独立用药'
 }
 
 function hasMultiDrug(dog: any): boolean {
@@ -370,8 +378,13 @@ function showBatchActions() {
 .health-row__badge {
   font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 4px;
   &--amber { background: var(--amber-soft); color: var(--amber); }
+  &--plum { background: var(--plum-soft); color: var(--plum); }
 }
-.health-row__meta { font-size: 10px; color: var(--text-3); }
+.health-row__meta {
+  font-size: 10px;
+  color: var(--text-3);
+  &--relation { color: var(--plum); font-weight: 600; }
+}
 .health-row__chevron {
   font-size: 18px; color: var(--text-3); flex-shrink: 0;
 }

@@ -619,7 +619,8 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
     .map((ill) => {
       const status = ill.details?.treatment_status || '观察中'
       const dogMedications = medByDog.get(ill.dog_id) || []
-      const hasExplicitLinkedMedication = dogMedications.some(m => m.source_record_id && m.source_record_id === ill._id)
+      const explicitLinkedMedication = dogMedications.find(m => m.source_record_id && m.source_record_id === ill._id) || null
+      const hasExplicitLinkedMedication = !!explicitLinkedMedication
       const hasFallbackMedication = dogMedications.some(m => !m.source_record_id)
       if (status === '治疗中' && (hasExplicitLinkedMedication || hasFallbackMedication)) return null
 
@@ -634,6 +635,8 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
         symptomSummary: getIllnessSymptomSummary(ill.details || {}),
         severity: ill.details?.severity || '轻微',
         illnessId: ill._id,
+        linkedMedicationTaskId: explicitLinkedMedication?._id || '',
+        relationType: hasExplicitLinkedMedication ? 'linked' : (hasFallbackMedication ? 'fallback' : 'standalone'),
         daysSick,
         treatmentStatus: status,
         _createdAt: ill.date || ill.created_at || 0,
@@ -657,6 +660,9 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
         : dogIllnesses.filter(ill => ill.treatmentStatus === '治疗中')
       const medicatedIllnessNames = [...new Set(medicatedIllnesses.map(ill => ill.illness).filter(Boolean))]
       const medicatedSymptomSummaries = [...new Set(medicatedIllnesses.map(ill => ill.symptomSummary).filter(Boolean))]
+      const relationType = explicitlyLinkedIllnesses.length > 0
+        ? 'linked'
+        : (medicatedIllnesses.length > 0 ? 'fallback' : 'standalone')
 
       const drugName = isMultiDrug ? `${uniqueDrugs.length}种用药` : (primary.drug_name || '用药')
       const dosageStr = isMultiDrug ? '' : (primary.dosage ? `${primary.dosage}${unitMap[primary.dosage_unit] || primary.dosage_unit || 'mg'}` : '')
@@ -689,6 +695,7 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
         illnessNames,
         symptomSummary: medicatedSymptomSummaries[0] || '',
         illnessId: primaryIllnessId,
+        relationType,
         treatmentStatus: isSickWithMed ? '治疗中' : '',
         drugName,
         dosageStr,

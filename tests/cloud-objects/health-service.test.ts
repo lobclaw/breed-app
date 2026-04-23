@@ -574,6 +574,98 @@ describe('health-service', () => {
       expect(completed).toHaveLength(1)
     })
 
+    it('单条关联用药结束时，应按 illnessDisposition 回写疾病状态', async () => {
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+      seedCollection('health_records', [{
+        _id: 'ill_end_1',
+        type: 'illness',
+        dog_id: 'dog_1',
+        dog_name: '花花',
+        family_id: familyId,
+        deleted_at: null,
+        date: Date.now() - DAY_MS,
+        details: {
+          primary_condition: '感冒',
+          condition: '感冒',
+          symptom_tags: ['咳嗽'],
+          treatment_status: '治疗中',
+        },
+        created_at: Date.now() - DAY_MS,
+        updated_at: Date.now() - DAY_MS,
+      }])
+      seedCollection('medication_tasks', [{
+        _id: 'med_end_linked',
+        dog_id: 'dog_1',
+        dog_name: '花花',
+        family_id: familyId,
+        source_record_id: 'ill_end_1',
+        drug_name: '头孢',
+        frequency: 1,
+        duration_days: 3,
+        actual_start_date: Date.now() - DAY_MS,
+        status: '进行中',
+        created_at: Date.now() - DAY_MS,
+        updated_at: Date.now() - DAY_MS,
+      }])
+      seedCollection('tasks', [
+        { _id: 'med_end_task_1', medication_task_id: 'med_end_linked', status: 'pending', family_id: familyId },
+        { _id: 'med_end_task_2', medication_task_id: 'med_end_linked', status: 'completed', family_id: familyId },
+      ])
+
+      await healthService.endMedication.call(ctx, { id: 'med_end_linked', illnessDisposition: 'recovered' })
+
+      const { data: medTasks } = await db.collection('medication_tasks').doc('med_end_linked').get()
+      expect(medTasks[0].status).toBe('已取消')
+
+      const { data: illnessRecords } = await db.collection('health_records').doc('ill_end_1').get()
+      expect(illnessRecords[0].details.treatment_status).toBe('已康复')
+
+      const { data: dailyTasks } = await db.collection('tasks').where({ medication_task_id: 'med_end_linked' }).get()
+      expect(dailyTasks.find(item => item._id === 'med_end_task_1')?.status).toBe('cancelled')
+      expect(dailyTasks.find(item => item._id === 'med_end_task_2')?.status).toBe('completed')
+    })
+
+    it('独立用药结束时，不应误改疾病状态', async () => {
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+      seedCollection('health_records', [{
+        _id: 'ill_end_fallback',
+        type: 'illness',
+        dog_id: 'dog_1',
+        dog_name: '花花',
+        family_id: familyId,
+        deleted_at: null,
+        date: Date.now() - DAY_MS,
+        details: {
+          primary_condition: '皮肤病',
+          condition: '皮肤病',
+          treatment_status: '治疗中',
+        },
+        created_at: Date.now() - DAY_MS,
+        updated_at: Date.now() - DAY_MS,
+      }])
+      seedCollection('medication_tasks', [{
+        _id: 'med_end_standalone',
+        dog_id: 'dog_1',
+        dog_name: '花花',
+        family_id: familyId,
+        source_record_id: null,
+        drug_name: '外用药',
+        frequency: 1,
+        duration_days: 3,
+        actual_start_date: Date.now() - DAY_MS,
+        status: '进行中',
+        created_at: Date.now() - DAY_MS,
+        updated_at: Date.now() - DAY_MS,
+      }])
+
+      await healthService.endMedication.call(ctx, { id: 'med_end_standalone', illnessDisposition: 'observation' })
+
+      const { data: illnessRecords } = await db.collection('health_records').doc('ill_end_fallback').get()
+      expect(illnessRecords[0].details.treatment_status).toBe('治疗中')
+    })
+
     it('应返回兼容详情页的用药任务详情字段', async () => {
       const startDate = new Date('2026-04-18T09:30:00+08:00').getTime()
       const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
@@ -621,6 +713,125 @@ describe('health-service', () => {
       expect(result.data.is_fully_completed).toBe(false)
       expect(result.data.completed_map[expectedStartDate]).toMatchObject({
         name: '已完成2/2次',
+      })
+    })
+
+    it('用药详情应返回 linkedIllness 与 relationType', async () => {
+      const now = new Date('2026-04-23T10:00:00+08:00').getTime()
+      vi.spyOn(Date, 'now').mockReturnValue(now)
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+      seedCollection('health_records', [{
+        _id: 'ill_med_detail',
+        type: 'illness',
+        dog_id: 'dog_1',
+        dog_name: '花花',
+        family_id: familyId,
+        deleted_at: null,
+        date: now - DAY_MS,
+        details: {
+          primary_condition: '感冒',
+          condition: '感冒',
+          symptom_tags: ['咳嗽', '流鼻涕'],
+          treatment_status: '治疗中',
+        },
+        created_at: now - DAY_MS,
+        updated_at: now - DAY_MS,
+      }])
+      seedCollection('medication_tasks', [{
+        _id: 'med_detail_linked',
+        dog_id: 'dog_1',
+        dog_name: '花花',
+        family_id: familyId,
+        source_record_id: 'ill_med_detail',
+        drug_name: '阿莫西林',
+        frequency: 1,
+        duration_days: 3,
+        actual_start_date: now - DAY_MS,
+        status: '进行中',
+        created_at: now - DAY_MS,
+        updated_at: now - DAY_MS,
+      }])
+
+      const result = await healthService.getMedicationTaskDetail.call(ctx, { id: 'med_detail_linked' })
+
+      expect(result.data.relationType).toBe('linked')
+      expect(result.data.linkedIllness).toMatchObject({
+        recordId: 'ill_med_detail',
+        primaryCondition: '感冒',
+        symptomSummary: '咳嗽 / 流鼻涕',
+        treatmentStatus: '治疗中',
+      })
+    })
+
+    it('疾病详情应返回关联中的用药与历史疗程', async () => {
+      const now = new Date('2026-04-23T10:00:00+08:00').getTime()
+      vi.spyOn(Date, 'now').mockReturnValue(now)
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+      seedCollection('health_records', [{
+        _id: 'ill_detail_with_tasks',
+        type: 'illness',
+        dog_id: 'dog_1',
+        dog_name: '花花',
+        family_id: familyId,
+        deleted_at: null,
+        date: now - 3 * DAY_MS,
+        details: {
+          primary_condition: '肠胃炎',
+          condition: '肠胃炎',
+          symptom_tags: ['腹泻'],
+          treatment_status: '治疗中',
+        },
+        created_at: now - 3 * DAY_MS,
+        updated_at: now - 3 * DAY_MS,
+      }])
+      seedCollection('medication_tasks', [
+        {
+          _id: 'med_detail_active',
+          dog_id: 'dog_1',
+          dog_name: '花花',
+          family_id: familyId,
+          source_record_id: 'ill_detail_with_tasks',
+          drug_name: '益生菌',
+          frequency: 1,
+          duration_days: 5,
+          actual_start_date: now - DAY_MS,
+          status: '进行中',
+          daily_doses: { 1: 1, 2: 1 },
+          created_at: now - DAY_MS,
+          updated_at: now - DAY_MS,
+        },
+        {
+          _id: 'med_detail_completed',
+          dog_id: 'dog_1',
+          dog_name: '花花',
+          family_id: familyId,
+          source_record_id: 'ill_detail_with_tasks',
+          drug_name: '蒙脱石散',
+          frequency: 1,
+          duration_days: 2,
+          actual_start_date: now - 3 * DAY_MS,
+          status: '已完成',
+          daily_doses: { 1: 1, 2: 1 },
+          created_at: now - 3 * DAY_MS,
+          updated_at: now - DAY_MS,
+        },
+      ])
+
+      const result = await healthService.getHealthRecordDetail.call(ctx, { id: 'ill_detail_with_tasks' })
+
+      expect(result.linkedMedicationTasks).toHaveLength(2)
+      expect(result.linkedMedicationTasks[0]).toMatchObject({
+        taskId: 'med_detail_active',
+        medicationName: '益生菌',
+        status: 'active',
+        relationType: 'linked',
+      })
+      expect(result.linkedMedicationTasks[1]).toMatchObject({
+        taskId: 'med_detail_completed',
+        medicationName: '蒙脱石散',
+        status: 'completed',
       })
     })
 
@@ -710,6 +921,33 @@ describe('health-service', () => {
   })
 
   describe('费用创建', () => {
+    it('录入疫苗记录时应创建归一后的自动支出分类', async () => {
+      const now = Date.now()
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+      await healthService.addHealthRecord.call(ctx, {
+        type: 'vaccination',
+        dog_id: 'dog_1',
+        date: now,
+        cost: 200,
+        notes: '六联',
+        details: {
+          vaccine_type: '六联',
+        },
+      })
+
+      const { data: expenses } = await db.collection('expenses')
+        .where({ family_id: familyId })
+        .get()
+
+      expect(expenses).toHaveLength(1)
+      expect(expenses[0]).toMatchObject({
+        category: '疫苗驱虫',
+        notes: '疫苗 · 六联',
+        source_type: 'auto',
+      })
+    })
+
     it('有 cost 的健康记录应创建 expense', async () => {
       const now = Date.now()
 

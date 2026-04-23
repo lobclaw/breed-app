@@ -611,6 +611,61 @@ describe('finance-service', () => {
     })
   })
 
+  it('历史细粒度自动支出分类应按稳定财务分类参与筛选、统计与详情展示', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+    seedCollection('expenses', [
+      {
+        _id: 'exp_vaccine_legacy',
+        family_id: familyId,
+        category: '疫苗',
+        total_amount: 200,
+        deleted_at: null,
+        date: aprilTs,
+      },
+      {
+        _id: 'exp_pregnancy_legacy',
+        family_id: familyId,
+        category: '孕检',
+        total_amount: 300,
+        deleted_at: null,
+        date: aprilTs,
+      },
+      {
+        _id: 'exp_birth_legacy',
+        family_id: familyId,
+        category: '生产',
+        total_amount: 500,
+        deleted_at: null,
+        date: aprilTs,
+      },
+    ])
+
+    const listResult = await financeService.getTransactionList.call(ctx, {
+      type: 'expense',
+      expenseCategories: ['疫苗驱虫', '孕检产检', '生产育幼'],
+      year: 2026,
+      month: 4,
+    })
+    const summaryResult = await financeService.getFinancialSummary.call(ctx, {
+      period: 'monthly',
+      year: 2026,
+      month: 4,
+      expenseCategories: ['疫苗驱虫', '孕检产检', '生产育幼'],
+    })
+    const detailResult = await financeService.getExpenseDetail.call(ctx, { id: 'exp_pregnancy_legacy' })
+
+    expect(listResult.data.map((item: any) => item.category).sort()).toEqual(['疫苗驱虫', '孕检产检', '生产育幼'].sort())
+    expect(summaryResult.data.categoryBreakdown).toEqual({
+      医疗健康: 200,
+      繁育投入: 800,
+    })
+    expect(detailResult.data).toMatchObject({
+      category: '孕检产检',
+      category_group_label: '繁育投入',
+    })
+  })
+
   it('单窝利润应避免同一笔生产费用在周期和窝级别重复统计', async () => {
     const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
 

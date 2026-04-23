@@ -182,6 +182,34 @@
         </BCard>
       </view>
 
+      <template v-if="record.type === 'illness' && linkedMedicationTasks.length > 0">
+        <view class="section-label">
+          <view class="section-dot section-dot--plum" />
+          <text class="section-text">关联用药</text>
+        </view>
+        <view class="card-feed">
+          <BCard color="plum" :pressable="false">
+            <view class="linked-med-list">
+              <view
+                v-for="taskItem in linkedMedicationTasks"
+                :key="taskItem.taskId"
+                class="linked-med-item"
+                @click="goToMedicationDetail(taskItem.taskId)"
+              >
+                <view class="linked-med-item__main">
+                  <text class="linked-med-item__title">{{ taskItem.medicationName }}</text>
+                  <text class="linked-med-item__sub">{{ linkedMedicationSummary(taskItem) }}</text>
+                </view>
+                <view class="linked-med-item__side">
+                  <BTag :label="linkedMedicationStatusLabel(taskItem)" :color="linkedMedicationStatusColor(taskItem)" />
+                  <text class="material-icons-round linked-med-item__chevron">chevron_right</text>
+                </view>
+              </view>
+            </view>
+          </BCard>
+        </view>
+      </template>
+
       <!-- 下次提醒 Banner -->
       <view v-if="nextReminderText" class="info-banner amber">
         <text class="material-icons-round" style="font-size: 16px; flex-shrink: 0; margin-top: 1px;">schedule</text>
@@ -195,6 +223,34 @@
       </view>
       <view v-if="record.created_by_name" class="created-info">
         <text>创建人: {{ record.created_by_name }} · {{ formatDateTime(record.created_at) }}</text>
+      </view>
+
+      <view v-if="record.type === 'illness' && primaryIllnessAction" class="action-area action-area--red">
+        <view class="detail-action-card">
+          <view class="detail-action-card__glow" />
+          <view class="detail-action-card__body">
+            <view class="detail-action-card__row">
+              <BButton
+                v-if="canRecoverIllness"
+                class="detail-action-card__secondary"
+                variant="ghost"
+                color="green"
+                @click="markRecovered"
+              >
+                标记康复
+              </BButton>
+              <BButton
+                class="detail-action-card__primary"
+                variant="filled"
+                color="red"
+                @click="handlePrimaryIllnessAction"
+              >
+                {{ primaryIllnessAction.label }}
+              </BButton>
+            </view>
+            <text class="action-note">{{ primaryIllnessAction.note }}</text>
+          </view>
+        </view>
       </view>
 
     </template>
@@ -243,9 +299,11 @@ import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
 import BCard from '@/components/base/BCard.vue'
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BTag from '@/components/base/BTag.vue'
+import BButton from '@/components/base/BButton.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import BModal from '@/components/layout/BModal.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
+import { buildMedicationDetailUrl } from '@/utils/dogDetailNavigation'
 
 const record = ref<any>(null)
 const loading = ref(true)
@@ -284,6 +342,23 @@ const illnessStatus = computed(() => record.value?.details?.treatment_status || 
 const canRecoverIllness = computed(() => isIllnessRecord.value && illnessStatus.value !== '已康复')
 const canStartMedication = computed(() => isIllnessRecord.value && illnessStatus.value !== '已康复')
 const canDeleteRecord = computed(() => !loading.value && !!record.value)
+const linkedMedicationTasks = computed(() => Array.isArray(record.value?.linkedMedicationTasks) ? record.value.linkedMedicationTasks : [])
+const activeLinkedMedicationTask = computed(() => linkedMedicationTasks.value.find((item: any) => item.status === 'active') || null)
+const primaryIllnessAction = computed<null | { key: 'view_medication' | 'start_medication'; label: string; note: string }>(() => {
+  if (!isIllnessRecord.value || illnessStatus.value === '已康复') return null
+  if (activeLinkedMedicationTask.value) {
+    return {
+      key: 'view_medication',
+      label: '查看用药',
+      note: '当前疾病已有进行中的关联疗程，可直接查看执行情况。',
+    }
+  }
+  return {
+    key: 'start_medication',
+    label: '开始用药',
+    note: '为这条疾病创建连续用药任务，并保持与病程的明确关联。',
+  }
+})
 const hasMoreActions = computed(() => moreActions.value.length > 0)
 const moreActions = computed(() => {
   const actions: Array<{ key: 'recover' | 'start_medication' | 'delete'; label: string; icon: string; tone?: 'danger' }> = []
@@ -293,7 +368,11 @@ const moreActions = computed(() => {
   }
 
   if (canStartMedication.value) {
-    actions.push({ key: 'start_medication', label: '开始用药', icon: 'medication' })
+    actions.push({
+      key: 'start_medication',
+      label: activeLinkedMedicationTask.value ? '新增一轮用药' : '开始用药',
+      icon: 'medication',
+    })
   }
 
   if (canDeleteRecord.value) {
@@ -418,6 +497,27 @@ function formatAmount(n: number): string {
   return n.toLocaleString('zh-CN')
 }
 
+function linkedMedicationStatusLabel(taskItem: any) {
+  if (taskItem?.status === 'completed') return '已完成'
+  if (taskItem?.status === 'cancelled') return '已取消'
+  return '进行中'
+}
+
+function linkedMedicationStatusColor(taskItem: any): 'plum' | 'green' | 'red' {
+  if (taskItem?.status === 'completed') return 'green'
+  if (taskItem?.status === 'cancelled') return 'red'
+  return 'plum'
+}
+
+function linkedMedicationSummary(taskItem: any) {
+  const parts = [
+    taskItem?.startedAt ? `开始于 ${formatDate(taskItem.startedAt)}` : '',
+    taskItem?.endedAt ? `结束于 ${formatDate(taskItem.endedAt)}` : '',
+    taskItem?.todayCompleted ? '今日已完成' : '',
+  ].filter(Boolean)
+  return parts.join(' · ') || '查看疗程详情'
+}
+
 const { run: fetchRecord } = useCloudCall('health-service', 'getHealthRecordDetail')
 const { run: deleteRecord } = useCloudCall('health-service', 'deleteHealthRecord', {
   successMode: 'silent',
@@ -450,6 +550,11 @@ function resolveHealthRecordId(query?: Record<string, unknown> | null) {
 function goEdit() {
   showMore.value = false
   uni.navigateTo({ url: `/pages/record/health-edit?id=${recordId}` })
+}
+
+function goToMedicationDetail(taskId: string) {
+  if (!taskId) return
+  uni.navigateTo({ url: buildMedicationDetailUrl(taskId) })
 }
 
 function confirmDelete() {
@@ -486,6 +591,15 @@ function openMedicationFromIllness() {
   uni.navigateTo({
     url: `/pages/record/health-medication?dogId=${record.value.dog_id}&dogName=${dogName}&illnessRecordId=${recordId}`,
   })
+}
+
+function handlePrimaryIllnessAction() {
+  if (!primaryIllnessAction.value) return
+  if (primaryIllnessAction.value.key === 'view_medication' && activeLinkedMedicationTask.value?.taskId) {
+    goToMedicationDetail(activeLinkedMedicationTask.value.taskId)
+    return
+  }
+  openMedicationFromIllness()
 }
 
 function handleMoreAction(actionKey: 'recover' | 'start_medication' | 'delete') {
@@ -900,11 +1014,58 @@ onShow(() => {
 .section-dot--blue { background: var(--blue); }
 .section-dot--teal { background: var(--teal); }
 .section-dot--red { background: var(--red); }
+.section-dot--plum { background: var(--plum); }
 .section-text {
   font-size: 12px;
   font-weight: 700;
   color: var(--text-3);
   letter-spacing: 0.5px;
+}
+
+.linked-med-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.linked-med-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(216, 203, 189, 0.16);
+  &:last-child { border-bottom: none; }
+  &:active { opacity: 0.72; }
+}
+
+.linked-med-item__main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.linked-med-item__title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.linked-med-item__sub {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.linked-med-item__side {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.linked-med-item__chevron {
+  font-size: 18px;
+  color: var(--text-3);
 }
 
 /* ==================== CREATED INFO ==================== */
@@ -917,6 +1078,54 @@ onShow(() => {
   font-size: 11px;
   color: var(--text-3);
   text-align: center;
+}
+
+.action-area {
+  margin: 0 16px 16px;
+}
+
+.detail-action-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+
+.detail-action-card__glow {
+  position: absolute;
+  right: -18px;
+  bottom: -22px;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 237, 237, 0.95) 0%, rgba(255, 237, 237, 0) 72%);
+}
+
+.detail-action-card__body {
+  position: relative;
+  padding: 14px 16px 16px;
+}
+
+.detail-action-card__row {
+  display: flex;
+  gap: 12px;
+}
+
+.detail-action-card__primary {
+  flex: 1;
+}
+
+.detail-action-card__secondary {
+  min-width: 116px;
+}
+
+.action-note {
+  display: block;
+  margin-top: 12px;
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.5;
 }
 
 /* ==================== MORE ACTIONS ==================== */

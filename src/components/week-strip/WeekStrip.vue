@@ -6,9 +6,18 @@
 <template>
   <view class="day-strip-wrap">
     <!-- 月份标题 -->
-    <view class="month-header" @click="$emit('toggle-calendar')">
-      <text class="month-text">{{ monthLabel }}</text>
-      <text class="month-arrow">·</text>
+    <view class="month-header">
+      <view class="month-header__center" @click="$emit('toggle-calendar')">
+        <text class="month-text">{{ monthLabel }}</text>
+        <text class="month-arrow">·</text>
+      </view>
+      <view
+        v-if="!isSelectedToday"
+        class="month-header__today"
+        @click="$emit('jump-today')"
+      >
+        <text class="month-header__today-text">今日</text>
+      </view>
     </view>
 
     <!-- 周一到周日 -->
@@ -60,6 +69,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'select', ts: number): void
   (e: 'toggle-calendar'): void
+  (e: 'jump-today'): void
 }>()
 
 const WEEK_LABELS = ['日', '一', '二', '三', '四', '五', '六']
@@ -86,7 +96,7 @@ function getMonday(ts: number): number {
 const days = computed(() => {
   const result = []
   const DAY_MS = 86400000
-  const mondayTs = getMonday(today.value)
+  const mondayTs = getMonday(props.selectedDate || today.value)
 
   for (let i = 0; i < 7; i++) {
     const ts = mondayTs + i * DAY_MS
@@ -113,6 +123,8 @@ const monthLabel = computed(() => {
   return `${d.getFullYear()}年${d.getMonth() + 1}月`
 })
 
+const isSelectedToday = computed(() => props.selectedDate === today.value)
+
 function onDayClick(day: any) {
   if (day.isPast) return // 过去日期不可点击
   emit('select', day.ts)
@@ -126,11 +138,17 @@ function onDayClick(day: any) {
 
 /* 月份标题 */
 .month-header {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
   padding: 0 20px 8px;
+}
+.month-header__center {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
 }
 .month-text {
   font-size: 13px;
@@ -140,6 +158,25 @@ function onDayClick(day: any) {
 .month-arrow {
   font-size: 16px;
   color: var(--text-3);
+}
+.month-header__today {
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  transform: translateY(calc(-50% - 4px));
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(234, 62, 119, 0.08);
+}
+.month-header__today-text {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--primary);
+  line-height: 1;
 }
 
 /* 7天格子行 */

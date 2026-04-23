@@ -54,6 +54,18 @@ const DEFAULT_EXPENSE_CATEGORY_ITEMS = [
 ]
 
 const DEFAULT_EXPENSE_CATEGORIES = DEFAULT_EXPENSE_CATEGORY_ITEMS.map(item => item.name)
+const LEGACY_EXPENSE_CATEGORY_MAP = {
+  疫苗: '疫苗驱虫',
+  驱虫: '疫苗驱虫',
+  治疗: '医疗',
+  卵泡检查: '检查化验',
+  孕检: '孕检产检',
+  产检: '孕检产检',
+  临产监测: '孕检产检',
+  配种: '配种费',
+  生产: '生产育幼',
+  异常终止: '生产育幼',
+}
 const MANUAL_INCOME_TYPES = ['销售', '定金保留', '领养', '其他']
 const AUTO_INCOME_TYPES = ['退款']
 const INCOME_FILTER_TYPES = [...MANUAL_INCOME_TYPES, ...AUTO_INCOME_TYPES]
@@ -153,7 +165,8 @@ function getExpenseCategoryMetaMap(customCategories = [], customGroups = []) {
 }
 
 function getExpenseCategoryGroupKeyByName(categoryName, categoryMetaMap = {}) {
-  return categoryMetaMap[categoryName]?.parent_group || 'other'
+  const normalizedCategory = normalizeExpenseCategoryName(categoryName, categoryMetaMap)
+  return categoryMetaMap[normalizedCategory]?.parent_group || 'other'
 }
 
 function normalizeStringArray(rawValue) {
@@ -170,6 +183,13 @@ function normalizeIncomeType(type) {
   const normalized = String(type || '').trim()
   if (!normalized) return '其他'
   return LEGACY_INCOME_TYPE_MAP[normalized] || (INCOME_FILTER_TYPES.includes(normalized) ? normalized : '其他')
+}
+
+function normalizeExpenseCategoryName(categoryName, categoryMetaMap = null) {
+  const normalized = String(categoryName || '').trim()
+  if (!normalized) return '其他'
+  if (categoryMetaMap && categoryMetaMap[normalized]) return normalized
+  return LEGACY_EXPENSE_CATEGORY_MAP[normalized] || normalized
 }
 
 function normalizeManualIncomeType(type) {
@@ -234,8 +254,9 @@ function matchesExpenseCategoryFilter(expense, filters, categoryMetaMap = {}) {
   const hasCategoryFilter = filters.expenseCategoryGroups.length > 0 || filters.expenseCategories.length > 0
   if (!hasCategoryFilter) return true
 
-  const groupKey = getExpenseCategoryGroupKeyByName(expense.category, categoryMetaMap)
-  return filters.expenseCategoryGroups.includes(groupKey) || filters.expenseCategories.includes(expense.category)
+  const normalizedCategory = normalizeExpenseCategoryName(expense.category, categoryMetaMap)
+  const groupKey = getExpenseCategoryGroupKeyByName(normalizedCategory, categoryMetaMap)
+  return filters.expenseCategoryGroups.includes(groupKey) || filters.expenseCategories.includes(normalizedCategory)
 }
 
 function matchesExpenseLinkFilter(expense, filters) {
@@ -322,7 +343,7 @@ function getCreatorDisplayName(members = [], createdBy) {
 }
 
 function buildExpenseName(expense, fallback = '费用') {
-  return expense.notes || expense.category || fallback
+  return expense.notes || normalizeExpenseCategoryName(expense.category) || fallback
 }
 
 async function fetchDogsByIds(familyId, dogIds = []) {
@@ -671,6 +692,7 @@ module.exports = {
         .filter(expense => matchesExpenseLinkFilter(expense, normalizedFilters))
         .map((expense) => ({
         ...expense,
+        category: normalizeExpenseCategoryName(expense.category, categoryMetaMap),
         _txType: 'expense',
         category_group_label: getExpenseCategoryGroupLabel(
           getExpenseCategoryGroupKeyByName(expense.category, categoryMetaMap),
@@ -746,6 +768,7 @@ module.exports = {
     return {
       data: {
         ...expense,
+        category: normalizeExpenseCategoryName(expense.category, categoryMetaMap),
         amount: expense.total_amount || 0,
         source: expense.source_type,
         category_group_label: getExpenseCategoryGroupLabel(

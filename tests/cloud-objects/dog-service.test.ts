@@ -104,16 +104,20 @@ describe('dog-service', () => {
     expect(medicationStatuses).toHaveLength(2)
     expect(medicationStatuses[0]).toMatchObject({
       taskId: 'med_new_same_drug',
+      relationType: 'standalone',
       detail: '药2 · 5mg · 口服',
       meta: [
+        { icon: 'link', text: '独立用药' },
         { icon: 'schedule', text: '每日3次' },
         { icon: 'check_circle', text: '已执行 1/9 次' },
       ],
     })
     expect(medicationStatuses[1]).toMatchObject({
       taskId: 'med_other_drug',
+      relationType: 'standalone',
       detail: '药3 · 1片 · 口服',
       meta: [
+        { icon: 'link', text: '独立用药' },
         { icon: 'schedule', text: '每日1次' },
         { icon: 'check_circle', text: '已执行 0/5 次' },
       ],
@@ -123,6 +127,57 @@ describe('dog-service', () => {
       .where({ dog_id: 'dog_1', family_id: familyId })
       .get()
     expect(meds).toHaveLength(3)
+  })
+
+  it('犬只详情的用药状态应标记关联来源', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+    const now = new Date('2026-04-20T10:00:00+08:00').getTime()
+
+    seedCollection('health_records', [{
+      _id: 'ill_linked_1',
+      type: 'illness',
+      dog_id: 'dog_1',
+      dog_name: '肉肉',
+      family_id: familyId,
+      deleted_at: null,
+      date: now - 2 * 86400000,
+      details: {
+        primary_condition: '感冒',
+        condition: '感冒',
+        treatment_status: '治疗中',
+      },
+      created_at: now - 2 * 86400000,
+      updated_at: now - 2 * 86400000,
+    }])
+    seedCollection('medication_tasks', [{
+      _id: 'med_linked_status',
+      dog_id: 'dog_1',
+      dog_name: '肉肉',
+      family_id: familyId,
+      source_record_id: 'ill_linked_1',
+      drug_name: '阿莫西林',
+      dosage: '2',
+      dosage_unit: 'tablet',
+      method: 'oral',
+      duration_days: 5,
+      actual_start_date: now - 86400000,
+      status: '进行中',
+      created_at: now - 86400000,
+      updated_at: now - 86400000,
+    }])
+
+    const result = await dogService.getDogDetail.call(ctx, 'dog_1')
+    const medicationStatus = (result.data.statuses || []).find((item: any) => item.type === '用药中')
+
+    expect(medicationStatus).toMatchObject({
+      taskId: 'med_linked_status',
+      relationType: 'linked',
+      meta: [
+        { icon: 'link', text: '关联疾病' },
+        { icon: 'schedule', text: '每日1次' },
+        { icon: 'check_circle', text: '已执行 0/5 次' },
+      ],
+    })
   })
 
   it('犬只详情不应显示已超疗程但仍为进行中的用药任务', async () => {
@@ -167,6 +222,7 @@ describe('dog-service', () => {
     expect(medicationStatuses).toHaveLength(1)
     expect(medicationStatuses[0]).toMatchObject({
       taskId: 'med_active',
+      relationType: 'standalone',
       detail: '切克闹 · 8片 · 口服',
     })
   })
@@ -211,6 +267,7 @@ describe('dog-service', () => {
     expect(medicationStatuses).toHaveLength(1)
     expect(medicationStatuses[0]).toMatchObject({
       taskId: 'med_same_drug_active',
+      relationType: 'standalone',
       detail: '药2 · 5mg · 口服',
     })
   })
@@ -350,6 +407,7 @@ describe('dog-service', () => {
       type: '用药中',
       label: '用药中',
       count: 2,
+      relationType: 'standalone',
     })
   })
 

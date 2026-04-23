@@ -41,6 +41,7 @@ export interface DeriveStatus {
   cycleId?: string
   recordId?: string
   taskId?: string
+  relationType?: 'linked' | 'fallback' | 'standalone'
   label?: string
   count?: number
   overflow?: boolean

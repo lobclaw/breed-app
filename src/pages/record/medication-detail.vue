@@ -132,6 +132,10 @@
               <text class="info-row-label">预计结束</text>
               <text class="info-row-value">{{ formatDate(task.end_date) }} · {{ endDateRelativeText }}</text>
             </view>
+            <view class="info-row">
+              <text class="info-row-label">关联来源</text>
+              <text class="info-row-value" :class="{ 'info-row-value--wrap': relationType === 'fallback' }">{{ relationTypeLabel }}</text>
+            </view>
             <view class="info-row" v-if="task.protocol_name">
               <text class="info-row-label">来源方案</text>
               <view class="info-row-value">
@@ -148,6 +152,27 @@
           </view>
         </BCard>
       </view>
+
+      <template v-if="linkedIllness">
+        <view class="section-label">
+          <view class="section-dot" style="background: var(--red);" />
+          <text class="section-text">关联疾病</text>
+        </view>
+        <view class="card-feed">
+          <BCard color="red" :pressable="false">
+            <view class="linked-illness-card" @click="goToLinkedIllness">
+              <view class="linked-illness-card__main">
+                <text class="linked-illness-card__title">{{ linkedIllness.primaryCondition }}</text>
+                <text class="linked-illness-card__sub">{{ linkedIllnessSummary }}</text>
+              </view>
+              <view class="linked-illness-card__side">
+                <BTag :label="linkedIllness.treatmentStatus || '观察中'" :color="linkedIllnessStatusColor" />
+                <text class="material-icons-round linked-illness-card__chevron">chevron_right</text>
+              </view>
+            </view>
+          </BCard>
+        </view>
+      </template>
 
       <view class="section-label">
         <view class="section-dot" style="background: var(--plum);" />
@@ -226,13 +251,46 @@
       description="可能已被删除"
     />
 
+    <BSheet v-model:visible="showCancelDispositionSheet" title="">
+      <view class="medication-stop-sheet">
+        <view class="medication-stop-sheet__icon-wrap">
+          <text class="material-icons-round medication-stop-sheet__icon">medication_liquid</text>
+        </view>
+        <text class="medication-stop-sheet__title">停止用药后，这条疾病怎么处理？</text>
+        <text class="medication-stop-sheet__desc">{{ linkedIllness?.primaryCondition || '当前疾病' }} 当前状态为 {{ linkedIllness?.treatmentStatus || '治疗中' }}，请选择这次停药后的去向。</text>
+        <view class="medication-stop-sheet__options">
+          <view
+            v-for="option in illnessDispositionOptions"
+            :key="option.value"
+            class="medication-stop-sheet__option"
+            :class="{ 'medication-stop-sheet__option--active': selectedIllnessDisposition === option.value }"
+            @click="selectedIllnessDisposition = option.value"
+          >
+            <view class="medication-stop-sheet__option-main">
+              <text class="medication-stop-sheet__option-title">{{ option.label }}</text>
+              <text class="medication-stop-sheet__option-sub">{{ option.desc }}</text>
+            </view>
+            <view class="medication-stop-sheet__radio" :class="{ 'medication-stop-sheet__radio--active': selectedIllnessDisposition === option.value }" />
+          </view>
+        </view>
+        <view class="medication-stop-sheet__actions">
+          <view class="medication-stop-sheet__btn medication-stop-sheet__btn--cancel" @click="showCancelDispositionSheet = false">
+            <text>继续用药</text>
+          </view>
+          <view class="medication-stop-sheet__btn medication-stop-sheet__btn--danger" @click="confirmCancelWithDisposition">
+            <text style="color: #fff;">确认停止</text>
+          </view>
+        </view>
+      </view>
+    </BSheet>
+
     <BModal
       v-model:visible="showCancelConfirm"
       title="确认取消"
       content="取消后将不再提醒每日用药，确定要取消这个用药任务吗？"
       confirmText="确认取消"
       :danger="true"
-      @confirm="handleCancelConfirm"
+      @confirm="handleCancelConfirm()"
     />
   </view>
 </template>
@@ -245,11 +303,13 @@ import { consumeSubmitFeedback, queueSubmitFeedback } from '@/composables/useSub
 import BButton from '@/components/base/BButton.vue'
 import BCard from '@/components/base/BCard.vue'
 import BProgress from '@/components/base/BProgress.vue'
+import BTag from '@/components/base/BTag.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
+import BSheet from '@/components/layout/BSheet.vue'
 import BModal from '@/components/layout/BModal.vue'
-import { resolveMedicationDetailId } from '@/utils/dogDetailNavigation'
+import { buildHealthDetailUrl, resolveMedicationDetailId } from '@/utils/dogDetailNavigation'
 import { getBeijingDayStart } from '@/utils/date'
 import { formatMedicationDosage, formatMedicationFrequency } from '@/utils/medicationDisplay'
 import { getMedicationDayState, getMedicationTodayProgress, getMedicationFrequency } from '@/utils/medicationState'
@@ -258,6 +318,8 @@ const task = ref<any>(null)
 const loading = ref(true)
 const submitBannerMessage = ref('')
 const showCancelConfirm = ref(false)
+const showCancelDispositionSheet = ref(false)
+const selectedIllnessDisposition = ref<'observation' | 'recovered' | 'keep_treating'>('observation')
 
 let taskId = ''
 let hasShownOnce = false
@@ -304,6 +366,40 @@ const statusText = computed(() => {
 
 const dosageText = computed(() => formatMedicationDosage(task.value?.dosage, task.value?.dosage_unit))
 const frequencyText = computed(() => formatMedicationFrequency(task.value?.frequency))
+const linkedIllness = computed(() => task.value?.linkedIllness || null)
+const relationType = computed<'linked' | 'fallback' | 'standalone'>(() => {
+  const raw = task.value?.relationType
+  if (raw === 'linked' || raw === 'fallback') return raw
+  return 'standalone'
+})
+const relationTypeLabel = computed(() => {
+  if (relationType.value === 'linked') return '关联疾病'
+  if (relationType.value === 'fallback') return '按当前治疗状态推断关联'
+  return '独立用药'
+})
+const linkedIllnessSummary = computed(() => {
+  if (!linkedIllness.value) return ''
+  return [
+    linkedIllness.value.symptomSummary || '',
+    linkedIllness.value.date ? `发病 ${formatDate(linkedIllness.value.date)}` : '',
+  ].filter(Boolean).join(' · ') || '查看疾病详情'
+})
+const linkedIllnessStatusColor = computed<'green' | 'amber' | 'red'>(() => {
+  if (linkedIllness.value?.treatmentStatus === '已康复') return 'green'
+  if (linkedIllness.value?.treatmentStatus === '治疗中') return 'amber'
+  return 'red'
+})
+const canChooseIllnessDisposition = computed(() => {
+  return task.value?.status === 'active'
+    && relationType.value === 'linked'
+    && !!linkedIllness.value
+    && linkedIllness.value.treatmentStatus !== '已康复'
+})
+const illnessDispositionOptions = [
+  { value: 'observation' as const, label: '回到观察中', desc: '结束本轮用药，疾病继续留在观察区。' },
+  { value: 'recovered' as const, label: '标记已康复', desc: '本轮治疗已收口，这条疾病一并结束。' },
+  { value: 'keep_treating' as const, label: '保持治疗中', desc: '只结束这轮药，疾病状态继续保留治疗中。' },
+]
 const medicationMethodSummary = computed(() => {
   const parts = [
     task.value?.method || '',
@@ -479,17 +575,36 @@ function goToProtocol() {
   }
 }
 
+function goToLinkedIllness() {
+  if (!linkedIllness.value?.recordId) return
+  uni.navigateTo({ url: buildHealthDetailUrl(linkedIllness.value.recordId) })
+}
+
 function confirmEndEarly() {
+  if (canChooseIllnessDisposition.value) {
+    selectedIllnessDisposition.value = 'observation'
+    showCancelDispositionSheet.value = true
+    return
+  }
   showCancelConfirm.value = true
 }
 
-async function handleCancelConfirm() {
-  const result = await cancelTask(taskId)
+async function handleCancelConfirm(illnessDisposition?: 'observation' | 'recovered' | 'keep_treating') {
+  showCancelConfirm.value = false
+  showCancelDispositionSheet.value = false
+  const payload = illnessDisposition
+    ? { id: taskId, illnessDisposition }
+    : { id: taskId }
+  const result = await cancelTask(payload)
   if (result) {
     queueSubmitFeedback({ message: '已取消用药任务', homeSection: 'therapy' })
     showSubmitBanner('已取消用药任务')
     await loadTask()
   }
+}
+
+function confirmCancelWithDisposition() {
+  handleCancelConfirm(selectedIllnessDisposition.value)
 }
 
 onLoad((query) => {
@@ -915,6 +1030,44 @@ onShow(() => {
   letter-spacing: 0.5px;
 }
 
+.linked-illness-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  &:active { opacity: 0.72; }
+}
+
+.linked-illness-card__main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.linked-illness-card__title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.linked-illness-card__sub {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.linked-illness-card__side {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.linked-illness-card__chevron {
+  font-size: 18px;
+  color: var(--text-3);
+}
+
 .exec-log {
   display: flex;
   flex-direction: column;
@@ -999,6 +1152,130 @@ onShow(() => {
   &.highlight {
     color: var(--plum);
     font-weight: 700;
+  }
+}
+
+.medication-stop-sheet {
+  padding-bottom: 12px;
+}
+
+.medication-stop-sheet__icon-wrap {
+  width: 54px;
+  height: 54px;
+  margin: 4px auto 12px;
+  border-radius: 18px;
+  background: var(--plum-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.medication-stop-sheet__icon {
+  font-size: 28px;
+  color: var(--plum);
+}
+
+.medication-stop-sheet__title {
+  display: block;
+  text-align: center;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.medication-stop-sheet__desc {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-2);
+  text-align: center;
+}
+
+.medication-stop-sheet__options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.medication-stop-sheet__option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(216, 203, 189, 0.3);
+  background: rgba(255, 255, 255, 0.9);
+  transition: border-color 0.15s ease, transform 0.12s ease;
+  &:active { transform: scale(0.98); }
+  &--active {
+    border-color: rgba(134, 104, 176, 0.34);
+    background: rgba(247, 242, 251, 0.98);
+  }
+}
+
+.medication-stop-sheet__option-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.medication-stop-sheet__option-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.medication-stop-sheet__option-sub {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+
+.medication-stop-sheet__radio {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid rgba(134, 104, 176, 0.22);
+  flex-shrink: 0;
+  position: relative;
+  &--active {
+    border-color: var(--plum);
+    &::after {
+      content: '';
+      position: absolute;
+      inset: 3px;
+      border-radius: 50%;
+      background: var(--plum);
+    }
+  }
+}
+
+.medication-stop-sheet__actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.medication-stop-sheet__btn {
+  flex: 1;
+  min-height: 44px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  &:active { transform: scale(0.98); }
+  &--cancel {
+    background: var(--card-dim);
+    color: var(--text-2);
+  }
+  &--danger {
+    background: var(--red);
   }
 }
 

@@ -40,6 +40,19 @@ export const DEFAULT_EXPENSE_CATEGORIES: ExpenseCategoryOption[] = [
   { name: '其他', parent_group: 'other', is_default: true },
 ]
 
+export const LEGACY_EXPENSE_CATEGORY_MAP = {
+  疫苗: '疫苗驱虫',
+  驱虫: '疫苗驱虫',
+  治疗: '医疗',
+  卵泡检查: '检查化验',
+  孕检: '孕检产检',
+  产检: '孕检产检',
+  临产监测: '孕检产检',
+  配种: '配种费',
+  生产: '生产育幼',
+  异常终止: '生产育幼',
+} as const
+
 export const INCOME_TYPES = ['销售', '定金保留', '领养', '其他'] as const
 export const INCOME_AUTO_TYPES = ['退款'] as const
 export const INCOME_FILTER_TYPES = ['销售', '定金保留', '领养', '其他', '退款'] as const
@@ -172,7 +185,8 @@ export function getExpenseCategoryGroupKey(
   categoryName?: string | null,
   categories: ExpenseCategoryOption[] = DEFAULT_EXPENSE_CATEGORIES,
 ) {
-  return categories.find(item => item.name === categoryName)?.parent_group || 'other'
+  const normalizedName = normalizeExpenseCategoryName(categoryName, categories)
+  return categories.find(item => item.name === normalizedName)?.parent_group || 'other'
 }
 
 export function normalizeExpenseCategories(
@@ -237,8 +251,19 @@ export function groupExpenseCategories(
     .filter(group => includeEmpty || group.items.length > 0)
 }
 
+export function normalizeExpenseCategoryName(
+  categoryName?: string | null,
+  categories: ExpenseCategoryOption[] = DEFAULT_EXPENSE_CATEGORIES,
+) {
+  const normalized = String(categoryName || '').trim()
+  if (!normalized) return '其他'
+  if (categories.some(item => item.name === normalized)) return normalized
+  return LEGACY_EXPENSE_CATEGORY_MAP[normalized as keyof typeof LEGACY_EXPENSE_CATEGORY_MAP] || normalized
+}
+
 export function getExpenseCategoryMeta(name?: string | null) {
-  return EXPENSE_CATEGORY_META[name || ''] || { icon: 'category', bg: 'var(--amber-soft)' }
+  const normalized = normalizeExpenseCategoryName(name)
+  return EXPENSE_CATEGORY_META[normalized] || { icon: 'category', bg: 'var(--amber-soft)' }
 }
 
 export function normalizeIncomeType(type?: string | null): IncomeFilterType | ManualIncomeType {

@@ -4,6 +4,7 @@ import {
   DEFAULT_EXPENSE_CATEGORIES,
   getExpenseCategoryGroupKey,
   getIncomeTypeMeta,
+  normalizeExpenseCategoryName,
   normalizeIncomeType,
 } from '@/constants/financeCategories'
 
@@ -28,6 +29,15 @@ describe('financeCategories', () => {
     expect(normalizeIncomeType('领养费')).toBe('领养')
     expect(normalizeIncomeType('配种费收入')).toBe('其他')
     expect(normalizeIncomeType('退款')).toBe('退款')
+  })
+
+  it('应将细粒度自动支出分类归一到稳定财务分类', () => {
+    expect(normalizeExpenseCategoryName('疫苗')).toBe('疫苗驱虫')
+    expect(normalizeExpenseCategoryName('驱虫')).toBe('疫苗驱虫')
+    expect(normalizeExpenseCategoryName('卵泡检查')).toBe('检查化验')
+    expect(normalizeExpenseCategoryName('孕检')).toBe('孕检产检')
+    expect(normalizeExpenseCategoryName('生产')).toBe('生产育幼')
+    expect(normalizeExpenseCategoryName('购入')).toBe('购入')
   })
 
   it('收入类型元数据应按归一后的类型返回', () => {

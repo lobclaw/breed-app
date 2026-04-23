@@ -5,7 +5,7 @@
         <view class="header-top">
         <view class="greeting-text">
           <text class="greeting-title">{{ greetingText }}</text>
-          <text class="greeting-sub">{{ formatFullDate(selectedDate) }} · 今日概览</text>
+          <text class="greeting-sub">{{ greetingSubText }}</text>
         </view>
         <view class="avatar">
           <text class="material-icons-round" style="color: #fff; font-size: 22px;">pets</text>
@@ -32,6 +32,7 @@
       :selected-date="selectedDate"
       :day-counts="dayCounts"
       @select="onDateSelect"
+      @jump-today="jumpToToday"
       @toggle-calendar="toggleCalendar"
     />
 
@@ -584,6 +585,7 @@ import {
 } from '@/utils/homeBreedingActions'
 import { buildHomeWorkbench } from '@/utils/homeWorkbench'
 import { buildTimestampFromDayOffset, formatDateInputValue, getBeijingDayStart } from '@/utils/date'
+import { buildMedicationDetailUrl } from '@/utils/dogDetailNavigation'
 
 const { hasFamily, loadFamily } = useAuth()
 const taskStore = useTaskStore()
@@ -873,6 +875,11 @@ const greetingText = computed(() => {
   return '晚上好'
 })
 
+const greetingSubText = computed(() => {
+  const suffix = isSelectedToday.value ? '今日概览' : '当日安排'
+  return `${formatFullDate(selectedDate.value)} · ${suffix}`
+})
+
 /** 完整日期：3月22日 周六 */
 const weekDays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 function formatFullDate(ts: number) {
@@ -1136,6 +1143,10 @@ async function onDateSelect(ts: number) {
 
 function toggleCalendar() {
   showHomeDatePicker.value = true
+}
+
+function jumpToToday() {
+  void onDateSelect(startOfDay(Date.now()))
 }
 
 async function onHomeCalendarRangeChange(payload: CalendarRangeChangePayload) {
@@ -1687,6 +1698,8 @@ function onSickMenuSelect(item: any) {
     onAction({ type: 'recover', data: { dogId: dog.dogId, dogName: dog.dogName, illnessId: dog.illnessId } })
   } else if (item.action === 'update_status') {
     onAction({ type: 'update_status', data: { dogId: dog.dogId, status: '治疗中', illnessId: dog.illnessId } })
+  } else if (item.action === 'view_medication' && dog.linkedMedicationTaskId) {
+    uni.navigateTo({ url: buildMedicationDetailUrl(dog.linkedMedicationTaskId) })
   } else if (item.action === 'start_medication') {
     const dogList = [{ _id: dog.dogId, name: dog.dogName }]
     const illnessParam = dog.illnessId ? `&illnessRecordId=${dog.illnessId}` : ''

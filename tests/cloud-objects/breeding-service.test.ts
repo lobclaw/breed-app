@@ -1475,6 +1475,44 @@ describe('breeding-service', () => {
   })
 
   describe('费用创建', () => {
+    it('录入孕检记录时应创建归一后的自动支出分类', async () => {
+      const now = Date.now()
+      seedCollection('breeding_cycles', [{
+        _id: 'cycle_expense_map',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        status: '怀孕中',
+        created_at: now,
+        updated_at: now,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      await breedingService.addBreedingRecord.call(ctx, {
+        type: 'pregnancy_check',
+        dog_id: 'dam_1',
+        cycle_id: 'cycle_expense_map',
+        date: now,
+        cost: 360,
+        notes: 'B超复查',
+        details: {
+          confirmed: '是',
+          puppy_count: 3,
+        },
+      })
+
+      const { data: expenses } = await db.collection('expenses')
+        .where({ linked_cycle_id: 'cycle_expense_map' })
+        .get()
+
+      expect(expenses).toHaveLength(1)
+      expect(expenses[0]).toMatchObject({
+        category: '孕检产检',
+        notes: '孕检 · B超复查',
+        source_type: 'auto',
+      })
+    })
+
     it('有 cost 的记录应创建 expense', async () => {
       const now = Date.now()
 

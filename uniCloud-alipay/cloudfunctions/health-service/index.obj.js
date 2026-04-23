@@ -253,6 +253,52 @@ function normalizeIllnessDetails(details = {}) {
   return normalized
 }
 
+function getIllnessSymptomSummary(source, limit = 2) {
+  const details = source?.details && typeof source.details === 'object' ? source.details : source
+  const tags = normalizeIllnessSymptomTags(details?.symptom_tags)
+  if (tags.length === 0) return ''
+  if (tags.length <= limit) return tags.join(' / ')
+  return `${tags.slice(0, limit).join(' / ')} 等${tags.length}项`
+}
+
+function mapIllnessDispositionToStatus(value) {
+  if (value === 'recovered' || value === '已康复') return '已康复'
+  if (value === 'keep_treating' || value === '保持治疗中') return '治疗中'
+  if (value === 'observation' || value === '回到观察中' || value === '观察中') return '观察中'
+  return ''
+}
+
+function buildLinkedIllnessSummary(record) {
+  if (!record) return null
+  const details = normalizeIllnessDetails(record.details || {})
+  return {
+    recordId: record._id,
+    dogId: record.dog_id || '',
+    dogName: record.dog_name || '',
+    primaryCondition: getIllnessPrimaryCondition(details) || '疾病',
+    symptomSummary: getIllnessSymptomSummary(details),
+    treatmentStatus: details?.treatment_status || '观察中',
+    date: record.date || null,
+  }
+}
+
+function buildLinkedMedicationTaskSummary(task) {
+  if (!task) return null
+  const normalizedTask = normalizeMedicationTaskDetail(task, null)
+  const todayTs = startOfDay(Date.now())
+  return {
+    taskId: task._id,
+    medicationName: task.drug_name || '用药',
+    status: normalizedTask.status,
+    todayCompleted: normalizedTask.completed_dates.includes(todayTs),
+    startedAt: normalizedTask.start_date || null,
+    endedAt: normalizedTask.status === 'active'
+      ? null
+      : (task.updated_at || normalizedTask.end_date || null),
+    relationType: task.source_record_id ? 'linked' : 'standalone',
+  }
+}
+
 function isActiveIllnessRecord(record) {
   return record?.type === 'illness' && (record.details?.treatment_status || '观察中') !== '已康复'
 }
@@ -597,17 +643,27 @@ async function generateReminders(familyId, type, data, dog, recordId, preloadedS
 
 async function createExpense(familyId, uid, data, dog, sourceRecordId) {
   const now = Date.now()
-  const typeLabels = {
+  const sourceLabels = {
     vaccination: '疫苗',
     deworming: '驱虫',
     illness: '治疗',
   }
+  const categoryMap = {
+    vaccination: '疫苗驱虫',
+    deworming: '疫苗驱虫',
+    illness: '医疗',
+  }
+  const sourceLabel = sourceLabels[data.type] || '健康'
+  const category = categoryMap[data.type] || '其他'
+  const noteText = typeof data.notes === 'string' ? data.notes.trim() : ''
 
   await db.collection('expenses').add({
     total_amount: data.cost,
-    category: typeLabels[data.type] || '健康',
+    category,
     date: data.date,
-    notes: data.notes || null,
+    notes: noteText
+      ? (sourceLabel !== category ? `${sourceLabel} · ${noteText}` : noteText)
+      : (sourceLabel !== category ? sourceLabel : null),
     linked_dog_ids: [data.dog_id],
     dog_names: [dog.name],
     source_type: 'auto',
@@ -1427,10 +1483,12 @@ module.exports = {
   /**
    * 提前结束用药
    */
-  async endMedication(medicationTaskId) {
+  async endMedication(input) {
+    const medicationTaskId = getIdArg(input, 'id', 'taskId', 'task_id', 'medicationTaskId', 'medication_task_id')
     if (!medicationTaskId) throw new Error('缺少用药任务 ID')
 
     const now = Date.now()
+    const nextIllnessStatus = mapIllnessDispositionToStatus(input?.illnessDisposition || input?.illness_disposition)
 
     const { data: meds } = await db.collection('medication_tasks')
       .where({ _id: medicationTaskId, family_id: this.familyId })
@@ -1452,6 +1510,26 @@ module.exports = {
       status: 'cancelled',
       updated_at: now,
     })
+
+    if (meds[0].source_record_id && nextIllnessStatus) {
+      const { data: linkedIllnesses } = await db.collection('health_records')
+        .where({
+          _id: meds[0].source_record_id,
+          family_id: this.familyId,
+          type: 'illness',
+          deleted_at: null,
+        })
+        .limit(1)
+        .get()
+
+      const linkedIllness = linkedIllnesses?.[0]
+      if (linkedIllness && (linkedIllness.details?.treatment_status || '观察中') !== '已康复') {
+        await db.collection('health_records').doc(linkedIllness._id).update({
+          'details.treatment_status': nextIllnessStatus,
+          updated_at: now,
+        })
+      }
+    }
 
     await logHealthOperation({
       familyId: this.familyId,
@@ -1525,8 +1603,40 @@ module.exports = {
       protocolName = protocols?.[0]?.name || null
     }
 
+    const normalizedTask = normalizeMedicationTaskDetail(task, protocolName)
+    let linkedIllness = null
+    let relationType = normalizedTask.source_record_id ? 'linked' : 'standalone'
+
+    if (normalizedTask.source_record_id) {
+      const { data: illnessRecords } = await db.collection('health_records')
+        .where({
+          _id: normalizedTask.source_record_id,
+          family_id: this.familyId,
+          type: 'illness',
+          deleted_at: null,
+        })
+        .limit(1)
+        .get()
+      linkedIllness = buildLinkedIllnessSummary(illnessRecords?.[0])
+    } else if (task.dog_id) {
+      const { data: activeIllnesses } = await db.collection('health_records')
+        .where({
+          family_id: this.familyId,
+          dog_id: task.dog_id,
+          type: 'illness',
+          deleted_at: null,
+        })
+        .get()
+      const latestFallbackIllness = sortRecordsByActivityDesc((activeIllnesses || []).filter(isActiveIllnessRecord))[0]
+      if (latestFallbackIllness) relationType = 'fallback'
+    }
+
     return {
-      data: normalizeMedicationTaskDetail(task, protocolName),
+      data: {
+        ...normalizedTask,
+        linkedIllness,
+        relationType,
+      },
     }
   },
 
@@ -1680,7 +1790,8 @@ module.exports = {
   /**
    * 获取健康记录详情
    */
-  async getHealthRecordDetail({ id }) {
+  async getHealthRecordDetail(input) {
+    const id = getIdArg(input, 'id', 'recordId', 'record_id')
     if (!id) throw new Error('缺少记录 ID')
 
     const { data: records } = await db.collection('health_records')
@@ -1703,6 +1814,11 @@ module.exports = {
 
     if (record.type === 'illness') {
       record.details = normalizeIllnessDetails(record.details || {})
+      const { data: tasks } = await db.collection('medication_tasks')
+        .where({ family_id: this.familyId, source_record_id: id })
+        .get()
+      const normalizedTasks = await normalizeExpiredMedicationTasks(tasks || [])
+      record.linkedMedicationTasks = sortMedicationHistory(normalizedTasks).map(buildLinkedMedicationTaskSummary).filter(Boolean)
     }
 
     return record
