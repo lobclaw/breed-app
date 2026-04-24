@@ -306,9 +306,7 @@ function batchComplete() {
 
   // 收集所有活跃的 medication_task IDs
   const medIds = props.card.medicationTaskIds || []
-  setTimeout(() => {
-    emit('batch-complete-med', medIds)
-  }, 120)
+  emit('batch-complete-med', medIds)
 }
 
 function showBatchActions() {

@@ -225,6 +225,48 @@ describe('health-service', () => {
     })
   })
 
+  describe('疾病状态批量更新', () => {
+    it('batchUpdateIllnessStatus 应批量更新疾病状态并返回 ids', async () => {
+      const now = Date.now()
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+      seedCollection('health_records', [
+        {
+          _id: 'ill_batch_status_1',
+          type: 'illness',
+          dog_id: 'dog_1',
+          family_id: familyId,
+          deleted_at: null,
+          details: { treatment_status: '观察中', primary_condition: '感冒', condition: '感冒' },
+          date: now,
+          created_at: now,
+          updated_at: now,
+        },
+        {
+          _id: 'ill_batch_status_2',
+          type: 'illness',
+          dog_id: 'dog_1',
+          family_id: familyId,
+          deleted_at: null,
+          details: { treatment_status: '观察中', primary_condition: '皮肤病', condition: '皮肤病' },
+          date: now,
+          created_at: now,
+          updated_at: now,
+        },
+      ])
+
+      const result = await healthService.batchUpdateIllnessStatus.call(ctx, {
+        illnessIds: ['ill_batch_status_1', 'ill_batch_status_2'],
+        status: '治疗中',
+      })
+
+      expect(result.data.updatedIllnessIds).toEqual(['ill_batch_status_1', 'ill_batch_status_2'])
+
+      const { data: records } = await db.collection('health_records').where({ type: 'illness', family_id: familyId }).get()
+      expect(records.every(record => record.details?.treatment_status === '治疗中')).toBe(true)
+    })
+  })
+
   describe('用药任务', () => {
     it('超期未全量完成的旧疗程不应再算重复，并自动收口为已完成', async () => {
       const now = new Date('2026-04-15T10:00:00+08:00').getTime()
@@ -647,6 +689,173 @@ describe('health-service', () => {
 
       expect(tasks).toHaveLength(7)
       expect(tasks[0].title).toContain('第1天')
+    })
+
+    it('batchCompleteMedicationDay 应去重并仅完成当天未满剂量的任务', async () => {
+      const now = new Date('2026-04-21T10:00:00+08:00').getTime()
+      vi.spyOn(Date, 'now').mockReturnValue(now)
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+      seedCollection('medication_tasks', [
+        {
+          _id: 'med_batch_day_1',
+          dog_id: 'dog_1',
+          family_id: familyId,
+          drug_name: '阿莫西林',
+          frequency: 2,
+          duration_days: 2,
+          actual_start_date: new Date('2026-04-20T09:00:00+08:00').getTime(),
+          status: '进行中',
+          daily_doses: { 1: 2, 2: 1 },
+          created_at: now,
+          updated_at: now,
+        },
+        {
+          _id: 'med_batch_day_2',
+          dog_id: 'dog_1',
+          family_id: familyId,
+          drug_name: '益生菌',
+          frequency: 1,
+          duration_days: 2,
+          actual_start_date: new Date('2026-04-20T09:00:00+08:00').getTime(),
+          status: '进行中',
+          daily_doses: { 1: 1, 2: 0 },
+          created_at: now,
+          updated_at: now,
+        },
+        {
+          _id: 'med_batch_day_done',
+          dog_id: 'dog_1',
+          family_id: familyId,
+          drug_name: '维生素',
+          frequency: 1,
+          duration_days: 2,
+          actual_start_date: new Date('2026-04-20T09:00:00+08:00').getTime(),
+          status: '进行中',
+          daily_doses: { 1: 1, 2: 1 },
+          created_at: now,
+          updated_at: now,
+        },
+      ])
+
+      const result = await healthService.batchCompleteMedicationDay.call(ctx, [
+        'med_batch_day_1',
+        'med_batch_day_1',
+        'med_batch_day_2',
+        'med_batch_day_done',
+      ])
+
+      expect(result.data.completedMedicationTaskIds).toEqual(['med_batch_day_1', 'med_batch_day_2'])
+      expect(result.data.fullyCompletedMedicationTaskIds).toEqual(['med_batch_day_1', 'med_batch_day_2'])
+
+      const { data: meds } = await db.collection('medication_tasks').where({ family_id: familyId }).get()
+      const medMap = new Map(meds.map(item => [item._id, item]))
+      expect(medMap.get('med_batch_day_1')?.daily_doses?.['2']).toBe(2)
+      expect(medMap.get('med_batch_day_1')?.status).toBe('已完成')
+      expect(medMap.get('med_batch_day_2')?.daily_doses?.['2']).toBe(1)
+      expect(medMap.get('med_batch_day_2')?.status).toBe('已完成')
+      expect(medMap.get('med_batch_day_done')?.status).toBe('进行中')
+    })
+
+    it('recoverIllnesses 应返回康复疾病与取消的用药 ids', async () => {
+      const now = Date.now()
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+      seedCollection('health_records', [{
+        _id: 'ill_recover_batch',
+        type: 'illness',
+        dog_id: 'dog_1',
+        dog_name: '花花',
+        family_id: familyId,
+        deleted_at: null,
+        date: now - DAY_MS,
+        details: {
+          primary_condition: '感冒',
+          condition: '感冒',
+          treatment_status: '治疗中',
+        },
+        created_at: now - DAY_MS,
+        updated_at: now - DAY_MS,
+      }])
+      seedCollection('medication_tasks', [{
+        _id: 'med_recover_batch',
+        dog_id: 'dog_1',
+        dog_name: '花花',
+        family_id: familyId,
+        source_record_id: 'ill_recover_batch',
+        drug_name: '头孢',
+        frequency: 1,
+        duration_days: 3,
+        actual_start_date: now - DAY_MS,
+        status: '进行中',
+        created_at: now - DAY_MS,
+        updated_at: now - DAY_MS,
+      }])
+      seedCollection('tasks', [
+        { _id: 'recover_daily_1', medication_task_id: 'med_recover_batch', family_id: familyId, status: 'pending' },
+        { _id: 'recover_daily_2', medication_task_id: 'med_recover_batch', family_id: familyId, status: 'completed' },
+      ])
+
+      const result = await healthService.recoverIllnesses.call(ctx, { illnessIds: ['ill_recover_batch'] })
+
+      expect(result.data.recoveredIllnessIds).toEqual(['ill_recover_batch'])
+      expect(result.data.cancelledMedicationTaskIds).toEqual(['med_recover_batch'])
+    })
+
+    it('endMedicationByDog 应批量取消该犬进行中的用药并返回 ids', async () => {
+      const now = Date.now()
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+      seedCollection('medication_tasks', [
+        {
+          _id: 'med_stop_dog_1',
+          dog_id: 'dog_1',
+          family_id: familyId,
+          drug_name: '阿莫西林',
+          status: '进行中',
+          created_at: now,
+          updated_at: now,
+        },
+        {
+          _id: 'med_stop_dog_2',
+          dog_id: 'dog_1',
+          family_id: familyId,
+          drug_name: '益生菌',
+          status: '进行中',
+          created_at: now,
+          updated_at: now,
+        },
+        {
+          _id: 'med_stop_other_dog',
+          dog_id: 'dog_2',
+          family_id: familyId,
+          drug_name: '维生素',
+          status: '进行中',
+          created_at: now,
+          updated_at: now,
+        },
+      ])
+      seedCollection('tasks', [
+        { _id: 'stop_daily_1', medication_task_id: 'med_stop_dog_1', family_id: familyId, status: 'pending' },
+        { _id: 'stop_daily_2', medication_task_id: 'med_stop_dog_2', family_id: familyId, status: 'pending' },
+        { _id: 'stop_daily_3', medication_task_id: 'med_stop_other_dog', family_id: familyId, status: 'pending' },
+      ])
+
+      const result = await healthService.endMedicationByDog.call(ctx, 'dog_1')
+
+      expect(result.data.cancelledMedicationTaskIds).toEqual(['med_stop_dog_1', 'med_stop_dog_2'])
+
+      const { data: meds } = await db.collection('medication_tasks').where({ family_id: familyId }).get()
+      const medMap = new Map(meds.map(item => [item._id, item]))
+      expect(medMap.get('med_stop_dog_1')?.status).toBe('已取消')
+      expect(medMap.get('med_stop_dog_2')?.status).toBe('已取消')
+      expect(medMap.get('med_stop_other_dog')?.status).toBe('进行中')
+
+      const { data: tasks } = await db.collection('tasks').where({ family_id: familyId }).get()
+      const taskMap = new Map(tasks.map(item => [item._id, item]))
+      expect(taskMap.get('stop_daily_1')?.status).toBe('cancelled')
+      expect(taskMap.get('stop_daily_2')?.status).toBe('cancelled')
+      expect(taskMap.get('stop_daily_3')?.status).toBe('pending')
     })
 
     it('完成所有每日用药应标记用药任务为已完成', async () => {

@@ -1356,7 +1356,7 @@ const healthFilters: Array<{ key: HealthFilterKey; label: string }> = [
 const healthFilterChipId = (filterKey: HealthFilterKey) => `dog-detail-health-filter-${filterKey}`
 const canQuickStartMedication = computed(() => !!quickStartIllnessRecord.value)
 const canQuickRecover = computed(() => !!latestActiveIllnessRecord.value)
-type DispositionActionKey = 'promote' | 'deceased' | 'adoption' | 'gift' | 'retire' | 'cancel-retire'
+type DispositionActionKey = 'promote' | 'start-sale' | 'deceased' | 'adoption' | 'gift' | 'retire' | 'cancel-retire'
 type DispositionAction = {
   key: DispositionActionKey
   icon: string
@@ -1396,6 +1396,17 @@ const healthActions = computed(() => {
   }
 
   return actions
+})
+const puppySaleRecords = ref<any[]>([])
+const puppySaleRecordsLoaded = ref(false)
+const hasActivePuppySaleRecord = computed(() => puppySaleRecords.value.some((record: any) => (
+  record?.status === '待售' || record?.status === '已预定' || record?.status === '已成交'
+)))
+const canStartSale = computed(() => {
+  const d = dog.value
+  if (!d || d.role !== '幼崽') return false
+  if (!['在养', '自留'].includes(d.disposition || '')) return false
+  return puppySaleRecordsLoaded.value && !hasActivePuppySaleRecord.value
 })
 
 const healthTimeline = computed<UnifiedHealthTimelineItem[]>(() => {
@@ -1487,6 +1498,9 @@ const dispositionActions = computed<DispositionAction[]>(() => {
 
   if (d.role === '幼崽') {
     return [
+      ...(canStartSale.value
+        ? [{ key: 'start-sale' as const, icon: 'storefront', title: '开始销售', sub: '纳入销售池并创建待售记录', tone: 'blue' as const }]
+        : []),
       { key: 'promote', icon: 'trending_up', title: '升级为种犬', sub: '切换为种狗身份并恢复在养状态', tone: 'amber' },
       { key: 'adoption', icon: 'volunteer_activism', title: '送领养', sub: '登记领养去向与领养费用', tone: 'green' },
       { key: 'gift', icon: 'redeem', title: '赠送', sub: '登记受赠对象与赠送日期', tone: 'teal' },
@@ -1789,6 +1803,9 @@ const { run: fetchMedicationHistory } = useCloudCall<{ data: any[] }>('health-se
 const { run: fetchLitters } = useCloudCall<{ data: any[] }>('breeding-service', 'getLittersByDam')
 const { run: fetchDogFinance } = useCloudCall<{ data: any }>('finance-service', 'getDogFinanceSummary')
 const { run: fetchDamRoi } = useCloudCall<{ data: any }>('finance-service', 'getDamRoi')
+const { run: fetchSaleList } = useCloudCall<{ data: any[] }>('finance-service', 'getSaleList', {
+  showError: false,
+})
 const { run: cleanupDuplicateIllnesses } = useCloudCall('health-service', 'cleanupDuplicateIllnesses', {
   showLoading: false,
 })
@@ -2409,6 +2426,16 @@ function goToFinanceList() {
   })
 }
 
+function goToStartSale() {
+  const dogName = encodeURIComponent(dog.value?.name || '')
+  uni.navigateTo({
+    url: `/pages/sale/create?dogId=${dogId}&dogName=${dogName}`,
+    fail() {
+      uni.showToast({ title: '页面打开失败', icon: 'none' })
+    },
+  })
+}
+
 function goToDamRoi() {
   uni.navigateTo({ url: `/pages/finance/dam-roi?damId=${dogId}` })
 }
@@ -2493,6 +2520,9 @@ function handleDispositionAction(actionKey: DispositionActionKey) {
       return
     case 'promote':
       showPromoteModal.value = true
+      return
+    case 'start-sale':
+      goToStartSale()
       return
   }
 }
@@ -2895,6 +2925,10 @@ async function loadData({
       litters.value = []
       activeCycleSummaryDetail.value = null
     }
+    puppySaleRecordsLoaded.value = !isPuppy
+    if (!isPuppy) {
+      puppySaleRecords.value = []
+    }
 
     const healthPromise = fetchHealth(dogId)
       .then((healthRes) => {
@@ -2925,6 +2959,23 @@ async function loadData({
           medicationHistoryLoaded.value = true
         }
       })
+
+    const salePromise = isPuppy
+      ? fetchSaleList({ dog_id: dogId })
+          .then((saleRes) => {
+            if (loadToken !== latestLoadToken) return
+            puppySaleRecords.value = saleRes?.data || []
+          })
+          .catch(() => {
+            if (loadToken !== latestLoadToken) return
+            puppySaleRecords.value = []
+          })
+          .finally(() => {
+            if (loadToken === latestLoadToken) {
+              puppySaleRecordsLoaded.value = true
+            }
+          })
+      : Promise.resolve()
 
     const shouldLoadDamRoi = detailRes?.data?.role === '种狗' && detailRes?.data?.gender === '母'
     const financePromise = Promise.all([
@@ -3011,6 +3062,7 @@ async function loadData({
     await Promise.all([
       healthPromise,
       medicationPromise,
+      salePromise,
       financePromise,
       cyclesPromise,
       littersPromise,

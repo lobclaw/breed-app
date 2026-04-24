@@ -56,10 +56,24 @@
 
 ### 事实源原则
 
+- 核心业务集合以客户端本地镜像为默认事实源；页面优先读本地，再由后台增量同步校正
 - 犬只当前状态实时推导，不预存
-- 首页提醒由 `tasks` 和 `medication_tasks` 提供
+- 首页提醒由本地 `tasks`、`medication_tasks`、`health_records` 与繁育相关集合派生，不再把云端首页聚合作为交互事实源
 - 健康记录与任务分离：记录是真实发生，任务是待处理提醒
 - 统计值实时查询计算，不做预聚合
+- 家庭邀请、成员角色、登录鉴权、`operation_logs` 继续在线优先，不进入 V1 离线写入
+
+### 同步字段与本地系统规则
+
+- 业务主集合统一补充 `version`，每次服务端成功写入后递增；客户端据此做乐观并发与冲突识别
+- 支持软删除的集合继续使用 `deleted_at` 作为同步 tombstone；增量拉取时 tombstone 也要同步到本地
+- 客户端新增记录统一先生成稳定 `_id`，再本地入库并排队同步；云端不得二次改写主键
+- 所有进入 outbox 的写操作都带 `_sync` 元数据：
+  - `clientMutationId`
+  - `deviceId`
+  - `baseVersions`
+  - `clientTimestamp`
+- 同一个 `clientMutationId` 在服务端重放时必须幂等，不得重复创建记录或重复推进状态
 
 ## 3. 核心集合
 
@@ -69,6 +83,7 @@
 
 关键字段：
 
+- `_id`
 - `name`
 - `gender`
 - `role`：`种狗 / 幼崽 / 外部种公`
@@ -83,11 +98,13 @@
 - `disposition_date`
 - `disposition_notes`
 - `family_id`
+- `version`
 - `deleted_at`
 
 规则：
 
 - `role` 表示经营身份，`disposition` 表示当前去向
+- `待售` 表示犬只已被手动纳入销售池，不等于已定价
 - 外部种公与普通犬只共用同一集合，通过 `role=外部种公` 区分
 - 幼崽升级为种狗时保留 `origin_litter_id`
 - 已退休仍在健康管理范围内，不再参与繁育
@@ -99,10 +116,12 @@
 
 关键字段：
 
+- `_id`
 - `dam_id` / `dam_name`
 - `sire_id` / `sire_name`
 - `status`
 - `family_id`
+- `version`
 - `created_at` / `updated_at`
 
 状态：
@@ -127,6 +146,7 @@
 
 关键字段：
 
+- `_id`
 - `cycle_id`
 - `dam_id` / `dam_name`
 - `sire_id` / `sire_name`
@@ -135,6 +155,7 @@
 - `birth_notes`
 - `weaned_at`
 - `family_id`
+- `version`
 
 规则：
 
@@ -148,6 +169,7 @@
 
 公共字段：
 
+- `_id`
 - `type`
 - `cycle_id`
 - `dog_id`
@@ -156,6 +178,7 @@
 - `notes`
 - `details`
 - `family_id`
+- `version`
 - `created_by`
 
 记录类型：
@@ -186,6 +209,7 @@
 
 公共字段：
 
+- `_id`
 - `type`
 - `dog_id`
 - `date`
@@ -193,6 +217,7 @@
 - `notes`
 - `details`
 - `family_id`
+- `version`
 - `created_by`
 
 记录类型：
@@ -216,6 +241,7 @@
 
 关键字段：
 
+- `_id`
 - `dog_id`
 - `drug_name`
 - `source_record_id`
@@ -225,6 +251,7 @@
 - `frequency`
 - `details`
 - `family_id`
+- `version`
 
 规则：
 
@@ -248,6 +275,7 @@
 
 - 首页提醒、额外安排、主链里程碑与手动待办统一由该集合承载
 - 任务是否完成只表达“待处理事实”，不替代真实业务记录
+- 所有待同步写操作都落到本地 `outbox_mutations`，由后台顺序重放；同步协议存语义化 mutation，不存页面 patch
 - `breeding_milestone(details.step_type=follicle_check)` 额外维护：
   `follicle_check_count`（本周期累计卵泡检查次数）、
   `follicle_result`（最近一次检查结果）、
@@ -357,10 +385,12 @@
 
 - `dog_id` / `dog_name`
 - `status`
+- `sale_mode`
 - `floor_price`
 - `deposit_amount`
 - `agreed_price`
 - `received_amount`
+- `settlement_status`
 - `seller_agent_id`
 - `platform`
 - `buyer_info`
@@ -373,6 +403,12 @@
 
 - 财务统计从 `expenses + incomes` 实时聚合
 - `sale_records` 负责销售状态流转与上下文
+- `待售` 由显式“开始销售”动作创建，不要求先写 `floor_price`
+- `floor_price` 表示内部约束价，可为空
+- `received_amount` 表示最终到手价，允许在 `已成交` 后补录
+- `sale_mode` 当前使用 `自售 / 代理 / 代卖`
+- `settlement_status` 当前使用 `未结算 / 部分结算 / 已结算`
+- `status` 负责表达销售进度，`settlement_status` 负责表达成交后的结算进度
 
 ### 3.9 辅助集合
 

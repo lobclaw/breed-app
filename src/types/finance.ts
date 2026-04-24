@@ -55,12 +55,26 @@ export interface Income extends BaseDocument, SoftDeletable {
 export interface SaleRecord extends BaseDocument, SoftDeletable {
   dog_id: string
   dog_name: string            // 冗余
-  buyer_name: string
-  buyer_phone?: string
-  sale_price: number
-  deposit_amount?: number
-  status: '待付款' | '已付定金' | '已完成' | '已取消'
-  notes?: string
+  family_id: string
+  status: '待售' | '已预定' | '已成交' | '已退款' | '定金取消'
+  sale_mode?: '自售' | '代理' | '代卖' | null
+  settlement_status?: '未结算' | '部分结算' | '已结算' | null
+  floor_price?: number | null
+  deposit_amount?: number | null
+  deposit_date?: number | null
+  agreed_price?: number | null
+  received_amount?: number | null
+  seller_agent_id?: string | null
+  seller_agent_name?: string | null
+  platform?: string | null
+  date?: number | null
+  delivery_date?: number | null
+  buyer_info?: string | null
+  refund_amount?: number | null
+  refund_reason?: string | null
+  refund_date?: number | null
+  deposit_kept_amount?: number | null
+  notes?: string | null
   created_by: string
 }
 

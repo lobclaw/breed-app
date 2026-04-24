@@ -56,7 +56,8 @@
                 <text v-else>3</text>
               </view>
               <text class="stepper-label" :class="{ 'stepper-label--done': stepIndex >= 2 }">已成交</text>
-              <text v-if="sale.received_amount" class="stepper-amount" style="color: var(--red);">到手 ¥{{ sale.received_amount?.toLocaleString() }}</text>
+              <text v-if="sale.received_amount != null" class="stepper-amount" style="color: var(--red);">到手 ¥{{ sale.received_amount?.toLocaleString() }}</text>
+              <text v-else-if="sale.status === '已成交' && sale.settlement_status" class="stepper-amount" style="color: var(--amber);">{{ sale.settlement_status }}</text>
             </view>
           </view>
         </view>
@@ -80,7 +81,7 @@
             <text class="detail-label">成交价</text>
             <text class="detail-value detail-value--price">¥{{ sale.agreed_price?.toLocaleString() }}</text>
           </view>
-          <view class="detail-row" v-if="sale.received_amount">
+          <view class="detail-row" v-if="sale.received_amount != null">
             <text class="detail-label">到手价</text>
             <text class="detail-value detail-value--price">¥{{ sale.received_amount?.toLocaleString() }}</text>
           </view>
@@ -113,6 +114,16 @@
           <view class="detail-row" v-if="sale.created_at">
             <text class="detail-label">创建日期</text>
             <text class="detail-value">{{ formatDate(sale.created_at) }}</text>
+          </view>
+          <view class="detail-row" v-if="sale.sale_mode">
+            <text class="detail-label">销售方式</text>
+            <text class="detail-value">{{ sale.sale_mode }}</text>
+          </view>
+          <view class="detail-row" v-if="sale.status === '已成交' && sale.settlement_status">
+            <text class="detail-label">结算状态</text>
+            <text class="detail-value" :style="sale.settlement_status === '已结算' ? 'color: var(--green);' : 'color: var(--amber);'">
+              {{ sale.settlement_status }}
+            </text>
           </view>
           <view class="detail-row" v-if="sale.agent_name">
             <text class="detail-label">卖出人</text>
@@ -155,6 +166,11 @@
       </view>
 
       <view class="action-area" v-if="sale.status === '已成交'">
+        <button
+          v-if="sale.settlement_status !== '已结算'"
+          class="action-btn action-btn--filled-green"
+          @click="openSettleModal"
+        >补录结算</button>
         <button class="action-btn action-btn--ghost-red" @click="openRefundSheet">退款</button>
       </view>
     </template>
@@ -210,8 +226,8 @@
       <view class="modal-content">
         <text class="modal-title">完成交易</text>
         <view class="modal-field">
-          <text class="modal-label">到手价(¥) *</text>
-          <input v-model="completeForm.received_amount" type="digit" placeholder="必填" class="modal-input" />
+          <text class="modal-label">到手价(¥)</text>
+          <input v-model="completeForm.received_amount" type="digit" placeholder="选填，结算后再补" class="modal-input" />
         </view>
         <view class="modal-field">
           <text class="modal-label">约定价(¥)</text>
@@ -243,7 +259,39 @@
         </view>
         <view class="modal-actions">
           <button class="modal-btn" @click="showCompleteModal = false">取消</button>
-          <button class="modal-btn modal-btn--primary" :disabled="!completeForm.received_amount" @click="doComplete">确认</button>
+          <button class="modal-btn modal-btn--primary" @click="doComplete">确认</button>
+        </view>
+      </view>
+    </view>
+
+    <view class="modal-mask" v-if="showSettleModal" @click.self="showSettleModal = false" @touchmove.prevent>
+      <view class="modal-content">
+        <text class="modal-title">补录结算</text>
+        <view class="modal-field">
+          <text class="modal-label">到手价(¥) *</text>
+          <input v-model="settleForm.received_amount" type="digit" placeholder="必填" class="modal-input" />
+        </view>
+        <view class="modal-field">
+          <text class="modal-label">约定价(¥)</text>
+          <input v-model="settleForm.agreed_price" type="digit" placeholder="选填" class="modal-input" />
+        </view>
+        <view class="modal-field">
+          <text class="modal-label">结算状态</text>
+          <view class="modal-pills">
+            <view
+              v-for="option in settlementStatusOptions"
+              :key="option"
+              class="modal-pill"
+              :class="{ 'modal-pill--active': settleForm.settlement_status === option }"
+              @click="settleForm.settlement_status = option"
+            >
+              <text>{{ option }}</text>
+            </view>
+          </view>
+        </view>
+        <view class="modal-actions">
+          <button class="modal-btn" @click="showSettleModal = false">取消</button>
+          <button class="modal-btn modal-btn--primary" :disabled="!settleForm.received_amount" @click="doSettle">确认</button>
         </view>
       </view>
     </view>
@@ -443,6 +491,7 @@ const saleId = ref('')
 
 const showDepositModal = ref(false)
 const showCompleteModal = ref(false)
+const showSettleModal = ref(false)
 const showDeliveryDatePicker = ref(false)
 const showRefundDatePicker = ref(false)
 
@@ -455,6 +504,7 @@ const platforms = [
   { label: '闲鱼', icon: 'shopping_bag' },
 ]
 const platformLabels = platforms.map(p => p.label)
+const settlementStatusOptions: Array<'已结算' | '部分结算'> = ['已结算', '部分结算']
 
 /* S-6: 退款表单 */
 const showRefundSheet = ref(false)
@@ -519,6 +569,12 @@ const completeForm = reactive({
   delivery_date: null as number | null,
 })
 
+const settleForm = reactive({
+  received_amount: '',
+  agreed_price: '',
+  settlement_status: '已结算' as '已结算' | '部分结算',
+})
+
 const deliveryDateText = computed(() => formatDateInputValue(completeForm.delivery_date))
 const refundDateText = computed(() => formatDateInputValue(refundSheetForm.refund_date))
 
@@ -577,6 +633,7 @@ function getDogCardBorderColor(status: string) {
 const { run: fetchDetail } = useCloudCall<{ data: any }>('finance-service', 'getSaleDetail')
 const { run: receiveDeposit } = useCloudCall('finance-service', 'receiveSaleDeposit', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 const { run: completeSale } = useCloudCall('finance-service', 'completeSale', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
+const { run: settleSale } = useCloudCall('finance-service', 'settleSale', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 const { run: cancelSale } = useCloudCall('finance-service', 'cancelSale', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 
 function formatDate(ts: number) {
@@ -589,10 +646,19 @@ async function load() {
   const res = await fetchDetail(saleId.value)
   if (res?.data) {
     sale.value = res.data
-    if (res.data.buyer_info) completeForm.buyer_info = res.data.buyer_info
-    if (res.data.platform) completeForm.platform = res.data.platform
-    if (res.data.agreed_price) completeForm.received_amount = String(res.data.agreed_price)
+    completeForm.received_amount = ''
+    completeForm.agreed_price = res.data.agreed_price != null ? String(res.data.agreed_price) : ''
+    completeForm.buyer_info = res.data.buyer_info || ''
+    completeForm.platform = res.data.platform || ''
+    completeForm.delivery_date = null
   }
+}
+
+function openSettleModal() {
+  settleForm.received_amount = sale.value?.received_amount != null ? String(sale.value.received_amount) : ''
+  settleForm.agreed_price = sale.value?.agreed_price != null ? String(sale.value.agreed_price) : ''
+  settleForm.settlement_status = sale.value?.settlement_status === '部分结算' ? '部分结算' : '已结算'
+  showSettleModal.value = true
 }
 
 async function doDeposit() {
@@ -611,12 +677,14 @@ async function doDeposit() {
 }
 
 async function doComplete() {
-  const receivedAmount = parseFloat(completeForm.received_amount)
+  const hasReceivedAmount = completeForm.received_amount.trim() !== ''
+  const receivedAmount = hasReceivedAmount ? parseFloat(completeForm.received_amount) : null
+  if (hasReceivedAmount && (!receivedAmount || receivedAmount <= 0)) return
 
   // 到手价低于底价时触发价格预警
   const deliveryDate = completeForm.delivery_date || null
 
-  if (sale.value?.floor_price && receivedAmount < sale.value.floor_price) {
+  if (sale.value?.floor_price && receivedAmount != null && receivedAmount < sale.value.floor_price) {
     checkPriceWarning(receivedAmount, async () => {
       const res = await completeSale(saleId.value, {
         received_amount: receivedAmount,
@@ -644,6 +712,21 @@ async function doComplete() {
   })
   if (res) {
     showCompleteModal.value = false
+    load()
+  }
+}
+
+async function doSettle() {
+  const receivedAmount = parseFloat(settleForm.received_amount)
+  if (!receivedAmount || receivedAmount <= 0) return
+  const res = await settleSale(saleId.value, {
+    received_amount: receivedAmount,
+    agreed_price: settleForm.agreed_price ? parseFloat(settleForm.agreed_price) : null,
+    settlement_status: settleForm.settlement_status,
+    date: Date.now(),
+  })
+  if (res) {
+    showSettleModal.value = false
     load()
   }
 }

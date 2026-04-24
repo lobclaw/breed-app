@@ -415,9 +415,10 @@ describe('task-service', () => {
       ])
 
       const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
-      await taskService.batchCompleteTask.call(ctx, ['vac_batch_1', 'vac_batch_2'], true)
+      const result = await taskService.batchCompleteTask.call(ctx, ['vac_batch_1', 'vac_batch_2'], true)
 
       const { data: records } = await db.collection('health_records').get()
+      expect(result.data.completedTaskIds).toEqual(['vac_batch_1', 'vac_batch_2'])
       expect(records).toHaveLength(2)
       expect(records.map(r => r.dog_name).sort()).toEqual(['奶盖', '布丁'])
       expect(records.every(r => r.type === 'vaccination')).toBe(true)
@@ -448,6 +449,51 @@ describe('task-service', () => {
       expect(data[0].due_date).toBe(newDate)
       expect(data[0].postpone_count).toBe(1)
       expect(data[0].postpone_reason).toBe('等待复查')
+    })
+
+    it('batchPostponeTask 应一次性更新多个 pending 任务并返回 ids', async () => {
+      const now = Date.now()
+      const newDate = now + 2 * DAY_MS
+      seedCollection('tasks', [
+        {
+          _id: 'task_batch_postpone_1',
+          family_id: familyId,
+          status: 'pending',
+          due_date: now,
+          postpone_count: 0,
+        },
+        {
+          _id: 'task_batch_postpone_2',
+          family_id: familyId,
+          status: 'pending',
+          due_date: now,
+          postpone_count: 1,
+        },
+        {
+          _id: 'task_batch_postpone_done',
+          family_id: familyId,
+          status: 'completed',
+          due_date: now,
+          postpone_count: 3,
+        },
+      ])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      const result = await taskService.batchPostponeTask.call(ctx, [
+        'task_batch_postpone_1',
+        'task_batch_postpone_2',
+        'task_batch_postpone_done',
+      ], newDate, '统一顺延')
+
+      expect(result.data.postponedTaskIds).toEqual(['task_batch_postpone_1', 'task_batch_postpone_2'])
+
+      const { data: tasks } = await db.collection('tasks').where({ family_id: familyId }).get()
+      const taskMap = new Map(tasks.map(task => [task._id, task]))
+      expect(taskMap.get('task_batch_postpone_1')?.due_date).toBe(newDate)
+      expect(taskMap.get('task_batch_postpone_1')?.postpone_count).toBe(1)
+      expect(taskMap.get('task_batch_postpone_2')?.postpone_count).toBe(2)
+      expect(taskMap.get('task_batch_postpone_done')?.due_date).toBe(now)
+      expect(taskMap.get('task_batch_postpone_done')?.postpone_count).toBe(3)
     })
   })
 

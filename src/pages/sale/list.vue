@@ -2,15 +2,12 @@
   <view class="page">
     <BPageHeader title="销售管理" />
 
-    <!-- 状态筛选 Tabs -->
     <BChipFilterStrip v-model="activeFilter" :options="statusFilters" @change="load" />
 
-    <!-- 骨架屏 -->
     <view v-if="loading" class="primary-page-loading">
       <BSkeleton :rows="4" />
     </view>
 
-    <!-- 列表 -->
     <view v-else-if="sales.length > 0" class="card-feed">
       <view
         v-for="sale in sales"
@@ -26,14 +23,13 @@
           />
           <view class="card-middle">
             <text class="card-name">{{ sale.dog_name }}</text>
-            <text class="card-sub">{{ sale.breed || '马尔济斯' }}{{ sale.sex ? ' · ' + sale.sex : '' }}</text>
+            <text class="card-sub">{{ getSaleSubtitle(sale) }}</text>
           </view>
           <view class="card-right">
             <BTag :label="sale.status" :color="getStatusTagColor(sale.status)" />
             <text class="sale-price" :style="getSalePriceStyle(sale)">{{ getSalePriceText(sale) }}</text>
           </view>
         </view>
-        <!-- 代理人 + 平台 行 -->
         <view v-if="sale.agent_name || sale.platform" class="sale-extra">
           <text class="sale-agent">{{ sale.agent_name ? '代理人：' + sale.agent_name : '' }}</text>
           <text v-if="sale.platform" class="platform-badge">{{ sale.platform }}</text>
@@ -41,23 +37,20 @@
       </view>
     </view>
 
-    <!-- 空状态 -->
     <view v-else class="primary-page-empty">
       <BEmpty
         icon="storefront"
         title="暂无销售记录"
-        description="设定底价后犬只进入待售状态"
-        actionText="+ 创建销售"
+        description="开始销售后犬只进入待售状态"
+        actionText="+ 开始销售"
         @action="goToCreate"
       />
     </view>
-
   </view>
 </template>
 
 <script setup lang="ts">
 import { ref } from 'vue'
-
 import { onShow } from '@dcloudio/uni-app'
 import BChipFilterStrip from '@/components/base/BChipFilterStrip.vue'
 import { useCloudCall } from '@/composables/useCloudCall'
@@ -68,8 +61,13 @@ import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 
 const CACHE_KEY = 'sale_list_cache'
+
 function readSaleCache(): any[] {
-  try { return JSON.parse(uni.getStorageSync(CACHE_KEY) || '[]') } catch { return [] }
+  try {
+    return JSON.parse(uni.getStorageSync(CACHE_KEY) || '[]')
+  } catch {
+    return []
+  }
 }
 
 const sales = ref<any[]>(readSaleCache())
@@ -89,14 +87,17 @@ const { run: fetchSales } = useCloudCall<{ data: any[] }>('finance-service', 'ge
 
 async function load() {
   if (sales.value.length === 0) loading.value = true
-  const filters: any = {}
+  const filters: Record<string, string> = {}
   if (activeFilter.value) filters.status = activeFilter.value
   const res = await fetchSales(filters)
   if (res?.data) {
     sales.value = res.data
-    // 只缓存"全部"筛选结果
     if (!activeFilter.value) {
-      try { uni.setStorageSync(CACHE_KEY, JSON.stringify(res.data)) } catch { /* ignore */ }
+      try {
+        uni.setStorageSync(CACHE_KEY, JSON.stringify(res.data))
+      } catch {
+        // ignore cache failure
+      }
     }
   }
   loading.value = false
@@ -152,19 +153,39 @@ function getStatusTagColor(status: string): 'red' | 'amber' | 'green' | 'blue' |
   return map[status] || 'amber'
 }
 
+function getSaleSubtitle(sale: any) {
+  const parts = [
+    sale.sale_mode || '',
+    sale.breed || '马尔济斯',
+    sale.sex || sale.gender || '',
+  ].filter(Boolean)
+  return parts.join(' · ')
+}
+
 function getSalePriceText(sale: any) {
-  if (sale.status === '待售') return `底价 ¥${(sale.floor_price || 0).toLocaleString()}`
+  if (sale.status === '待售') {
+    return sale.floor_price ? `底价 ¥${sale.floor_price.toLocaleString()}` : '未定价'
+  }
   if (sale.status === '已预定') return `定金 ¥${(sale.deposit_amount || 0).toLocaleString()}`
-  if (sale.status === '已成交') return `到手 ¥${(sale.received_amount || 0).toLocaleString()}`
+  if (sale.status === '已成交') {
+    if (sale.settlement_status === '部分结算') return '部分结算'
+    if (sale.received_amount != null) return `到手 ¥${sale.received_amount.toLocaleString()}`
+    return '未结算'
+  }
   if (sale.status === '已退款') return `退款 ¥${(sale.refund_amount || 0).toLocaleString()}`
-  if (sale.status === '定金取消') return `保留 ¥${(sale.deposit_kept_amount || 0).toLocaleString()}`
+  if (sale.status === '定金取消') {
+    return sale.deposit_kept_amount ? `保留 ¥${sale.deposit_kept_amount.toLocaleString()}` : '已取消'
+  }
   return ''
 }
 
 function getSalePriceStyle(sale: any) {
-  if (sale.status === '已成交') return 'color: var(--red);'
+  if (sale.status === '已成交' && sale.settlement_status === '部分结算') return 'color: var(--amber);'
+  if (sale.status === '已成交' && sale.received_amount != null) return 'color: var(--red);'
+  if (sale.status === '已成交') return 'color: var(--amber);'
   if (sale.status === '已退款') return 'color: var(--green);'
   if (sale.status === '定金取消') return 'color: var(--red);'
+  if (sale.status === '待售' && !sale.floor_price) return 'color: var(--text-3);'
   return ''
 }
 
@@ -178,7 +199,6 @@ onShow(() => load())
   padding-bottom: 100px;
 }
 
-/* ==================== CARD FEED ==================== */
 .card-feed {
   padding: 0 var(--space-page);
   display: flex;
@@ -197,6 +217,7 @@ onShow(() => load())
   overflow: hidden;
   border-left: var(--primary-page-card-bar-width) solid transparent;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
+
   &:active {
     transform: scale(var(--primary-page-card-active-scale));
     box-shadow: var(--primary-page-card-shadow-active);
@@ -205,31 +226,48 @@ onShow(() => load())
   &::before {
     content: '';
     position: absolute;
-    top: 0; left: 0; right: 0;
+    top: 0;
+    left: 0;
+    right: 0;
     height: 100%;
     pointer-events: none;
   }
 
-  & > * { position: relative; z-index: 1; }
+  & > * {
+    position: relative;
+    z-index: 1;
+  }
 
   &--gray {
     border-left-color: var(--text-4);
-    &::before { background: linear-gradient(135deg, rgba(216,203,189,0.15) 0%, transparent 40%); }
+
+    &::before {
+      background: linear-gradient(135deg, rgba(216, 203, 189, 0.15) 0%, transparent 40%);
+    }
   }
 
   &--amber {
     border-left-color: var(--amber);
-    &::before { background: linear-gradient(135deg, var(--amber-soft) 0%, transparent 40%); }
+
+    &::before {
+      background: linear-gradient(135deg, var(--amber-soft) 0%, transparent 40%);
+    }
   }
 
   &--green {
     border-left-color: var(--green);
-    &::before { background: linear-gradient(135deg, var(--green-soft) 0%, transparent 40%); }
+
+    &::before {
+      background: linear-gradient(135deg, var(--green-soft) 0%, transparent 40%);
+    }
   }
 
   &--red {
     border-left-color: var(--red);
-    &::before { background: linear-gradient(135deg, var(--red-soft) 0%, transparent 40%); }
+
+    &::before {
+      background: linear-gradient(135deg, var(--red-soft) 0%, transparent 40%);
+    }
   }
 }
 
@@ -263,35 +301,37 @@ onShow(() => load())
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 4px;
+  gap: 6px;
   flex-shrink: 0;
 }
 
 .sale-price {
-  font-family: var(--font-display);
-  font-size: var(--primary-page-card-accent-size);
-  font-weight: var(--primary-page-card-accent-weight);
-  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-2);
 }
 
 .sale-extra {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-top: 8px;
+  gap: 8px;
+  margin-top: 12px;
+  padding-left: 40px;
+  flex-wrap: wrap;
 }
 
 .sale-agent {
-  font-size: var(--primary-page-card-meta-size);
-  color: var(--primary-page-card-meta-color);
+  font-size: 12px;
+  color: var(--text-3);
 }
 
 .platform-badge {
-  font-size: 10px;
-  font-weight: 600;
   padding: 2px 8px;
-  border-radius: var(--radius-tag);
-  background: var(--card-dim);
-  color: var(--text-2);
+  border-radius: 999px;
+  background: rgba(91, 141, 239, 0.12);
+  color: var(--blue);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
 }
 </style>

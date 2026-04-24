@@ -1,6 +1,6 @@
 {
   "bsonType": "object",
-  "required": ["dog_id", "family_id", "buyer_name", "sale_price", "status"],
+  "required": ["dog_id", "dog_name", "family_id", "status", "created_by", "created_at", "updated_at"],
   "permission": {
     "read": true,
     "create": true,
@@ -25,25 +25,47 @@
       "foreignKey": "families._id",
       "description": "所属家庭ID"
     },
-    "buyer_name": {
-      "bsonType": "string",
-      "description": "买家姓名"
+    "sale_mode": {
+      "bsonType": ["string", "null"],
+      "enum": ["自售", "代理", "代卖", null],
+      "description": "销售方式"
     },
-    "buyer_phone": {
-      "bsonType": "string",
-      "description": "买家电话"
+    "settlement_status": {
+      "bsonType": ["string", "null"],
+      "enum": ["未结算", "部分结算", "已结算", null],
+      "description": "结算状态"
     },
-    "sale_price": {
-      "bsonType": "number",
-      "description": "成交价格（元）"
+    "floor_price": {
+      "bsonType": ["number", "null"],
+      "description": "内部底价（元）"
     },
     "deposit_amount": {
-      "bsonType": "number",
+      "bsonType": ["number", "null"],
       "description": "定金金额（元）"
+    },
+    "agreed_price": {
+      "bsonType": ["number", "null"],
+      "description": "对外成交价（元）"
+    },
+    "received_amount": {
+      "bsonType": ["number", "null"],
+      "description": "最终到手价（元）"
     },
     "deposit_date": {
       "bsonType": ["number", "null"],
       "description": "定金日期（时间戳毫秒）"
+    },
+    "seller_agent_id": {
+      "bsonType": ["string", "null"],
+      "description": "代理人ID"
+    },
+    "seller_agent_name": {
+      "bsonType": ["string", "null"],
+      "description": "代理人名称（冗余）"
+    },
+    "platform": {
+      "bsonType": ["string", "null"],
+      "description": "销售平台"
     },
     "date": {
       "bsonType": ["number", "null"],
@@ -57,13 +79,29 @@
       "bsonType": ["number", "null"],
       "description": "退款日期（时间戳毫秒）"
     },
+    "buyer_info": {
+      "bsonType": ["string", "null"],
+      "description": "买家信息"
+    },
+    "refund_amount": {
+      "bsonType": ["number", "null"],
+      "description": "退款金额"
+    },
+    "refund_reason": {
+      "bsonType": ["string", "null"],
+      "description": "退款原因"
+    },
+    "deposit_kept_amount": {
+      "bsonType": ["number", "null"],
+      "description": "定金保留金额"
+    },
     "status": {
       "bsonType": "string",
       "enum": ["待售", "已预定", "已成交", "已退款", "定金取消"],
       "description": "销售状态"
     },
     "notes": {
-      "bsonType": "string",
+      "bsonType": ["string", "null"],
       "description": "备注"
     },
     "created_by": {

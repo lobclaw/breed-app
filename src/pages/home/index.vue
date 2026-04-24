@@ -761,6 +761,13 @@ const postponeDate = ref(buildTimestampFromDayOffset(1))
 const postponeQuick = ref('tomorrow')
 const showPostponeDatePicker = ref(false)
 
+type BatchDogSelectionItem = {
+  id: string
+  name: string
+  completed: boolean
+  taskId?: string
+}
+
 const postponeDateStr = computed(() => {
   return formatDateInputValue(postponeDate.value)
 })
@@ -778,9 +785,9 @@ function setPostponeQuick(option: string) {
 // H-5: 批量完成
 const showBatchComplete = ref(false)
 const batchCompleteTitle = ref('批量完成')
-const batchDogList = ref<Array<{ id: string; name: string; completed: boolean }>>([])
+const batchDogList = ref<BatchDogSelectionItem[]>([])
 const batchSelected = reactive<Record<string, boolean>>({})
-let batchTaskIds: string[] = []
+let batchTaskIdByDogId: Record<string, string> = {}
 const showSickBatch = ref(false)
 const sickBatchList = ref<Array<{
   id: string
@@ -903,9 +910,14 @@ const { run: fetchWeekCards } = useCloudCall<{ data: any }>('task-service', 'get
 const { run: doCompleteTask } = useCloudCall('task-service', 'completeTask')
 const { run: doPostponeTask } = useCloudCall('task-service', 'postponeTask')
 const { run: doBatchComplete } = useCloudCall('task-service', 'batchCompleteTask')
+const { run: doBatchPostponeTask } = useCloudCall('task-service', 'batchPostponeTask')
 const { run: doRecordMedDose } = useCloudCall('health-service', 'recordMedicationDose')
 const { run: doBatchCompleteMedDay } = useCloudCall('health-service', 'batchCompleteMedicationDay')
 const { run: recoverIllnesses } = useCloudCall('health-service', 'recoverIllnesses', {
+  successMode: 'silent',
+  loadingMode: 'local',
+})
+const { run: batchUpdateIllnessStatus } = useCloudCall('health-service', 'batchUpdateIllnessStatus', {
   successMode: 'silent',
   loadingMode: 'local',
 })
@@ -1382,6 +1394,120 @@ function syncWeekCache(taskId: string) {
   }
 }
 
+function isMedicationTaskPending(task: any) {
+  const frequency = Number(task?.details?.frequency || 1)
+  const dosesGiven = Number(task?.doses_given || 0)
+  return task?.status !== 'completed' && dosesGiven < frequency
+}
+
+function patchMedicationCards(
+  updater: (card: any) => { nextCard?: any; removeCard?: boolean } | null,
+) {
+  let shouldRemoveCard = false
+
+  for (const list of [cards, dayCards]) {
+    const idx = list.value.findIndex(card => card.cardType === 'medication')
+    if (idx < 0) continue
+    const currentCard = list.value[idx]
+    const result = updater(currentCard)
+    if (!result) continue
+    if (result.removeCard) {
+      shouldRemoveCard = true
+      continue
+    }
+    if (result.nextCard) {
+      list.value[idx] = result.nextCard
+    }
+  }
+
+  if (shouldRemoveCard) {
+    removeCardLocally('medication', true)
+  }
+}
+
+function markMedicationTasksCompletedLocally(medicationTaskIds: string[] = []) {
+  const taskIdSet = new Set(medicationTaskIds.filter(Boolean))
+  if (!taskIdSet.size) return
+
+  patchMedicationCards((card) => {
+    let touched = false
+    const nextDogs = (card.dogs || []).map((dog: any) => {
+      const allMedTasks = Array.isArray(dog.allMedTasks) ? dog.allMedTasks : []
+      const nextTasks = allMedTasks.map((task: any) => {
+        if (!taskIdSet.has(task._id)) return task
+        touched = true
+        return {
+          ...task,
+          doses_given: Number(task?.details?.frequency || 1),
+          status: 'completed',
+        }
+      })
+      if (nextTasks === allMedTasks) return dog
+      return {
+        ...dog,
+        completed: nextTasks.every((task: any) => !isMedicationTaskPending(task)),
+        allMedTasks: nextTasks,
+      }
+    })
+
+    if (!touched) return null
+
+    const nextCard = {
+      ...card,
+      dogs: nextDogs,
+      medicationTaskIds: (card.medicationTaskIds || []).filter((id: string) => !taskIdSet.has(id)),
+    }
+    const hasPendingMedication = nextDogs.some((dog: any) =>
+      (dog.allMedTasks || []).some((task: any) => isMedicationTaskPending(task)),
+    )
+
+    return hasPendingMedication ? { nextCard } : { removeCard: true }
+  })
+}
+
+function removeMedicationDogsLocally(dogIds: string[] = []) {
+  const dogIdSet = new Set(dogIds.filter(Boolean))
+  if (!dogIdSet.size) return
+
+  patchMedicationCards((card) => {
+    const currentDogs = Array.isArray(card.dogs) ? card.dogs : []
+    const nextDogs = currentDogs.filter((dog: any) => !dogIdSet.has(dog.dogId))
+    if (nextDogs.length === currentDogs.length) return null
+
+    const nextMedicationTaskIds = nextDogs.flatMap((dog: any) =>
+      (dog.allMedTasks || [])
+        .filter((task: any) => isMedicationTaskPending(task))
+        .map((task: any) => task._id)
+        .filter(Boolean),
+    )
+
+    if (nextDogs.length === 0 || nextMedicationTaskIds.length === 0) {
+      return { removeCard: true }
+    }
+
+    return {
+      nextCard: {
+        ...card,
+        dogs: nextDogs,
+        medicationTaskIds: nextMedicationTaskIds,
+      },
+    }
+  })
+}
+
+function updateSickDogsStatusLocally(illnessIds: string[] = [], status = '治疗中') {
+  const illnessIdSet = new Set(illnessIds.filter(Boolean))
+  if (!illnessIdSet.size) return
+
+  const sickCard = cards.value.find(card => card.cardType === 'sick_observation')
+  if (!sickCard) return
+  ;(sickCard.dogs || []).forEach((dog: any) => {
+    if (illnessIdSet.has(dog.illnessId)) {
+      dog.treatmentStatus = status
+    }
+  })
+}
+
 async function onComplete(taskId: string, mode?: boolean | string) {
   // 批量卡片全部勾完
   if (mode === true) {
@@ -1468,6 +1594,7 @@ async function doPostpone() {
           if (ci >= 0) list.value.splice(ci, 1)
           clearCardCompleting(card.id)
           counts.today = Math.max(0, counts.today - 1)
+          dayCounts.value[startOfDay(Date.now())] = counts.today
         }, 450)
         break
       }
@@ -1477,12 +1604,15 @@ async function doPostpone() {
   } else {
     // 单条推迟
     removeCardLocally(ids[0], false, false)
-    syncWeekCache(ids[0])
   }
 
   // 后台静默调接口
-  for (const id of ids) {
-    doPostponeTask(id, postponeDate.value)
+  if (ids.length > 1) {
+    const result = await doBatchPostponeTask(ids, postponeDate.value)
+    if (!result) await loadTodayCards()
+  } else if (ids[0]) {
+    const result = await doPostponeTask(ids[0], postponeDate.value)
+    if (!result) await loadTodayCards()
   }
 }
 
@@ -1490,10 +1620,16 @@ async function onBatchComplete(payload: any) {
   // 打开批量完成 Sheet (H-5)
   if (payload && payload.dogs) {
     batchCompleteTitle.value = payload.title || '批量完成'
-    batchDogList.value = payload.dogs
-    batchTaskIds = payload.taskIds || []
+    batchTaskIdByDogId = (payload.dogs || []).reduce((map: Record<string, string>, dog: any) => {
+      if (dog?.id && dog?.taskId) map[dog.id] = dog.taskId
+      return map
+    }, {})
+    batchDogList.value = (payload.dogs || []).map((dog: any) => ({
+      ...dog,
+      taskId: dog?.taskId || batchTaskIdByDogId[dog?.id] || '',
+    }))
     Object.keys(batchSelected).forEach(k => delete batchSelected[k])
-    payload.dogs.forEach((d: any) => {
+    batchDogList.value.forEach((d: any) => {
       if (!d.completed) batchSelected[d.id] = false
     })
     showBatchComplete.value = true
@@ -1505,25 +1641,47 @@ async function onBatchComplete(payload: any) {
   if (taskIds.length > 0) {
     removeCardLocally(taskIds[0], true)
   }
-  doBatchComplete(taskIds, autoRecord)
+  const result = await doBatchComplete(taskIds, autoRecord)
+  if (!result) {
+    await loadTodayCards()
+    return
+  }
+  addSuppressedTasks(result?.data?.completedTaskIds || taskIds)
 }
 
-function onBatchSkip(taskIds: string[]) {
+async function onBatchSkip(taskIds: string[]) {
   if (taskIds.length > 0) removeCardLocally(taskIds[0], true, false)
-  doBatchComplete(taskIds)
+  const result = await doBatchComplete(taskIds)
+  if (!result) {
+    await loadTodayCards()
+    return
+  }
+  addSuppressedTasks(result?.data?.completedTaskIds || taskIds)
 }
 
 async function onRecordDose({ medicationTaskId }: { medicationTaskId: string }) {
-  await doRecordMedDose(medicationTaskId)
-  await loadTodayCards()
+  const result = await doRecordMedDose(medicationTaskId)
+  if (result?.data?.completed || result?.data?.allComplete) {
+    await loadTodayCards()
+  }
 }
 
 async function onBatchCompleteMed(medicationTaskIds: string[]) {
-  if (medicationTaskIds.length > 0) {
-    removeCardLocally('medication', true)
+  if (medicationTaskIds.length === 0) return
+  markMedicationTasksCompletedLocally(medicationTaskIds)
+  const result = await doBatchCompleteMedDay(medicationTaskIds)
+  if (!result) {
+    await loadTodayCards()
+    return
   }
-  await doBatchCompleteMedDay(medicationTaskIds)
-  await loadTodayCards()
+  const completedMedicationTaskIds = result?.data?.completedMedicationTaskIds || medicationTaskIds
+  const fullyCompletedMedicationTaskIds = result?.data?.fullyCompletedMedicationTaskIds || []
+  if (
+    completedMedicationTaskIds.length !== medicationTaskIds.length
+    || fullyCompletedMedicationTaskIds.length > 0
+  ) {
+    await loadTodayCards()
+  }
 }
 
 function applyHomeFeedback(payload: any) {
@@ -1546,7 +1704,6 @@ function applyHomeFeedback(payload: any) {
   }
 }
 
-const { run: updateIllnessStatus } = useCloudCall('health-service', 'updateIllnessStatus')
 const { run: endMedication } = useCloudCall('health-service', 'endMedicationByDog')
 
 /** 乐观移除疾病观察卡中的观察项（带淡出动画） */
@@ -1620,14 +1777,21 @@ function onAction(payload: { type: string; data: any }) {
     void recoverIllnesses({ illnessIds: [payload.data.illnessId] })
   } else if (payload.type === 'update_status' && payload.data?.illnessId) {
     // 就地更新状态标签（不移除行）
-    const sickCard = cards.value.find(c => c.cardType === 'sick_observation')
-    if (sickCard) {
-      const dog = (sickCard.dogs || []).find((d: any) => d.illnessId === payload.data.illnessId)
-      if (dog) dog.treatmentStatus = payload.data.status
-    }
-    void updateIllnessStatus(payload.data.illnessId, payload.data.status)
+    updateSickDogsStatusLocally([payload.data.illnessId], payload.data.status)
+    void batchUpdateIllnessStatus({ illnessIds: [payload.data.illnessId], status: payload.data.status })
   } else if (payload.type === 'stop_medication' && payload.data?.dogId) {
-    endMedication(payload.data.dogId).then(() => loadAll())
+    endMedication(payload.data.dogId).then((result) => {
+      if (!result) {
+        return loadTodayCards()
+      }
+      const cancelledMedicationTaskIds = result?.data?.cancelledMedicationTaskIds || []
+      if (cancelledMedicationTaskIds.length > 0) {
+        removeMedicationDogsLocally([payload.data.dogId])
+      } else {
+        return loadTodayCards()
+      }
+      return null
+    })
   }
 }
 
@@ -1638,9 +1802,16 @@ async function confirmMedBatchComplete() {
 
   const medIds = selectedItems.flatMap(item => item.medicationTaskIds)
   if (medIds.length > 0) {
-    removeCardLocally('medication', true)
-    await doBatchCompleteMedDay(medIds)
-    await loadTodayCards()
+    markMedicationTasksCompletedLocally(medIds)
+    const result = await doBatchCompleteMedDay(medIds)
+    if (!result) {
+      await loadTodayCards()
+      return
+    }
+    const completedMedicationTaskIds = result?.data?.completedMedicationTaskIds || medIds
+    if (completedMedicationTaskIds.length !== medIds.length) {
+      await loadTodayCards()
+    }
   }
 }
 
@@ -1652,8 +1823,16 @@ async function confirmMedBatchRecover() {
   const illnessIds = [...new Set(selectedItems.flatMap(item => item.illnessIds).filter(Boolean))]
   const medicationTaskIds = [...new Set(selectedItems.flatMap(item => item.medicationTaskIds).filter(Boolean))]
 
-  await recoverIllnesses({ illnessIds, medicationTaskIds })
-  await loadAll()
+  const result = await recoverIllnesses({ illnessIds, medicationTaskIds })
+  if (!result) {
+    await loadTodayCards()
+    return
+  }
+  if (result?.data?.recoveredIllnessIds?.length) {
+    removeMedicationDogsLocally(selectedItems.map(item => item.dogId))
+  } else {
+    await loadTodayCards()
+  }
 }
 
 async function confirmSickBatchAction(action: SickBatchAction) {
@@ -1672,14 +1851,9 @@ async function confirmSickBatchAction(action: SickBatchAction) {
   }
 
   if (action === 'update_status') {
-    const sickCard = cards.value.find(c => c.cardType === 'sick_observation')
-    if (sickCard) {
-      selectedItems.forEach((item) => {
-        const dog = (sickCard.dogs || []).find((d: any) => d.illnessId === item.illnessId)
-        if (dog) dog.treatmentStatus = '治疗中'
-      })
-    }
-    await Promise.all(selectedItems.map(item => updateIllnessStatus(item.illnessId, '治疗中')))
+    const illnessIds = [...new Set(selectedItems.map(item => item.illnessId).filter(Boolean))]
+    updateSickDogsStatusLocally(illnessIds, '治疗中')
+    await batchUpdateIllnessStatus({ illnessIds, status: '治疗中' })
     return
   }
 
@@ -1774,7 +1948,7 @@ async function confirmQuickComplete() {
   removeCardLocally(taskId)
 
   // 后台静默调接口
-  doCompleteTask(taskId, quickCompleteDate.value, quickCompleteNotes.value || null)
+  void doCompleteTask(taskId)
   quickCompleteNotes.value = ''
   quickCompleteTask.value = null
 }
@@ -1784,16 +1958,23 @@ async function confirmBatchComplete() {
   const selectedIds = Object.entries(batchSelected)
     .filter(([, v]) => v)
     .map(([k]) => k)
-  // 映射回 taskIds
-  const taskIdsToComplete = batchTaskIds.length > 0
-    ? batchTaskIds.filter((_id, idx) => {
-        const dog = batchDogList.value[idx]
-        return dog && selectedIds.includes(dog.id)
-      })
-    : selectedIds
-  await doBatchComplete(taskIdsToComplete)
+
+  const taskIdsToComplete = selectedIds
+    .map(id => batchTaskIdByDogId[id] || batchDogList.value.find(dog => dog.id === id)?.taskId || '')
+    .filter(Boolean)
+  const result = await doBatchComplete(taskIdsToComplete)
+  if (!result) {
+    await loadTodayCards()
+    return
+  }
+  addSuppressedTasks(result?.data?.completedTaskIds || taskIdsToComplete)
   showBatchComplete.value = false
-  await loadAll()
+
+  if (taskIdsToComplete.length === batchDogList.value.filter(dog => !dog.completed).length) {
+    if (taskIdsToComplete.length > 0) removeCardLocally(taskIdsToComplete[0], true)
+  } else {
+    taskIdsToComplete.forEach(taskId => removeCardLocally(taskId))
+  }
 }
 
 onShow(async () => {

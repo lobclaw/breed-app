@@ -542,6 +542,14 @@ async function createAutoHealthRecord({ familyId, uid, task, now }) {
   return true
 }
 
+function normalizeTaskIdList(taskIds = []) {
+  return [...new Set(
+    (Array.isArray(taskIds) ? taskIds : [taskIds])
+      .map(taskId => typeof taskId === 'string' ? taskId.trim() : '')
+      .filter(Boolean),
+  )]
+}
+
 /**
  * 智能合并任务为卡片
  * 合并优先级：健康关注 > 窝级别 > 护理群组 > 批量(2+同类同天) > 个体犬只
@@ -1174,43 +1182,46 @@ module.exports = {
    * 批量完成任务
    */
   async batchCompleteTask(taskIds, autoRecord) {
-    if (!taskIds || !taskIds.length) throw new Error('缺少任务 ID')
+    const normalizedTaskIds = normalizeTaskIdList(taskIds)
+    if (!normalizedTaskIds.length) throw new Error('缺少任务 ID')
 
     const now = Date.now()
-    let completed = 0
+    const { data: tasks } = await db.collection('tasks')
+      .where({
+        _id: dbCmd.in(normalizedTaskIds),
+        family_id: this.familyId,
+      })
+      .get()
 
-    for (const taskId of taskIds) {
-      try {
-        const { data: tasks } = await db.collection('tasks')
-          .where({ _id: taskId, family_id: this.familyId })
-          .get()
-        if (!tasks || tasks.length === 0) continue
+    const pendingTasks = (tasks || []).filter(task => task?.status === 'pending')
+    const completedTaskIds = pendingTasks.map(task => task._id).filter(Boolean)
 
-        const task = tasks[0]
+    if (completedTaskIds.length > 0) {
+      await db.collection('tasks').where({
+        _id: dbCmd.in(completedTaskIds),
+        family_id: this.familyId,
+        status: 'pending',
+      }).update({
+        status: 'completed',
+        completed_by: this.uid,
+        completed_at: now,
+        updated_at: now,
+      })
+    }
 
-        await db.collection('tasks').doc(taskId).update({
-          status: 'completed',
-          completed_by: this.uid,
-          completed_at: now,
-          updated_at: now,
-        })
-
-        if (autoRecord) {
-          try {
-            await createAutoHealthRecord({
-              familyId: this.familyId,
-              uid: this.uid,
-              task,
-              now,
-            })
-          } catch (e) {
-            console.log('[batchCompleteTask] auto-record failed:', e.message)
-          }
+    if (autoRecord && pendingTasks.length > 0) {
+      await Promise.all(pendingTasks.map(async (task) => {
+        try {
+          await createAutoHealthRecord({
+            familyId: this.familyId,
+            uid: this.uid,
+            task,
+            now,
+          })
+        } catch (e) {
+          console.log('[batchCompleteTask] auto-record failed:', e.message)
         }
-        completed++
-      } catch (e) {
-        // 跳过不存在或已处理的任务
-      }
+      }))
     }
 
     await logTaskOperation({
@@ -1219,12 +1230,12 @@ module.exports = {
       actionType: 'complete',
       targetType: 'task_batch',
       targetId: `batch:${Date.now()}`,
-      targetName: `${completed}个任务`,
-      summary: `批量完成了 ${completed} 个任务`,
-      meta: { completed, autoRecord: Boolean(autoRecord) },
+      targetName: `${completedTaskIds.length}个任务`,
+      summary: `批量完成了 ${completedTaskIds.length} 个任务`,
+      meta: { completed: completedTaskIds.length, completedTaskIds, autoRecord: Boolean(autoRecord) },
     })
 
-    return { data: { completed } }
+    return { data: { completed: completedTaskIds.length, completedTaskIds } }
   },
 
   /**
@@ -1374,6 +1385,49 @@ module.exports = {
     })
 
     return { message: '已推迟' }
+  },
+
+  async batchPostponeTask(taskIds, newDate, reason) {
+    const normalizedTaskIds = normalizeTaskIdList(taskIds)
+    if (!normalizedTaskIds.length) throw new Error('缺少任务 ID')
+    if (!newDate) throw new Error('请选择新日期')
+
+    const now = Date.now()
+    const { data: tasks } = await db.collection('tasks')
+      .where({
+        _id: dbCmd.in(normalizedTaskIds),
+        family_id: this.familyId,
+      })
+      .get()
+
+    const pendingTasks = (tasks || []).filter(task => task?.status === 'pending')
+    const postponedTaskIds = pendingTasks.map(task => task._id).filter(Boolean)
+
+    if (postponedTaskIds.length > 0) {
+      await db.collection('tasks').where({
+        _id: dbCmd.in(postponedTaskIds),
+        family_id: this.familyId,
+        status: 'pending',
+      }).update({
+        due_date: newDate,
+        postpone_count: dbCmd.inc(1),
+        postpone_reason: reason || null,
+        updated_at: now,
+      })
+    }
+
+    await logTaskOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'postpone',
+      targetType: 'task_batch',
+      targetId: `batch:${now}`,
+      targetName: `${postponedTaskIds.length}个任务`,
+      summary: `批量推迟了 ${postponedTaskIds.length} 个任务`,
+      meta: { postponedTaskIds, dueDate: newDate, reason: reason || null },
+    })
+
+    return { data: { postponed: postponedTaskIds.length, postponedTaskIds } }
   },
 
   /**

@@ -74,6 +74,10 @@ const LEGACY_INCOME_TYPE_MAP = {
   领养费: '领养',
   配种费收入: '其他',
 }
+const SALE_ACTIVE_STATUSES = ['待售', '已预定']
+const SALE_RECORD_STATUSES = ['待售', '已预定', '已成交', '已退款', '定金取消']
+const SALE_MODES = ['自售', '代理', '代卖']
+const SALE_SETTLEMENT_STATUSES = ['未结算', '部分结算', '已结算']
 
 function normalizeExpenseCategoryGroupKey(groupKey) {
   return groupKey && PRESET_EXPENSE_CATEGORY_GROUPS.some(item => item.key === groupKey) ? groupKey : 'other'
@@ -195,6 +199,32 @@ function normalizeExpenseCategoryName(categoryName, categoryMetaMap = null) {
 function normalizeManualIncomeType(type) {
   const normalized = normalizeIncomeType(type)
   return MANUAL_INCOME_TYPES.includes(normalized) ? normalized : ''
+}
+
+function normalizeSaleMode(mode) {
+  return SALE_MODES.includes(mode) ? mode : '自售'
+}
+
+function normalizeSettlementStatus(status) {
+  return SALE_SETTLEMENT_STATUSES.includes(status) ? status : null
+}
+
+function deriveSettlementStatus(sale = {}) {
+  const normalized = normalizeSettlementStatus(sale.settlement_status)
+  if (normalized) return normalized
+  if (sale.status === '已成交') {
+    return sale.received_amount != null ? '已结算' : '未结算'
+  }
+  return null
+}
+
+function normalizeSaleRecord(record = {}) {
+  return {
+    ...record,
+    sale_mode: normalizeSaleMode(record.sale_mode),
+    settlement_status: deriveSettlementStatus(record),
+    agent_name: record.seller_agent_name || record.agent_name || null,
+  }
 }
 
 function normalizeFinanceFilters(filters = {}) {
@@ -1268,6 +1298,111 @@ module.exports = {
 
   // ── 销售流程 ──
 
+  async getDogSaleRecord(dogId, familyId) {
+    const { data: dogs } = await db.collection('dogs')
+      .where({ _id: dogId, family_id: familyId, deleted_at: null })
+      .get()
+    if (!dogs || dogs.length === 0) throw new Error('犬只不存在')
+    return dogs[0]
+  },
+
+  async getActiveSaleRecordForDog(dogId, familyId, excludeSaleId = '') {
+    const { data: saleRecords } = await db.collection('sale_records')
+      .where({
+        dog_id: dogId,
+        family_id: familyId,
+        deleted_at: null,
+        status: dbCmd.in(SALE_ACTIVE_STATUSES),
+      })
+      .get()
+
+    return (saleRecords || []).find(item => item._id !== excludeSaleId) || null
+  },
+
+  async createPendingSaleRecord({
+    dog,
+    familyId,
+    now,
+    saleMode = '自售',
+    floorPrice = null,
+    buyerInfo = null,
+    sellerAgentId = null,
+    sellerAgentName = null,
+    platform = null,
+    notes = null,
+  }) {
+    const saleData = {
+      dog_id: dog._id,
+      dog_name: dog.name,
+      family_id: familyId,
+      status: '待售',
+      sale_mode: normalizeSaleMode(saleMode),
+      settlement_status: null,
+      floor_price: floorPrice,
+      deposit_amount: null,
+      deposit_date: null,
+      agreed_price: null,
+      received_amount: null,
+      seller_agent_id: sellerAgentId,
+      seller_agent_name: sellerAgentName,
+      platform,
+      date: null,
+      delivery_date: null,
+      buyer_info: buyerInfo,
+      refund_amount: null,
+      refund_reason: null,
+      refund_date: null,
+      deposit_kept_amount: null,
+      notes,
+      created_by: this.uid,
+      deleted_at: null,
+      created_at: now,
+      updated_at: now,
+    }
+
+    const { id } = await db.collection('sale_records').add(saleData)
+    return { id, saleData }
+  },
+
+  async upsertSaleIncomeRecord({
+    saleId,
+    sale,
+    amount,
+    date,
+    familyId,
+    now,
+  }) {
+    const { data: incomes } = await db.collection('incomes')
+      .where({ family_id: familyId, source_sale_id: saleId, type: '销售', deleted_at: null })
+      .get()
+
+    if (incomes && incomes.length > 0) {
+      await db.collection('incomes').doc(incomes[0]._id).update({
+        amount,
+        date,
+        updated_at: now,
+      })
+      return incomes[0]._id
+    }
+
+    const { id } = await db.collection('incomes').add({
+      dog_id: sale.dog_id,
+      dog_name: sale.dog_name,
+      type: '销售',
+      amount,
+      date,
+      source_sale_id: saleId,
+      notes: null,
+      family_id: familyId,
+      created_by: this.uid,
+      deleted_at: null,
+      created_at: now,
+      updated_at: now,
+    })
+
+    return id
+  },
+
   /**
    * 创建销售记录（待售/意向阶段）
    */
@@ -1277,44 +1412,27 @@ module.exports = {
     const now = Date.now()
     const familyId = this.familyId
 
-    // 校验犬只
-    const { data: dogs } = await db.collection('dogs')
-      .where({ _id: data.dog_id, family_id: familyId, deleted_at: null })
-      .get()
-    if (!dogs || dogs.length === 0) throw new Error('犬只不存在')
-    const dog = dogs[0]
+    const dog = await this.getDogSaleRecord(data.dog_id, familyId)
+    if (dog.role !== '幼崽') throw new Error('只有幼崽可以开始销售')
+    if (!['在养', '自留'].includes(dog.disposition)) throw new Error('当前犬只状态不可开始销售')
 
-    const saleData = {
-      dog_id: data.dog_id,
-      dog_name: dog.name,
-      family_id: familyId,
-      status: '待售',
-      floor_price: data.floor_price || null,
-      deposit_amount: null,
-      deposit_date: null,
-      agreed_price: null,
-      received_amount: null,
-      seller_agent_id: null,
-      platform: null,
-      date: null,
-      delivery_date: null,
-      buyer_info: data.buyer_info || null,
-      refund_amount: null,
-      refund_reason: null,
-      refund_date: null,
-      deposit_kept_amount: null,
+    const activeSale = await this.getActiveSaleRecordForDog(data.dog_id, familyId)
+    if (activeSale) throw new Error('该犬只已有进行中的销售记录')
+
+    const { id } = await this.createPendingSaleRecord({
+      dog,
+      familyId,
+      now,
+      saleMode: data.sale_mode,
+      floorPrice: data.floor_price ?? null,
+      buyerInfo: data.buyer_info || null,
       notes: data.notes || null,
-      created_by: this.uid,
-      deleted_at: null,
-      created_at: now,
-      updated_at: now,
-    }
-
-    const { id } = await db.collection('sale_records').add(saleData)
+    })
 
     // 更新犬只去向为待售
     await db.collection('dogs').doc(data.dog_id).update({
       disposition: '待售',
+      disposition_date: now,
       updated_at: now,
     })
 
@@ -1326,7 +1444,11 @@ module.exports = {
       targetType: 'sale_record',
       targetId: id,
       targetName: dog.name || '未命名犬只',
-      summary: `为 ${dog.name || '未命名犬只'} 创建了销售记录`,
+      summary: `将 ${dog.name || '未命名犬只'} 纳入销售池`,
+      meta: {
+        saleMode: normalizeSaleMode(data.sale_mode),
+        floorPrice: data.floor_price ?? null,
+      },
     })
 
     return { data: { saleId: id } }
@@ -1355,7 +1477,8 @@ module.exports = {
       deposit_date: data.deposit_date || now,
       agreed_price: data.agreed_price || null,
       buyer_info: data.buyer_info || sale.buyer_info,
-      seller_agent_id: data.seller_agent_id || null,
+      seller_agent_id: data.seller_agent_id || data.agent_id || null,
+      seller_agent_name: data.seller_agent_name || data.agent_name || sale.seller_agent_name || null,
       platform: data.platform || null,
       updated_at: now,
     })
@@ -1386,7 +1509,6 @@ module.exports = {
    */
   async completeSale(saleId, data) {
     if (!saleId) throw new Error('缺少销售记录 ID')
-    if (!data.received_amount) throw new Error('请填写到手价')
 
     const now = Date.now()
     const familyId = this.familyId
@@ -1398,37 +1520,43 @@ module.exports = {
     const sale = sales[0]
     if (!['待售', '已预定'].includes(sale.status)) throw new Error('当前状态不可完成交易')
 
+    const hasReceivedAmount = data.received_amount !== '' && data.received_amount != null
+    const receivedAmount = hasReceivedAmount ? Number(data.received_amount) : null
+    if (hasReceivedAmount && (!Number.isFinite(receivedAmount) || receivedAmount <= 0)) {
+      throw new Error('请填写有效的到手价')
+    }
+    const settledDate = Number.isFinite(Number(data.date)) ? Number(data.date) : now
+    const settlementStatus = hasReceivedAmount ? '已结算' : '未结算'
+
     await db.collection('sale_records').doc(saleId).update({
       status: '已成交',
-      received_amount: data.received_amount,
-      date: data.date || now,
+      settlement_status: settlementStatus,
+      received_amount: receivedAmount,
+      agreed_price: data.agreed_price != null ? data.agreed_price : sale.agreed_price || null,
+      date: settledDate,
       delivery_date: data.delivery_date || null,
       seller_agent_id: data.seller_agent_id || sale.seller_agent_id,
+      seller_agent_name: data.seller_agent_name || data.agent_name || sale.seller_agent_name || null,
       platform: data.platform || sale.platform,
       buyer_info: data.buyer_info || sale.buyer_info,
       updated_at: now,
     })
 
-    // 自动生成收入记录
-    await db.collection('incomes').add({
-      dog_id: sale.dog_id,
-      dog_name: sale.dog_name,
-      type: '销售',
-      amount: data.received_amount,
-      date: data.date || now,
-      source_sale_id: saleId,
-      notes: null,
-      family_id: familyId,
-      created_by: this.uid,
-      deleted_at: null,
-      created_at: now,
-      updated_at: now,
-    })
+    if (hasReceivedAmount) {
+      await this.upsertSaleIncomeRecord({
+        saleId,
+        sale,
+        amount: receivedAmount,
+        date: settledDate,
+        familyId,
+        now,
+      })
+    }
 
     // 更新犬只去向
     await db.collection('dogs').doc(sale.dog_id).update({
       disposition: '已售',
-      disposition_date: data.date || now,
+      disposition_date: settledDate,
       updated_at: now,
     })
 
@@ -1441,10 +1569,69 @@ module.exports = {
       targetId: saleId,
       targetName: sale.dog_name || saleId,
       summary: `完成了 ${sale.dog_name || '未命名犬只'} 的销售`,
-      meta: { receivedAmount: data.received_amount },
+      meta: {
+        receivedAmount,
+        settlementStatus,
+      },
     })
 
     return { message: '交易完成' }
+  },
+
+  /**
+   * 补录成交后的结算信息
+   */
+  async settleSale(saleId, data) {
+    if (!saleId) throw new Error('缺少销售记录 ID')
+    if (data.received_amount === '' || data.received_amount == null) throw new Error('请填写到手价')
+
+    const now = Date.now()
+    const familyId = this.familyId
+    const receivedAmount = Number(data.received_amount)
+    if (!Number.isFinite(receivedAmount) || receivedAmount <= 0) throw new Error('请填写有效的到手价')
+
+    const { data: sales } = await db.collection('sale_records')
+      .where({ _id: saleId, family_id: familyId })
+      .get()
+    if (!sales || sales.length === 0) throw new Error('记录不存在')
+    const sale = sales[0]
+    if (sale.status !== '已成交') throw new Error('只有已成交状态可以补录结算')
+
+    const settlementDate = Number.isFinite(Number(data.date)) ? Number(data.date) : (sale.date || now)
+    const settlementStatus = normalizeSettlementStatus(data.settlement_status) || '已结算'
+
+    await db.collection('sale_records').doc(saleId).update({
+      received_amount: receivedAmount,
+      agreed_price: data.agreed_price != null ? data.agreed_price : sale.agreed_price || null,
+      settlement_status: settlementStatus,
+      updated_at: now,
+    })
+
+    await this.upsertSaleIncomeRecord({
+      saleId,
+      sale,
+      amount: receivedAmount,
+      date: settlementDate,
+      familyId,
+      now,
+    })
+
+    await logFinanceOperation({
+      familyId,
+      actorUserId: this.uid,
+      actionType: 'status_change',
+      domain: 'sale',
+      targetType: 'sale_record',
+      targetId: saleId,
+      targetName: sale.dog_name || saleId,
+      summary: `补录了 ${sale.dog_name || '未命名犬只'} 的结算信息`,
+      meta: {
+        receivedAmount,
+        settlementStatus,
+      },
+    })
+
+    return { message: '已补录结算' }
   },
 
   /**
@@ -1571,7 +1758,7 @@ module.exports = {
       .limit(100)
       .get()
 
-    return { data: sales }
+    return { data: (sales || []).map(item => normalizeSaleRecord(item)) }
   },
 
   /**
@@ -1585,7 +1772,7 @@ module.exports = {
       .get()
     if (!sales || sales.length === 0) throw new Error('记录不存在')
 
-    return { data: sales[0] }
+    return { data: normalizeSaleRecord(sales[0]) }
   },
 
   // ── 中间商管理 ──

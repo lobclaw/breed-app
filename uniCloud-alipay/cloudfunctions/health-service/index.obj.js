@@ -324,6 +324,40 @@ function normalizeIdList(value) {
     .filter(Boolean)))
 }
 
+function buildMedicationDailyDosePatch(task, nowTs) {
+  const now = Number.isFinite(Number(nowTs)) ? Number(nowTs) : Date.now()
+  const today = startOfDay(now)
+  const startDate = startOfDay(task?.actual_start_date || task?.start_date || task?.created_at || now)
+  const currentDay = Math.floor((today - startDate) / DAY_MS) + 1
+  const durationDays = Math.max(1, Number(task?.duration_days) || 1)
+
+  if (currentDay < 1 || currentDay > durationDays) return null
+
+  const frequency = Math.max(1, Number(task?.frequency) || 1)
+  const dayKey = String(currentDay)
+  const currentDoses = Number(task?.daily_doses?.[dayKey]) || 0
+  if (currentDoses >= frequency) return null
+
+  const nextDailyDoses = {
+    ...(task?.daily_doses && typeof task.daily_doses === 'object' ? task.daily_doses : {}),
+    [dayKey]: frequency,
+  }
+
+  let allComplete = true
+  for (let day = 1; day <= durationDays; day += 1) {
+    if ((Number(nextDailyDoses[String(day)]) || 0) < frequency) {
+      allComplete = false
+      break
+    }
+  }
+
+  return {
+    dayKey,
+    nextDailyDoses,
+    allComplete,
+  }
+}
+
 function isActiveIllnessRecord(record) {
   return record?.type === 'illness' && (record.details?.treatment_status || '观察中') !== '已康复'
 }
@@ -743,6 +777,55 @@ module.exports = {
     return { data: { success: true } }
   },
 
+  async batchUpdateIllnessStatus(input = {}) {
+    const familyId = this.familyId
+    const now = Date.now()
+    const status = typeof input?.status === 'string' ? input.status.trim() : ''
+    const requestedIllnessIds = normalizeIdList([
+      ...(Array.isArray(input?.illnessIds) ? input.illnessIds : []),
+      ...(Array.isArray(input?.illness_ids) ? input.illness_ids : []),
+      getIdArg(input, 'id', 'recordId', 'record_id', 'illnessId', 'illness_id'),
+    ])
+
+    if (!requestedIllnessIds.length) throw new Error('缺少疾病记录 ID')
+    if (!status) throw new Error('缺少疾病状态')
+
+    const { data: illnessRecords } = await db.collection('health_records')
+      .where({
+        _id: dbCmd.in(requestedIllnessIds),
+        family_id: familyId,
+        type: 'illness',
+        deleted_at: null,
+      })
+      .get()
+    const validIllnessIds = (illnessRecords || []).map(record => record._id).filter(Boolean)
+    if (validIllnessIds.length === 0) throw new Error('疾病记录不存在')
+
+    await db.collection('health_records').where({
+      _id: dbCmd.in(validIllnessIds),
+      family_id: familyId,
+      type: 'illness',
+      deleted_at: null,
+    }).update({
+      'details.treatment_status': status,
+      updated_at: now,
+    })
+
+    await logHealthOperation({
+      familyId,
+      actorUserId: this.uid,
+      actionType: 'status_change',
+      domain: 'health',
+      targetType: 'illness_batch',
+      targetId: `batch:${now}`,
+      targetName: `${validIllnessIds.length}条疾病记录`,
+      summary: `批量更新了 ${validIllnessIds.length} 条疾病状态`,
+      meta: { illnessIds: validIllnessIds, status },
+    })
+
+    return { data: { success: true, updatedIllnessIds: validIllnessIds } }
+  },
+
   /**
    * 疾病康复收口：标记疾病康复，并停止显式关联的进行中用药。
    */
@@ -841,6 +924,8 @@ module.exports = {
       data: {
         recovered: validIllnessIds.length,
         cancelledMedicationTasks: activeMedicationIds.length,
+        recoveredIllnessIds: validIllnessIds,
+        cancelledMedicationTaskIds: activeMedicationIds,
       },
     }
   },
@@ -1499,50 +1584,35 @@ module.exports = {
    * 将指定的 medication_tasks 今天的 doses 全部补满
    */
   async batchCompleteMedicationDay(medicationTaskIds) {
-    if (!medicationTaskIds || !Array.isArray(medicationTaskIds) || medicationTaskIds.length === 0) {
+    const normalizedTaskIds = normalizeIdList(medicationTaskIds)
+    if (normalizedTaskIds.length === 0) {
       throw new Error('缺少用药任务 ID')
     }
 
     const familyId = this.familyId
     const now = Date.now()
-    const today = startOfDay(now)
 
     const { data: meds } = await db.collection('medication_tasks')
-      .where({ _id: dbCmd.in(medicationTaskIds), family_id: familyId, status: '进行中' })
+      .where({ _id: dbCmd.in(normalizedTaskIds), family_id: familyId, status: '进行中' })
       .get()
 
-    for (const med of meds) {
-      const startDate = startOfDay(med.actual_start_date || med.start_date || med.created_at)
-      const currentDay = Math.floor((today - startDate) / DAY_MS) + 1
-      if (currentDay < 1 || currentDay > med.duration_days) continue
+    const patchableMeds = (meds || [])
+      .map(med => ({ med, patch: buildMedicationDailyDosePatch(med, now) }))
+      .filter(item => !!item.patch)
 
-      const dayKey = String(currentDay)
-      const frequency = med.frequency || 1
-      const currentDoses = med.daily_doses?.[dayKey] || 0
-      if (currentDoses >= frequency) continue
-
-      // 直接设置为 frequency（补满）
-      await db.collection('medication_tasks').doc(med._id).update({
-        [`daily_doses.${dayKey}`]: frequency,
+    await Promise.all(patchableMeds.map(({ med, patch }) => (
+      db.collection('medication_tasks').doc(med._id).update({
+        daily_doses: patch.nextDailyDoses,
+        status: patch.allComplete ? '已完成' : med.status,
         updated_at: now,
       })
+    )))
 
-      // 检查全部完成
-      const updatedDoses = { ...med.daily_doses, [dayKey]: frequency }
-      let allComplete = true
-      for (let d = 1; d <= med.duration_days; d++) {
-        if ((updatedDoses[String(d)] || 0) < frequency) {
-          allComplete = false
-          break
-        }
-      }
-      if (allComplete) {
-        await db.collection('medication_tasks').doc(med._id).update({
-          status: '已完成',
-          updated_at: now,
-        })
-      }
-    }
+    const completedMedicationTaskIds = patchableMeds.map(({ med }) => med._id).filter(Boolean)
+    const fullyCompletedMedicationTaskIds = patchableMeds
+      .filter(({ patch }) => patch.allComplete)
+      .map(({ med }) => med._id)
+      .filter(Boolean)
 
     await logHealthOperation({
       familyId,
@@ -1551,12 +1621,18 @@ module.exports = {
       domain: 'medication',
       targetType: 'medication_task_batch',
       targetId: `batch:${Date.now()}`,
-      targetName: `${meds.length}个用药方案`,
-      summary: `批量完成了 ${meds.length} 个今日用药`,
-      meta: { count: meds.length },
+      targetName: `${completedMedicationTaskIds.length}个用药方案`,
+      summary: `批量完成了 ${completedMedicationTaskIds.length} 个今日用药`,
+      meta: { count: completedMedicationTaskIds.length, completedMedicationTaskIds, fullyCompletedMedicationTaskIds },
     })
 
-    return { data: { completed: meds.length } }
+    return {
+      data: {
+        completed: completedMedicationTaskIds.length,
+        completedMedicationTaskIds,
+        fullyCompletedMedicationTaskIds,
+      },
+    }
   },
 
   /**
@@ -1693,24 +1769,31 @@ module.exports = {
       .where({ dog_id: dogId, family_id: familyId, status: '进行中' })
       .get()
 
-    let cancelled = 0
-    for (const med of meds) {
-      await db.collection('medication_tasks').doc(med._id).update({
+    const cancelledMedicationTaskIds = (meds || []).map(med => med._id).filter(Boolean)
+    if (cancelledMedicationTaskIds.length > 0) {
+      await db.collection('medication_tasks').where({
+        _id: dbCmd.in(cancelledMedicationTaskIds),
+        family_id: familyId,
+        status: '进行中',
+      }).update({
         status: '已取消',
         updated_at: now,
       })
+
       // 兼容旧数据：取消关联的 daily tasks
       await db.collection('tasks').where({
-        medication_task_id: med._id,
+        medication_task_id: dbCmd.in(cancelledMedicationTaskIds),
         status: 'pending',
       }).update({
         status: 'cancelled',
         updated_at: now,
       })
-      cancelled++
     }
 
-    return { message: `已停止 ${cancelled} 个用药方案` }
+    return {
+      message: `已停止 ${cancelledMedicationTaskIds.length} 个用药方案`,
+      data: { cancelled: cancelledMedicationTaskIds.length, cancelledMedicationTaskIds },
+    }
   },
 
   /**
