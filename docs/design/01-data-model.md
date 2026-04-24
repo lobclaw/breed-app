@@ -264,6 +264,20 @@
 
 用途：首页待办、健康提醒、繁育里程碑、额外安排等可操作任务。
 
+关键字段：
+
+- `_id`
+- `dog_id`
+- `cycle_id`
+- `litter_id`
+- `type`
+- `title`
+- `due_date`
+- `status`
+- `details`
+- `family_id`
+- `version`
+
 典型来源：
 
 - 健康记录显式创建的下一次提醒
@@ -330,6 +344,7 @@
 - `dam_name`
 - `litter_number`
 - `family_id`
+- `version`
 - `deleted_at`
 
 规则：
@@ -365,6 +380,7 @@
 - `source_sale_id`
 - `notes`
 - `family_id`
+- `version`
 - `deleted_at`
 
 规则：
@@ -397,6 +413,7 @@
 - `refund_amount`
 - `deposit_kept_amount`
 - `family_id`
+- `version`
 - `deleted_at`
 
 规则：
@@ -416,6 +433,7 @@
 - `agents`：代理人/中间人
 - `dog_weights`：体重历史
 - `medication_protocols`：用药方案库
+- `sync_mutations`：服务端幂等 mutation 记录
 
 其中 `families` 至少包含：
 
@@ -443,6 +461,11 @@
 - `custom_condition_types`
 - `custom_breed_types`
 
+补充规则：
+
+- `families.settings` 进入本地镜像，但成员管理、邀请、角色变更仍保持在线优先
+- `families` 主文档也补充 `version`，用于设置类字段的同步校验
+
 其中 `families.settings.notification_types` 结构为：
 
 - `breeding`
@@ -450,6 +473,30 @@
 - `medication`
 - `care_group`
 - `overdue`
+
+### 3.10 本地系统集合
+
+用途：仅存在于客户端本地，用于支撑 local-first 与自动同步，不直接暴露给业务页面。
+
+#### `outbox_mutations`
+
+- 记录待同步 mutation 队列
+- 关键字段：`_id`、`type`、`collection_scope`、`payload`、`status`、`retry_count`、`next_retry_at`、`client_mutation_id`、`device_id`、`created_at`、`updated_at`
+
+#### `sync_state`
+
+- 记录各集合最近一次增量拉取与同步游标
+- 关键字段：`collection`、`last_pulled_at`、`last_full_sync_at`、`last_ack_at`
+
+#### `sync_conflicts`
+
+- 记录服务端返回的版本冲突，供客户端后续提示与人工处理
+- 关键字段：`_id`、`client_mutation_id`、`collection`、`entity_id`、`base_version`、`server_version`、`status`、`detail`、`created_at`
+
+#### `local_meta`
+
+- 保存设备级元信息与本地库元数据
+- 关键字段：`device_id`、`schema_version`、`last_bootstrap_at`
 
 其中 `families.settings.custom_expense_categories` 结构为：
 

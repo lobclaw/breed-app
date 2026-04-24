@@ -619,10 +619,10 @@ function decodeQueryValue(value: unknown) {
 }
 
 function applyEntryDogFilter(query: Record<string, any> | undefined) {
-  const dogId = decodeQueryValue(query?.dogId || query?.dog_id)
+  const dogId = decodeQueryValue(query?.dogId) || decodeQueryValue(query?.dog_id)
   if (!dogId) return false
 
-  const dogName = decodeQueryValue(query?.dogName || query?.dog_name)
+  const dogName = decodeQueryValue(query?.dogName) || decodeQueryValue(query?.dog_name)
   Object.assign(appliedFilters, normalizeFilters({
     ...createDefaultFilters(currentMonth.value),
     selectedDogIds: [dogId],

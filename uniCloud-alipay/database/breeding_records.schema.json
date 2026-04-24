@@ -58,6 +58,10 @@
       "bsonType": "string",
       "description": "创建人用户ID"
     },
+    "version": {
+      "bsonType": "number",
+      "description": "同步版本号，每次服务端成功写入递增"
+    },
     "created_at": {
       "bsonType": "number",
       "description": "创建时间（时间戳毫秒）"

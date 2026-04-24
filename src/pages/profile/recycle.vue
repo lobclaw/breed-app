@@ -62,6 +62,8 @@
 import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
+import { localSyncRuntime } from '@/localdb/runtime'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BModal from '@/components/layout/BModal.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
@@ -70,6 +72,7 @@ import { useProtocolStore } from '@/stores/protocolStore'
 import type { RecycleBinItem, RecycleItemType } from '@/types/recycle'
 
 const protocolStore = useProtocolStore()
+const { currentFamily } = useAuth()
 const deletedItems = ref<RecycleBinItem[]>([])
 const loading = ref(true)
 const showConfirmModal = ref(false)
@@ -119,9 +122,9 @@ async function restoreItem(item: RecycleBinItem) {
   confirmText.value = '恢复'
   confirmDanger.value = false
   confirmAction = async () => {
-    await doRestore({ id: item._id, type: item.type })
+    await localSyncRuntime.restoreRecycleItemLocally(currentFamily.value?._id || '', item.type, item._id)
     await syncRecycleSideEffects(item.type)
-    await load()
+    deletedItems.value = deletedItems.value.filter(current => current._id !== item._id)
   }
   showConfirmModal.value = true
 }
@@ -132,9 +135,9 @@ async function permanentDelete(item: RecycleBinItem) {
   confirmText.value = '永久删除'
   confirmDanger.value = true
   confirmAction = async () => {
-    await doDelete({ id: item._id, type: item.type })
+    await localSyncRuntime.permanentDeleteRecycleItemLocally(currentFamily.value?._id || '', item.type, item._id)
     await syncRecycleSideEffects(item.type)
-    await load()
+    deletedItems.value = deletedItems.value.filter(current => current._id !== item._id)
   }
   showConfirmModal.value = true
 }

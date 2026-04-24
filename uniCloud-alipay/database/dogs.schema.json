@@ -93,6 +93,10 @@
     "updated_at": {
       "bsonType": "number",
       "description": "更新时间（时间戳毫秒）"
+    },
+    "version": {
+      "bsonType": "number",
+      "description": "同步版本号，每次成功写入后递增"
     }
   }
 }

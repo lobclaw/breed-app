@@ -1,0 +1,35 @@
+{
+  "bsonType": "object",
+  "required": ["family_id", "client_mutation_id", "response", "created_at", "updated_at"],
+  "permission": {
+    "read": false,
+    "create": false,
+    "update": false,
+    "delete": false
+  },
+  "properties": {
+    "_id": {
+      "description": "幂等 mutation 记录 ID，格式 familyId:clientMutationId"
+    },
+    "family_id": {
+      "bsonType": "string",
+      "description": "所属家庭 ID"
+    },
+    "client_mutation_id": {
+      "bsonType": "string",
+      "description": "客户端 mutation ID"
+    },
+    "response": {
+      "bsonType": "object",
+      "description": "最近一次处理完成后的响应快照"
+    },
+    "created_at": {
+      "bsonType": "number",
+      "description": "创建时间"
+    },
+    "updated_at": {
+      "bsonType": "number",
+      "description": "更新时间"
+    }
+  }
+}

@@ -27,7 +27,7 @@ describe('dog add/edit page source contract', () => {
 
   it('编辑犬只提交时不应继续通过普通更新接口主动传 role', () => {
     expect(source).toContain('const baseDogData = {')
-    expect(source).toContain('await updateDog(editDogId, baseDogData)')
+    expect(source).toContain('await localSyncRuntime.updateDogLocally(currentFamily.value?._id || \'\', editDogId, baseDogData)')
     expect(source).toContain('const dogData = {')
     expect(source).toContain('role: form.role')
   })

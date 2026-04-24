@@ -173,7 +173,9 @@
 import { ref, computed } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
 import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
+import { localSyncRuntime } from '@/localdb/runtime'
 import {
   DEFAULT_EXPENSE_CATEGORIES,
   INCOME_TYPES,
@@ -195,6 +197,7 @@ import type { ExpenseCategory } from '@/types/finance'
 
 // 模式：支出 / 收入
 const mode = ref<'expense' | 'income'>('expense')
+const { currentFamily } = useAuth()
 
 const amountInput = ref('')
 const submitState = ref<'idle' | 'submitting' | 'success'>('idle')
@@ -440,7 +443,7 @@ async function submit() {
     let res
     if (mode.value === 'expense') {
       saveRecentExpenseCategory(expenseCategory.value)
-      res = await addExpense({
+      res = await localSyncRuntime.addExpenseLocally(currentFamily.value?._id || '', {
         total_amount: parseFloat(amountInput.value),
         category: expenseCategory.value,
         date: date.value,
@@ -456,7 +459,7 @@ async function submit() {
       })
     } else {
       saveRecentIncomeType(incomeType.value)
-      res = await addIncome({
+      res = await localSyncRuntime.addIncomeLocally(currentFamily.value?._id || '', {
         amount: parseFloat(amountInput.value),
         type: incomeType.value,
         date: date.value,

@@ -360,8 +360,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
 import { useRecordSubmitState } from '@/composables/useRecordSubmitState'
 import { buildTaskFeedbackMessage, queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
+import { localSyncRuntime } from '@/localdb/runtime'
 import { resolveMedicationRouteQuery, type MedicationRouteIllnessLink } from '@/utils/recordFormRoutes'
 import { formatMedicationDosage } from '@/utils/medicationDisplay'
 import { buildTimestampFromDayOffset, formatDateInputValue, getLocalCalendarDayDiff } from '@/utils/date'
@@ -381,6 +383,7 @@ const props = withDefaults(defineProps<{
   query: () => ({}),
 })
 
+const { currentFamily } = useAuth()
 const selectedDogs = ref<any[]>([])
 const drugName = ref('')
 const dosage = ref('')
@@ -664,8 +667,12 @@ async function submit() {
     const drug = drugName.value.trim()
     const dogIds = selectedDogs.value.map((dog: any) => dog._id)
 
-    const duplicateRes = await batchCheckDuplicate(dogIds, drug)
-    dupList.value = duplicateRes?.data || []
+    try {
+      const duplicateRes = await batchCheckDuplicate(dogIds, drug)
+      dupList.value = duplicateRes?.data || []
+    } catch {
+      dupList.value = []
+    }
     if (dupList.value.length > 0) {
       dupOverrideDogIds.value = []
       showDupModal.value = true
@@ -693,7 +700,7 @@ async function submit() {
         illness_record_id: item.illnessRecordId,
       }))
 
-    await batchStartMedication({
+    await localSyncRuntime.batchStartMedicationLocally(currentFamily.value?._id || '', {
       dog_ids: finalDogIds,
       override_dog_ids: overrideDogIds.length > 0 ? overrideDogIds : undefined,
       drug_name: drug,

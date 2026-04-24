@@ -9,6 +9,20 @@ try {
 } catch (error) {
   ;({ safeWriteOperationLog } = require('../common/breed-auth/operation-log'))
 }
+let syncUtils = null
+try {
+  syncUtils = require('breed-sync')
+} catch (error) {
+  syncUtils = require('../common/breed-sync')
+}
+const {
+  getSyncMeta,
+  buildTouchedEntity,
+  buildSyncAck,
+  findAppliedMutation,
+  markMutationApplied,
+  buildVersionedCreate,
+} = syncUtils
 
 const db = uniCloud.database()
 const dbCmd = db.command
@@ -573,8 +587,14 @@ module.exports = {
     if (!data.category) throw new Error('请选择分类')
 
     const now = Date.now()
+    const syncMeta = getSyncMeta(data)
+    const appliedMutation = await findAppliedMutation(db, this.familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
+    const clientExpenseId = syncMeta?.clientEntityIds?.expenses
+    const expenseId = typeof clientExpenseId === 'string' ? clientExpenseId : null
 
-    const expenseData = {
+    const expenseData = buildVersionedCreate({
+      ...(expenseId ? { _id: expenseId } : {}),
       family_id: this.familyId,
       total_amount: data.total_amount,
       category: data.category,
@@ -591,22 +611,33 @@ module.exports = {
       notes: data.notes || null,
       created_by: this.uid,
       deleted_at: null,
-      created_at: now,
-      updated_at: now,
-    }
+    }, now)
 
     const { id } = await db.collection('expenses').add(expenseData)
+    const resolvedExpenseId = expenseId || id
     await logFinanceOperation({
       familyId: this.familyId,
       actorUserId: this.uid,
       actionType: 'create',
       targetType: 'expense',
-      targetId: id,
+      targetId: resolvedExpenseId,
       targetName: data.category,
       summary: `新增了支出 ${data.category}`,
       meta: { amount: data.total_amount },
     })
-    return { data: { expenseId: id } }
+    const savedExpense = { ...expenseData, _id: resolvedExpenseId }
+    const response = {
+      data: { expenseId: resolvedExpenseId },
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: [buildTouchedEntity('expenses', savedExpense)],
+        resyncScopes: ['expenses'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**
@@ -618,8 +649,14 @@ module.exports = {
     if (!normalizedType) throw new Error('请选择收入类型')
 
     const now = Date.now()
+    const syncMeta = getSyncMeta(data)
+    const appliedMutation = await findAppliedMutation(db, this.familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
+    const clientIncomeId = syncMeta?.clientEntityIds?.incomes
+    const incomeId = typeof clientIncomeId === 'string' ? clientIncomeId : null
 
-    const incomeData = {
+    const incomeData = buildVersionedCreate({
+      ...(incomeId ? { _id: incomeId } : {}),
       family_id: this.familyId,
       dog_id: data.dog_id || null,
       dog_name: data.dog_name || null,
@@ -630,22 +667,33 @@ module.exports = {
       notes: data.notes || null,
       created_by: this.uid,
       deleted_at: null,
-      created_at: now,
-      updated_at: now,
-    }
+    }, now)
 
     const { id } = await db.collection('incomes').add(incomeData)
+    const resolvedIncomeId = incomeId || id
     await logFinanceOperation({
       familyId: this.familyId,
       actorUserId: this.uid,
       actionType: 'create',
       targetType: 'income',
-      targetId: id,
+      targetId: resolvedIncomeId,
       targetName: normalizedType,
       summary: `新增了收入 ${normalizedType}`,
       meta: { amount: data.amount },
     })
-    return { data: { incomeId: id } }
+    const savedIncome = { ...incomeData, _id: resolvedIncomeId }
+    const response = {
+      data: { incomeId: resolvedIncomeId },
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: [buildTouchedEntity('incomes', savedIncome)],
+        resyncScopes: ['incomes'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**

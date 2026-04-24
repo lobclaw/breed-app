@@ -547,4 +547,58 @@ describe('dog-service', () => {
       updated_at: mockNow,
     })
   })
+
+  it('createDog 应支持 _sync 稳定 ID 与幂等重放', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+    const payload = {
+      name: '豆豆',
+      gender: '公',
+      role: '种狗',
+      _sync: {
+        clientMutationId: 'dog-create-1',
+        deviceId: 'device_1',
+        clientTimestamp: mockNow,
+        clientEntityIds: { dogs: 'dog_client_1' },
+      },
+    }
+
+    const first = await dogService.createDog.call(ctx, payload)
+    const second = await dogService.createDog.call(ctx, payload)
+
+    expect(first.ack).toBe('accepted')
+    expect(second).toEqual(first)
+    expect(first.data._id).toBe('dog_client_1')
+
+    const { data: dogs } = await db.collection('dogs')
+      .where({ _id: 'dog_client_1', family_id: familyId })
+      .get()
+    expect(dogs).toHaveLength(1)
+    expect(dogs[0].version).toBe(1)
+  })
+
+  it('updateDog 在 baseVersion 过期时应返回 conflict 且不覆盖', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+    await db.collection('dogs').doc('dog_1').update({ version: 3, latest_weight: 2.5 })
+
+    const result = await dogService.updateDog.call(ctx, 'dog_1', {
+      latest_weight: 3.1,
+      _sync: {
+        clientMutationId: 'dog-update-conflict-1',
+        deviceId: 'device_1',
+        clientTimestamp: mockNow,
+        baseVersions: { dog_1: 2 },
+      },
+    })
+
+    expect(result.ack).toBe('conflict')
+    expect(result.conflict).toMatchObject({
+      collection: 'dogs',
+      entityId: 'dog_1',
+      baseVersion: 2,
+      serverVersion: 3,
+    })
+
+    const { data: dogs } = await db.collection('dogs').doc('dog_1').get()
+    expect(dogs[0].latest_weight).toBe(2.5)
+  })
 })

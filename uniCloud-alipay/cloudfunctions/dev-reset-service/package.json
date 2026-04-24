@@ -1,0 +1,6 @@
+{
+  "name": "dev-reset-service",
+  "version": "1.0.0",
+  "description": "测试环境数据重置云对象",
+  "main": "index.obj.js"
+}

@@ -1498,9 +1498,6 @@ const dispositionActions = computed<DispositionAction[]>(() => {
 
   if (d.role === '幼崽') {
     return [
-      ...(canStartSale.value
-        ? [{ key: 'start-sale' as const, icon: 'storefront', title: '开始销售', sub: '纳入销售池并创建待售记录', tone: 'blue' as const }]
-        : []),
       { key: 'promote', icon: 'trending_up', title: '升级为种犬', sub: '切换为种狗身份并恢复在养状态', tone: 'amber' },
       { key: 'adoption', icon: 'volunteer_activism', title: '送领养', sub: '登记领养去向与领养费用', tone: 'green' },
       { key: 'gift', icon: 'redeem', title: '赠送', sub: '登记受赠对象与赠送日期', tone: 'teal' },
@@ -2317,6 +2314,7 @@ function editDog() {
 const addRecordGroups = computed(() => createDogDetailAddRecordGroups({
   role: dog.value?.role,
   gender: dog.value?.gender,
+  allowBreeding: dog.value?.role !== '幼崽',
   activeCycleStatus: activeCycle.value?.status,
   statuses: statuses.value,
   includeBreedingHint: !!activeCycle.value?._id,
@@ -2413,17 +2411,8 @@ function goToIncomeAdd() {
 }
 
 function goToFinanceList() {
-  uni.setStorageSync(FINANCE_ENTRY_DOG_FILTER_KEY, JSON.stringify({
-    dogId,
-    dogName: dog.value?.name || '',
-  }))
-  uni.switchTab({
-    url: '/pages/finance/index',
-    fail() {
-      uni.removeStorageSync(FINANCE_ENTRY_DOG_FILTER_KEY)
-      uni.showToast({ title: '财务页打开失败', icon: 'none' })
-    },
-  })
+  const dogName = encodeURIComponent(dog.value?.name || '')
+  uni.navigateTo({ url: `/pages/finance/index?dogId=${dogId}&dogName=${dogName}` })
 }
 
 function goToStartSale() {

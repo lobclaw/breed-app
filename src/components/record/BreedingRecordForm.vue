@@ -476,8 +476,10 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
 import { useRecordSubmitState } from '@/composables/useRecordSubmitState'
 import { buildRecordFeedbackMessage, queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
+import { localSyncRuntime } from '@/localdb/runtime'
 import { resolveBreedingRouteQuery } from '@/utils/recordFormRoutes'
 import { getDefaultExtraArrangementDate, type ExtraArrangementKind } from '@/utils/breedingExtraArrangement'
 import { getBreedingDogPickerEmptyState, getEligibleBreedingDogs } from '@/utils/breedingDogEligibility'
@@ -512,6 +514,7 @@ const props = withDefaults(defineProps<{
 })
 
 const isEdit = computed(() => props.mode === 'edit')
+const { currentFamily } = useAuth()
 
 const breedingType = computed<BreedingRecordType | ''>(() => {
   return (isEdit.value ? currentRecord.value?.type : props.type) || ''
@@ -1096,7 +1099,7 @@ async function loadEditState() {
 async function submitCreate() {
   if (isHeatMultiCreate.value) {
     const detailPayload = buildDetails()
-    const result = await batchAddRecords({
+    const result = await localSyncRuntime.batchAddBreedingRecordsLocally(currentFamily.value?._id || '', {
       dog_ids: selectedDogs.value.map((dog: any) => dog._id),
       type: 'heat',
       date: date.value,
@@ -1143,9 +1146,9 @@ async function submitCreate() {
     payload.extra_arrangement = extraArrangementPayload.value
   }
 
-  const result = await addRecord(payload)
+  const result = await localSyncRuntime.addBreedingRecordLocally(currentFamily.value?._id || '', payload)
   if (prefillTaskId.value) {
-    await completeTask(prefillTaskId.value)
+    await localSyncRuntime.completeTaskLocally(currentFamily.value?._id || '', prefillTaskId.value)
   }
 
   markSuccess()

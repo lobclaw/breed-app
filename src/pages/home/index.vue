@@ -560,7 +560,6 @@
 <script setup lang="ts">
 import { ref, reactive, computed, nextTick, getCurrentInstance, watch } from 'vue'
 import { onHide, onShow } from '@dcloudio/uni-app'
-import { useCloudCall } from '@/composables/useCloudCall'
 import { useAuth } from '@/composables/useAuth'
 import WeekStrip from '@/components/week-strip/WeekStrip.vue'
 import BreedingProcessGroupCard from '@/components/smart-card/BreedingProcessGroupCard.vue'
@@ -587,8 +586,9 @@ import { buildHomeWorkbench } from '@/utils/homeWorkbench'
 import { buildTimestampFromDayOffset, formatDateInputValue, getBeijingDayStart } from '@/utils/date'
 import { buildMedicationDetailUrl } from '@/utils/dogDetailNavigation'
 import type { MedicationRouteIllnessLink } from '@/utils/recordFormRoutes'
+import { localSyncRuntime } from '@/localdb/runtime'
 
-const { hasFamily, loadFamily } = useAuth()
+const { hasFamily, currentFamily, loadFamily } = useAuth()
 const taskStore = useTaskStore()
 
 // stale-while-revalidate：先用 taskStore 缓存渲染，后台刷新
@@ -904,23 +904,69 @@ function formatFullDate(ts: number) {
   return `${d.getMonth() + 1}月${d.getDate()}日 ${weekDays[d.getDay()]}`
 }
 
-const { run: fetchCards } = useCloudCall<{ data: any }>('task-service', 'getHomeCards')
-const { run: fetchDateCounts } = useCloudCall<{ data: any }>('task-service', 'getDateCounts')
-const { run: fetchWeekCards } = useCloudCall<{ data: any }>('task-service', 'getWeekCards')
-const { run: doCompleteTask } = useCloudCall('task-service', 'completeTask')
-const { run: doPostponeTask } = useCloudCall('task-service', 'postponeTask')
-const { run: doBatchComplete } = useCloudCall('task-service', 'batchCompleteTask')
-const { run: doBatchPostponeTask } = useCloudCall('task-service', 'batchPostponeTask')
-const { run: doRecordMedDose } = useCloudCall('health-service', 'recordMedicationDose')
-const { run: doBatchCompleteMedDay } = useCloudCall('health-service', 'batchCompleteMedicationDay')
-const { run: recoverIllnesses } = useCloudCall('health-service', 'recoverIllnesses', {
-  successMode: 'silent',
-  loadingMode: 'local',
-})
-const { run: batchUpdateIllnessStatus } = useCloudCall('health-service', 'batchUpdateIllnessStatus', {
-  successMode: 'silent',
-  loadingMode: 'local',
-})
+function getCurrentFamilyId() {
+  return currentFamily.value?._id || ''
+}
+
+async function fetchCards() {
+  return localSyncRuntime.getHomeCards()
+}
+
+async function fetchDateCounts(startDate: number, endDate: number) {
+  return localSyncRuntime.getDateCounts(startDate, endDate)
+}
+
+async function fetchWeekCards(startDate: number, endDate: number) {
+  return localSyncRuntime.getWeekCards(startDate, endDate)
+}
+
+async function doCompleteTask(taskId: string, autoRecord?: boolean) {
+  const familyId = getCurrentFamilyId()
+  if (!familyId) return null
+  return localSyncRuntime.completeTaskLocally(familyId, taskId, Boolean(autoRecord))
+}
+
+async function doPostponeTask(taskId: string, newDate: number) {
+  const familyId = getCurrentFamilyId()
+  if (!familyId) return null
+  return localSyncRuntime.postponeTasksLocally(familyId, [taskId], newDate)
+}
+
+async function doBatchComplete(taskIds: string[], autoRecord?: boolean) {
+  const familyId = getCurrentFamilyId()
+  if (!familyId) return null
+  return localSyncRuntime.batchCompleteTasksLocally(familyId, taskIds, Boolean(autoRecord))
+}
+
+async function doBatchPostponeTask(taskIds: string[], newDate: number) {
+  const familyId = getCurrentFamilyId()
+  if (!familyId) return null
+  return localSyncRuntime.postponeTasksLocally(familyId, taskIds, newDate)
+}
+
+async function doRecordMedDose(medicationTaskId: string) {
+  const familyId = getCurrentFamilyId()
+  if (!familyId) return null
+  return localSyncRuntime.recordMedicationDoseLocally(familyId, medicationTaskId)
+}
+
+async function doBatchCompleteMedDay(medicationTaskIds: string[]) {
+  const familyId = getCurrentFamilyId()
+  if (!familyId) return null
+  return localSyncRuntime.batchCompleteMedicationDayLocally(familyId, medicationTaskIds)
+}
+
+async function recoverIllnesses(input: { illnessIds: string[]; medicationTaskIds?: string[] }) {
+  const familyId = getCurrentFamilyId()
+  if (!familyId) return null
+  return localSyncRuntime.recoverIllnessesLocally(familyId, input.illnessIds || [], input.medicationTaskIds || [])
+}
+
+async function batchUpdateIllnessStatus(input: { illnessIds: string[]; status: string }) {
+  const familyId = getCurrentFamilyId()
+  if (!familyId) return null
+  return localSyncRuntime.updateIllnessStatusLocally(familyId, input.illnessIds || [], input.status)
+}
 
 // 7天卡片缓存：{ [dayTimestamp]: Card[] }
 type WeekCacheEntry = { cards: any[] }
@@ -1067,13 +1113,13 @@ async function loadTodayCards(loadToken = latestLoadToken) {
 
   const result = await fetchCards()
   if (loadToken !== latestLoadToken) return
-  if (result?.data) {
+  if (result) {
     pruneSuppressedTasks()
-    cards.value = filterSuppressedCards(result.data.cards || [])
-    counts.today = result.data.counts?.today || 0
-    counts.week = result.data.counts?.week || 0
-    counts.month30 = result.data.counts?.month30 || 0
-    counts.hasOverdue = result.data.counts?.hasOverdue || false
+    cards.value = filterSuppressedCards(result.cards || [])
+    counts.today = result.counts?.today || 0
+    counts.week = result.counts?.week || 0
+    counts.month30 = result.counts?.month30 || 0
+    counts.hasOverdue = result.counts?.hasOverdue || false
     // 同步到 taskStore
     taskStore.cards = cards.value
     taskStore.counts = { today: counts.today, week: counts.week, month30: counts.month30, hasOverdue: counts.hasOverdue }
@@ -1091,10 +1137,10 @@ async function loadWeekCache(loadToken = latestLoadToken) {
   const end = todayTs + 7 * DAY_MS - 1 // 未来 6 天
   const result = await fetchWeekCards(start, end)
   if (loadToken !== latestLoadToken) return
-  if (result?.data) {
+  if (result) {
     pruneSuppressedTasks()
     const cache: Record<number, WeekCacheEntry> = {}
-    for (const [k, v] of Object.entries(result.data)) {
+    for (const [k, v] of Object.entries(result)) {
       const dayData = v as { cards?: any[] }
       cache[Number(k)] = {
         cards: filterSuppressedCards(dayData.cards || []),
@@ -1154,7 +1200,7 @@ async function onDateSelect(ts: number) {
       const result = await fetchWeekCards(normalizedTs, normalizedTs + 86400000 - 1)
       if (loadToken !== latestLoadToken || selectedDate.value !== normalizedTs) return
       pruneSuppressedTasks()
-      const dayData = result?.data?.[normalizedTs] || result?.data?.[String(normalizedTs)]
+      const dayData = (result as any)?.[normalizedTs] || (result as any)?.[String(normalizedTs)]
       const cardsForDay = filterSuppressedCards(dayData?.cards || [])
       weekCache.value = {
         ...weekCache.value,
@@ -1229,7 +1275,7 @@ async function ensureDateCountsRange(
   const result = await fetchDateCounts(normalizedStart, normalizedEnd)
   if (options.loadToken !== undefined && options.loadToken !== latestLoadToken) return
 
-  mergeDateCountsRange(normalizedStart, normalizedEnd, result?.data)
+  mergeDateCountsRange(normalizedStart, normalizedEnd, result || {})
   loadedDateCountRanges.add(rangeKey)
 }
 
@@ -1704,7 +1750,11 @@ function applyHomeFeedback(payload: any) {
   }
 }
 
-const { run: endMedication } = useCloudCall('health-service', 'endMedicationByDog')
+async function endMedication(dogId: string) {
+  const familyId = getCurrentFamilyId()
+  if (!familyId) return null
+  return localSyncRuntime.endMedicationByDogLocally(familyId, dogId)
+}
 
 /** 乐观移除疾病观察卡中的观察项（带淡出动画） */
 function removeSickDogLocally(dogId: string, illnessId?: string) {
@@ -1999,6 +2049,9 @@ onShow(async () => {
     uni.navigateTo({ url: '/pages/family/setup' })
     return
   }
+  const familyId = getCurrentFamilyId()
+  if (!familyId) return
+  await localSyncRuntime.syncHome(familyId)
   selectedDate.value = startOfDay(Date.now())
   viewMode.value = 'today'
   dayCards.value = []

@@ -71,12 +71,12 @@
       </view>
     </view>
 
-    <view v-if="loadingMore && logs.length" class="timeline timeline--append">
+    <view v-if="loadingMore && logs.length" class="log-list log-list--append">
       <view class="timeline-group">
         <view class="timeline-group__list">
-          <view v-for="index in 2" :key="`append-${index}`" class="log-card log-card--skeleton">
+          <view v-for="index in 2" :key="`append-${index}`" class="log-item log-item--skeleton">
             <view class="log-card__rail" />
-            <view class="log-card__icon log-card__icon--skeleton log-skeleton__shimmer" />
+            <view class="log-icon log-icon--skeleton log-skeleton__shimmer" />
             <view class="log-card__body">
               <view class="log-skeleton__line log-skeleton__line--main log-skeleton__shimmer" />
               <view class="log-skeleton__line log-skeleton__line--meta log-skeleton__shimmer" />
@@ -84,6 +84,10 @@
           </view>
         </view>
       </view>
+    </view>
+
+    <view v-if="hasMore && logs.length && !loadingMore" class="load-more" @click="loadMore">
+      <text>加载更多</text>
     </view>
 
     <view v-if="!logs.length && !loading" class="empty-state">
@@ -97,12 +101,12 @@
       </view>
     </view>
 
-    <view v-if="loading && !logs.length" class="timeline">
+    <view v-if="loading && !logs.length" class="log-list">
       <view class="timeline-group">
         <view class="timeline-group__list">
-          <view v-for="index in 4" :key="`loading-${index}`" class="log-card log-card--skeleton">
+          <view v-for="index in 4" :key="`loading-${index}`" class="log-item log-item--skeleton">
             <view class="log-card__rail" />
-            <view class="log-card__icon log-card__icon--skeleton log-skeleton__shimmer" />
+            <view class="log-icon log-icon--skeleton log-skeleton__shimmer" />
             <view class="log-card__body">
               <view class="log-skeleton__line log-skeleton__line--main log-skeleton__shimmer" />
               <view class="log-skeleton__line log-skeleton__line--meta log-skeleton__shimmer" />
@@ -771,6 +775,14 @@ onReachBottom(() => {
   }
 }
 
+.log-list {
+  @extend .timeline;
+
+  &--append {
+    padding-top: 0;
+  }
+}
+
 .timeline-group {
   margin-bottom: 14px;
 
@@ -809,7 +821,8 @@ onReachBottom(() => {
   }
 }
 
-.log-card {
+.log-card,
+.log-item {
   position: relative;
   display: flex;
   align-items: flex-start;
@@ -823,7 +836,21 @@ onReachBottom(() => {
   &--skeleton {
     pointer-events: none;
   }
+}
 
+.log-icon {
+  position: relative;
+  z-index: 1;
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.log-card {
   &__rail {
     position: absolute;
     left: 0;

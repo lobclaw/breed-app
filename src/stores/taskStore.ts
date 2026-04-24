@@ -4,7 +4,8 @@
  * 首页加载时填充，BFabSheet 读取用于智能推荐
  */
 import { defineStore } from 'pinia'
-import { cloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
+import { localSyncRuntime } from '@/localdb/runtime'
 import type { HomeCardFocusTarget } from '@/utils/homeCardFocus'
 import {
   buildFabTaskRecommendation,
@@ -65,14 +66,18 @@ export const useTaskStore = defineStore('tasks', {
     /** 从服务端加载 */
     async fetchFromServer() {
       try {
-        const res = await cloudCall<{ data: any }>('task-service', 'getHomeCards')
-        if (res?.data) {
-          this.cards = res.data.cards || []
+        const { currentFamily } = useAuth()
+        const familyId = currentFamily.value?._id
+        if (!familyId) return
+        await localSyncRuntime.syncHome(familyId)
+        const res = await localSyncRuntime.getHomeCards()
+        if (res) {
+          this.cards = (res.cards || []) as TaskCard[]
           this.counts = {
-            today: res.data.counts?.today || 0,
-            week: res.data.counts?.week || 0,
-            month30: res.data.counts?.month30 || 0,
-            hasOverdue: res.data.counts?.hasOverdue || false,
+            today: res.counts?.today || 0,
+            week: res.counts?.week || 0,
+            month30: res.counts?.month30 || 0,
+            hasOverdue: res.counts?.hasOverdue || false,
           }
           this.loaded = true
         }

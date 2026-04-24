@@ -423,6 +423,49 @@ describe('task-service', () => {
       expect(records.map(r => r.dog_name).sort()).toEqual(['奶盖', '布丁'])
       expect(records.every(r => r.type === 'vaccination')).toBe(true)
     })
+
+    it('completeTask 应支持 _sync 幂等重放并返回 touchedEntities', async () => {
+      const now = Date.now()
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      seedCollection('tasks', [{
+        _id: 'task_sync_1',
+        family_id: familyId,
+        dog_id: 'dog_1',
+        dog_name: '花花',
+        type: 'vaccination',
+        title: '疫苗',
+        status: 'pending',
+        due_date: now,
+        version: 3,
+        created_at: now - DAY_MS,
+        updated_at: now - DAY_MS,
+      }])
+
+      const payload = {
+        taskId: 'task_sync_1',
+        autoRecord: false,
+        _sync: {
+          clientMutationId: 'mutation_task_sync_1',
+          deviceId: 'device_a',
+          baseVersions: { task_sync_1: 3 },
+          clientTimestamp: now,
+        },
+      }
+
+      const first = await taskService.completeTask.call(ctx, payload)
+      expect(first.ack).toBe('accepted')
+      expect(first.clientMutationId).toBe('mutation_task_sync_1')
+      expect(first.touchedEntities).toEqual([
+        expect.objectContaining({ collection: 'tasks', id: 'task_sync_1', version: 4 }),
+      ])
+
+      const second = await taskService.completeTask.call(ctx, payload)
+      expect(second).toEqual(first)
+
+      const { data: tasks } = await db.collection('tasks').doc('task_sync_1').get()
+      expect(tasks[0].status).toBe('completed')
+      expect(tasks[0].version).toBe(4)
+    })
   })
 
   describe('postponeTask 推迟任务', () => {
@@ -494,6 +537,43 @@ describe('task-service', () => {
       expect(taskMap.get('task_batch_postpone_2')?.postpone_count).toBe(2)
       expect(taskMap.get('task_batch_postpone_done')?.due_date).toBe(now)
       expect(taskMap.get('task_batch_postpone_done')?.postpone_count).toBe(3)
+    })
+
+    it('postponeTask 在 baseVersion 过期时应返回 conflict 且不写入', async () => {
+      const now = Date.now()
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      seedCollection('tasks', [{
+        _id: 'task_conflict_1',
+        family_id: familyId,
+        status: 'pending',
+        due_date: now,
+        version: 5,
+        created_at: now - DAY_MS,
+        updated_at: now - DAY_MS,
+      }])
+
+      const result = await taskService.postponeTask.call(ctx, {
+        taskId: 'task_conflict_1',
+        newDate: now + DAY_MS,
+        _sync: {
+          clientMutationId: 'mutation_task_conflict_1',
+          deviceId: 'device_a',
+          baseVersions: { task_conflict_1: 4 },
+          clientTimestamp: now,
+        },
+      })
+
+      expect(result.ack).toBe('conflict')
+      expect(result.conflict).toEqual(expect.objectContaining({
+        collection: 'tasks',
+        entityId: 'task_conflict_1',
+        baseVersion: 4,
+        serverVersion: 5,
+      }))
+
+      const { data: task } = await db.collection('tasks').doc('task_conflict_1').get()
+      expect(task[0].due_date).toBe(now)
+      expect(task[0].version).toBe(5)
     })
   })
 

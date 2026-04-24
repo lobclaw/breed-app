@@ -9,6 +9,24 @@ try {
 } catch (error) {
   ;({ safeWriteOperationLog } = require('../common/breed-auth/operation-log'))
 }
+let syncUtils = null
+try {
+  syncUtils = require('breed-sync')
+} catch (error) {
+  syncUtils = require('../common/breed-sync')
+}
+const {
+  getSyncMeta,
+  buildTouchedEntity,
+  buildSyncAck,
+  buildConflictAck,
+  findAppliedMutation,
+  markMutationApplied,
+  getBaseVersion,
+  getServerVersion,
+  buildVersionUpdate,
+  buildVersionedCreate,
+} = syncUtils
 
 const db = uniCloud.database()
 const dbCmd = db.command
@@ -614,7 +632,12 @@ module.exports = {
     if (!data.role) throw new Error('请选择角色')
 
     const now = Date.now()
-    const dogData = {
+    const syncMeta = getSyncMeta(data)
+    const appliedMutation = await findAppliedMutation(db, this.familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
+    const clientDogId = typeof syncMeta?.clientEntityIds?.dogs === 'string' ? syncMeta.clientEntityIds.dogs : null
+    const dogData = buildVersionedCreate({
+      ...(clientDogId ? { _id: clientDogId } : {}),
       name: data.name || '',
       gender: data.gender,
       role: data.role,
@@ -631,36 +654,33 @@ module.exports = {
       disposition_date: null,
       disposition_notes: null,
       deleted_at: null,
-      created_at: now,
-      updated_at: now,
-    }
+    }, now)
 
     const { id } = await db.collection('dogs').add(dogData)
+    const dogId = clientDogId || id
 
     // 如有购入价格，自动创建费用记录
     if (data.purchase_price && data.purchase_price > 0) {
-      await db.collection('expenses').add({
+      await db.collection('expenses').add(buildVersionedCreate({
         total_amount: data.purchase_price,
         category: '购入',
         date: data.purchase_date || now,
         notes: `购入${data.role === '外部种公' ? '外部种公' : '种犬'}：${data.name || ''}`,
-        linked_dog_ids: [id],
+        linked_dog_ids: [dogId],
         dog_names: [data.name || ''],
         source_type: 'auto',
-        source_record_id: id,
+        source_record_id: dogId,
         family_id: this.familyId,
         created_by: this.uid,
         deleted_at: null,
-        created_at: now,
-        updated_at: now,
-      })
+      }, now))
     }
 
     await logDogOperation({
       familyId: this.familyId,
       actorUserId: this.uid,
       actionType: 'create',
-      targetId: id,
+      targetId: dogId,
       targetName: dogData.name || '未命名犬只',
       summary: `新增了犬只 ${dogData.name || '未命名犬只'}`,
       meta: {
@@ -669,14 +689,31 @@ module.exports = {
       },
     })
 
-    return { data: { _id: id } }
+    const savedDog = { ...dogData, _id: dogId }
+    const response = {
+      data: { _id: dogId },
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: [buildTouchedEntity('dogs', savedDog)],
+        resyncScopes: ['dogs', 'expenses'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**
    * 更新犬只基础信息
    */
-  async updateDog(dogId, data) {
+  async updateDog(input, data = null) {
+    const dogId = typeof input === 'object' ? (input.dogId || input.dog_id || input.id) : input
+    data = typeof input === 'object' ? (input.data || input.patch || input) : data
     if (!dogId) throw new Error('缺少犬只 ID')
+    const syncMeta = getSyncMeta(data)
+    const appliedMutation = await findAppliedMutation(db, this.familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
 
     const { data: dogs } = await db.collection('dogs')
       .where({ _id: dogId, family_id: this.familyId })
@@ -685,6 +722,15 @@ module.exports = {
     if (!dogs || dogs.length === 0) throw new Error('犬只不存在')
 
     const currentDog = dogs[0]
+    const baseVersion = getBaseVersion(syncMeta, dogId)
+    if (baseVersion !== null && baseVersion < getServerVersion(currentDog)) {
+      return buildConflictAck(syncMeta, {
+        collection: 'dogs',
+        entityId: dogId,
+        baseVersion,
+        serverVersion: getServerVersion(currentDog),
+      })
+    }
 
     if (Object.prototype.hasOwnProperty.call(data, 'role') && data.role !== currentDog.role) {
       throw new Error('角色不可通过普通编辑修改，请使用专门操作')
@@ -692,7 +738,7 @@ module.exports = {
 
     // 禁止通过此方法修改 name（用 updateDogName）、disposition（用 changeDisposition）和 role（用专门流程）
     const { name, disposition, role, family_id, deleted_at, created_at, _id, ...updateFields } = data
-    updateFields.updated_at = Date.now()
+    Object.assign(updateFields, buildVersionUpdate(dbCmd, Date.now()))
 
     await db.collection('dogs')
       .where({ _id: dogId, family_id: this.familyId })
@@ -707,18 +753,38 @@ module.exports = {
       summary: `更新了犬只 ${currentDog.name || '未命名犬只'} 的档案信息`,
     })
 
-    return { message: '已更新' }
+    const { data: updatedDogs } = await db.collection('dogs')
+      .where({ _id: dogId, family_id: this.familyId })
+      .limit(1)
+      .get()
+    const response = {
+      message: '已更新',
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: updatedDogs?.[0] ? [buildTouchedEntity('dogs', updatedDogs[0])] : [],
+        resyncScopes: ['dogs'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**
    * 改名 + 批量更新冗余字段
    */
-  async updateDogName(dogId, newName) {
+  async updateDogName(input, newName = '') {
+    const dogId = typeof input === 'object' ? (input.dogId || input.dog_id || input.id) : input
+    newName = typeof input === 'object' ? (input.name || input.newName || input.new_name || '') : newName
     if (!dogId) throw new Error('缺少犬只 ID')
     if (!newName || !newName.trim()) throw new Error('请输入新名称')
 
     const trimmedName = newName.trim()
     const now = Date.now()
+    const syncMeta = getSyncMeta(input)
+    const appliedMutation = await findAppliedMutation(db, this.familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
 
     const { data: dogs } = await db.collection('dogs')
       .where({ _id: dogId, family_id: this.familyId })
@@ -726,11 +792,20 @@ module.exports = {
       .get()
     const dog = dogs?.[0]
     if (!dog) throw new Error('犬只不存在')
+    const baseVersion = getBaseVersion(syncMeta, dogId)
+    if (baseVersion !== null && baseVersion < getServerVersion(dog)) {
+      return buildConflictAck(syncMeta, {
+        collection: 'dogs',
+        entityId: dogId,
+        baseVersion,
+        serverVersion: getServerVersion(dog),
+      })
+    }
 
     // 更新犬只名称
     await db.collection('dogs')
       .where({ _id: dogId, family_id: this.familyId })
-      .update({ name: trimmedName, updated_at: now })
+      .update({ name: trimmedName, ...buildVersionUpdate(dbCmd, now) })
 
     // 批量更新冗余字段（顺序写入，审计兜底）
     const updates = [
@@ -755,7 +830,22 @@ module.exports = {
       summary: `将犬只 ${dog.name || dogId} 改名为 ${trimmedName}`,
     })
 
-    return { message: '名称已更新' }
+    const { data: updatedDogs } = await db.collection('dogs')
+      .where({ _id: dogId, family_id: this.familyId })
+      .limit(1)
+      .get()
+    const response = {
+      message: '名称已更新',
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: updatedDogs?.[0] ? [buildTouchedEntity('dogs', updatedDogs[0])] : [],
+        resyncScopes: ['dogs', 'tasks', 'breeding_cycles', 'litters'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**
@@ -858,19 +948,33 @@ module.exports = {
   /**
    * 软删除犬只
    */
-  async softDeleteDog(dogId) {
+  async softDeleteDog(input) {
+    const dogId = typeof input === 'object' ? (input.dogId || input.dog_id || input.id) : input
     if (!dogId) throw new Error('缺少犬只 ID')
     requireAdmin(this.role)
+    const syncMeta = getSyncMeta(input)
+    const appliedMutation = await findAppliedMutation(db, this.familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
 
     const { data: dogs } = await db.collection('dogs')
       .where({ _id: dogId, family_id: this.familyId })
       .limit(1)
       .get()
     const dog = dogs?.[0] || {}
+    const baseVersion = getBaseVersion(syncMeta, dogId)
+    if (baseVersion !== null && baseVersion < getServerVersion(dog)) {
+      return buildConflictAck(syncMeta, {
+        collection: 'dogs',
+        entityId: dogId,
+        baseVersion,
+        serverVersion: getServerVersion(dog),
+      })
+    }
+    const now = Date.now()
 
     await db.collection('dogs')
       .where({ _id: dogId, family_id: this.familyId })
-      .update({ deleted_at: Date.now(), updated_at: Date.now() })
+      .update({ deleted_at: now, ...buildVersionUpdate(dbCmd, now) })
 
     await logDogOperation({
       familyId: this.familyId,
@@ -881,25 +985,53 @@ module.exports = {
       summary: `删除了犬只 ${dog.name || '未命名犬只'}`,
     })
 
-    return { message: '已删除（可在回收站恢复）' }
+    const { data: updatedDogs } = await db.collection('dogs')
+      .where({ _id: dogId, family_id: this.familyId })
+      .limit(1)
+      .get()
+    const response = {
+      message: '已删除（可在回收站恢复）',
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: updatedDogs?.[0] ? [buildTouchedEntity('dogs', updatedDogs[0])] : [],
+        resyncScopes: ['dogs'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**
    * 恢复软删除的犬只
    */
-  async restoreDog(dogId) {
+  async restoreDog(input) {
+    const dogId = typeof input === 'object' ? (input.dogId || input.dog_id || input.id) : input
     if (!dogId) throw new Error('缺少犬只 ID')
     requireAdmin(this.role)
+    const syncMeta = getSyncMeta(input)
+    const appliedMutation = await findAppliedMutation(db, this.familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
 
     const { data: dogs } = await db.collection('dogs')
       .where({ _id: dogId, family_id: this.familyId })
       .limit(1)
       .get()
     const dog = dogs?.[0] || {}
+    const baseVersion = getBaseVersion(syncMeta, dogId)
+    if (baseVersion !== null && baseVersion < getServerVersion(dog)) {
+      return buildConflictAck(syncMeta, {
+        collection: 'dogs',
+        entityId: dogId,
+        baseVersion,
+        serverVersion: getServerVersion(dog),
+      })
+    }
 
     await db.collection('dogs')
       .where({ _id: dogId, family_id: this.familyId })
-      .update({ deleted_at: null, updated_at: Date.now() })
+      .update({ deleted_at: null, ...buildVersionUpdate(dbCmd, Date.now()) })
 
     await logDogOperation({
       familyId: this.familyId,
@@ -910,7 +1042,22 @@ module.exports = {
       summary: `恢复了犬只 ${dog.name || '未命名犬只'}`,
     })
 
-    return { message: '已恢复' }
+    const { data: updatedDogs } = await db.collection('dogs')
+      .where({ _id: dogId, family_id: this.familyId })
+      .limit(1)
+      .get()
+    const response = {
+      message: '已恢复',
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: updatedDogs?.[0] ? [buildTouchedEntity('dogs', updatedDogs[0])] : [],
+        resyncScopes: ['dogs'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**

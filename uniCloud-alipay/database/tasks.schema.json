@@ -98,6 +98,10 @@
       "bsonType": "number",
       "description": "更新时间（时间戳毫秒）"
     },
+    "version": {
+      "bsonType": "number",
+      "description": "同步版本号，每次成功写入后递增"
+    },
     "doses_given": {
       "bsonType": "number",
       "description": "当日已给药次数（用于多次/日用药追踪，达到 details.frequency 时自动完成）"

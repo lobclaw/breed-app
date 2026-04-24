@@ -4,6 +4,7 @@ import { onLaunch, onShow, onHide } from "@dcloudio/uni-app";
 import uniIdPageInit from '@/uni_modules/uni-id-pages/init.js';
 import { useAuth } from '@/composables/useAuth';
 import { useTheme } from '@/composables/useTheme';
+import { localSyncRuntime } from '@/localdb/runtime';
 
 onLaunch(async () => {
   // 初始化主题（暗色模式）
@@ -14,9 +15,15 @@ onLaunch(async () => {
   // 初始化认证状态（恢复登录、监听事件）
   const { init } = useAuth();
   await init();
+  await localSyncRuntime.init();
 });
 onShow(() => {
   console.log("App Show");
+  const { currentFamily } = useAuth();
+  const familyId = currentFamily.value?._id || '';
+  if (familyId) {
+    void localSyncRuntime.syncHome(familyId);
+  }
 });
 onHide(() => {
   console.log("App Hide");

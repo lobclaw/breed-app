@@ -265,6 +265,48 @@ describe('health-service', () => {
       const { data: records } = await db.collection('health_records').where({ type: 'illness', family_id: familyId }).get()
       expect(records.every(record => record.details?.treatment_status === '治疗中')).toBe(true)
     })
+
+    it('batchUpdateIllnessStatus 应支持 _sync 幂等重放并返回 touchedEntities', async () => {
+      const now = Date.now()
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+      seedCollection('health_records', [{
+        _id: 'ill_sync_status_1',
+        type: 'illness',
+        dog_id: 'dog_1',
+        family_id: familyId,
+        deleted_at: null,
+        details: { treatment_status: '观察中', primary_condition: '感冒', condition: '感冒' },
+        date: now,
+        version: 2,
+        created_at: now,
+        updated_at: now,
+      }])
+
+      const payload = {
+        illnessIds: ['ill_sync_status_1'],
+        status: '治疗中',
+        _sync: {
+          clientMutationId: 'mutation_health_sync_1',
+          deviceId: 'device_a',
+          baseVersions: { ill_sync_status_1: 2 },
+          clientTimestamp: now,
+        },
+      }
+
+      const first = await healthService.batchUpdateIllnessStatus.call(ctx, payload)
+      expect(first.ack).toBe('accepted')
+      expect(first.touchedEntities).toEqual([
+        expect.objectContaining({ collection: 'health_records', id: 'ill_sync_status_1', version: 3 }),
+      ])
+
+      const second = await healthService.batchUpdateIllnessStatus.call(ctx, payload)
+      expect(second).toEqual(first)
+
+      const { data: records } = await db.collection('health_records').doc('ill_sync_status_1').get()
+      expect(records[0].details.treatment_status).toBe('治疗中')
+      expect(records[0].version).toBe(3)
+    })
   })
 
   describe('用药任务', () => {
@@ -800,6 +842,51 @@ describe('health-service', () => {
 
       expect(result.data.recoveredIllnessIds).toEqual(['ill_recover_batch'])
       expect(result.data.cancelledMedicationTaskIds).toEqual(['med_recover_batch'])
+    })
+
+    it('recoverIllnesses 在 baseVersion 过期时应返回 conflict', async () => {
+      const now = Date.now()
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+      seedCollection('health_records', [{
+        _id: 'ill_recover_conflict',
+        type: 'illness',
+        dog_id: 'dog_1',
+        dog_name: '花花',
+        family_id: familyId,
+        deleted_at: null,
+        date: now - DAY_MS,
+        details: {
+          primary_condition: '感冒',
+          condition: '感冒',
+          treatment_status: '治疗中',
+        },
+        version: 4,
+        created_at: now - DAY_MS,
+        updated_at: now - DAY_MS,
+      }])
+
+      const result = await healthService.recoverIllnesses.call(ctx, {
+        illnessIds: ['ill_recover_conflict'],
+        _sync: {
+          clientMutationId: 'mutation_health_conflict_1',
+          deviceId: 'device_a',
+          baseVersions: { ill_recover_conflict: 3 },
+          clientTimestamp: now,
+        },
+      })
+
+      expect(result.ack).toBe('conflict')
+      expect(result.conflict).toEqual(expect.objectContaining({
+        collection: 'health_records',
+        entityId: 'ill_recover_conflict',
+        baseVersion: 3,
+        serverVersion: 4,
+      }))
+
+      const { data: illness } = await db.collection('health_records').doc('ill_recover_conflict').get()
+      expect(illness[0].details.treatment_status).toBe('治疗中')
+      expect(illness[0].version).toBe(4)
     })
 
     it('endMedicationByDog 应批量取消该犬进行中的用药并返回 ids', async () => {

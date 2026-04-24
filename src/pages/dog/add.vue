@@ -216,6 +216,7 @@ import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
 import { useAuth } from '@/composables/useAuth'
+import { localSyncRuntime } from '@/localdb/runtime'
 import { formatDateInputValue } from '@/utils/date'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
@@ -356,9 +357,6 @@ function onPurchaseDateConfirm(value: number | string) {
   form.purchase_date = value
 }
 
-const { run: createDog } = useCloudCall('dog-service', 'createDog', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
-const { run: updateDog } = useCloudCall('dog-service', 'updateDog', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
-const { run: updateDogName } = useCloudCall('dog-service', 'updateDogName')
 const { run: fetchDetail } = useCloudCall<{ data: any }>('dog-service', 'getDogDetail')
 let originalName = ''
 
@@ -390,10 +388,10 @@ async function submit() {
     }
 
     if (isEdit.value) {
-      await updateDog(editDogId, baseDogData)
+      await localSyncRuntime.updateDogLocally(currentFamily.value?._id || '', editDogId, baseDogData)
       // 名称变更时单独调用（updateDog 不处理 name；幼崽可清空名称）
       if (baseDogData.name !== originalName) {
-        await updateDogName(editDogId, baseDogData.name)
+        await localSyncRuntime.updateDogNameLocally(currentFamily.value?._id || '', editDogId, baseDogData.name)
       }
       // 更新缓存
       dogStore.updateDog(editDogId, baseDogData as any)
@@ -402,7 +400,7 @@ async function submit() {
         ...baseDogData,
         role: form.role,
       }
-      const res = await createDog(dogData)
+      const res = await localSyncRuntime.createDogLocally(currentFamily.value?._id || '', dogData)
       const createdDogId = res?.data?._id || ''
       // 新增到缓存
       if (createdDogId) {

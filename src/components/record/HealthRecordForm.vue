@@ -338,6 +338,7 @@ import { useCloudCall } from '@/composables/useCloudCall'
 import { useAuth } from '@/composables/useAuth'
 import { useRecordSubmitState } from '@/composables/useRecordSubmitState'
 import { buildRecordFeedbackMessage, buildTaskFeedbackMessage, queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
+import { localSyncRuntime } from '@/localdb/runtime'
 import { resolveHealthCreateRouteQuery, type MedicationRouteIllnessLink } from '@/utils/recordFormRoutes'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 import BFormOptions from '@/components/form/BFormOptions.vue'
@@ -1013,11 +1014,16 @@ async function handleDuplicateIllnessIfNeeded() {
     : selectedDogs.value.map((dog: any) => dog._id)
   if (dogIds.length === 0) return false
 
-  const duplicateRes = await checkDuplicateIllness({
-    dog_ids: dogIds,
-    condition,
-    exclude_record_id: isEdit.value ? props.recordId : undefined,
-  })
+  let duplicateRes
+  try {
+    duplicateRes = await checkDuplicateIllness({
+      dog_ids: dogIds,
+      condition,
+      exclude_record_id: isEdit.value ? props.recordId : undefined,
+    })
+  } catch {
+    return false
+  }
   const duplicates = duplicateRes?.data?.duplicates || []
   if (duplicates.length === 0) return false
 
@@ -1070,7 +1076,7 @@ async function submitCreateRecord() {
   const detailPayload = buildDetails()
 
   if (isTodo.value && resolvedType.value !== 'illness') {
-    const result = await batchAddTask({
+    const result = await localSyncRuntime.batchCreateManualTasksLocally(currentFamily.value?._id || '', {
       dogs: selectedDogs.value.map((dog: any) => ({ dog_id: dog._id, dog_name: dog.name })),
       card_type: 'individual',
       type: resolvedType.value,
@@ -1118,7 +1124,7 @@ async function submitCreateRecord() {
     payload.create_task = enableReminder.value
   }
 
-  const result = await batchAddRecord(payload)
+  const result = await localSyncRuntime.batchAddHealthRecordsLocally(currentFamily.value?._id || '', payload)
   const completedTasks = result?.data?.completedTasks || []
   const completedTaskIds = completedTasks.map((task: any) => task._id).filter(Boolean)
   const suppressTaskIds = sourceTaskIds.value.length > 0 ? sourceTaskIds.value : completedTaskIds

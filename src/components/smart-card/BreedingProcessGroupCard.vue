@@ -5,7 +5,7 @@
       :key="item.id"
       class="group-row"
       :class="{ 'group-row--passed': item.milestone.suggestionStatus === 'window_passed' }"
-      @click="onRowTap(item.card)"
+      @click="goProcess(item.card)"
     >
       <view
         class="group-avatar"
@@ -49,9 +49,23 @@
       </view>
       <view class="group-actions">
         <view
+          v-if="canOpenHomePrenatal(item.card)"
+          class="group-action group-action--weak"
+          @click.stop="openWeakAction(item.card, 'prenatal')"
+        >
+          <text class="group-action__text">产检</text>
+        </view>
+        <view
+          v-if="canOpenHomePreLabor(item.card)"
+          class="group-action group-action--weak"
+          @click.stop="openWeakAction(item.card, 'pre_labor')"
+        >
+          <text class="group-action__text">临产</text>
+        </view>
+        <view
           class="group-action"
           :class="{ 'group-action--passed': item.milestone.suggestionStatus === 'window_passed' }"
-          @click.stop="onPrimaryActionTap(item.card)"
+          @click.stop="goProcess(item.card)"
         >
           <text class="group-action__text">处理</text>
         </view>
@@ -77,8 +91,8 @@ import { buildBreedingMilestoneSummary } from '@/utils/breedingMilestoneSummary'
 import {
   hasMultipleHomeBreedingActions,
   openHomeBreedingAction,
-  openHomeBreedingDetail,
 } from '@/utils/homeBreedingActions'
+import { canOpenHomePreLabor, canOpenHomePrenatal } from '@/utils/homeHeatObservation'
 
 const props = defineProps<{ group: any }>()
 const emit = defineEmits<{
@@ -128,17 +142,17 @@ function goDogDetail(card: any) {
   uni.navigateTo({ url: `/pages/dog/detail?id=${card.dogId}` })
 }
 
-function onRowTap(card: any) {
-  openHomeBreedingDetail(card)
-}
-
-function onPrimaryActionTap(card: any) {
+function goProcess(card: any) {
   if (hasMultipleHomeBreedingActions(card)) {
     emit('action', { type: 'show_breeding_actions', data: { card } })
     return
   }
 
   openHomeBreedingAction(card, 'process')
+}
+
+function openWeakAction(card: any, action: 'prenatal' | 'pre_labor') {
+  openHomeBreedingAction(card, action)
 }
 </script>
 

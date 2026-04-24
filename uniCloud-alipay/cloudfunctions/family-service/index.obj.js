@@ -10,6 +10,20 @@ try {
 } catch (error) {
   ;({ safeWriteOperationLog, isOperationLogCollectionMissingError } = require('../common/breed-auth/operation-log'))
 }
+let syncUtils = null
+try {
+  syncUtils = require('breed-sync')
+} catch (error) {
+  syncUtils = require('../common/breed-sync')
+}
+const {
+  getSyncMeta,
+  buildTouchedEntity,
+  buildSyncAck,
+  findAppliedMutation,
+  markMutationApplied,
+  buildVersionUpdate,
+} = syncUtils
 
 const db = uniCloud.database()
 const dbCmd = db.command
@@ -867,6 +881,9 @@ module.exports = {
   async restoreItem(input) {
     requireAdmin(this.role)
 
+    const syncMeta = getSyncMeta(input)
+    const appliedMutation = await findAppliedMutation(db, this.familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
     const { id, type } = parseRecycleItemInput(input)
     const { config, doc } = await getSoftDeletedDocByType(this.familyId, type, id)
 
@@ -874,9 +891,10 @@ module.exports = {
       throw new Error('回收站项目不存在')
     }
 
+    const now = Date.now()
     await db.collection(config.collection).doc(id).update({
       deleted_at: null,
-      updated_at: Date.now(),
+      ...buildVersionUpdate(dbCmd, now),
     })
 
     await safeWriteOperationLog({
@@ -890,7 +908,19 @@ module.exports = {
       summary: `恢复了回收站项目 ${config.typeLabel}：${config.name(doc)}`,
     })
 
-    return { message: '已恢复' }
+    const restoredDoc = { ...doc, deleted_at: null, updated_at: now, version: Number(doc.version || 0) + 1 }
+    const response = {
+      message: '已恢复',
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: [buildTouchedEntity(config.collection, restoredDoc)],
+        resyncScopes: [config.collection],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**
@@ -900,6 +930,9 @@ module.exports = {
   async permanentDeleteItem(input) {
     requireAdmin(this.role)
 
+    const syncMeta = getSyncMeta(input)
+    const appliedMutation = await findAppliedMutation(db, this.familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
     const { id, type } = parseRecycleItemInput(input)
     const { config, doc } = await getSoftDeletedDocByType(this.familyId, type, id)
 
@@ -920,7 +953,24 @@ module.exports = {
       summary: `永久删除了回收站项目 ${config.typeLabel}：${config.name(doc)}`,
     })
 
-    return { message: '已永久删除' }
+    const response = {
+      message: '已永久删除',
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: [{
+          collection: config.collection,
+          id,
+          version: Number(doc.version || 0),
+          updatedAt: Date.now(),
+          deletedAt: Date.now(),
+        }],
+        resyncScopes: [config.collection],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**

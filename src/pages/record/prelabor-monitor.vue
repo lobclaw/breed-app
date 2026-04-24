@@ -152,7 +152,9 @@
 import { ref, computed, watch } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
 import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
+import { localSyncRuntime } from '@/localdb/runtime'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
@@ -165,6 +167,7 @@ interface TempRecord {
 }
 
 const selectedDog = ref<any>(null)
+const { currentFamily } = useAuth()
 
 // 体温
 const temperature = ref('')
@@ -302,7 +305,7 @@ async function handleSave() {
 
   submitting.value = true
   try {
-    const res = await addBreedingRecord({
+    const res = await localSyncRuntime.addBreedingRecordLocally(currentFamily.value?._id || '', {
       type: 'pre_labor',
       dog_id: selectedDog.value._id,
       date: recordTime.value,

@@ -32,6 +32,7 @@ type DogDetailBreedingStatus = Extract<DeriveStatus['type'], '发情中' | '怀�
 type CreateDogDetailAddRecordGroupsOptions = {
   role?: DogRole | string | null
   gender?: DogGender | string | null
+  allowBreeding?: boolean
   activeCycleStatus?: CycleStatus | string | null
   statuses?: DeriveStatus[]
   includeBreedingHint?: boolean
@@ -153,12 +154,13 @@ function getDogDetailBreedingPages(status: DogDetailBreedingStatus | '') {
 export function createDogDetailAddRecordGroups({
   role,
   gender,
+  allowBreeding: allowBreedingInput,
   activeCycleStatus,
   statuses = [],
   includeBreedingHint = false,
 }: CreateDogDetailAddRecordGroupsOptions): AddRecordGroup[] {
   const groups: AddRecordGroup[] = []
-  const allowBreeding = role === '种狗' && gender === '母'
+  const allowBreeding = (allowBreedingInput ?? true) && role === '种狗' && gender === '母'
 
   if (allowBreeding) {
     const breedingStatus = resolveDogDetailBreedingStatus({ activeCycleStatus, statuses })

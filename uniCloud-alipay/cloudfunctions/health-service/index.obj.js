@@ -9,6 +9,24 @@ try {
 } catch (error) {
   ;({ safeWriteOperationLog } = require('../common/breed-auth/operation-log'))
 }
+let syncUtils = null
+try {
+  syncUtils = require('breed-sync')
+} catch (error) {
+  syncUtils = require('../common/breed-sync')
+}
+const {
+  getSyncMeta,
+  buildTouchedEntity,
+  buildSyncAck,
+  buildConflictAck,
+  findAppliedMutation,
+  markMutationApplied,
+  getBaseVersion,
+  getServerVersion,
+  buildVersionUpdate,
+  buildVersionedCreate,
+} = syncUtils
 
 const db = uniCloud.database()
 const dbCmd = db.command
@@ -322,6 +340,19 @@ function normalizeIdList(value) {
   return Array.from(new Set(value
     .map((item) => typeof item === 'string' ? item.trim() : '')
     .filter(Boolean)))
+}
+
+function getEntityConflict(syncMeta, collection, entity) {
+  const baseVersion = getBaseVersion(syncMeta, entity?._id)
+  if (baseVersion === null) return null
+  const serverVersion = getServerVersion(entity)
+  if (baseVersion === serverVersion) return null
+  return buildConflictAck(syncMeta, {
+    collection,
+    entityId: entity._id,
+    baseVersion,
+    serverVersion,
+  })
 }
 
 function buildMedicationDailyDosePatch(task, nowTs) {
@@ -780,6 +811,11 @@ module.exports = {
   async batchUpdateIllnessStatus(input = {}) {
     const familyId = this.familyId
     const now = Date.now()
+    const syncMeta = getSyncMeta(input)
+    if (syncMeta?.clientMutationId) {
+      const existing = await findAppliedMutation(db, familyId, syncMeta.clientMutationId)
+      if (existing?.response) return existing.response
+    }
     const status = typeof input?.status === 'string' ? input.status.trim() : ''
     const requestedIllnessIds = normalizeIdList([
       ...(Array.isArray(input?.illnessIds) ? input.illnessIds : []),
@@ -800,6 +836,10 @@ module.exports = {
       .get()
     const validIllnessIds = (illnessRecords || []).map(record => record._id).filter(Boolean)
     if (validIllnessIds.length === 0) throw new Error('疾病记录不存在')
+    for (const record of illnessRecords || []) {
+      const conflict = getEntityConflict(syncMeta, 'health_records', record)
+      if (conflict) return conflict
+    }
 
     await db.collection('health_records').where({
       _id: dbCmd.in(validIllnessIds),
@@ -808,7 +848,7 @@ module.exports = {
       deleted_at: null,
     }).update({
       'details.treatment_status': status,
-      updated_at: now,
+      ...buildVersionUpdate(dbCmd, now),
     })
 
     await logHealthOperation({
@@ -823,7 +863,27 @@ module.exports = {
       meta: { illnessIds: validIllnessIds, status },
     })
 
-    return { data: { success: true, updatedIllnessIds: validIllnessIds } }
+    const { data: updatedRecords } = await db.collection('health_records')
+      .where({
+        _id: dbCmd.in(validIllnessIds),
+        family_id: familyId,
+        type: 'illness',
+        deleted_at: null,
+      })
+      .get()
+
+    const response = {
+      data: { success: true, updatedIllnessIds: validIllnessIds },
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: (updatedRecords || []).map(record => buildTouchedEntity('health_records', record)),
+        resyncScopes: ['health_records'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**
@@ -832,6 +892,11 @@ module.exports = {
   async recoverIllnesses(input = {}) {
     const familyId = this.familyId
     const now = Date.now()
+    const syncMeta = getSyncMeta(input)
+    if (syncMeta?.clientMutationId) {
+      const existing = await findAppliedMutation(db, familyId, syncMeta.clientMutationId)
+      if (existing?.response) return existing.response
+    }
     const singleIllnessId = getIdArg(input, 'id', 'recordId', 'record_id', 'illnessId', 'illness_id')
     const illnessIds = normalizeIdList([
       ...(Array.isArray(input?.illnessIds) ? input.illnessIds : []),
@@ -855,6 +920,10 @@ module.exports = {
       .get()
     const validIllnessIds = (illnessRecords || []).map(record => record._id).filter(Boolean)
     if (validIllnessIds.length === 0) throw new Error('疾病记录不存在')
+    for (const record of illnessRecords || []) {
+      const conflict = getEntityConflict(syncMeta, 'health_records', record)
+      if (conflict) return conflict
+    }
 
     await db.collection('health_records').where({
       _id: dbCmd.in(validIllnessIds),
@@ -862,7 +931,7 @@ module.exports = {
       type: 'illness',
     }).update({
       'details.treatment_status': '已康复',
-      updated_at: now,
+      ...buildVersionUpdate(dbCmd, now),
     })
 
     const medicationMap = new Map()
@@ -888,6 +957,10 @@ module.exports = {
     }
 
     const activeMedicationIds = Array.from(medicationMap.keys()).filter(Boolean)
+    for (const med of medicationMap.values()) {
+      const conflict = getEntityConflict(syncMeta, 'medication_tasks', med)
+      if (conflict) return conflict
+    }
     if (activeMedicationIds.length > 0) {
       await db.collection('medication_tasks').where({
         _id: dbCmd.in(activeMedicationIds),
@@ -895,7 +968,7 @@ module.exports = {
         status: '进行中',
       }).update({
         status: '已取消',
-        updated_at: now,
+        ...buildVersionUpdate(dbCmd, now),
       })
 
       // 兼容旧数据：取消关联的 daily tasks（新记录没有，旧记录可能有）
@@ -920,14 +993,42 @@ module.exports = {
       meta: { illnessCount: validIllnessIds.length, medicationTaskCount: activeMedicationIds.length },
     })
 
-    return {
+    const { data: updatedIllnesses } = await db.collection('health_records')
+      .where({
+        _id: dbCmd.in(validIllnessIds),
+        family_id: familyId,
+        type: 'illness',
+      })
+      .get()
+    const { data: updatedMeds } = activeMedicationIds.length > 0
+      ? await db.collection('medication_tasks')
+        .where({
+          _id: dbCmd.in(activeMedicationIds),
+          family_id: familyId,
+        })
+        .get()
+      : { data: [] }
+
+    const response = {
       data: {
         recovered: validIllnessIds.length,
         cancelledMedicationTasks: activeMedicationIds.length,
         recoveredIllnessIds: validIllnessIds,
         cancelledMedicationTaskIds: activeMedicationIds,
       },
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: [
+          ...(updatedIllnesses || []).map(record => buildTouchedEntity('health_records', record)),
+          ...(updatedMeds || []).map(record => buildTouchedEntity('medication_tasks', record)),
+        ],
+        resyncScopes: ['health_records', 'medication_tasks'],
+      }),
     }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   async checkDuplicateIllness({ dog_ids, condition, exclude_record_id } = {}) {
@@ -1047,6 +1148,12 @@ module.exports = {
     const now = Date.now()
     const familyId = this.familyId
     const uid = this.uid
+    const syncMeta = getSyncMeta(data)
+    const appliedMutation = await findAppliedMutation(db, familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
+    const clientRecordIds = Array.isArray(syncMeta?.clientEntityIds?.health_records)
+      ? syncMeta.clientEntityIds.health_records
+      : []
 
     const normalizedDetails = data.type === 'illness'
       ? normalizeIllnessDetails(data.details || {})
@@ -1066,6 +1173,8 @@ module.exports = {
       .where({ _id: dbCmd.in(data.dog_ids), family_id: familyId, deleted_at: null })
       .get()
     if (dogs.length !== data.dog_ids.length) throw new Error('部分犬只不存在或不属于当前家庭')
+    const dogMap = new Map(dogs.map(dog => [dog._id, dog]))
+    const orderedDogs = data.dog_ids.map(dogId => dogMap.get(dogId)).filter(Boolean)
 
     // ② 一次读取 family settings
     const settings = await getFamilySettings(familyId)
@@ -1075,13 +1184,14 @@ module.exports = {
 
     // ④ 费用分摊
     const totalCost = data.cost || null
-    const perDogCost = totalCost && dogs.length > 1
-      ? Math.round(totalCost / dogs.length * 100) / 100
+    const perDogCost = totalCost && orderedDogs.length > 1
+      ? Math.round(totalCost / orderedDogs.length * 100) / 100
       : totalCost
 
     // ⑤ 并行处理每只犬
-    const results = await Promise.all(dogs.map(async (dog) => {
-      const recordData = {
+    const results = await Promise.all(orderedDogs.map(async (dog, index) => {
+      const recordData = buildVersionedCreate({
+        ...(clientRecordIds[index] ? { _id: clientRecordIds[index] } : {}),
         type: data.type,
         dog_id: dog._id,
         family_id: familyId,
@@ -1090,17 +1200,16 @@ module.exports = {
         notes: data.notes || null,
         details: normalizedDetails,
         created_by: uid,
-        created_at: now,
-        updated_at: now,
-      }
+      }, now)
       const { id: recordId } = await db.collection('health_records').add(recordData)
+      const resolvedRecordId = clientRecordIds[index] || recordId
 
       // 自动完成该犬同类型的 pending 待办
       const completedTasks = await autoCompletePendingTasks(familyId, dog._id, data.type, normalizedDetails)
 
       // 生成下次提醒任务（传入预加载的 settings）
       if (shouldCreateReminder(data)) {
-        await generateReminders(familyId, data.type, { ...data, details: normalizedDetails }, dog, recordId, settings)
+        await generateReminders(familyId, data.type, { ...data, details: normalizedDetails }, dog, resolvedRecordId, settings)
       }
 
       // 创建费用
@@ -1108,10 +1217,10 @@ module.exports = {
         await createExpense(familyId, uid, {
           type: data.type, date: data.date, cost: perDogCost,
           dog_id: dog._id, notes: data.notes || null,
-        }, dog, recordId)
+        }, dog, resolvedRecordId)
       }
 
-      return { recordId, dog_id: dog._id, completedTasks }
+      return { recordId: resolvedRecordId, dog_id: dog._id, completedTasks, record: { ...recordData, _id: resolvedRecordId } }
     }))
 
     await logHealthOperation({
@@ -1125,13 +1234,26 @@ module.exports = {
       meta: { type: data.type, count: results.length },
     })
 
-    return {
+    const touchedTasks = results.flatMap(r => r.completedTasks || [])
+    const response = {
       data: {
         count: results.length,
         records: results.map(r => ({ recordId: r.recordId, dog_id: r.dog_id })),
-        completedTasks: results.flatMap(r => r.completedTasks),
-      }
+        completedTasks: touchedTasks,
+      },
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: [
+          ...results.map(r => buildTouchedEntity('health_records', r.record)),
+          ...touchedTasks.map(task => buildTouchedEntity('tasks', task)),
+        ],
+        resyncScopes: ['health_records', 'tasks', 'expenses'],
+      }),
     }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**
@@ -1266,6 +1388,12 @@ module.exports = {
     const now = Date.now()
     const familyId = this.familyId
     const uid = this.uid
+    const syncMeta = getSyncMeta(data)
+    const appliedMutation = await findAppliedMutation(db, familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
+    const clientMedicationIds = Array.isArray(syncMeta?.clientEntityIds?.medication_tasks)
+      ? syncMeta.clientEntityIds.medication_tasks
+      : []
     const startDate = Number.isFinite(Number(data.actual_start_date)) ? Number(data.actual_start_date) : now
     const endDate = startDate + ((durationDays - 1) * DAY_MS)
     const normalizedIllnessLinks = normalizeMedicationIllnessLinks(data.illness_links || data.illnessLinks)
@@ -1277,6 +1405,8 @@ module.exports = {
       .where({ _id: dbCmd.in(data.dog_ids), family_id: familyId, deleted_at: null })
       .get()
     if (dogs.length !== data.dog_ids.length) throw new Error('部分犬只不存在或不属于当前家庭')
+    const dogMap = new Map(dogs.map(dog => [dog._id, dog]))
+    const orderedDogs = data.dog_ids.map(dogId => dogMap.get(dogId)).filter(Boolean)
 
     const { data: duplicateTasks } = await db.collection('medication_tasks')
       .where({
@@ -1291,13 +1421,13 @@ module.exports = {
     // ② 费用分摊
     const totalCost = data.cost || null
     const perDogCost = totalCost && dogs.length > 1
-      ? Math.round(totalCost / dogs.length * 100) / 100
+      ? Math.round(totalCost / orderedDogs.length * 100) / 100
       : totalCost
 
     // ③ 并行创建
-    const results = await Promise.all(dogs.map(async (dog) => {
+    const results = await Promise.all(orderedDogs.map(async (dog, index) => {
       const linkedIllnessRecordId = illnessLinkMap.get(dog._id)
-        || ((dogs.length === 1 && singleIllnessRecordId) ? singleIllnessRecordId : '')
+        || ((orderedDogs.length === 1 && singleIllnessRecordId) ? singleIllnessRecordId : '')
 
       // 覆盖模式：先取消该犬的同名进行中任务
       if (data.override_dog_ids && data.override_dog_ids.includes(dog._id)) {
@@ -1309,7 +1439,8 @@ module.exports = {
         ))
       }
 
-      const medicationData = {
+      const medicationData = buildVersionedCreate({
+        ...(clientMedicationIds[index] ? { _id: clientMedicationIds[index] } : {}),
         dog_id: dog._id,
         dog_name: dog.name,
         family_id: familyId,
@@ -1327,10 +1458,9 @@ module.exports = {
         status: '进行中',
         daily_doses: {},
         notes: data.notes || null,
-        created_at: now,
-        updated_at: now,
-      }
+      }, now)
       const { id: medicationId } = await db.collection('medication_tasks').add(medicationData)
+      const resolvedMedicationId = clientMedicationIds[index] || medicationId
 
       // 创建费用
       if (perDogCost && perDogCost > 0) {
@@ -1342,7 +1472,7 @@ module.exports = {
           dog_names: [dog.name],
           notes: `${data.drug_name} ${durationDays}天`,
           source_type: 'auto',
-          source_record_id: medicationId,
+          source_record_id: resolvedMedicationId,
           family_id: familyId,
           created_by: uid,
           deleted_at: null,
@@ -1362,7 +1492,7 @@ module.exports = {
             'details.treatment_status': '治疗中', updated_at: now,
           })
         }
-      } else if (dogs.length === 1 && normalizedIllnessLinks.length === 0 && !singleIllnessRecordId) {
+      } else if (orderedDogs.length === 1 && normalizedIllnessLinks.length === 0 && !singleIllnessRecordId) {
         // 兼容旧单犬入口：未显式绑定疾病时，仍保留单犬兜底升级逻辑
         const { data: activeIllnesses } = await db.collection('health_records')
           .where({
@@ -1379,7 +1509,7 @@ module.exports = {
         }
       }
 
-      return { medicationId, dog_id: dog._id }
+      return { medicationId: resolvedMedicationId, dog_id: dog._id, medication: { ...medicationData, _id: resolvedMedicationId } }
     }))
 
     await logHealthOperation({
@@ -1394,7 +1524,18 @@ module.exports = {
       meta: { count: results.length, drugName: data.drug_name },
     })
 
-    return { data: { count: results.length, medications: results } }
+    const response = {
+      data: { count: results.length, medications: results.map(({ medicationId, dog_id }) => ({ medicationId, dog_id })) },
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: results.map(result => buildTouchedEntity('medication_tasks', result.medication)),
+        resyncScopes: ['medication_tasks', 'health_records', 'expenses'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   async startMedication(data) {
@@ -1510,11 +1651,17 @@ module.exports = {
    * 记录一次给药（打卡模式）
    * 原子递增 daily_doses.{day}，达到 frequency 时当天完成，全部天数完成时结束用药
    */
-  async recordMedicationDose(medicationTaskId) {
+  async recordMedicationDose(input) {
+    const medicationTaskId = getIdArg(input, 'id', 'taskId', 'task_id', 'medicationTaskId', 'medication_task_id') || (typeof input === 'string' ? input : '')
     if (!medicationTaskId) throw new Error('缺少用药任务 ID')
 
     const familyId = this.familyId
     const now = Date.now()
+    const syncMeta = getSyncMeta(input)
+    if (syncMeta?.clientMutationId) {
+      const existing = await findAppliedMutation(db, familyId, syncMeta.clientMutationId)
+      if (existing?.response) return existing.response
+    }
 
     const { data: meds } = await db.collection('medication_tasks')
       .where({ _id: medicationTaskId, family_id: familyId, status: '进行中' })
@@ -1522,6 +1669,8 @@ module.exports = {
     if (!meds || meds.length === 0) return { data: { completed: false, already_done: true } }
 
     const med = meds[0]
+    const conflict = getEntityConflict(syncMeta, 'medication_tasks', med)
+    if (conflict) return conflict
     const frequency = med.frequency || 1
 
     // 计算今天是第几天
@@ -1537,7 +1686,7 @@ module.exports = {
     // 原子递增当天给药次数
     await db.collection('medication_tasks').doc(medicationTaskId).update({
       [`daily_doses.${dayKey}`]: dbCmd.inc(1),
-      updated_at: now,
+      ...buildVersionUpdate(dbCmd, now),
     })
 
     // 重新读取判断完成状态
@@ -1559,7 +1708,7 @@ module.exports = {
       if (allComplete) {
         await db.collection('medication_tasks').doc(medicationTaskId).update({
           status: '已完成',
-          updated_at: now,
+          ...buildVersionUpdate(dbCmd, now),
         })
       }
     }
@@ -1576,7 +1725,21 @@ module.exports = {
       meta: { drugName: med.drug_name, currentDay, dosesGiven: todayDoses },
     })
 
-    return { data: { doses_given: todayDoses, completed: todayComplete, allComplete } }
+    const { data: updatedMeds } = await db.collection('medication_tasks')
+      .where({ _id: medicationTaskId, family_id: familyId })
+      .get()
+    const response = {
+      data: { doses_given: todayDoses, completed: todayComplete, allComplete },
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: (updatedMeds || []).map(record => buildTouchedEntity('medication_tasks', record)),
+        resyncScopes: ['medication_tasks'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**
@@ -1584,17 +1747,30 @@ module.exports = {
    * 将指定的 medication_tasks 今天的 doses 全部补满
    */
   async batchCompleteMedicationDay(medicationTaskIds) {
-    const normalizedTaskIds = normalizeIdList(medicationTaskIds)
+    const syncMeta = getSyncMeta(medicationTaskIds)
+    const normalizedTaskIds = normalizeIdList(
+      Array.isArray(medicationTaskIds)
+        ? medicationTaskIds
+        : (medicationTaskIds?.medicationTaskIds || medicationTaskIds?.medication_task_ids || []),
+    )
     if (normalizedTaskIds.length === 0) {
       throw new Error('缺少用药任务 ID')
     }
 
     const familyId = this.familyId
     const now = Date.now()
+    if (syncMeta?.clientMutationId) {
+      const existing = await findAppliedMutation(db, familyId, syncMeta.clientMutationId)
+      if (existing?.response) return existing.response
+    }
 
     const { data: meds } = await db.collection('medication_tasks')
       .where({ _id: dbCmd.in(normalizedTaskIds), family_id: familyId, status: '进行中' })
       .get()
+    for (const med of meds || []) {
+      const conflict = getEntityConflict(syncMeta, 'medication_tasks', med)
+      if (conflict) return conflict
+    }
 
     const patchableMeds = (meds || [])
       .map(med => ({ med, patch: buildMedicationDailyDosePatch(med, now) }))
@@ -1604,7 +1780,7 @@ module.exports = {
       db.collection('medication_tasks').doc(med._id).update({
         daily_doses: patch.nextDailyDoses,
         status: patch.allComplete ? '已完成' : med.status,
-        updated_at: now,
+        ...buildVersionUpdate(dbCmd, now),
       })
     )))
 
@@ -1626,13 +1802,28 @@ module.exports = {
       meta: { count: completedMedicationTaskIds.length, completedMedicationTaskIds, fullyCompletedMedicationTaskIds },
     })
 
-    return {
+    const { data: updatedMeds } = completedMedicationTaskIds.length > 0
+      ? await db.collection('medication_tasks')
+        .where({ _id: dbCmd.in(completedMedicationTaskIds), family_id: familyId })
+        .get()
+      : { data: [] }
+
+    const response = {
       data: {
         completed: completedMedicationTaskIds.length,
         completedMedicationTaskIds,
         fullyCompletedMedicationTaskIds,
       },
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: (updatedMeds || []).map(record => buildTouchedEntity('medication_tasks', record)),
+        resyncScopes: ['medication_tasks'],
+      }),
     }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**
@@ -1758,16 +1949,26 @@ module.exports = {
   /**
    * 按犬只停止所有进行中的用药（从首页健康关注卡调用）
    */
-  async endMedicationByDog(dogId) {
+  async endMedicationByDog(input) {
+    const dogId = getIdArg(input, 'dogId', 'dog_id', 'id') || (typeof input === 'string' ? input : '')
     if (!dogId) throw new Error('缺少犬只 ID')
 
     const now = Date.now()
     const familyId = this.familyId
+    const syncMeta = getSyncMeta(input)
+    if (syncMeta?.clientMutationId) {
+      const existing = await findAppliedMutation(db, familyId, syncMeta.clientMutationId)
+      if (existing?.response) return existing.response
+    }
 
     // 找到该犬所有进行中的用药方案
     const { data: meds } = await db.collection('medication_tasks')
       .where({ dog_id: dogId, family_id: familyId, status: '进行中' })
       .get()
+    for (const med of meds || []) {
+      const conflict = getEntityConflict(syncMeta, 'medication_tasks', med)
+      if (conflict) return conflict
+    }
 
     const cancelledMedicationTaskIds = (meds || []).map(med => med._id).filter(Boolean)
     if (cancelledMedicationTaskIds.length > 0) {
@@ -1777,7 +1978,7 @@ module.exports = {
         status: '进行中',
       }).update({
         status: '已取消',
-        updated_at: now,
+        ...buildVersionUpdate(dbCmd, now),
       })
 
       // 兼容旧数据：取消关联的 daily tasks
@@ -1790,10 +1991,24 @@ module.exports = {
       })
     }
 
-    return {
+    const { data: updatedMeds } = cancelledMedicationTaskIds.length > 0
+      ? await db.collection('medication_tasks')
+        .where({ _id: dbCmd.in(cancelledMedicationTaskIds), family_id: familyId })
+        .get()
+      : { data: [] }
+    const response = {
       message: `已停止 ${cancelledMedicationTaskIds.length} 个用药方案`,
       data: { cancelled: cancelledMedicationTaskIds.length, cancelledMedicationTaskIds },
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: (updatedMeds || []).map(record => buildTouchedEntity('medication_tasks', record)),
+        resyncScopes: ['medication_tasks'],
+      }),
     }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**

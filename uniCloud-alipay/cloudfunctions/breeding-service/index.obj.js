@@ -9,6 +9,24 @@ try {
 } catch (error) {
   ;({ safeWriteOperationLog } = require('../common/breed-auth/operation-log'))
 }
+let syncUtils = null
+try {
+  syncUtils = require('breed-sync')
+} catch (error) {
+  syncUtils = require('../common/breed-sync')
+}
+const {
+  getSyncMeta,
+  buildTouchedEntity,
+  buildSyncAck,
+  buildConflictAck,
+  findAppliedMutation,
+  markMutationApplied,
+  getBaseVersion,
+  getServerVersion,
+  buildVersionUpdate,
+  buildVersionedCreate,
+} = syncUtils
 
 const db = uniCloud.database()
 const dbCmd = db.command
@@ -715,6 +733,13 @@ async function addBreedingRecordCore({
   rejectActiveCycleForHeat = false,
 }) {
   const now = Date.now()
+  const syncMeta = getSyncMeta(data)
+  const clientRecordId = typeof syncMeta?.clientEntityIds?.breeding_records === 'string'
+    ? syncMeta.clientEntityIds.breeding_records
+    : null
+  const clientCycleId = typeof syncMeta?.clientEntityIds?.breeding_cycles === 'string'
+    ? syncMeta.clientEntityIds.breeding_cycles
+    : null
   const strictCycleRule = STRICT_CYCLE_STATUS_RULES[data.type] || null
   const activeCycleStatuses = strictCycleRule?.allowedStatuses || ['发情中', '怀孕中']
 
@@ -733,18 +758,17 @@ async function addBreedingRecordCore({
       }
       cycleId = activeCycles[0]._id
     } else if (CYCLE_TRIGGER_TYPES.includes(data.type)) {
-      const cycleData = {
+      const cycleData = buildVersionedCreate({
+        ...(clientCycleId ? { _id: clientCycleId } : {}),
         dam_id: data.dog_id,
         dam_name: dog.name,
         sire_id: null,
         sire_name: null,
         family_id: familyId,
         status: '发情中',
-        created_at: now,
-        updated_at: now,
-      }
+      }, now)
       const { id } = await db.collection('breeding_cycles').add(cycleData)
-      cycleId = id
+      cycleId = clientCycleId || id
     } else {
       throw new Error('没有进行中的繁育周期，请先录入发情或配种记录')
     }
@@ -753,6 +777,17 @@ async function addBreedingRecordCore({
   if (strictCycleRule) {
     const cycle = await getCycleById(cycleId, familyId)
     if (!cycle) throw new Error('繁育周期不存在')
+    const baseVersion = getBaseVersion(syncMeta, cycleId)
+    if (baseVersion !== null && baseVersion < getServerVersion(cycle)) {
+      return {
+        conflict: buildConflictAck(syncMeta, {
+          collection: 'breeding_cycles',
+          entityId: cycleId,
+          baseVersion,
+          serverVersion: getServerVersion(cycle),
+        }),
+      }
+    }
     if (!strictCycleRule.allowedStatuses.includes(cycle.status)) {
       throw new Error(strictCycleRule.errorMessage)
     }
@@ -772,7 +807,8 @@ async function addBreedingRecordCore({
 
   validateDetails(data.type, normalizedDetails)
 
-  const recordData = {
+  const recordData = buildVersionedCreate({
+    ...(clientRecordId ? { _id: clientRecordId } : {}),
     type: data.type,
     cycle_id: cycleId,
     dog_id: data.dog_id,
@@ -782,17 +818,16 @@ async function addBreedingRecordCore({
     notes: data.notes || null,
     details: normalizedDetails,
     created_by: uid,
-    created_at: now,
-    updated_at: now,
-  }
+  }, now)
   const { id: recordId } = await db.collection('breeding_records').add(recordData)
+  const resolvedRecordId = clientRecordId || recordId
 
   let newStatus = STATUS_TRANSITIONS[data.type]
   if (data.type === 'pregnancy_check' && isPregnancyRejected(data.details)) {
     newStatus = '失败'
   }
   if (newStatus) {
-    const updateData = { status: newStatus, updated_at: now }
+    const updateData = { status: newStatus, ...buildVersionUpdate(dbCmd, now) }
 
     if (data.type === 'mating') {
       updateData.mated_at = data.date
@@ -817,27 +852,27 @@ async function addBreedingRecordCore({
     await clearPendingBreedingMilestones(familyId, { cycleId })
   }
 
-  await generateTasks(familyId, data.type, data, cycleId, dog, recordId)
+  await generateTasks(familyId, data.type, data, cycleId, dog, resolvedRecordId)
 
   if (data.extra_arrangement?.kind && data.extra_arrangement?.due_date) {
     await createExtraArrangementTask(
       familyId,
       dog,
       cycleId,
-      recordId,
+      resolvedRecordId,
       data.extra_arrangement
     )
   }
 
   if (data.type !== 'heat_observation' && data.cost && data.cost > 0) {
-    await createExpense(familyId, uid, data, dog, cycleId, recordId)
+    await createExpense(familyId, uid, data, dog, cycleId, resolvedRecordId)
   }
 
   if (data.type !== 'heat_observation') {
-    await postWriteVerify(recordId, 'breeding_records')
+    await postWriteVerify(resolvedRecordId, 'breeding_records')
   }
 
-  return { recordId, cycleId }
+  return { recordId: resolvedRecordId, cycleId, record: { ...recordData, _id: resolvedRecordId } }
 }
 
 module.exports = {
@@ -877,6 +912,9 @@ module.exports = {
     if (!data.date) throw new Error('请选择日期')
 
     const familyId = this.familyId
+    const syncMeta = getSyncMeta(data)
+    const appliedMutation = await findAppliedMutation(db, familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
     const dog = await getDogById(familyId, data.dog_id)
     const result = await addBreedingRecordCore({
       familyId,
@@ -884,6 +922,7 @@ module.exports = {
       data,
       dog,
     })
+    if (result?.conflict) return result.conflict
     await logBreedingOperation({
       familyId,
       actorUserId: this.uid,
@@ -894,7 +933,29 @@ module.exports = {
       summary: `为 ${dog.name || '未命名犬只'} 新增了${BREEDING_RECORD_LABEL_MAP[data.type] || '繁育记录'}`,
       meta: { type: data.type, cycleId: result.cycleId || data.cycle_id || '' },
     })
-    return { data: result }
+    const { data: touchedRows } = await db.collection('breeding_records')
+      .where({ _id: result.recordId, family_id: familyId })
+      .get()
+    const touchedEntities = []
+    if (touchedRows?.[0]) touchedEntities.push(buildTouchedEntity('breeding_records', touchedRows[0]))
+    if (result.cycleId) {
+      const { data: cycles } = await db.collection('breeding_cycles')
+        .where({ _id: result.cycleId, family_id: familyId })
+        .get()
+      if (cycles?.[0]) touchedEntities.push(buildTouchedEntity('breeding_cycles', cycles[0]))
+    }
+    const response = {
+      data: { recordId: result.recordId, cycleId: result.cycleId },
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities,
+        resyncScopes: ['breeding_records', 'breeding_cycles', 'tasks', 'expenses', 'litters'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   async batchAddBreedingRecords(data) {

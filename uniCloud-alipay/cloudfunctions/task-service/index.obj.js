@@ -9,6 +9,24 @@ try {
 } catch (error) {
   ;({ safeWriteOperationLog } = require('../common/breed-auth/operation-log'))
 }
+let syncUtils = null
+try {
+  syncUtils = require('breed-sync')
+} catch (error) {
+  syncUtils = require('../common/breed-sync')
+}
+const {
+  getSyncMeta,
+  buildTouchedEntity,
+  buildSyncAck,
+  buildConflictAck,
+  findAppliedMutation,
+  markMutationApplied,
+  getBaseVersion,
+  getServerVersion,
+  buildVersionUpdate,
+  buildVersionedCreate,
+} = syncUtils
 
 const db = uniCloud.database()
 const dbCmd = db.command
@@ -516,7 +534,7 @@ function toLegacyMedItem(task) {
   }
 }
 
-async function createAutoHealthRecord({ familyId, uid, task, now }) {
+async function createAutoHealthRecord({ familyId, uid, task, now, recordId = '' }) {
   if (!task || !['vaccination', 'deworming'].includes(task.type)) return false
 
   const details = {}
@@ -526,7 +544,8 @@ async function createAutoHealthRecord({ familyId, uid, task, now }) {
     details.drug_name = task.details?.drug_name || null
   }
 
-  const recordData = {
+  const recordData = buildVersionedCreate({
+    _id: recordId || undefined,
     family_id: familyId,
     dog_id: task.dog_id,
     dog_name: task.dog_name,
@@ -535,11 +554,9 @@ async function createAutoHealthRecord({ familyId, uid, task, now }) {
     details,
     source: 'auto_complete',
     created_by: uid,
-    created_at: now,
-    updated_at: now,
-  }
+  }, now)
   await db.collection('health_records').add(recordData)
-  return true
+  return recordData
 }
 
 function normalizeTaskIdList(taskIds = []) {
@@ -548,6 +565,75 @@ function normalizeTaskIdList(taskIds = []) {
       .map(taskId => typeof taskId === 'string' ? taskId.trim() : '')
       .filter(Boolean),
   )]
+}
+
+function parseCompleteTaskArgs(taskIdOrInput, autoRecord, maybeSync) {
+  if (taskIdOrInput && typeof taskIdOrInput === 'object' && !Array.isArray(taskIdOrInput)) {
+    return {
+      taskId: taskIdOrInput.taskId || taskIdOrInput.task_id || taskIdOrInput.id || '',
+      autoRecord: Boolean(taskIdOrInput.autoRecord ?? taskIdOrInput.auto_record),
+      syncMeta: getSyncMeta(taskIdOrInput, maybeSync),
+      autoHealthRecords: Array.isArray(taskIdOrInput?._sync?.autoHealthRecords) ? taskIdOrInput._sync.autoHealthRecords : [],
+    }
+  }
+
+  return {
+    taskId: taskIdOrInput,
+    autoRecord: Boolean(autoRecord),
+    syncMeta: getSyncMeta(null, maybeSync),
+    autoHealthRecords: [],
+  }
+}
+
+function parseBatchTaskArgs(taskIdsOrInput, autoRecord, maybeSync) {
+  if (taskIdsOrInput && typeof taskIdsOrInput === 'object' && !Array.isArray(taskIdsOrInput)) {
+    return {
+      taskIds: normalizeTaskIdList(taskIdsOrInput.taskIds || taskIdsOrInput.task_ids || []),
+      autoRecord: Boolean(taskIdsOrInput.autoRecord ?? taskIdsOrInput.auto_record),
+      syncMeta: getSyncMeta(taskIdsOrInput, maybeSync),
+      autoHealthRecords: Array.isArray(taskIdsOrInput?._sync?.autoHealthRecords) ? taskIdsOrInput._sync.autoHealthRecords : [],
+    }
+  }
+
+  return {
+    taskIds: normalizeTaskIdList(taskIdsOrInput),
+    autoRecord: Boolean(autoRecord),
+    syncMeta: getSyncMeta(null, maybeSync),
+    autoHealthRecords: [],
+  }
+}
+
+function parsePostponeArgs(taskIdOrInput, newDate, reason, maybeSync) {
+  if (taskIdOrInput && typeof taskIdOrInput === 'object' && !Array.isArray(taskIdOrInput)) {
+    return {
+      taskId: taskIdOrInput.taskId || taskIdOrInput.task_id || taskIdOrInput.id || '',
+      taskIds: normalizeTaskIdList(taskIdOrInput.taskIds || taskIdOrInput.task_ids || []),
+      newDate: taskIdOrInput.newDate || taskIdOrInput.new_date || newDate,
+      reason: taskIdOrInput.reason || null,
+      syncMeta: getSyncMeta(taskIdOrInput, maybeSync),
+    }
+  }
+
+  return {
+    taskId: typeof taskIdOrInput === 'string' ? taskIdOrInput : '',
+    taskIds: normalizeTaskIdList(taskIdOrInput),
+    newDate,
+    reason: reason || null,
+    syncMeta: getSyncMeta(null, maybeSync),
+  }
+}
+
+function getTaskConflict(syncMeta, task) {
+  const baseVersion = getBaseVersion(syncMeta, task?._id)
+  if (baseVersion === null) return null
+  const serverVersion = getServerVersion(task)
+  if (baseVersion === serverVersion) return null
+  return buildConflictAck(syncMeta, {
+    collection: 'tasks',
+    entityId: task._id,
+    baseVersion,
+    serverVersion,
+  })
 }
 
 /**
@@ -1181,9 +1267,13 @@ module.exports = {
   /**
    * 批量完成任务
    */
-  async batchCompleteTask(taskIds, autoRecord) {
-    const normalizedTaskIds = normalizeTaskIdList(taskIds)
+  async batchCompleteTask(taskIds, autoRecord, maybeSync) {
+    const { taskIds: normalizedTaskIds, autoRecord: shouldAutoRecord, syncMeta, autoHealthRecords } = parseBatchTaskArgs(taskIds, autoRecord, maybeSync)
     if (!normalizedTaskIds.length) throw new Error('缺少任务 ID')
+    if (syncMeta?.clientMutationId) {
+      const existing = await findAppliedMutation(db, this.familyId, syncMeta.clientMutationId)
+      if (existing?.response) return existing.response
+    }
 
     const now = Date.now()
     const { data: tasks } = await db.collection('tasks')
@@ -1194,6 +1284,10 @@ module.exports = {
       .get()
 
     const pendingTasks = (tasks || []).filter(task => task?.status === 'pending')
+    for (const task of pendingTasks) {
+      const conflict = getTaskConflict(syncMeta, task)
+      if (conflict) return conflict
+    }
     const completedTaskIds = pendingTasks.map(task => task._id).filter(Boolean)
 
     if (completedTaskIds.length > 0) {
@@ -1205,19 +1299,23 @@ module.exports = {
         status: 'completed',
         completed_by: this.uid,
         completed_at: now,
-        updated_at: now,
+        ...buildVersionUpdate(dbCmd, now),
       })
     }
 
-    if (autoRecord && pendingTasks.length > 0) {
+    const createdHealthRecords = []
+    const autoRecordMap = new Map((autoHealthRecords || []).map(item => [item.taskId, item.recordId]))
+    if (shouldAutoRecord && pendingTasks.length > 0) {
       await Promise.all(pendingTasks.map(async (task) => {
         try {
-          await createAutoHealthRecord({
+          const record = await createAutoHealthRecord({
             familyId: this.familyId,
             uid: this.uid,
             task,
             now,
+            recordId: autoRecordMap.get(task._id) || '',
           })
+          if (record) createdHealthRecords.push(record)
         } catch (e) {
           console.log('[batchCompleteTask] auto-record failed:', e.message)
         }
@@ -1232,10 +1330,32 @@ module.exports = {
       targetId: `batch:${Date.now()}`,
       targetName: `${completedTaskIds.length}个任务`,
       summary: `批量完成了 ${completedTaskIds.length} 个任务`,
-      meta: { completed: completedTaskIds.length, completedTaskIds, autoRecord: Boolean(autoRecord) },
+      meta: { completed: completedTaskIds.length, completedTaskIds, autoRecord: Boolean(shouldAutoRecord) },
     })
 
-    return { data: { completed: completedTaskIds.length, completedTaskIds } }
+    const { data: updatedTasks } = completedTaskIds.length > 0
+      ? await db.collection('tasks').where({ _id: dbCmd.in(completedTaskIds), family_id: this.familyId }).get()
+      : { data: [] }
+    const touchedEntities = [
+      ...(updatedTasks || []).map(task => buildTouchedEntity('tasks', task)),
+      ...createdHealthRecords.map(record => buildTouchedEntity('health_records', record)),
+    ]
+    const response = {
+      data: {
+        completed: completedTaskIds.length,
+        completedTaskIds,
+        autoRecordedHealthRecordIds: createdHealthRecords.map(record => record._id),
+      },
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities,
+        resyncScopes: ['tasks', 'health_records'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**
@@ -1302,33 +1422,47 @@ module.exports = {
    * 完成任务
    * autoRecord=true 时（健康类），自动创建 health_record，但不再无声续链
    */
-  async completeTask(taskId, autoRecord) {
-    if (!taskId) throw new Error('缺少任务 ID')
+  async completeTask(taskId, autoRecord, maybeSync) {
+    const { taskId: normalizedTaskId, autoRecord: shouldAutoRecord, syncMeta, autoHealthRecords } = parseCompleteTaskArgs(taskId, autoRecord, maybeSync)
+    if (!normalizedTaskId) throw new Error('缺少任务 ID')
+    if (syncMeta?.clientMutationId) {
+      const existing = await findAppliedMutation(db, this.familyId, syncMeta.clientMutationId)
+      if (existing?.response) return existing.response
+    }
 
     const now = Date.now()
     const familyId = this.familyId
 
     const { data: tasks } = await db.collection('tasks')
-      .where({ _id: taskId, family_id: familyId })
+      .where({ _id: normalizedTaskId, family_id: familyId })
       .get()
     if (!tasks || tasks.length === 0) throw new Error('任务不存在')
+    const conflict = getTaskConflict(syncMeta, tasks[0])
+    if (conflict) return conflict
     // 幂等
-    if (tasks[0].status !== 'pending') return { message: '已完成' }
+    if (tasks[0].status !== 'pending') {
+      return {
+        message: '已完成',
+        ...buildSyncAck(syncMeta, { ack: 'duplicate', resyncScopes: ['tasks'] }),
+      }
+    }
 
     const task = tasks[0]
 
-    await db.collection('tasks').doc(taskId).update({
+    await db.collection('tasks').doc(normalizedTaskId).update({
       status: 'completed',
       completed_by: this.uid,
       completed_at: now,
-      updated_at: now,
+      ...buildVersionUpdate(dbCmd, now),
     })
 
     // 健康类一键完成：自动创建记录，不再自动生成下次提醒
     const HEALTH_TYPES = ['vaccination', 'deworming']
-    if (autoRecord && HEALTH_TYPES.includes(task.type)) {
+    let createdHealthRecord = null
+    if (shouldAutoRecord && HEALTH_TYPES.includes(task.type)) {
       try {
-        await createAutoHealthRecord({ familyId, uid: this.uid, task, now })
+        const recordId = Array.isArray(autoHealthRecords) && autoHealthRecords.length > 0 ? autoHealthRecords[0].recordId : ''
+        createdHealthRecord = await createAutoHealthRecord({ familyId, uid: this.uid, task, now, recordId })
       } catch (e) {
         console.log('[completeTask] auto-record failed:', e.message)
         // 不影响任务完成，静默失败
@@ -1340,37 +1474,65 @@ module.exports = {
       actorUserId: this.uid,
       actionType: 'complete',
       targetType: 'task',
-      targetId: taskId,
-      targetName: task.title || taskId,
+      targetId: normalizedTaskId,
+      targetName: task.title || normalizedTaskId,
       summary: `完成了任务 ${task.title || ''}`.trim(),
-      meta: { autoRecord: Boolean(autoRecord) },
+      meta: { autoRecord: Boolean(shouldAutoRecord) },
     })
 
-    return { message: '已完成', autoRecorded: autoRecord && HEALTH_TYPES.includes(task.type) }
+    const { data: updatedTasks } = await db.collection('tasks').where({ _id: normalizedTaskId, family_id: familyId }).get()
+    const touchedEntities = [
+      ...(updatedTasks || []).map(item => buildTouchedEntity('tasks', item)),
+      ...(createdHealthRecord ? [buildTouchedEntity('health_records', createdHealthRecord)] : []),
+    ]
+    const response = {
+      message: '已完成',
+      autoRecorded: shouldAutoRecord && HEALTH_TYPES.includes(task.type),
+      data: {
+        completedTaskIds: [normalizedTaskId],
+        autoRecordedHealthRecordIds: createdHealthRecord ? [createdHealthRecord._id] : [],
+      },
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities,
+        resyncScopes: ['tasks', 'health_records'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**
    * 推迟任务
    */
-  async postponeTask(taskId, newDate, reason) {
-    if (!taskId) throw new Error('缺少任务 ID')
-    if (!newDate) throw new Error('请选择新日期')
+  async postponeTask(taskId, newDate, reason, maybeSync) {
+    const parsed = parsePostponeArgs(taskId, newDate, reason, maybeSync)
+    if (!parsed.taskId) throw new Error('缺少任务 ID')
+    if (!parsed.newDate) throw new Error('请选择新日期')
+    if (parsed.syncMeta?.clientMutationId) {
+      const existing = await findAppliedMutation(db, this.familyId, parsed.syncMeta.clientMutationId)
+      if (existing?.response) return existing.response
+    }
 
     const now = Date.now()
 
     const { data: tasks } = await db.collection('tasks')
-      .where({ _id: taskId, family_id: this.familyId })
+      .where({ _id: parsed.taskId, family_id: this.familyId })
       .get()
     if (!tasks || tasks.length === 0) throw new Error('任务不存在')
+    const conflict = getTaskConflict(parsed.syncMeta, tasks[0])
+    if (conflict) return conflict
     if (tasks[0].status !== 'pending') throw new Error('任务已处理')
 
     const task = tasks[0]
 
-    await db.collection('tasks').doc(taskId).update({
-      due_date: newDate,
+    await db.collection('tasks').doc(parsed.taskId).update({
+      due_date: parsed.newDate,
       postpone_count: dbCmd.inc(1),
-      postpone_reason: reason || null,
-      updated_at: now,
+      postpone_reason: parsed.reason || null,
+      ...buildVersionUpdate(dbCmd, now),
     })
 
     await logTaskOperation({
@@ -1378,19 +1540,37 @@ module.exports = {
       actorUserId: this.uid,
       actionType: 'postpone',
       targetType: 'task',
-      targetId: taskId,
-      targetName: task.title || taskId,
+      targetId: parsed.taskId,
+      targetName: task.title || parsed.taskId,
       summary: `推迟了任务 ${task.title || ''}`.trim(),
-      meta: { dueDate: newDate, reason: reason || null },
+      meta: { dueDate: parsed.newDate, reason: parsed.reason || null },
     })
 
-    return { message: '已推迟' }
+    const { data: updatedTasks } = await db.collection('tasks').where({ _id: parsed.taskId, family_id: this.familyId }).get()
+    const response = {
+      message: '已推迟',
+      data: { postponedTaskIds: [parsed.taskId] },
+      ...buildSyncAck(parsed.syncMeta, {
+        ack: 'accepted',
+        touchedEntities: (updatedTasks || []).map(item => buildTouchedEntity('tasks', item)),
+        resyncScopes: ['tasks'],
+      }),
+    }
+    if (parsed.syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, parsed.syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
-  async batchPostponeTask(taskIds, newDate, reason) {
-    const normalizedTaskIds = normalizeTaskIdList(taskIds)
+  async batchPostponeTask(taskIds, newDate, reason, maybeSync) {
+    const parsed = parsePostponeArgs(taskIds, newDate, reason, maybeSync)
+    const normalizedTaskIds = parsed.taskIds
     if (!normalizedTaskIds.length) throw new Error('缺少任务 ID')
-    if (!newDate) throw new Error('请选择新日期')
+    if (!parsed.newDate) throw new Error('请选择新日期')
+    if (parsed.syncMeta?.clientMutationId) {
+      const existing = await findAppliedMutation(db, this.familyId, parsed.syncMeta.clientMutationId)
+      if (existing?.response) return existing.response
+    }
 
     const now = Date.now()
     const { data: tasks } = await db.collection('tasks')
@@ -1401,6 +1581,10 @@ module.exports = {
       .get()
 
     const pendingTasks = (tasks || []).filter(task => task?.status === 'pending')
+    for (const task of pendingTasks) {
+      const conflict = getTaskConflict(parsed.syncMeta, task)
+      if (conflict) return conflict
+    }
     const postponedTaskIds = pendingTasks.map(task => task._id).filter(Boolean)
 
     if (postponedTaskIds.length > 0) {
@@ -1409,10 +1593,10 @@ module.exports = {
         family_id: this.familyId,
         status: 'pending',
       }).update({
-        due_date: newDate,
+        due_date: parsed.newDate,
         postpone_count: dbCmd.inc(1),
-        postpone_reason: reason || null,
-        updated_at: now,
+        postpone_reason: parsed.reason || null,
+        ...buildVersionUpdate(dbCmd, now),
       })
     }
 
@@ -1424,10 +1608,24 @@ module.exports = {
       targetId: `batch:${now}`,
       targetName: `${postponedTaskIds.length}个任务`,
       summary: `批量推迟了 ${postponedTaskIds.length} 个任务`,
-      meta: { postponedTaskIds, dueDate: newDate, reason: reason || null },
+      meta: { postponedTaskIds, dueDate: parsed.newDate, reason: parsed.reason || null },
     })
 
-    return { data: { postponed: postponedTaskIds.length, postponedTaskIds } }
+    const { data: updatedTasks } = postponedTaskIds.length > 0
+      ? await db.collection('tasks').where({ _id: dbCmd.in(postponedTaskIds), family_id: this.familyId }).get()
+      : { data: [] }
+    const response = {
+      data: { postponed: postponedTaskIds.length, postponedTaskIds },
+      ...buildSyncAck(parsed.syncMeta, {
+        ack: 'accepted',
+        touchedEntities: (updatedTasks || []).map(item => buildTouchedEntity('tasks', item)),
+        resyncScopes: ['tasks'],
+      }),
+    }
+    if (parsed.syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, parsed.syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**
@@ -1515,6 +1713,12 @@ module.exports = {
     const familyId = this.familyId
     const uid = this.uid
     const now = Date.now()
+    const syncMeta = getSyncMeta(data)
+    const appliedMutation = await findAppliedMutation(db, familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
+    const clientTaskIds = Array.isArray(syncMeta?.clientEntityIds?.tasks)
+      ? syncMeta.clientEntityIds.tasks
+      : []
 
     // ① 一次查询批量去重
     const WEEK = 7 * DAY_MS
@@ -1538,14 +1742,15 @@ module.exports = {
     // ② 并行创建不重复的任务
     const dogsToCreate = data.dogs.filter(d => !existingDogIds.has(d.dog_id))
 
-    const results = await Promise.all(dogsToCreate.map(async (dog) => {
+    const results = await Promise.all(dogsToCreate.map(async (dog, index) => {
       const taskTitle = data.title
         || (data.type === 'vaccination' ? (data.details?.vaccine_type ? `疫苗 · ${data.details.vaccine_type}` : '疫苗') : '')
         || (data.type === 'deworming'
           ? (data.details?.drug_name ? `驱虫 · ${data.details.drug_name}` : '驱虫')
           : '')
         || data.type
-      const taskData = {
+      const taskData = buildVersionedCreate({
+        ...(clientTaskIds[index] ? { _id: clientTaskIds[index] } : {}),
         card_type: data.card_type || 'individual',
         dog_id: dog.dog_id,
         dog_name: dog.dog_name || '',
@@ -1561,11 +1766,10 @@ module.exports = {
         family_id: familyId,
         postpone_count: 0,
         created_by: uid,
-        created_at: now,
-        updated_at: now,
-      }
+      }, now)
       const { id } = await db.collection('tasks').add(taskData)
-      return { taskId: id, dog_id: dog.dog_id }
+      const resolvedTaskId = clientTaskIds[index] || id
+      return { taskId: resolvedTaskId, dog_id: dog.dog_id, task: { ...taskData, _id: resolvedTaskId } }
     }))
 
     await logTaskOperation({
@@ -1579,13 +1783,23 @@ module.exports = {
       meta: { created: results.length, skipped: data.dogs.length - results.length },
     })
 
-    return {
+    const response = {
       data: {
         created: results.length,
         skipped: data.dogs.length - results.length,
+        tasks: results.map(({ task }) => task),
         message: results.length > 0 ? '已创建待办' : '已有相同待办',
-      }
+      },
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: results.map(result => buildTouchedEntity('tasks', result.task)),
+        resyncScopes: ['tasks'],
+      }),
     }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**

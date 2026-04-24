@@ -23,11 +23,11 @@
 
 ### 当前里程碑
 
-首页工作台密度自适应优化：
+Local-First Foundation：
 
-- 不改后端事实源
-- 不改首页四层语义
-- 通过 workbench adapter 和更轻量的区块呈现提升密度
+- 先把核心业务读写升级为“本地事务 + outbox + 后台同步”
+- 首页作为第一批接入页，改为本地实体投影，不再依赖云端首页聚合响应
+- 产品按“本地优先单主端”落地，但同步底座保留升级到多端并发的能力
 
 ## 3. 服务边界
 
@@ -40,6 +40,7 @@
 - 更新家庭设置
 - 回收站聚合查询
 - 回收站恢复与永久删除路由
+- 在线优先的家庭协作与 `operation_logs`
 - 依赖 `_before` 注入 `familyId`
 
 ### `dog-service`
@@ -76,9 +77,8 @@
 
 负责：
 
-- 首页卡片协议
+- 任务写操作收口与同步 ack
 - 完成、推迟、跳过普通任务
-- 日期计数与 WeekStrip 基础数据
 - 每日审计、自动关闭
 
 ### `finance-service`
@@ -89,24 +89,44 @@
 - 关联犬只/窝/周期
 - 统计汇总与详情展示
 
-## 4. 前端边界
+## 4. Local-First 底座
+
+### `src/localdb`
+
+负责：
+
+- 本地持久化适配器（SQLite / IndexedDB / fallback）
+- 业务集合镜像与系统集合管理
+- 本地查询、事务、outbox、sync state、conflict state
+- 设备 ID、客户端稳定 ID 与同步元数据
+
+### `sync worker`
+
+负责：
+
+- 顺序重放 `outbox_mutations`
+- 离线暂停、指数退避、应用重启恢复、回前台续传
+- 写接口 ack 处理与按集合增量拉取
+- 冲突记录下沉到 `sync_conflicts`
+
+## 5. 前端边界
 
 ### 首页
 
 首页是编排层，负责：
 
-- `loadAll / loadTodayCards / loadDateCounts / loadWeekCache`
+- 从本地实体投影四层工作台、WeekStrip 与日期计数
 - latest token 保护
-- suppression 防闪回
-- 本地承接与后台刷新
+- 迁移期的 suppression 兼容保护
+- 本地事务后的即时反馈与后台同步触发
 - 首页任务日历继续复用 `BDateTimePicker`，通过纯日期模式与日期计数缓存展示任务红点
-- 统一处理路由、云调用、banner/弱提示
+- 统一处理路由、banner/弱提示与同步失败兜底
 
 首页不应该：
 
 - 在子组件里直接调用云对象
 - 静默截断数据
-- 自行改写后端事实
+- 自行拼装远端首页事实
 
 ### 表单
 
@@ -114,25 +134,25 @@
 
 - 健康表单继续使用 `BFormOptions`
 - 繁育表单使用 `BExtraArrangementSection`
-- 提交反馈采用局部 loading + 弱成功反馈
+- 提交反馈采用局部 loading + 弱成功反馈；逐步迁移到本地事务优先
 
-## 5. 当前首页工作台的实现方向
+## 6. 当前接入顺序
 
-### 不变的约束
+### 第一批接入
 
 - 固定四层：`逾期 / 繁育 / 健康 / 用药`
-- 不恢复统一任务池
-- 不新增首页专属持久化聚合
-- 不改 `medication_tasks` 的事实源地位
+- 首页、WeekStrip、今日计数
+- 首页上的完成、推迟、给药、康复、停药等即时动作
+- `tasks / medication_tasks / health_records / dogs` 本地镜像与投影
+- `task-service / health-service` 首页相关写接口幂等化与 ack 化
 
-### 本轮改造方式
+### 第二批接入
 
-1. 保持 `task-service` 输出业务事实
-2. 在前端增加纯 workbench adapter
-3. 由 adapter 生成 section / group / row / hidden-count 视图模型
-4. 首页继续承担副作用与本地承接
+- 犬只列表、犬只详情、健康与用药详情
+- 记录表单的离线创建与客户端稳定 ID
+- 财务、回收站与更多增量拉取覆盖面
 
-## 6. 当前重点页面
+## 7. 当前重点页面
 
 ### 核心页面
 
@@ -148,17 +168,21 @@
 
 ### 高风险页面或模块
 
-- 首页与 `task-service`
+- 首页本地投影与 `task-service` / `health-service` 同步边界
+- `src/localdb` 与 sync worker
 - 用药详情与首页用药卡的一致性
 - 疾病记录编辑与唯一性校验
-- 批量健康完成后的局部承接
+- 批量健康完成后的本地事务与自动记录
 
-## 7. 测试策略
+## 8. 测试策略
 
 ### 必测方向
 
+- 本地事务成功后 UI 立即可见，重启后本地数据仍在
+- outbox 重试、重复重放时不重复创建、不重复推进状态
+- ack / touchedEntities / version / conflict contract
 - 云对象业务约束
-- 首页 contract 与 adapter 纯函数行为
+- 首页本地投影纯函数行为
 - 批量健康完成是否真实落 `health_record`
 - 用药状态排序、漏服判断、批量操作
 - WeekStrip 红点与首页可见内容一致性
@@ -167,18 +191,19 @@
 
 ```bash
 pnpm type-check
+pnpm test tests/localdb
 pnpm test tests/cloud-objects/task-service.test.ts
 pnpm test tests/cloud-objects/health-service.test.ts
 pnpm test tests/cloud-objects/breeding-service.test.ts
 pnpm test
 ```
 
-## 8. 验收重点
+## 9. 验收重点
 
 ### 首页
 
-- 大数量任务时不再靠大卡片硬堆
-- 计数、红点、局部承接、防闪回保持一致
+- 首屏不等云端首页聚合
+- 计数、红点、局部承接、防闪回与本地实体持续一致
 - 繁育不被误做成批量完成
 
 ### 健康
@@ -192,13 +217,13 @@ pnpm test
 - 首页与详情页共用同一套状态语义
 - 完成、漏服、康复、停药动作口径一致
 
-## 9. 下一步执行顺序
+## 10. 下一步执行顺序
 
 以 `docs/ROADMAP.md` 为准，当前固定顺序：
 
-1. Workbench Contract & Test Foundation
-2. Breeding Step Workbench
-3. Health Batch-First Workbench
-4. Medication State Workbench
-5. Overdue, Counts & Reconciliation Calibration
-6. Today Focus
+1. `src/localdb`、outbox、sync worker、设备 ID 与客户端稳定 ID
+2. 首页本地投影与首页动作本地事务化
+3. 首页相关云对象幂等 / ack / version contract
+4. 犬只、健康、用药详情接入本地读取
+5. 记录表单、财务、回收站接入本地优先
+6. 冲突呈现与多端同步升级能力补强
