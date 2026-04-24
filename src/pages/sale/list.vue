@@ -1,24 +1,9 @@
 <template>
   <view class="page">
-    <!-- 页面标题 -->
-    <view class="primary-page-header">
-      <view class="primary-page-header__row">
-        <text class="primary-page-header__title">销售管理</text>
-      </view>
-    </view>
+    <BPageHeader title="销售管理" />
 
     <!-- 状态筛选 Tabs -->
-    <view class="filter-tabs primary-page-tabs primary-page-tabs--flush">
-      <view
-        v-for="f in statusFilters"
-        :key="f.value"
-        class="filter-tab primary-page-tab"
-        :class="{ 'filter-tab--active primary-page-tab--active': activeFilter === f.value }"
-        @click="activeFilter = f.value; load()"
-      >
-        <text>{{ f.label }}</text>
-      </view>
-    </view>
+    <BChipFilterStrip v-model="activeFilter" :options="statusFilters" @change="load" />
 
     <!-- 骨架屏 -->
     <view v-if="loading" class="primary-page-loading">
@@ -67,8 +52,6 @@
       />
     </view>
 
-    <!-- 底部导航 -->
-    <BNavBar current="finance" />
   </view>
 </template>
 
@@ -76,8 +59,9 @@
 import { ref } from 'vue'
 
 import { onShow } from '@dcloudio/uni-app'
+import BChipFilterStrip from '@/components/base/BChipFilterStrip.vue'
 import { useCloudCall } from '@/composables/useCloudCall'
-import BNavBar from '@/components/layout/BNavBar.vue'
+import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BIconBox from '@/components/base/BIconBox.vue'
 import BTag from '@/components/base/BTag.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
@@ -92,7 +76,7 @@ const sales = ref<any[]>(readSaleCache())
 const loading = ref(sales.value.length === 0)
 const activeFilter = ref('')
 
-const statusFilters = [
+const statusFilters: Array<{ label: string; value: string }> = [
   { label: '全部', value: '' },
   { label: '待售', value: '待售' },
   { label: '已预定', value: '已预定' },
@@ -192,10 +176,6 @@ onShow(() => load())
   min-height: 100vh;
   background: var(--bg);
   padding-bottom: 100px;
-}
-
-/* ==================== FILTER TABS ==================== */
-.filter-tabs {
 }
 
 /* ==================== CARD FEED ==================== */

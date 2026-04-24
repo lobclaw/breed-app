@@ -53,6 +53,7 @@
 - 弹层：`BSheet`、`BModal`、`BDeleteConfirm` 打开时锁滚动，关闭时先退场动画再卸载
 - 交互：表单互斥选项用 pill-select；Segmented Control 只用于视图 / 标签切换；提交反馈统一为“局部 loading + 弱成功反馈 + 来源页承接”；提交按钮固定 `默认 / 提交中 / 成功瞬态` 三态，成功瞬态 `520ms`
 - 详情页：首屏优先保证“可见和可点”；不要用遮挡内容的 sticky / 负 margin；若有骨架必须拟真；操作入口收口为“一个稳定主操作入口 + 一个 more”
+- `我的` 页：`/pages/profile/index` 当前定位为犬舍总览页，不再以长列表菜单作为主体；页头主标题优先显示家庭名，副标题显示成员昵称与角色；页面主体先展示经营/繁育汇总卡，再展示管理入口；原“我的”页菜单收纳进左侧抽屉，底部导航保持不变，抽屉内容需可滚动且默认隐藏滚动条
 - 页头与详情：一级页头多动作时主 CTA 在左、工具动作在右，主按钮走 `primary-page-header__action--primary`；犬只详情 Hero 需明确断行 / 留白；犬只详情与繁育周期详情“添加记录”统一复用高密 `BSheet`；繁育周期详情保留完整原始时间线但历史记录不承担“当前 / 最新”语义；窝详情右上角编辑入口统一用 `BSheet`，备注 / 经验心得默认多行 `textarea`；编辑犬只页不允许直接修改 `role`
 - 组件与路由：`BFormOptions` 仅用于健康记录表单，繁育表单统一用 `BExtraArrangementSection`；`BButton` 只承接通用操作按钮，表单底部主 CTA 一律用 `BSubmitButton`
 - 记录表单：统一为 `HealthRecordForm`、`BreedingRecordForm`、`MedicationTaskForm`；`/pages/record/*` 是稳定 contract；提交三态、旧 query 兼容、来源页反馈优先走共享逻辑；若有首屏骨架，`edit` 态必须在 loading 前拿到稳定类型；必填未满足时 `BSubmitButton` 直接禁用
@@ -108,6 +109,7 @@
 - 用药任务主状态表达疗程是否结束；未全量完成时通过详情页或副文案表达 `部分完成`；用药详情页主实体是 `medication_task`，跳转和查询优先使用用药任务 ID；回收站恢复或永久删除 `medication_protocol` 后必须刷新 `protocolStore`
 - 疾病 `标记康复` 必须通过 `health-service.recoverIllnesses` 一次性收口：标记疾病 `已康复`，并取消显式关联的进行中 `medication_tasks` 及旧 daily `tasks`；首页单个/批量康复、今日用药批量康复、疾病详情、犬只详情入口口径一致，避免前端多接口并发
 - 犬只状态：表达当前仍生效且需要理解 / 处理的状态集合，不是时间线；优先级 `疾病` → `用药` → `怀孕 / 哺乳` → `发情`；点击分别跳到健康记录详情 / 用药任务详情 / 繁育周期详情；带天数时统一紧凑式 `发情第X天 / 怀孕第X天 / 哺乳第X天 / 病名第X天 / 药名第X天`
+- 状态图标口径：`怀孕中= pregnant_woman`、`哺乳中= child_care`、`待产= child_friendly`；不要把 `favorite`、`pets`、`local_drink` 重新用于这三个状态，避免和配种、通用犬只、饮水语义混淆
 - 跳转和查询必须兼容 camelCase 与 snake_case，至少兼容 `recordId/record_id`、`taskId/task_id/medication_task_id`、`cycleId/cycle_id`
 - 同一只狗在 `details.treatment_status !== 已康复` 时，不允许存在同病名重复疾病记录；前端可预检查，但 `health-service` 必须服务端兜底
 
