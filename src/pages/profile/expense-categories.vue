@@ -183,6 +183,13 @@
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
+import { usePageSync } from '@/composables/usePageSync'
+import {
+  getLocalExpenseCategories,
+  getLocalExpenseCategoryGroups,
+} from '@/localdb/domain-repository'
+import { localSyncRuntime } from '@/localdb/runtime'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSheet from '@/components/layout/BSheet.vue'
@@ -194,44 +201,13 @@ import {
   normalizeExpenseCategories,
 } from '@/constants/financeCategories'
 import type { ExpenseCategory, ExpenseCategoryGroup } from '@/types/finance'
+import type { ExpenseCategoryGroupOption } from '@/constants/financeCategories'
 
-const CATEGORY_CACHE_KEY = 'expense_categories_cache'
-const GROUP_CACHE_KEY = 'expense_category_groups_cache'
+const { currentFamily } = useAuth()
+usePageSync({ routePath: 'pages/profile/expense-categories' })
 
-function readCategoryCache() {
-  try {
-    return JSON.parse(uni.getStorageSync(CATEGORY_CACHE_KEY) || '[]')
-  } catch {
-    return []
-  }
-}
-
-function readGroupCache() {
-  try {
-    return JSON.parse(uni.getStorageSync(GROUP_CACHE_KEY) || '[]')
-  } catch {
-    return []
-  }
-}
-
-function saveCategoryCache(data: ExpenseCategory[]) {
-  try {
-    uni.setStorageSync(CATEGORY_CACHE_KEY, JSON.stringify(data))
-  } catch {
-    // ignore
-  }
-}
-
-function saveGroupCache(data: ExpenseCategoryGroup[]) {
-  try {
-    uni.setStorageSync(GROUP_CACHE_KEY, JSON.stringify(data))
-  } catch {
-    // ignore
-  }
-}
-
-const groups = ref<ExpenseCategoryGroup[]>(buildExpenseCategoryGroups(readGroupCache()))
-const categories = ref<ExpenseCategory[]>(normalizeExpenseCategories(readCategoryCache(), groups.value))
+const groups = ref<ExpenseCategoryGroupOption[]>(buildExpenseCategoryGroups())
+const categories = ref<ExpenseCategory[]>(normalizeExpenseCategories([], groups.value))
 const groupedCategories = computed(() => groupExpenseCategories(categories.value, groups.value, true))
 const loading = ref(true)
 
@@ -261,8 +237,6 @@ const deleteConfirmContent = computed(() => {
   return `删除分类「${deletingLabel.value}」后不可恢复，历史账单中该分类名称保持不变`
 })
 
-const { run: fetchCategories } = useCloudCall<{ data: ExpenseCategory[] }>('finance-service', 'getExpenseCategories')
-const { run: fetchGroups } = useCloudCall<{ data: ExpenseCategoryGroup[] }>('finance-service', 'getExpenseCategoryGroups')
 const { run: addCategory } = useCloudCall('finance-service', 'addExpenseCategory', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 const { run: updateCategory } = useCloudCall('finance-service', 'updateExpenseCategory', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 const { run: deleteCategory } = useCloudCall('finance-service', 'removeExpenseCategory', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
@@ -271,21 +245,21 @@ const { run: updateGroup } = useCloudCall('finance-service', 'updateExpenseCateg
 const { run: deleteGroup } = useCloudCall('finance-service', 'removeExpenseCategoryGroup', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 
 async function load() {
-  try {
-    const [groupRes, categoryRes] = await Promise.all([
-      fetchGroups(),
-      fetchCategories(),
-    ])
-
-    groups.value = buildExpenseCategoryGroups(groupRes?.data || [])
-    categories.value = normalizeExpenseCategories(categoryRes?.data || [], groups.value)
-    saveGroupCache(groups.value)
-    saveCategoryCache(categories.value)
-  } catch {
-    uni.showToast({ title: '加载失败，请稍后重试', icon: 'none' })
-  } finally {
+  const familyId = currentFamily.value?._id || ''
+  if (!familyId) {
     loading.value = false
+    groups.value = buildExpenseCategoryGroups()
+    categories.value = normalizeExpenseCategories([], groups.value)
+    return
   }
+  localSyncRuntime.setCurrentFamilyId(familyId)
+  const [localGroups, localCategories] = await Promise.all([
+    getLocalExpenseCategoryGroups(familyId),
+    getLocalExpenseCategories(familyId),
+  ])
+  groups.value = buildExpenseCategoryGroups(localGroups)
+  categories.value = normalizeExpenseCategories(localCategories, groups.value)
+  loading.value = false
 }
 
 function openGroupSheet(group?: ExpenseCategoryGroup) {
@@ -311,11 +285,15 @@ async function saveGroup() {
   try {
     if (editingGroupKey.value) {
       await updateGroup({ key: editingGroupKey.value, label })
+      groups.value = groups.value.map(group => group.key === editingGroupKey.value ? { ...group, label } : group)
     } else {
-      await addGroup({ label })
+      const res = await addGroup({ label })
+      groups.value = buildExpenseCategoryGroups([
+        ...groups.value.filter(group => !group.is_default).map(group => ({ key: group.key, label: group.label })),
+        res?.data || { key: `temp_${Date.now()}`, label },
+      ])
     }
     showGroupSheet.value = false
-    await load()
   } catch (error: any) {
     uni.showToast({ title: error?.message || '保存失败，请重试', icon: 'none' })
   } finally {
@@ -335,14 +313,20 @@ async function saveCategory() {
         newName: name,
         parentGroup: categoryFormParentGroup.value,
       })
+      categories.value = categories.value.map(category => category.name === editingCategoryName.value
+        ? { ...category, name, parent_group: categoryFormParentGroup.value }
+        : category)
     } else {
       await addCategory({
         name,
         parentGroup: categoryFormParentGroup.value,
       })
+      categories.value = normalizeExpenseCategories([
+        ...categories.value.filter(category => !category.is_default),
+        { name, parent_group: categoryFormParentGroup.value },
+      ], groups.value)
     }
     showCategorySheet.value = false
-    await load()
   } catch (error: any) {
     uni.showToast({ title: error?.message || '保存失败，请重试', icon: 'none' })
   } finally {
@@ -364,11 +348,15 @@ async function confirmDelete() {
   try {
     if (deleteTargetType.value === 'group') {
       await deleteGroup({ key: deletingKey.value })
+      groups.value = buildExpenseCategoryGroups(groups.value
+        .filter(group => !group.is_default && group.key !== deletingKey.value)
+        .map(group => ({ key: group.key, label: group.label })))
+      categories.value = normalizeExpenseCategories(categories.value, groups.value)
     } else {
       await deleteCategory({ name: deletingKey.value })
+      categories.value = categories.value.filter(category => category.name !== deletingKey.value)
     }
     showDeleteConfirm.value = false
-    await load()
   } catch (error: any) {
     uni.showToast({ title: error?.message || '删除失败，请重试', icon: 'none' })
   } finally {

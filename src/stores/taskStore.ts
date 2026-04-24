@@ -69,7 +69,8 @@ export const useTaskStore = defineStore('tasks', {
         const { currentFamily } = useAuth()
         const familyId = currentFamily.value?._id
         if (!familyId) return
-        await localSyncRuntime.syncHome(familyId)
+        localSyncRuntime.setCurrentFamilyId(familyId)
+        await localSyncRuntime.syncScope('home')
         const res = await localSyncRuntime.getHomeCards()
         if (res) {
           this.cards = (res.cards || []) as TaskCard[]

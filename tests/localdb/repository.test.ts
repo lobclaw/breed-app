@@ -48,12 +48,14 @@ describe('localdb repository public api', () => {
       last_ack_at: 0,
       updated_at: 200,
     })
+    await localDb.upsertLocalMeta('sync:active-scope', 'dog-list')
 
     expect(await getSyncStatus()).toMatchObject({
       pending: 1,
       failed: 0,
       lastPulledAt: 200,
+      activeScope: 'dog-list',
+      recentSyncAt: 200,
     })
   })
 })
-

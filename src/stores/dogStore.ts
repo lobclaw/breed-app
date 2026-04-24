@@ -1,9 +1,11 @@
 /**
  * 犬只数据 Store
- * 自动持久化（pinia-plugin-unistorage）+ stale-while-revalidate
+ * 自动持久化（pinia-plugin-unistorage）+ local-first
  */
 import { defineStore } from 'pinia'
-import { cloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
+import { listLocalDogsWithStatus } from '@/localdb/domain-repository'
+import { localSyncRuntime } from '@/localdb/runtime'
 import type { DogWithStatus } from '@/types/dog'
 
 export const useDogStore = defineStore('dogs', {
@@ -18,16 +20,19 @@ export const useDogStore = defineStore('dogs', {
   },
 
   actions: {
-    /** 从服务端加载最新数据 */
+    /** 从本地投影加载，并按页面 scope 后台同步 */
     async fetchFromServer() {
       try {
-        await cloudCall('health-service', 'cleanupDuplicateIllnesses').catch(() => {})
-        const res = await cloudCall<{ data: any }>('dog-service', 'getDogListWithStatus')
-        const fresh: DogWithStatus[] = res?.data?.dogs || res?.data || []
+        const { currentFamily } = useAuth()
+        const familyId = currentFamily.value?._id || ''
+        if (!familyId) return
+        localSyncRuntime.setCurrentFamilyId(familyId)
+        const fresh = await listLocalDogsWithStatus(familyId)
         this.list = fresh
         this.loaded = true
+        void localSyncRuntime.syncScope('dog-list')
       } catch {
-        // 网络失败，保留已有缓存
+        // 本地读取失败时保留缓存
       }
     },
 

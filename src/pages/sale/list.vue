@@ -53,25 +53,21 @@
 import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import BChipFilterStrip from '@/components/base/BChipFilterStrip.vue'
-import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
+import { usePageSync } from '@/composables/usePageSync'
+import { listLocalSales } from '@/localdb/domain-repository'
+import { localSyncRuntime } from '@/localdb/runtime'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BIconBox from '@/components/base/BIconBox.vue'
 import BTag from '@/components/base/BTag.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 
-const CACHE_KEY = 'sale_list_cache'
+const { currentFamily } = useAuth()
+usePageSync({ routePath: 'pages/sale/list' })
 
-function readSaleCache(): any[] {
-  try {
-    return JSON.parse(uni.getStorageSync(CACHE_KEY) || '[]')
-  } catch {
-    return []
-  }
-}
-
-const sales = ref<any[]>(readSaleCache())
-const loading = ref(sales.value.length === 0)
+const sales = ref<any[]>([])
+const loading = ref(true)
 const activeFilter = ref('')
 
 const statusFilters: Array<{ label: string; value: string }> = [
@@ -83,23 +79,18 @@ const statusFilters: Array<{ label: string; value: string }> = [
   { label: '定金取消', value: '定金取消' },
 ]
 
-const { run: fetchSales } = useCloudCall<{ data: any[] }>('finance-service', 'getSaleList')
-
 async function load() {
-  if (sales.value.length === 0) loading.value = true
-  const filters: Record<string, string> = {}
-  if (activeFilter.value) filters.status = activeFilter.value
-  const res = await fetchSales(filters)
-  if (res?.data) {
-    sales.value = res.data
-    if (!activeFilter.value) {
-      try {
-        uni.setStorageSync(CACHE_KEY, JSON.stringify(res.data))
-      } catch {
-        // ignore cache failure
-      }
-    }
+  loading.value = true
+  const familyId = currentFamily.value?._id || ''
+  if (!familyId) {
+    sales.value = []
+    loading.value = false
+    return
   }
+  localSyncRuntime.setCurrentFamilyId(familyId)
+  sales.value = await listLocalSales(familyId, {
+    status: activeFilter.value || undefined,
+  })
   loading.value = false
 }
 

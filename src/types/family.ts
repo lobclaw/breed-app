@@ -52,6 +52,14 @@ export interface FamilySettings {
   }
   custom_condition_types: string[]
   custom_breed_types: string[]
+  custom_expense_categories?: Array<{
+    name: string
+    parent_group?: string
+  }>
+  custom_expense_category_groups?: Array<{
+    key: string
+    label: string
+  }>
 }
 
 // 家庭

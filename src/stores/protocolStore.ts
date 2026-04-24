@@ -3,7 +3,9 @@
  * 两个消费者：方案库管理页 + 用药表单的方案选择器
  */
 import { defineStore } from 'pinia'
-import { cloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
+import { listLocalMedicationProtocols } from '@/localdb/domain-repository'
+import { localSyncRuntime } from '@/localdb/runtime'
 
 export interface MedicationProtocol {
   _id: string
@@ -29,11 +31,13 @@ export const useProtocolStore = defineStore('protocols', {
   actions: {
     async fetchFromServer() {
       try {
-        const res = await cloudCall<{ data: MedicationProtocol[] }>('health-service', 'getMedicationProtocols')
-        if (res?.data) {
-          this.list = res.data
-          this.loaded = true
-        }
+        const { currentFamily } = useAuth()
+        const familyId = currentFamily.value?._id || ''
+        if (!familyId) return
+        localSyncRuntime.setCurrentFamilyId(familyId)
+        this.list = await listLocalMedicationProtocols(familyId)
+        this.loaded = true
+        void localSyncRuntime.syncScope('settings-local')
       } catch { /* 网络失败保留缓存 */ }
     },
 

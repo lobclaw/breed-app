@@ -39,8 +39,12 @@
 
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import { useAuth } from '@/composables/useAuth'
+import { usePageSync } from '@/composables/usePageSync'
+import { getLocalFamilySettings } from '@/localdb/domain-repository'
+import { localSyncRuntime } from '@/localdb/runtime'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 
 interface SettingItem {
@@ -52,6 +56,7 @@ interface SettingItem {
 }
 
 const { currentFamily, loadFamily } = useAuth()
+usePageSync({ routePath: 'pages/profile/defaults' })
 
 const editingKey = ref('')
 const editingValue = ref('')
@@ -77,6 +82,19 @@ const { run: updateSettings } = useCloudCall('family-service', 'updateSettings',
   loadingMode: 'local',
   throwOnError: true,
 })
+
+async function loadLocalSettings() {
+  const familyId = currentFamily.value?._id || ''
+  if (!familyId) return
+  localSyncRuntime.setCurrentFamilyId(familyId)
+  const settings = await getLocalFamilySettings(familyId)
+  const source = settings || currentFamily.value?.settings
+  if (!source) return
+  settingsItems.forEach((item) => {
+    const value = source[item.key as keyof typeof source]
+    item.value = value != null ? String(value) : item.value
+  })
+}
 
 function startEdit(item: SettingItem) {
   editingKey.value = item.key
@@ -112,6 +130,10 @@ async function saveAll() {
     saving.value = false
   }
 }
+
+onShow(() => {
+  void loadLocalSettings()
+})
 </script>
 
 <style lang="scss" scoped>

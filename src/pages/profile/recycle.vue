@@ -61,8 +61,9 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { useCloudCall } from '@/composables/useCloudCall'
 import { useAuth } from '@/composables/useAuth'
+import { usePageSync } from '@/composables/usePageSync'
+import { listLocalRecycleItems } from '@/localdb/domain-repository'
 import { localSyncRuntime } from '@/localdb/runtime'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BModal from '@/components/layout/BModal.vue'
@@ -81,10 +82,7 @@ const confirmContent = ref('')
 const confirmText = ref('确定')
 const confirmDanger = ref(false)
 let confirmAction: (() => Promise<void>) | null = null
-
-const { run: fetchDeleted } = useCloudCall<{ data: RecycleBinItem[] }>('family-service', 'getDeletedItems')
-const { run: doRestore } = useCloudCall('family-service', 'restoreItem', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
-const { run: doDelete } = useCloudCall('family-service', 'permanentDeleteItem', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
+usePageSync({ routePath: 'pages/profile/recycle' })
 
 function getIcon(type: RecycleItemType): string {
   const map: Record<RecycleItemType, string> = {
@@ -111,8 +109,14 @@ async function syncRecycleSideEffects(type: RecycleItemType) {
 
 async function load() {
   loading.value = true
-  const res = await fetchDeleted()
-  deletedItems.value = res?.data || []
+  const familyId = currentFamily.value?._id || ''
+  if (!familyId) {
+    deletedItems.value = []
+    loading.value = false
+    return
+  }
+  localSyncRuntime.setCurrentFamilyId(familyId)
+  deletedItems.value = await listLocalRecycleItems(familyId)
   loading.value = false
 }
 

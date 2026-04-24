@@ -20,6 +20,12 @@ import {
   queryLocal as queryLocalRows,
   upsertLocalRows,
 } from '@/localdb/repository'
+import {
+  getSyncScopeDefinition,
+  resolveSyncScopeForRoute,
+  type ResolvedSyncScope,
+  type SyncScopeMode,
+} from '@/localdb/scope-registry'
 import { getSyncStatus } from '@/localdb/sync-status'
 import type {
   BusinessCollectionName,
@@ -30,6 +36,37 @@ import type {
   SyncMetadata,
   SyncStateRow,
 } from '@/localdb/types'
+
+interface StoredScopeFreshness {
+  scopeKey: string
+  routeKey: string
+  routePath: string
+  last_synced_at: number
+  last_full_sync_at: number
+  last_error: string | null
+  last_skip_reason: string | null
+  ttl_ms: number
+  mode: SyncScopeMode
+}
+
+interface SyncScopeResult {
+  scopeKey: string
+  routeKey: string
+  pulledCollections: BusinessCollectionName[]
+  skipped: boolean
+  skipReason: string | null
+  lastSyncedAt: number
+  force: boolean
+}
+
+const ACTIVE_SCOPE_META_KEY = 'sync:active-scope'
+const CORE_SYNC_META_KEY = 'sync:core'
+const CORE_SYNC_INTERVAL_MS = 10 * 60 * 1000
+const CORE_SYNC_BATCH_SIZE = 4
+
+function buildScopeMetaKey(scopeKey: string) {
+  return `sync:scope:${scopeKey}`
+}
 
 function startOfDay(ts: number) {
   const offsetMs = 8 * 60 * 60 * 1000
@@ -56,6 +93,41 @@ function isOnlineError(error: unknown) {
 
 function getNow() {
   return Date.now()
+}
+
+function getScopeRouteKey(scopeKey: string) {
+  return scopeKey.split(':')[0] || scopeKey
+}
+
+function createResolvedScope(scopeKey: string): ResolvedSyncScope {
+  const routeKey = getScopeRouteKey(scopeKey)
+  const definition = getSyncScopeDefinition(routeKey)
+  if (!definition) {
+    throw new Error(`未知 sync scope: ${scopeKey}`)
+  }
+
+  return {
+    key: scopeKey,
+    routeKey,
+    routePath: '',
+    mode: definition.mode,
+    ttlMs: definition.ttlMs,
+    collections: [...definition.collections],
+  }
+}
+
+function toScopeFreshness(scope: ResolvedSyncScope, current?: Partial<StoredScopeFreshness> | null): StoredScopeFreshness {
+  return {
+    scopeKey: scope.key,
+    routeKey: scope.routeKey,
+    routePath: scope.routePath,
+    last_synced_at: Number(current?.last_synced_at || 0),
+    last_full_sync_at: Number(current?.last_full_sync_at || 0),
+    last_error: current?.last_error || null,
+    last_skip_reason: current?.last_skip_reason || null,
+    ttl_ms: scope.ttlMs,
+    mode: scope.mode,
+  }
 }
 
 function buildSyncMeta(baseVersions: Record<string, number> = {}, extras: Partial<SyncMetadata> = {}): SyncMetadata {
@@ -358,7 +430,11 @@ async function applySyncAck(ack: SyncAckPayload, fallbackCollections: BusinessCo
   const resyncCollections = [...new Set(
     (ack.resyncScopes || [])
       .map(scope => scope.split(':')[0])
-      .filter((scope): scope is BusinessCollectionName => (HOME_SYNC_COLLECTIONS as readonly string[]).includes(scope)),
+      .filter((scope): scope is BusinessCollectionName => (
+        !scope.includes(':')
+        && !scope.includes('/')
+        && (CORE_SYNC_COLLECTIONS as readonly string[]).includes(scope)
+      )),
   )]
 
   const collectionsToPull = resyncCollections.length > 0 ? resyncCollections : [...new Set([...fallbackCollections, ...touchedCollections])]
@@ -370,10 +446,9 @@ class LocalSyncRuntime {
   private processing = false
   private online = true
   private currentFamilyId = ''
-  private homeSyncPromise: Promise<void> | null = null
+  private activeScopeKey = ''
+  private scopeSyncPromises = new Map<string, Promise<SyncScopeResult>>()
   private coreSyncPromise: Promise<void> | null = null
-  private lastHomeSyncAt = 0
-  private lastCoreSyncAt = 0
 
   async init() {
     if (this.started) return
@@ -395,62 +470,257 @@ class LocalSyncRuntime {
       uni.onNetworkStatusChange((result) => {
         this.online = !!result?.isConnected
         if (this.online && this.currentFamilyId) {
-          void this.syncHome(this.currentFamilyId)
+          void this.flushOutbox(this.currentFamilyId).then(() => this.syncActiveScope())
         }
       })
     } catch {
       // ignore
+    }
+
+    const persistedActiveScope = await localDb.getLocalMeta<string>(ACTIVE_SCOPE_META_KEY)
+    if (persistedActiveScope) {
+      this.activeScopeKey = persistedActiveScope
     }
   }
 
   async resume(familyId: string) {
     if (!familyId) return
     this.currentFamilyId = familyId
-    await this.syncCore(familyId)
+    await this.flushOutbox(familyId)
+    await this.syncActiveScope()
+    this.scheduleCoreSync(familyId)
   }
 
-  async syncHome(familyId: string, options: { force?: boolean; minIntervalMs?: number } = {}) {
-    if (!familyId) return
+  private logScope(scope: string, payload: Record<string, any>) {
+    const devFlag = typeof globalThis !== 'undefined' ? (globalThis as any).__DEV__ : undefined
+    if (typeof devFlag === 'boolean' && !devFlag) return
+    console.info('[local-sync]', scope, payload)
+  }
+
+  private async getStoredScopeFreshness(scopeKey: string, fallbackScope?: ResolvedSyncScope) {
+    const scope = fallbackScope || createResolvedScope(scopeKey)
+    const value = await localDb.getLocalMeta<StoredScopeFreshness>(buildScopeMetaKey(scopeKey))
+    return toScopeFreshness(scope, value)
+  }
+
+  private async setStoredScopeFreshness(scope: ResolvedSyncScope, patch: Partial<StoredScopeFreshness>) {
+    const current = await this.getStoredScopeFreshness(scope.key, scope)
+    await localDb.upsertLocalMeta(buildScopeMetaKey(scope.key), {
+      ...current,
+      ...patch,
+      scopeKey: scope.key,
+      routeKey: scope.routeKey,
+      routePath: scope.routePath,
+      ttl_ms: scope.ttlMs,
+      mode: scope.mode,
+    } satisfies StoredScopeFreshness)
+  }
+
+  private async hasCollectionsData(collections: BusinessCollectionName[]) {
+    const uniqueCollections = [...new Set(collections)]
+    const rows = await Promise.all(uniqueCollections.map(collection => localDb.getTable<any>(collection)))
+    return rows.some((items) => items.length > 0)
+  }
+
+  async setActiveScope(scopeKey: string) {
+    if (!scopeKey) return
+    this.activeScopeKey = scopeKey
+    await localDb.upsertLocalMeta(ACTIVE_SCOPE_META_KEY, scopeKey)
+  }
+
+  setCurrentFamilyId(familyId: string) {
+    this.currentFamilyId = familyId || ''
+  }
+
+  async setActiveScopeFromRoute(routePath: string, query: Record<string, any> = {}) {
+    const resolved = resolveSyncScopeForRoute(routePath, query)
+    if (!resolved) return null
+    await this.setActiveScope(resolved.key)
+    return resolved
+  }
+
+  async getActiveScope() {
+    if (this.activeScopeKey) return this.activeScopeKey
+    const persisted = await localDb.getLocalMeta<string>(ACTIVE_SCOPE_META_KEY)
+    this.activeScopeKey = persisted || ''
+    return this.activeScopeKey
+  }
+
+  async getScopeStatus(scopeKey: string) {
+    const scope = createResolvedScope(scopeKey)
+    const freshness = await this.getStoredScopeFreshness(scopeKey, scope)
+    return {
+      scopeKey,
+      routeKey: scope.routeKey,
+      mode: scope.mode,
+      ttlMs: scope.ttlMs,
+      collections: scope.collections,
+      inFlight: this.scopeSyncPromises.has(scopeKey),
+      lastSyncedAt: freshness.last_synced_at,
+      lastFullSyncAt: freshness.last_full_sync_at,
+      lastError: freshness.last_error,
+      lastSkipReason: freshness.last_skip_reason,
+    }
+  }
+
+  async syncScope(scopeKey: string, options: { force?: boolean; forceFull?: boolean; skipTtl?: boolean; reason?: string } = {}) {
+    const familyId = this.currentFamilyId
+    if (!familyId) return null
     await this.init()
-    this.currentFamilyId = familyId
-    const minIntervalMs = options.minIntervalMs ?? 10000
-    const now = getNow()
-    if (!options.force && this.homeSyncPromise) return this.homeSyncPromise
-    if (!options.force && now - this.lastHomeSyncAt < minIntervalMs) {
-      await this.flushOutbox(familyId)
-      return
+    const scope = createResolvedScope(scopeKey)
+    await this.setActiveScope(scope.key)
+
+    if (scope.mode === 'static') {
+      await this.setStoredScopeFreshness(scope, {
+        last_skip_reason: 'static-scope',
+        last_error: null,
+      })
+      return {
+        scopeKey: scope.key,
+        routeKey: scope.routeKey,
+        pulledCollections: [],
+        skipped: true,
+        skipReason: 'static-scope',
+        lastSyncedAt: 0,
+        force: Boolean(options.force),
+      } satisfies SyncScopeResult
     }
 
-    this.homeSyncPromise = (async () => {
-      const needsFullPull = options.force || !(await this.hasHomeData())
-      await this.pullHomeCollections(familyId, needsFullPull)
+    if (!options.force && this.scopeSyncPromises.has(scope.key)) {
+      this.logScope(scope.key, { skip: 'in-flight-dedupe' })
+      return this.scopeSyncPromises.get(scope.key) || null
+    }
+
+    const freshness = await this.getStoredScopeFreshness(scope.key, scope)
+    const now = getNow()
+    if (!options.force && !options.skipTtl && scope.ttlMs > 0 && freshness.last_synced_at > 0 && now - freshness.last_synced_at < scope.ttlMs) {
+      const skipReason = options.reason || `ttl:${scope.ttlMs}`
+      await this.setStoredScopeFreshness(scope, {
+        last_skip_reason: skipReason,
+        last_error: null,
+      })
+      this.logScope(scope.key, { skip: skipReason, collections: scope.collections })
       await this.flushOutbox(familyId)
-      this.lastHomeSyncAt = getNow()
-    })()
+      return {
+        scopeKey: scope.key,
+        routeKey: scope.routeKey,
+        pulledCollections: [],
+        skipped: true,
+        skipReason,
+        lastSyncedAt: freshness.last_synced_at,
+        force: false,
+      } satisfies SyncScopeResult
+    }
+
+    const runningSync = (async () => {
+      const needsFullPull = Boolean(options.forceFull) || !(await this.hasCollectionsData(scope.collections))
+      await this.flushOutbox(familyId)
+      const results = await Promise.allSettled(scope.collections.map(collection => pullCollection(collection, familyId, needsFullPull)))
+      const pulledCollections = scope.collections.filter((_, index) => results[index]?.status === 'fulfilled')
+      const syncedAt = getNow()
+      await this.setStoredScopeFreshness(scope, {
+        last_synced_at: syncedAt,
+        last_full_sync_at: needsFullPull ? syncedAt : freshness.last_full_sync_at,
+        last_error: null,
+        last_skip_reason: null,
+      })
+      this.logScope(scope.key, {
+        collections: scope.collections,
+        pulledCollections,
+        force: Boolean(options.force),
+        full: needsFullPull,
+      })
+      if (scope.routeKey === 'home') {
+        this.scheduleCoreSync(familyId)
+      }
+      return {
+        scopeKey: scope.key,
+        routeKey: scope.routeKey,
+        pulledCollections,
+        skipped: false,
+        skipReason: null,
+        lastSyncedAt: syncedAt,
+        force: Boolean(options.force),
+      } satisfies SyncScopeResult
+    })().catch(async (error) => {
+      await this.setStoredScopeFreshness(scope, {
+        last_error: error instanceof Error ? error.message : String(error || '同步失败'),
+        last_skip_reason: null,
+      })
+      throw error
+    })
+
+    this.scopeSyncPromises.set(scope.key, runningSync)
 
     try {
-      await this.homeSyncPromise
+      return await runningSync
     } finally {
-      this.homeSyncPromise = null
+      this.scopeSyncPromises.delete(scope.key)
     }
+  }
+
+  async forceSyncScope(scopeKey: string) {
+    return this.syncScope(scopeKey, { force: true, skipTtl: true })
+  }
+
+  async syncScopeFromRoute(routePath: string, query: Record<string, any> = {}, options: { force?: boolean } = {}) {
+    const resolved = resolveSyncScopeForRoute(routePath, query)
+    if (!resolved) return null
+    await this.setActiveScope(resolved.key)
+    if (resolved.mode === 'local-first') {
+      return this.syncScope(resolved.key, { force: options.force })
+    }
+    return {
+      scopeKey: resolved.key,
+      routeKey: resolved.routeKey,
+      pulledCollections: [],
+      skipped: true,
+      skipReason: resolved.mode,
+      lastSyncedAt: 0,
+      force: Boolean(options.force),
+    } satisfies SyncScopeResult
+  }
+
+  async syncActiveScope(options: { force?: boolean } = {}) {
+    const scopeKey = await this.getActiveScope()
+    if (!scopeKey) return null
+    return this.syncScope(scopeKey, { force: options.force })
+  }
+
+  private scheduleCoreSync(familyId: string) {
+    if (!familyId) return
+    setTimeout(() => {
+      void this.syncCore(familyId)
+    }, 400)
+  }
+
+  async syncHome(familyId: string, options: { force?: boolean } = {}) {
+    if (!familyId) return null
+    this.currentFamilyId = familyId
+    return this.syncScope('home', { force: options.force })
   }
 
   async syncCore(familyId: string, options: { force?: boolean; minIntervalMs?: number } = {}) {
     if (!familyId) return
     await this.init()
     this.currentFamilyId = familyId
-    const minIntervalMs = options.minIntervalMs ?? 60000
-    const now = getNow()
+    const minIntervalMs = options.minIntervalMs ?? CORE_SYNC_INTERVAL_MS
     if (!options.force && this.coreSyncPromise) return this.coreSyncPromise
-    if (!options.force && now - this.lastCoreSyncAt < minIntervalMs) {
-      await this.flushOutbox(familyId)
+
+    const meta = await localDb.getLocalMeta<{ last_synced_at?: number }>(CORE_SYNC_META_KEY)
+    const lastSyncedAt = Number(meta?.last_synced_at || 0)
+    if (!options.force && lastSyncedAt > 0 && getNow() - lastSyncedAt < minIntervalMs) {
       return
     }
 
     this.coreSyncPromise = (async () => {
-      await this.pullCoreCollections(familyId, Boolean(options.force))
-      await this.flushOutbox(familyId)
-      this.lastCoreSyncAt = getNow()
+      for (let index = 0; index < CORE_SYNC_COLLECTIONS.length; index += CORE_SYNC_BATCH_SIZE) {
+        const batch = CORE_SYNC_COLLECTIONS.slice(index, index + CORE_SYNC_BATCH_SIZE)
+        await this.pullCollections(familyId, batch, Boolean(options.force))
+      }
+      await localDb.upsertLocalMeta(CORE_SYNC_META_KEY, {
+        last_synced_at: getNow(),
+      })
     })()
 
     try {
@@ -463,12 +733,6 @@ class LocalSyncRuntime {
   async pullHomeCollections(familyId: string, forceFull = false) {
     this.currentFamilyId = familyId
     await Promise.all(HOME_SYNC_COLLECTIONS.map(collection => pullCollection(collection, familyId, forceFull)))
-  }
-
-  async pullCoreCollections(familyId: string, forceFull = false) {
-    this.currentFamilyId = familyId
-    const results = await Promise.allSettled(CORE_SYNC_COLLECTIONS.map(collection => pullCollection(collection, familyId, forceFull)))
-    return results.filter(result => result.status === 'fulfilled').length
   }
 
   async pullCollections(familyId: string, collections: BusinessCollectionName[], forceFull = false) {
@@ -661,14 +925,9 @@ class LocalSyncRuntime {
     await this.init()
     this.currentFamilyId = familyId
 
-    if (await this.hasHomeData()) return
-    await this.pullHomeCollections(familyId, true)
-  }
-
-  private async hasHomeData() {
-    const entities = await getHomeEntities()
-    const hasLocalData = entities.tasks.length > 0 || entities.medication_tasks.length > 0 || entities.health_records.length > 0 || entities.dogs.length > 0
-    return hasLocalData
+    const hasHomeData = await this.hasCollectionsData(HOME_SYNC_COLLECTIONS)
+    if (hasHomeData) return
+    await this.syncScope('home', { force: true, forceFull: true })
   }
 
   async getHomeCards() {

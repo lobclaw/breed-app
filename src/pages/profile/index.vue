@@ -242,6 +242,8 @@ import { useAuth } from '@/composables/useAuth'
 import { useCloudCall } from '@/composables/useCloudCall'
 import BNavBar from '@/components/layout/BNavBar.vue'
 import BModal from '@/components/layout/BModal.vue'
+import { getLocalKennelDashboardStats } from '@/localdb/domain-repository'
+import { localSyncRuntime } from '@/localdb/runtime'
 
 type DrawerMenuItem = {
   label: string
@@ -375,26 +377,15 @@ const saleStatusItems = computed(() => [
   { label: '已成交', value: stats.saleCompletedCount, tone: 'teal' },
 ])
 
-const { run: fetchDogs } = useCloudCall<{ data: any[] }>('dog-service', 'getDogListWithStatus')
-const { run: fetchLitters } = useCloudCall<{ data: any[] }>('breeding-service', 'getActiveLitters')
-const { run: fetchFinance } = useCloudCall<{ data: any }>('finance-service', 'getFinancialSummary')
-const { run: fetchSales } = useCloudCall<{ data: any[] }>('finance-service', 'getSaleList')
-
 async function loadStats() {
-  if (!hasFamily.value) return
+  const familyId = currentFamily.value?._id || ''
+  if (!familyId) return
   statsLoading.value = true
-  const [activeDogRes, soldDogRes, litterRes, finRes, saleRes] = await Promise.all([
-    fetchDogs({}).catch(() => null),
-    fetchDogs({ disposition: '已售' }).catch(() => null),
-    fetchLitters().catch(() => null),
-    fetchFinance({ period: 'monthly' }).catch(() => null),
-    fetchSales({}).catch(() => null),
-  ])
-
-  const activeDogs = activeDogRes?.data || []
-  const soldDogs = soldDogRes?.data || []
-  const litters = litterRes?.data || []
-  const sales = saleRes?.data || []
+  const result = await getLocalKennelDashboardStats(familyId)
+  const activeDogs = result.activeDogs || []
+  const soldDogs = result.soldDogs || []
+  const litters = result.litters || []
+  const sales = result.sales || []
   const activeAndSoldDogs = [...activeDogs, ...soldDogs]
 
   stats.dogCount = activeAndSoldDogs.length
@@ -409,16 +400,21 @@ async function loadStats() {
   stats.pregnantCount = countDogsByStatus(activeDogs, '怀孕中')
   stats.nursingCount = Math.max(countDogsByStatus(activeDogs, '哺乳中'), litters.length)
   stats.dueSoonCount = countDueSoonDogs(activeDogs)
-  stats.monthlyIncome = finRes?.data?.totalIncome || 0
-  stats.monthlyExpense = finRes?.data?.totalExpense || 0
-  stats.monthlyNet = finRes?.data?.netProfit ?? (stats.monthlyIncome - stats.monthlyExpense)
+  stats.monthlyIncome = result.monthlyIncome || 0
+  stats.monthlyExpense = result.monthlyExpense || 0
+  stats.monthlyNet = stats.monthlyIncome - stats.monthlyExpense
   stats.salePendingCount = sales.filter(sale => sale.status === '待售').length || stats.forSaleCount
   stats.saleReservedCount = sales.filter(sale => sale.status === '已预定').length
   stats.saleCompletedCount = sales.filter(sale => sale.status === '已成交').length || stats.soldCount
   statsLoading.value = false
 }
 
-onShow(() => loadStats())
+onShow(async () => {
+  localSyncRuntime.setCurrentFamilyId(currentFamily.value?._id || '')
+  await localSyncRuntime.setActiveScope('kennel-dashboard')
+  await localSyncRuntime.syncScope('kennel-dashboard')
+  await loadStats()
+})
 
 const { run: doUpdateNickname } = useCloudCall('family-service', 'updateNickname', {
   successMode: 'silent',

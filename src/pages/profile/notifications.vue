@@ -62,8 +62,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
+import { usePageSync } from '@/composables/usePageSync'
+import { getLocalFamilySettings } from '@/localdb/domain-repository'
+import { localSyncRuntime } from '@/localdb/runtime'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
 import type { FamilySettings, NotificationTypes } from '@/types/family'
@@ -83,6 +88,8 @@ const summaryEnabled = ref(true)
 const summaryTime = ref('09:00')
 const saveToken = ref(0)
 const showTimePicker = ref(false)
+const { currentFamily } = useAuth()
+usePageSync({ routePath: 'pages/profile/notifications' })
 
 const notifTypes = reactive<NotificationTypeItem[]>([
   { key: 'breeding', label: '繁育节点提醒', sub: '配种 / 孕检 / 预产期', enabled: true, disabled: false },
@@ -92,7 +99,6 @@ const notifTypes = reactive<NotificationTypeItem[]>([
 ])
 
 const { run: updateSettings } = useCloudCall('family-service', 'updateSettings')
-const { run: getFamilyInfo } = useCloudCall<{ data: { settings?: FamilySettings } }>('family-service', 'getFamilyInfo')
 
 interface NotificationFormState {
   pushEnabled: boolean
@@ -182,23 +188,37 @@ async function saveSettings(prevState: NotificationFormState) {
   }
 }
 
-onMounted(async () => {
-  const res = await getFamilyInfo()
-  if (res?.data?.settings) {
-    const s = res.data.settings
-    applyState({
-      pushEnabled: s.push_enabled ?? true,
-      summaryEnabled: s.morning_summary_enabled ?? true,
-      summaryTime: s.morning_summary_time || '09:00',
-      notificationTypes: {
-        breeding: s.notification_types?.breeding ?? true,
-        vaccination: s.notification_types?.vaccination ?? true,
-        medication: s.notification_types?.medication ?? true,
-        care_group: s.notification_types?.care_group ?? true,
-        overdue: true,
-      },
-    })
+function buildStateFromSettings(s: FamilySettings) {
+  applyState({
+    pushEnabled: s.push_enabled ?? true,
+    summaryEnabled: s.morning_summary_enabled ?? true,
+    summaryTime: s.morning_summary_time || '09:00',
+    notificationTypes: {
+      breeding: s.notification_types?.breeding ?? true,
+      vaccination: s.notification_types?.vaccination ?? true,
+      medication: s.notification_types?.medication ?? true,
+      care_group: s.notification_types?.care_group ?? true,
+      overdue: true,
+    },
+  })
+}
+
+async function loadLocalSettings() {
+  const familyId = currentFamily.value?._id || ''
+  if (!familyId) return
+  localSyncRuntime.setCurrentFamilyId(familyId)
+  const settings = await getLocalFamilySettings(familyId)
+  if (settings) {
+    buildStateFromSettings(settings)
+    return
   }
+  if (currentFamily.value?.settings) {
+    buildStateFromSettings(currentFamily.value.settings)
+  }
+}
+
+onShow(() => {
+  void loadLocalSettings()
 })
 </script>
 

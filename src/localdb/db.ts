@@ -2,6 +2,7 @@ import { getCollectionStorageKey, getLocalDbAdapter } from '@/localdb/adapter'
 import type {
   LocalCollectionName,
   LocalDbChangeEvent,
+  LocalMetaRow,
   OutboxMutation,
   SyncConflictRow,
   SyncStateRow,
@@ -137,7 +138,20 @@ export class LocalDb {
   async upsertConflict(row: SyncConflictRow) {
     await this.upsertRows('sync_conflicts', [row])
   }
+
+  async getLocalMeta<T = unknown>(key: string): Promise<T | null> {
+    const row = await this.findById<LocalMetaRow>('local_meta', key)
+    return (row?.value as T | undefined) ?? null
+  }
+
+  async upsertLocalMeta<T = unknown>(key: string, value: T) {
+    await this.upsertRows('local_meta', [{
+      _id: key,
+      key,
+      value,
+      updated_at: Date.now(),
+    }])
+  }
 }
 
 export const localDb = new LocalDb()
-

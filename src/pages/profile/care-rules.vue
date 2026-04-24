@@ -116,16 +116,21 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import { useAuth } from '@/composables/useAuth'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { usePageSync } from '@/composables/usePageSync'
+import { listLocalCareRules } from '@/localdb/domain-repository'
+import { localSyncRuntime } from '@/localdb/runtime'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 import BModal from '@/components/layout/BModal.vue'
 import BDeleteConfirm from '@/components/layout/BDeleteConfirm.vue'
 
-const { currentFamily, loadFamily } = useAuth()
+const { currentFamily } = useAuth()
+usePageSync({ routePath: 'pages/profile/care-rules' })
 
-const rules = computed(() => currentFamily.value?.care_rules || [])
+const rules = ref<any[]>([])
 
 const triggerOptions = ['怀孕中', '哺乳中', '生病中', '用药中']
 const frequencyOptions = ['每日', '每周', '每两周']
@@ -172,6 +177,16 @@ function selectTrigger(opt: string) {
 const { run: addCareRule } = useCloudCall('family-service', 'addCareRule', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 const { run: removeCareRule } = useCloudCall('family-service', 'removeCareRule', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 
+async function loadLocalRules() {
+  const familyId = currentFamily.value?._id || ''
+  if (!familyId) {
+    rules.value = []
+    return
+  }
+  localSyncRuntime.setCurrentFamilyId(familyId)
+  rules.value = await listLocalCareRules(familyId)
+}
+
 function openAddModal() {
   form.status_trigger = ''
   form.customTrigger = ''
@@ -197,36 +212,25 @@ async function onConfirm() {
     task_description: form.task_description.trim(),
     frequency: form.frequency,
   }
-  // 乐观更新：立即加入列表
-  if (currentFamily.value) {
-    currentFamily.value.care_rules = [...(currentFamily.value.care_rules || []), newRule]
-  }
+  rules.value = [...rules.value, newRule]
   showModal.value = false
   addCareRule(newRule).catch(() => {
-    // 失败回滚
-    if (currentFamily.value) {
-      const idx = currentFamily.value.care_rules.findIndex(
-        (r: any) => r.status_trigger === newRule.status_trigger && r.task_description === newRule.task_description
-      )
-      if (idx !== -1) currentFamily.value.care_rules.splice(idx, 1)
-    }
+    const idx = rules.value.findIndex(
+      (r: any) => r.status_trigger === newRule.status_trigger && r.task_description === newRule.task_description
+    )
+    if (idx !== -1) rules.value.splice(idx, 1)
     uni.showToast({ title: '添加失败，请重试', icon: 'none' })
   })
 }
 
 async function enableTemplate(tpl: typeof templates[0]) {
   const newRule = { status_trigger: tpl.status_trigger, task_description: tpl.task_description, frequency: tpl.frequency }
-  // 乐观更新
-  if (currentFamily.value) {
-    currentFamily.value.care_rules = [...(currentFamily.value.care_rules || []), newRule]
-  }
+  rules.value = [...rules.value, newRule]
   addCareRule(newRule).catch(() => {
-    if (currentFamily.value) {
-      const idx = currentFamily.value.care_rules.findIndex(
-        (r: any) => r.status_trigger === newRule.status_trigger && r.task_description === newRule.task_description
-      )
-      if (idx !== -1) currentFamily.value.care_rules.splice(idx, 1)
-    }
+    const idx = rules.value.findIndex(
+      (r: any) => r.status_trigger === newRule.status_trigger && r.task_description === newRule.task_description
+    )
+    if (idx !== -1) rules.value.splice(idx, 1)
     uni.showToast({ title: '启用失败，请重试', icon: 'none' })
   })
 }
@@ -238,16 +242,18 @@ function askDelete(index: number) {
 
 async function confirmDelete() {
   const index = deletingIndex.value
-  if (index < 0 || !currentFamily.value) return
-  // 乐观删除：立即从列表移除
-  const removed = currentFamily.value.care_rules.splice(index, 1)[0]
+  if (index < 0) return
+  const removed = rules.value.splice(index, 1)[0]
   showDeleteConfirm.value = false
   removeCareRule(index).catch(() => {
-    // 失败恢复
-    if (currentFamily.value) currentFamily.value.care_rules.splice(index, 0, removed)
+    rules.value.splice(index, 0, removed)
     uni.showToast({ title: '删除失败，请重试', icon: 'none' })
   })
 }
+
+onShow(() => {
+  void loadLocalRules()
+})
 </script>
 
 <style lang="scss" scoped>

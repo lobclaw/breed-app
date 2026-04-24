@@ -72,8 +72,8 @@
             第{{ cycle.cycleNumber || '?' }}次繁育 · {{ cycle.detail }}
           </text>
         </view>
-        <view class="b-cycle-selector__tag b-cycle-selector__tag--green">
-          <text class="b-cycle-selector__tag-text">已完成</text>
+        <view class="b-cycle-selector__tag" :class="getTagClass(cycle.status)">
+          <text class="b-cycle-selector__tag-text">{{ cycle.statusLabel }}</text>
         </view>
         <view
           class="b-cycle-selector__radio"
@@ -92,6 +92,9 @@
 
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
+import { useAuth } from '@/composables/useAuth'
+import { listLocalBreedingCycles } from '@/localdb/domain-repository'
+import { localSyncRuntime } from '@/localdb/runtime'
 import BSheet from '../layout/BSheet.vue'
 import BSkeleton from '../feedback/BSkeleton.vue'
 import BEmpty from '../feedback/BEmpty.vue'
@@ -130,19 +133,10 @@ const loading = ref(false)
 const cycles = ref<Cycle[]>([])
 const selected = ref('')
 const selectedIdsState = ref<string[]>([])
+const { currentFamily } = useAuth()
 
-const activeCycles = computed(() => cycles.value.filter(c => c.status !== 'completed'))
-const closedCycles = computed(() => cycles.value.filter(c => c.status === 'completed'))
-
-const STATUS_MAP: Record<string, string> = {
-  heat: '发情中',
-  mating: '配种中',
-  pregnant: '怀孕中',
-  whelping: '待产',
-  nursing: '哺乳中',
-  preparing: '准备中',
-  completed: '已完成',
-}
+const activeCycles = computed(() => cycles.value.filter(c => !['失败', '放弃'].includes(String(c.status || ''))))
+const closedCycles = computed(() => cycles.value.filter(c => ['失败', '放弃'].includes(String(c.status || ''))))
 
 watch(() => props.visible, async (val) => {
   if (val) {
@@ -160,27 +154,16 @@ watch(() => props.selectedIds, (val) => {
 async function fetchCycles() {
   loading.value = true
   try {
-    const db = uniCloud.database()
-    let query: any = db.collection('breeding_cycles')
-    if (props.damId) {
-      query = query.where(`dam_id == "${props.damId}"`)
+    const familyId = currentFamily.value?._id || ''
+    if (!familyId) {
+      cycles.value = []
+      return
     }
-    const res = await query
-      .orderBy('start_date', 'desc')
-      .limit(50)
-      .get()
-
-    cycles.value = (res.result?.data || []).map((item: any) => ({
-      _id: item._id,
-      damName: item.dam_name,
-      cycleNumber: item.cycle_number,
-      status: item.status,
-      statusLabel: STATUS_MAP[item.status] || item.status || '未知',
-      detail: formatDetail(item),
-      startDate: item.start_date,
-      recordCount: item.record_count || 0,
-      ...item,
-    }))
+    localSyncRuntime.setCurrentFamilyId(familyId)
+    cycles.value = await listLocalBreedingCycles(familyId, {
+      damId: props.damId,
+      includeClosed: true,
+    })
   } catch (e) {
     console.error('获取繁育周期失败', e)
     cycles.value = []
@@ -189,29 +172,9 @@ async function fetchCycles() {
   }
 }
 
-function formatDetail(item: any): string {
-  if (item.status === 'pregnant' && item.start_date) {
-    const days = Math.floor((Date.now() - item.start_date) / 86400000)
-    return `第${days}天`
-  }
-  if (item.start_date) {
-    return formatDate(item.start_date)
-  }
-  return `${item.record_count || 0}条记录`
-}
-
-function formatDate(ts?: number): string {
-  if (!ts) return '--'
-  const d = new Date(ts)
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
 function getTagClass(status?: string): string {
-  if (status === 'pregnant' || status === 'whelping') return 'b-cycle-selector__tag--rose'
-  if (status === 'completed') return 'b-cycle-selector__tag--green'
+  if (status === '怀孕中') return 'b-cycle-selector__tag--rose'
+  if (status === '已生产') return 'b-cycle-selector__tag--green'
   return 'b-cycle-selector__tag--gray'
 }
 

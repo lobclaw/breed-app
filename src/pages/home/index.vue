@@ -573,6 +573,7 @@ import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BIconBox from '@/components/base/BIconBox.vue'
 import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
 import { useTaskStore } from '@/stores/taskStore'
+import { localSyncRuntime } from '@/localdb/runtime'
 import { consumeSubmitFeedback } from '@/composables/useSubmitFeedback'
 import type { HomeCardFocusTarget } from '@/utils/homeCardFocus'
 import { deriveBreedingMilestoneViewModel } from '@/utils/breedingMilestone'
@@ -586,7 +587,6 @@ import { buildHomeWorkbench } from '@/utils/homeWorkbench'
 import { buildTimestampFromDayOffset, formatDateInputValue, getBeijingDayStart } from '@/utils/date'
 import { buildMedicationDetailUrl } from '@/utils/dogDetailNavigation'
 import type { MedicationRouteIllnessLink } from '@/utils/recordFormRoutes'
-import { localSyncRuntime } from '@/localdb/runtime'
 
 const { hasFamily, currentFamily, loadFamily } = useAuth()
 const taskStore = useTaskStore()
@@ -2051,7 +2051,9 @@ onShow(async () => {
   }
   const familyId = getCurrentFamilyId()
   if (!familyId) return
-  await localSyncRuntime.syncHome(familyId)
+  localSyncRuntime.setCurrentFamilyId(familyId)
+  await localSyncRuntime.setActiveScope('home')
+  await localSyncRuntime.syncScope('home')
   selectedDate.value = startOfDay(Date.now())
   viewMode.value = 'today'
   dayCards.value = []

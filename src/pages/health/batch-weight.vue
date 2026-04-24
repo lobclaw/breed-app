@@ -172,6 +172,10 @@
 import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
+import { usePageSync } from '@/composables/usePageSync'
+import { listLocalLitters } from '@/localdb/domain-repository'
+import { localSyncRuntime } from '@/localdb/runtime'
 import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
@@ -210,6 +214,8 @@ const dateChipActive = ref<DateChipKey>('today')
 const recordDateTime = ref(Date.now())
 const showLitterSelector = ref(false)
 const showDateTimePicker = ref(false)
+const { currentFamily } = useAuth()
+usePageSync({ routePath: 'pages/health/batch-weight' })
 
 const pageTitle = computed(() => {
   if (!selectedLitter.value) return '幼犬体重记录'
@@ -252,7 +258,6 @@ const daysSinceBirth = computed(() => {
   return Math.floor((Date.now() - selectedLitter.value.birth_date) / 86400000)
 })
 
-const { run: fetchLitters } = useCloudCall<{ data: any[] }>('breeding-service', 'getActiveLitters')
 const { run: batchAdd } = useCloudCall<{ data?: { count?: number } }>('health-service', 'batchAddWeights', {
   successMode: 'silent',
   loadingMode: 'local',
@@ -427,8 +432,13 @@ async function loadLitters() {
   loading.value = true
   loadError.value = ''
   try {
-    const res = await fetchLitters()
-    litters.value = res?.data || []
+    const familyId = currentFamily.value?._id || ''
+    if (!familyId) {
+      litters.value = []
+      return
+    }
+    localSyncRuntime.setCurrentFamilyId(familyId)
+    litters.value = await listLocalLitters(familyId, { activeOnly: true })
 
     if (preselectedLitterId) {
       const match = litters.value.find((item: any) => item._id === preselectedLitterId)

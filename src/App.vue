@@ -22,7 +22,7 @@ onShow(() => {
   const { currentFamily } = useAuth();
   const familyId = currentFamily.value?._id || '';
   if (familyId) {
-    void localSyncRuntime.syncHome(familyId);
+    void localSyncRuntime.resume(familyId);
   }
 });
 onHide(() => {

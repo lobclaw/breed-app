@@ -11,12 +11,14 @@
 - 工程事实源：`docs/design/03-tech-stack.md`、`docs/design/04-implementation.md`
 - 低频映射：`docs/design/05-field-page-mapping.md`
 - 记录表单验收：`docs/record-form-acceptance.md`
+- 测试环境清库：`docs/测试清库.md`
 
 ## 当前状态
 
 - 技术栈：UniApp（Vue 3 + TypeScript + Pinia）+ UniCloud 云对象（支付宝云）+ UniCloud MongoDB
-- 阶段：Phase 1 功能与性能优化已完成，当前进入验收测试与首页工作台密度优化；当前里程碑 `首页工作台密度自适应优化`；当前焦点 Phase 1 `Workbench Contract & Test Foundation`
-- 固定路线：契约/测试底座 → 繁育步骤工作台 → 健康批量优先工作台 → 用药状态工作台 → 逾期/计数/防闪回校准 → 今日重点
+- 阶段：Phase 1 功能与性能优化已完成；当前进入 `Local-First Foundation` 架构升级验收与补齐
+- 当前 local-first 状态：首页、部分表单与部分写路径已接入本地事实源 / outbox；全 App 页面级 sync scope、本地读路径和配置/销售/统计等边界仍需继续补齐
+- 固定路线：页面级 scope registry → 本地 projection/repository → 核心页面本地读 → 核心写入本地事务 + outbox → 云端 `_sync` 幂等 ack → 同步状态/冲突/失败 UX → Network 验收
 - 家庭协作已接入 `operation_logs` V1；路由保持 `/pages/profile/operation-log`，统一走 `family-service.getOperationLogs`
 - `care_group` 仅保留配置与数据结构，未接入自动任务链路，入口默认隐藏，不按已上线能力验收
 
@@ -33,19 +35,60 @@
 - 除 `families.settings.morning_summary_time` 外，业务日期字段统一为北京时间口径的 timestamp 毫秒数（`Number`）；字段保留真实时分秒毫秒；用户只选“日期”时，前端按“所选年月日 + 当前本地时分秒毫秒”构造 timestamp
 - 凡按“天”消费的逻辑（查询 / 分组 / 红点 / 逾期 / 第 X 天）统一在读取 timestamp 后按北京时间换算日边界
 - 简单读取走 clientDB/JQL；多集合写入、状态推进、批量操作走云对象
+- Local-First 迁移后，页面读取优先走 `src/localdb` 本地镜像 / 本地 projection；clientDB/JQL 仅用于同步 pull 或尚未迁移的在线优先边界
 - 支持软删除的集合统一使用 `deleted_at`
 - 回收站当前纳入：`dogs`、`expenses`、`incomes`、`agents`、`medication_protocols`；统一由 `family-service` 聚合查询 / 恢复 / 永久删除
 - 通知设置统一放 `families.settings`：`push_enabled`、`morning_summary_enabled`、`morning_summary_time`、`notification_types`；晨间摘要默认时间 `09:00`；`morning_summary_time` 是唯一保留为北京时间 `HH:MM` 的模板字段
 - 统计值实时查询，不做预存
 - 提交信息使用 conventional commits
 
+## Local-First / 同步 Contract
+
+- 目标口径：本地数据库是 UI 事实源；云端是同步、校验、幂等 ack 与冲突返回源；不要退回“页面等云接口返回后再显示/提交”的在线优先体验
+- 读同步和写同步分离：读同步受页面 scope + TTL 控制；写同步不受 TTL 控制，用户写入后必须立即本地事务、写入 `outbox_mutations`，有网就尽快 flush
+- 页面进入统一流程：设置 active scope → 先读本地并渲染 → `syncScope(scopeKey)` 后台校正；本地为空时只 full pull 当前 scope，不全量拉全 App
+- App 生命周期：`App.vue` 只初始化 localdb、认证、网络监听和 sync worker；回前台/网络恢复时 flush outbox，并按当前 active scope 的 TTL 同步，不直接拉全 core
+- 必须实现 in-flight 去重、scope TTL、手动刷新绕过 TTL、失败指数退避、collection cursor 与 scope freshness 分离
+- 推荐 TTL：`home=20s`；普通列表 `120s`；财务/统计/销售列表 `300s`；详情 `45s`；配置类 `300s`；后台 core mirror `10min` 且低优先级分批执行
+- 首页只处理首页 scope：`dogs`、`tasks`、`health_records`、`medication_tasks`；首页不得预拉财务、销售、窝、代理人、协议等非首页数据
+- 其他页面必须使用自己的 sync scope：犬只、犬只详情、记录入口、繁育周期、窝、健康详情、用药详情、财务、财务报表、销售、代理人、犬舍总览、配置、体重、回收站分别按域同步
+- 选择器与 store 不得绕过 localdb：`BDogPicker`、`BLitterSelector`、`BCycleSelector`、`BFinanceLinkSheet`、`dogStore`、`protocolStore`、`taskStore` 都应读本地 projection/cache，不直接 cloudCall/clientDB
+- 表单组件不得绕过 sync runtime：`BreedingRecordForm`、`HealthRecordForm`、`MedicationTaskForm` 的候选筛选、预填、提交应优先本地；重复疾病/重复用药/下一脚配种号本地预检，云端最终校验
+- 本地写入必须使用语义 mutation，不存页面 patch；例如 `dog.create`、`task.complete`、`breeding.addRecord`、`health.recoverIllnesses`、`finance.addExpense`、`sale.complete`、`settings.update`
+- 云对象核心写方法统一支持 `_sync.clientMutationId / deviceId / baseVersions / clientEntityIds / clientTimestamp`，返回 `ack / clientMutationId / touchedEntities / resyncScopes / conflict`
+- `sync_mutations` 记录已应用 mutation；同一 mutation 重放不得重复创建、重复收款、重复推进状态
+- 软删除统一以 `deleted_at` 作为 tombstone；永久删除后本地移除，并防止后续 pull 复活旧数据
+- 同步状态 UX 必须区分 `pending_sync`、`sync_failed`、`conflict`、`synced`、`pending_upload`，并提供待同步/失败/冲突/待上传入口
+- 开发态必须能观测 sync：scope key、collections、force/delta、TTL skip reason、in-flight dedupe、pull rows count、outbox flush result
+
+## Scope / 在线优先边界
+
+- `home`：首页、WeekStrip、FAB 推荐、`home/batch-process`
+- `dog-list` / `dog-detail:{dogId}`：犬只列表、详情、状态、体重、繁育/健康/财务摘要
+- `record-entry` / `record-form-support`：记录入口、候选犬/周期/窝、任务详情、记录详情、重复校验、下一脚配种号
+- `breeding-cycle:{cycleId}` / `litter:{litterId}`：繁育周期、窝详情、繁育记录、相关任务与费用
+- `health-record:{recordId}` / `medication-task:{taskId}` / `weight-batch`：健康详情、疾病、用药、批量体重
+- `finance-list` / `finance-detail:{type}:{id}` / `finance-report:*`：财务首页、收支详情/编辑、统计、未来预估、母犬 ROI、单窝利润
+- `sale-list` / `sale-detail:{id}` / `agent-list`：销售列表、开始销售、销售详情、定金/尾款/结算/取消、代理人管理
+- `kennel-dashboard`：`profile/index` 犬舍总览，覆盖经营/繁育/财务/销售汇总
+- `settings-local`：通知、默认参数、护理规则、财务分类/分类组、用药方案库；家庭成员/权限/邀请不属于此 scope
+- `recycle`：`dogs`、`expenses`、`incomes`、`agents`、`medication_protocols` 的 deleted rows 聚合、恢复、永久删除
+- 在线优先：`uni-id-pages/*`、`family/setup`、`family/join`、`family/invite`、`family/members`、`profile/operation-log`、`profile/backup`、云存储上传、token/账号资料/改密/绑定手机/注销账号
+- 静态无同步：`profile/about` 等纯说明页
+- 服务端定时权威：每日审计、自动关闭周期、晨间摘要只在云端执行；客户端只同步最终实体变化，不本地伪造审计/摘要结果
+- `income-add.vue` 视为旧入口，统一重定向或收敛到 `finance/expense-add?type=income`，不要维护第二套收入写路径
+- `sale_records` 当前不纳入回收站；未定义自动收入与犬只去向回滚前不要顺手接入回收站
+- 备份导出只包含云端已同步数据；若存在 pending outbox / pending upload，备份页必须提示数据尚未完全同步
+- 图片/附件第一版在线上传；业务主体可离线创建，但附件失败时标记 `pending_upload`，不能显示为完整同步
+
 ## 改动前后 Checklist
 
 - 改首页：先核对固定结构、红点口径、提交承接、防闪回、latest token
+- 改 local-first / 同步：先核对 scope registry、TTL、active scope、collection cursor、scope freshness、outbox flush、Network 请求数量
 - 改繁育 / 健康 / 用药：先核对任务生成条件、状态推进、唯一性约束
 - 改通知 / 晨间摘要 / 推送：先核对是否仍写入 `families.settings`，以及是否按家庭北京时间 `HH:MM` 分钟级命中
 - 改家庭协作 / 关键写操作 / 云对象 / 详情页刷新：先核对 `operation_logs`、多集合写入边界、北京时间按天换算逻辑、重复请求风险
-- 改完后：验证来源页承接、局部移除、suppression、latest token 是否仍成立
+- 改完后：验证来源页承接、局部移除、suppression、latest token、scope TTL、in-flight 去重、outbox 重放是否仍成立
 
 ## UI / 组件 / 路由 Contract
 
@@ -124,6 +167,19 @@
 - `未来预估` 禁止先展示硬编码默认值再异步覆盖；合法 `0` 值必须能覆盖默认值
 - `单窝利润` 中若同一笔 expense 同时关联 `linked_cycle_id` 与 `linked_litter_id`，只统计一次，并优先归入“窝级别费用”
 
+## 销售 Contract
+
+- 顶层销售状态保持 `待售 / 已预定 / 已成交 / 已退款 / 定金取消`；`已成交` 与 `settlement_status` 分离，后者当前使用 `未结算 / 部分结算 / 已结算`
+- `待售` 表示已手动纳入销售池，不再要求先填写 `floor_price`；`floor_price` 仅表示内部参考底价，可为空
+- “开始销售”提交仍走 `finance-service.createSaleRecord`；仅 `幼崽` 且 `disposition ∈ {在养, 自留}` 可开始销售；同一犬只同一时刻只允许一条进行中的销售记录
+- 开始销售后必须同时满足两件事：创建一条 `sale_records.status=待售` 记录；犬只 `disposition` 切到 `待售`
+- 销售创建页 `/pages/sale/create` 当前正式语义是“开始销售”，支持来源页透传 `dogId + dogName` 锁定犬只；犬只详情幼崽去向管理需提供“开始销售”入口
+- 销售创建页字段口径固定为：犬只、`sale_mode`（默认 `自售`）、`floor_price`（选填）、`buyer_info`（选填）、`notes`（选填）
+- 销售列表与详情必须按新语义展示：`待售` 无底价时显示“未定价”；`已成交` 且无 `received_amount` 时显示“未结算”，不要渲染 `¥0`
+- 完成交易仍走 `finance-service.completeSale`，允许 `received_amount` 为空；为空时写入 `status=已成交`、`settlement_status=未结算`，且不自动生成销售收入
+- 成交后补结算统一走 `finance-service.settleSale`；补录 `received_amount` 后再创建或更新自动收入；详情页需提供“补录结算”入口
+- `finance-service.getSaleList/getSaleDetail` 返回值必须走销售归一化口径，稳定包含 `sale_mode`、`settlement_status`、`agent_name`
+
 ## 云函数 / 刷新 / 限制
 
 - 云函数内禁止使用未定义常量；毫秒常量直接写字面量 `86400000`，不要定义全局 `DAY_MS`
@@ -131,7 +187,15 @@
 - 详情页刷新：若既要首屏加载又要子页返回刷新，必须避免 `onLoad` 与紧随其后的 `onShow` 双请求；犬只详情从子页返回时默认保留现有内容并静默后台刷新，只有首屏加载才进入整页骨架；静默刷新只在来源页有提交反馈时触发，且必须保留 latest token / 请求令牌保护
 - 详情页路由参数改口径时必须保留旧入口兼容；主口径改为 `id` 后仍需兼容 `taskId`、`recordId/record_id`、`medicationTaskId/medication_task_id`
 - 当前记录域重构后的回归验证优先按 `docs/record-form-acceptance.md` 执行
-- 已知限制：V1 单家庭模式；`_before` 默认从用户信息注入 `familyId`；V1 在线优先，不支持离线与冲突解决；`operation_logs` 需随 schema 部署后才会真实积累，未部署阶段只显示空态
+- 已知限制：V1 单家庭模式；`_before` 默认从用户信息注入 `familyId`；当前是 Local-First Foundation，尚未完成全 App 页面级 scope 覆盖与所有写入冲突 UX；`operation_logs` 需随 schema 部署后才会真实积累，未部署阶段只显示空态
+
+## 测试 / 清库 / 验收
+
+- 常规回归：`pnpm type-check`、`pnpm test`
+- Local-First 必测：`tests/localdb`、核心云对象 `_sync` 幂等测试、页面 source contract 中 scope 与本地读写约束
+- Network 验收：进入首页不拉非首页 scope；TTL 内切页不重复 pull；同一 scope 并发只发一个请求；手动刷新只强制当前 scope
+- 清库文档见 `docs/测试清库.md`；测试环境从零验证时需同时清 UniCloud 业务数据与本地 IndexedDB/SQLite/localStorage
+- 清云端测试数据使用 `dev-reset-service`；默认只清业务/同步数据，显式 `RESET_TEST_DATA_AND_AUTH` 才清账号数据
 
 ## graphify
 

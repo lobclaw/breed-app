@@ -221,6 +221,7 @@ import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
 import BNavBar from '@/components/layout/BNavBar.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import { consumeSubmitFeedback } from '@/composables/useSubmitFeedback'
+import { localSyncRuntime } from '@/localdb/runtime'
 import { useDogStore } from '@/stores/dogStore'
 import type { DeriveStatus, DeriveStatusType, DogDisposition, DogWithStatus } from '@/types/dog'
 import { buildCompactDeriveStatusTitle } from '@/utils/dogStatusCopy'
@@ -804,6 +805,7 @@ async function loadDogs() {
 }
 
 onShow(() => {
+  void localSyncRuntime.setActiveScope('dog-list')
   loadDogs().then(() => applyDogListFeedback())
 })
 </script>

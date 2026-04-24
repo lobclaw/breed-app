@@ -74,7 +74,9 @@
 
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
-import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
+import { listLocalLitters } from '@/localdb/domain-repository'
+import { localSyncRuntime } from '@/localdb/runtime'
 import BEntityIcon from '../base/BEntityIcon.vue'
 import BSheet from '../layout/BSheet.vue'
 import BSkeleton from '../feedback/BSkeleton.vue'
@@ -119,9 +121,7 @@ const litters = ref<Litter[]>([])
 const selected = ref('')
 const selectedIdsState = ref<string[]>([])
 const searchKeyword = ref('')
-
-const { run: fetchAllLitters } = useCloudCall<{ data: any[] }>('breeding-service', 'getAllLitters')
-const { run: fetchActiveLitters } = useCloudCall<{ data: any[] }>('breeding-service', 'getActiveLitters')
+const { currentFamily } = useAuth()
 
 const filteredLitters = computed(() => {
   if (!searchKeyword.value.trim()) return litters.value
@@ -160,17 +160,13 @@ watch(() => props.selectedIds, (val) => {
 async function fetchLitters() {
   loading.value = true
   try {
-    const res = props.activeOnly ? await fetchActiveLitters() : await fetchAllLitters()
-    litters.value = (res?.data || []).map((item: any) => ({
-      _id: item._id,
-      damName: item.dam_name,
-      litterNumber: item.litter_number,
-      birthDate: item.birth_date,
-      puppyCount: (item.puppies || []).length || item.born_alive || item.total_born,
-      aliveCount: item.born_alive || (item.puppies || []).length || item.total_born,
-      totalCount: item.total_born || item.born_alive || (item.puppies || []).length,
-      ...item,
-    }))
+    const familyId = props.familyId || currentFamily.value?._id || ''
+    if (!familyId) {
+      litters.value = []
+      return
+    }
+    localSyncRuntime.setCurrentFamilyId(familyId)
+    litters.value = await listLocalLitters(familyId, { activeOnly: props.activeOnly })
   } catch (e) {
     litters.value = []
   } finally {

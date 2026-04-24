@@ -103,6 +103,7 @@ import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import BDeleteConfirm from '@/components/layout/BDeleteConfirm.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
+import { localSyncRuntime } from '@/localdb/runtime'
 import { useProtocolStore } from '@/stores/protocolStore'
 import { formatMedicationDosage } from '@/utils/medicationDisplay'
 
@@ -178,6 +179,7 @@ function confirmDelete() {
 }
 
 onShow(async () => {
+  await localSyncRuntime.setActiveScope('settings-local')
   // stale-while-revalidate：有缓存立即显示，后台静默刷新
   await protocolStore.ensure()
   loading.value = false

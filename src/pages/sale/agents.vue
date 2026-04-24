@@ -81,22 +81,21 @@
 import { ref, reactive } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
+import { usePageSync } from '@/composables/usePageSync'
+import { listLocalAgents } from '@/localdb/domain-repository'
+import { localSyncRuntime } from '@/localdb/runtime'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import BDeleteConfirm from '@/components/layout/BDeleteConfirm.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 
-const CACHE_KEY = 'agents_list_cache'
-function readCache(): any[] {
-  try { return JSON.parse(uni.getStorageSync(CACHE_KEY) || '[]') } catch { return [] }
-}
-function saveCache(data: any[]) {
-  try { uni.setStorageSync(CACHE_KEY, JSON.stringify(data)) } catch { /* ignore */ }
-}
+const { currentFamily } = useAuth()
+usePageSync({ routePath: 'pages/sale/agents' })
 
-const agentList = ref<any[]>(readCache())
-const loading = ref(agentList.value.length === 0)
+const agentList = ref<any[]>([])
+const loading = ref(true)
 const showSheet = ref(false)
 const showDeleteConfirm = ref(false)
 const editingId = ref('')
@@ -109,11 +108,14 @@ const { run: updateAgent } = useCloudCall('finance-service', 'updateAgent', { su
 const { run: removeAgent } = useCloudCall('finance-service', 'removeAgent', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 
 async function load() {
-  const res = await fetchAgents()
-  if (res?.data) {
-    agentList.value = res.data
-    saveCache(res.data)
+  const familyId = currentFamily.value?._id || ''
+  if (!familyId) {
+    agentList.value = []
+    loading.value = false
+    return
   }
+  localSyncRuntime.setCurrentFamilyId(familyId)
+  agentList.value = await listLocalAgents(familyId)
   loading.value = false
 }
 
@@ -136,7 +138,6 @@ function save() {
       const updated = [...agentList.value]
       updated[idx] = { ...updated[idx], name, contact_info: form.contact_info || null }
       agentList.value = updated
-      saveCache(agentList.value)
     }
     const id = editingId.value
     updateAgent(id, { name, contact_info: form.contact_info || null }).catch(() => {
@@ -148,12 +149,10 @@ function save() {
     const tempId = `tmp_${Date.now()}`
     const newAgent = { _id: tempId, name, contact_info: form.contact_info || null }
     agentList.value = [...agentList.value, newAgent]
-    saveCache(agentList.value)
     addAgent({ name, contact_info: form.contact_info || null }).then(() => {
       load() // 刷新换真实 _id
     }).catch(() => {
       agentList.value = agentList.value.filter(a => a._id !== tempId)
-      saveCache(agentList.value)
       uni.showToast({ title: '添加失败，请重试', icon: 'none' })
     })
   }
@@ -168,21 +167,15 @@ function confirmDelete() {
   const id = deletingId.value
   const prev = [...agentList.value]
   agentList.value = agentList.value.filter(a => a._id !== id)
-  saveCache(agentList.value)
   showDeleteConfirm.value = false
   removeAgent(id).catch(() => {
     agentList.value = prev
-    saveCache(prev)
     uni.showToast({ title: '删除失败，请重试', icon: 'none' })
   })
 }
 
 onShow(() => {
-  if (agentList.value.length > 0) {
-    load() // 静默刷新
-  } else {
-    load()
-  }
+  load()
 })
 </script>
 

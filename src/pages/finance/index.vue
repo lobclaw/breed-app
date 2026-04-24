@@ -491,7 +491,9 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
+import { useAuth } from '@/composables/useAuth'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { localSyncRuntime } from '@/localdb/runtime'
 import BNavBar from '@/components/layout/BNavBar.vue'
 import BIconBox from '@/components/base/BIconBox.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
@@ -523,6 +525,7 @@ type FinanceFilterType = '' | 'income' | 'expense'
 type FinanceDateRangeValue = typeof FINANCE_DATE_RANGE_OPTIONS[number]['value']
 type FinanceSortValue = typeof FINANCE_SORT_OPTIONS[number]['value']
 const FINANCE_ENTRY_DOG_FILTER_KEY = 'finance_entry_dog_filter'
+const { currentFamily } = useAuth()
 
 interface FinanceFilterState {
   type: FinanceFilterType
@@ -1307,6 +1310,9 @@ onLoad((query) => {
 })
 
 onShow(async () => {
+  localSyncRuntime.setCurrentFamilyId(currentFamily.value?._id || '')
+  await localSyncRuntime.setActiveScope('finance-list')
+  void localSyncRuntime.syncScope('finance-list')
   await loadCategories()
   consumeEntryDogFilter()
   Object.assign(appliedFilters, normalizeFilters(appliedFilters))
