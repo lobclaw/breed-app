@@ -121,7 +121,11 @@
 import { ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
+import { usePageSync } from '@/composables/usePageSync'
 import { consumeSubmitFeedback, queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
+import { getLocalExpenseDetail } from '@/localdb/domain-repository'
+import { localSyncRuntime } from '@/localdb/runtime'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
 import BCard from '@/components/base/BCard.vue'
@@ -132,6 +136,14 @@ import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 import BModal from '@/components/layout/BModal.vue'
 import { formatFinanceAmount } from '@/utils/financeDisplay'
+
+const { currentFamily } = useAuth()
+usePageSync({
+  resolveScope: (query) => {
+    const id = query.id || query.recordId || query.record_id || ''
+    return id ? `finance-detail:expense:${id}` : 'finance-detail'
+  },
+})
 
 const record = ref<any>(null)
 const loading = ref(true)
@@ -154,7 +166,6 @@ function formatDateTime(ts: number | undefined): string {
   return `${formatDate(ts)} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-const { run: fetchRecord } = useCloudCall('finance-service', 'getExpenseDetail')
 const { run: deleteRecord } = useCloudCall('finance-service', 'deleteExpense', {
   successMode: 'silent',
   loadingMode: 'local',
@@ -162,13 +173,29 @@ const { run: deleteRecord } = useCloudCall('finance-service', 'deleteExpense', {
 })
 
 async function loadRecord() {
+  const familyId = currentFamily.value?._id || ''
   loading.value = true
-  const result = await fetchRecord(recordId)
-  if (result?.data) {
-    record.value = result.data
+  if (!familyId || !recordId) {
+    record.value = null
+    loading.value = false
+    return
   }
+  localSyncRuntime.setCurrentFamilyId(familyId)
+  record.value = await getLocalExpenseDetail(familyId, recordId)
   loading.value = false
   hasLoadedOnce = true
+}
+
+async function refreshRecord() {
+  const familyId = currentFamily.value?._id || ''
+  if (!familyId || !recordId) {
+    await loadRecord()
+    return
+  }
+  localSyncRuntime.setCurrentFamilyId(familyId)
+  await localSyncRuntime.resume(familyId)
+  await localSyncRuntime.forceSyncScope(`finance-detail:expense:${recordId}`)
+  await loadRecord()
 }
 
 function previewImage(url: string) {
@@ -222,7 +249,7 @@ onShow(() => {
     showSubmitBanner(feedback.message)
   }
   if (recordId && hasLoadedOnce) {
-    loadRecord()
+    void refreshRecord()
   }
 })
 </script>

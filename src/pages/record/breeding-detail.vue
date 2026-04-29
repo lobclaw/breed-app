@@ -437,6 +437,10 @@
 import { ref, computed } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
+import { usePageSync } from '@/composables/usePageSync'
+import { getLocalBreedingRecordDetail } from '@/localdb/domain-repository'
+import { localSyncRuntime } from '@/localdb/runtime'
 import { consumeSubmitFeedback, queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
@@ -456,6 +460,8 @@ let recordId = ''
 let hasShownOnce = false
 const submitBannerMessage = ref('')
 let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
+const { currentFamily } = useAuth()
+usePageSync({ routePath: 'pages/record/breeding-detail' })
 
 const typeMap: Record<string, { label: string; tagColor: any; cardColor: any }> = {
   heat: { label: '发情', tagColor: 'amber', cardColor: 'amber' },
@@ -579,7 +585,6 @@ function formatAmount(n: number): string {
   return n.toLocaleString('zh-CN')
 }
 
-const { run: fetchRecord } = useCloudCall('breeding-service', 'getBreedingRecordDetail')
 const { run: deleteRecord } = useCloudCall('breeding-service', 'deleteBreedingRecord', {
   successMode: 'silent',
   loadingMode: 'local',
@@ -588,10 +593,14 @@ const { run: deleteRecord } = useCloudCall('breeding-service', 'deleteBreedingRe
 
 async function loadRecord() {
   loading.value = true
-  const result = await fetchRecord({ id: recordId })
-  if (result) {
-    record.value = result.data || result
+  const familyId = currentFamily.value?._id || ''
+  if (!familyId) {
+    record.value = null
+    loading.value = false
+    return
   }
+  localSyncRuntime.setCurrentFamilyId(familyId)
+  record.value = await getLocalBreedingRecordDetail(familyId, recordId)
   loading.value = false
 }
 

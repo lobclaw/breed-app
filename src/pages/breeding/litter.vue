@@ -299,6 +299,10 @@
 import { ref, computed } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
+import { usePageSync } from '@/composables/usePageSync'
+import { getLocalLitterDetail } from '@/localdb/domain-repository'
+import { localSyncRuntime } from '@/localdb/runtime'
 import { consumeSubmitFeedback, queueSubmitFeedback } from '@/composables/useSubmitFeedback'
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
@@ -319,8 +323,9 @@ const weaning = ref(false)
 const loading = ref(true)
 let litterId = ''
 let sourceTaskId = ''
+const { currentFamily } = useAuth()
+usePageSync({ routePath: 'pages/breeding/litter' })
 
-const { run: fetchDetail } = useCloudCall<{ data: any }>('breeding-service', 'getLitterDetail')
 const { run: doWeaning } = useCloudCall('breeding-service', 'confirmWeaning', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 const { run: doAddPuppy } = useCloudCall('breeding-service', 'addPuppyToLitter', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 const { run: doUpdateBirthDate } = useCloudCall('breeding-service', 'updateBirthDate', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
@@ -477,11 +482,17 @@ function showSubmitBanner(message: string) {
 
 async function loadData() {
   loading.value = true
-  const res = await fetchDetail(litterId)
-  if (res?.data) {
-    litter.value = res.data.litter
-    puppies.value = res.data.puppies || []
+  const familyId = currentFamily.value?._id || ''
+  if (!familyId) {
+    litter.value = null
+    puppies.value = []
+    loading.value = false
+    return
   }
+  localSyncRuntime.setCurrentFamilyId(familyId)
+  const detail = await getLocalLitterDetail(familyId, litterId)
+  litter.value = detail?.litter || null
+  puppies.value = detail?.puppies || []
   loading.value = false
 }
 

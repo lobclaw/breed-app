@@ -289,6 +289,10 @@
 import { ref, computed } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
+import { usePageSync } from '@/composables/usePageSync'
+import { getLocalBreedingCycleDetail } from '@/localdb/domain-repository'
+import { localSyncRuntime } from '@/localdb/runtime'
 import type { BreedingCycleDetailResponse, BreedingCycleExpense } from '@/types/breeding'
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BTag from '@/components/base/BTag.vue'
@@ -325,8 +329,9 @@ const submitBannerMessage = ref('')
 let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
 let hasLoadedOnce = false
 const MORE_ACTION_CLOSE_DELAY_MS = 180
+const { currentFamily } = useAuth()
+usePageSync({ routePath: 'pages/breeding/cycle' })
 
-const { run: fetchDetail } = useCloudCall<{ data: BreedingCycleDetailResponse }>('breeding-service', 'getCycleDetail')
 const { run: doClose } = useCloudCall('breeding-service', 'closeCycle', { successMessage: '已关闭' })
 
 const pageTitle = computed(() => {
@@ -578,13 +583,22 @@ async function closeCycleAction() {
 
 async function loadData() {
   loading.value = true
-  const res = await fetchDetail(cycleId)
-  if (res?.data) {
-    cycle.value = res.data.cycle
-    records.value = res.data.records
-    litter.value = res.data.litter
-    expenses.value = res.data.expenses || []
+  const familyId = currentFamily.value?._id || ''
+  if (!familyId) {
+    cycle.value = null
+    records.value = []
+    litter.value = null
+    expenses.value = []
+    loading.value = false
+    hasLoadedOnce = true
+    return
   }
+  localSyncRuntime.setCurrentFamilyId(familyId)
+  const detail = await getLocalBreedingCycleDetail(familyId, cycleId)
+  cycle.value = detail?.cycle || null
+  records.value = detail?.records || []
+  litter.value = detail?.litter || null
+  expenses.value = detail?.expenses || []
   loading.value = false
   hasLoadedOnce = true
 }

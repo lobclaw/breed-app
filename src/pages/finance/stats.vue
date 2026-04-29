@@ -194,10 +194,16 @@
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
+import { usePageSync } from '@/composables/usePageSync'
+import { getLocalFinancialSummary } from '@/localdb/domain-repository'
+import { localSyncRuntime } from '@/localdb/runtime'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import { formatFinanceAmount } from '@/utils/financeDisplay'
+
+const { currentFamily } = useAuth()
+usePageSync({ routePath: 'pages/finance/stats' })
 
 const period = ref('monthly')
 const loading = ref(true)
@@ -267,22 +273,29 @@ function goTo(url: string) {
   uni.navigateTo({ url })
 }
 
-const { run: fetchSummary } = useCloudCall<{ data: any }>('finance-service', 'getFinancialSummary')
-
 async function load() {
+  const familyId = currentFamily.value?._id || ''
   loading.value = true
-  const res = await fetchSummary({
+  if (!familyId) {
+    data.totalIncome = 0
+    data.totalExpense = 0
+    data.netProfit = 0
+    data.categoryBreakdown = {}
+    data.incomeBreakdown = {}
+    loading.value = false
+    return
+  }
+  localSyncRuntime.setCurrentFamilyId(familyId)
+  const summary = await getLocalFinancialSummary(familyId, {
     period: period.value,
     month: currentMonth.value.getMonth() + 1,
     year: currentMonth.value.getFullYear(),
   })
-  if (res?.data) {
-    data.totalIncome = res.data.totalIncome || 0
-    data.totalExpense = res.data.totalExpense || 0
-    data.netProfit = res.data.netProfit || 0
-    data.categoryBreakdown = res.data.categoryBreakdown || {}
-    data.incomeBreakdown = res.data.incomeBreakdown || {}
-  }
+  data.totalIncome = summary.totalIncome || 0
+  data.totalExpense = summary.totalExpense || 0
+  data.netProfit = summary.netProfit || 0
+  data.categoryBreakdown = summary.categoryBreakdown || {}
+  data.incomeBreakdown = summary.incomeBreakdown || {}
   loading.value = false
 }
 

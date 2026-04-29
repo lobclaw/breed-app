@@ -307,6 +307,10 @@
 import { ref, computed } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
+import { usePageSync } from '@/composables/usePageSync'
+import { getLocalHealthRecordDetail } from '@/localdb/domain-repository'
+import { localSyncRuntime } from '@/localdb/runtime'
 import { consumeSubmitFeedback, queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
@@ -328,6 +332,8 @@ let recordId = ''
 let hasShownOnce = false
 const submitBannerMessage = ref('')
 let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
+const { currentFamily } = useAuth()
+usePageSync({ routePath: 'pages/record/health-detail' })
 
 const typeMap: Record<string, { label: string; tagColor: any; cardColor: any }> = {
   vaccination: { label: '疫苗', tagColor: 'blue', cardColor: 'blue' },
@@ -522,7 +528,6 @@ function linkedMedicationSummary(taskItem: any) {
   return parts.join(' · ') || '查看疗程详情'
 }
 
-const { run: fetchRecord } = useCloudCall('health-service', 'getHealthRecordDetail')
 const { run: deleteRecord } = useCloudCall('health-service', 'deleteHealthRecord', {
   successMode: 'silent',
   loadingMode: 'local',
@@ -536,10 +541,14 @@ const { run: recoverIllnesses } = useCloudCall('health-service', 'recoverIllness
 
 async function loadRecord() {
   loading.value = true
-  const result = await fetchRecord({ id: recordId })
-  if (result) {
-    record.value = result.data || result
+  const familyId = currentFamily.value?._id || ''
+  if (!familyId) {
+    record.value = null
+    loading.value = false
+    return
   }
+  localSyncRuntime.setCurrentFamilyId(familyId)
+  record.value = await getLocalHealthRecordDetail(familyId, recordId)
   loading.value = false
 }
 

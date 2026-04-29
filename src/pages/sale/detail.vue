@@ -474,8 +474,12 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
+import { usePageSync } from '@/composables/usePageSync'
+import { getLocalSaleDetail, listLocalAgents } from '@/localdb/domain-repository'
+import { localSyncRuntime } from '@/localdb/runtime'
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BTag from '@/components/base/BTag.vue'
@@ -485,6 +489,9 @@ import BModal from '@/components/layout/BModal.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
 import { formatDateInputValue } from '@/utils/date'
+
+const { currentFamily } = useAuth()
+usePageSync({ routePath: 'pages/sale/detail' })
 
 const sale = ref<any>(null)
 const saleId = ref('')
@@ -630,7 +637,6 @@ function getDogCardBorderColor(status: string) {
   return map[status] || 'var(--amber)'
 }
 
-const { run: fetchDetail } = useCloudCall<{ data: any }>('finance-service', 'getSaleDetail')
 const { run: receiveDeposit } = useCloudCall('finance-service', 'receiveSaleDeposit', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 const { run: completeSale } = useCloudCall('finance-service', 'completeSale', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 const { run: settleSale } = useCloudCall('finance-service', 'settleSale', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
@@ -643,15 +649,32 @@ function formatDate(ts: number) {
 }
 
 async function load() {
-  const res = await fetchDetail(saleId.value)
-  if (res?.data) {
-    sale.value = res.data
-    completeForm.received_amount = ''
-    completeForm.agreed_price = res.data.agreed_price != null ? String(res.data.agreed_price) : ''
-    completeForm.buyer_info = res.data.buyer_info || ''
-    completeForm.platform = res.data.platform || ''
-    completeForm.delivery_date = null
+  const familyId = currentFamily.value?._id || ''
+  if (!familyId || !saleId.value) {
+    sale.value = null
+    return
   }
+  localSyncRuntime.setCurrentFamilyId(familyId)
+  const detail = await getLocalSaleDetail(familyId, saleId.value)
+  sale.value = detail
+  if (!detail) return
+  completeForm.received_amount = ''
+  completeForm.agreed_price = detail.agreed_price != null ? String(detail.agreed_price) : ''
+  completeForm.buyer_info = detail.buyer_info || ''
+  completeForm.platform = detail.platform || ''
+  completeForm.delivery_date = null
+}
+
+async function refreshSale() {
+  const familyId = currentFamily.value?._id || ''
+  if (!familyId || !saleId.value) {
+    await load()
+    return
+  }
+  localSyncRuntime.setCurrentFamilyId(familyId)
+  await localSyncRuntime.resume(familyId)
+  await localSyncRuntime.forceSyncScope(`sale-detail:${saleId.value}`)
+  await load()
 }
 
 function openSettleModal() {
@@ -672,7 +695,7 @@ async function doDeposit() {
   })
   if (res) {
     showDepositModal.value = false
-    load()
+    await refreshSale()
   }
 }
 
@@ -712,7 +735,7 @@ async function doComplete() {
   })
   if (res) {
     showCompleteModal.value = false
-    load()
+    await refreshSale()
   }
 }
 
@@ -727,7 +750,7 @@ async function doSettle() {
   })
   if (res) {
     showSettleModal.value = false
-    load()
+    await refreshSale()
   }
 }
 
@@ -744,7 +767,7 @@ async function doRefundSheet() {
   })
   if (res) {
     showRefundSheet.value = false
-    load()
+    await refreshSale()
   }
 }
 
@@ -758,20 +781,23 @@ async function doCancelSheet() {
   })
   if (res) {
     showCancelSheet.value = false
-    load()
+    await refreshSale()
   }
 }
 
-/* S-9 代理人选择 */
-const { run: fetchAgents } = useCloudCall<{ data: any[] }>('finance-service', 'getAgentList')
-
 async function openAgentSheet(currentId: string, cb: (agent: any) => void) {
+  const familyId = currentFamily.value?._id || ''
   agentSheetValue.value = currentId
   agentCallback = cb
   showAgentSheet.value = true
   agentLoading.value = true
-  const res = await fetchAgents()
-  if (res?.data) agentList.value = res.data
+  if (!familyId) {
+    agentList.value = []
+    agentLoading.value = false
+    return
+  }
+  localSyncRuntime.setCurrentFamilyId(familyId)
+  agentList.value = await listLocalAgents(familyId)
   agentLoading.value = false
 }
 
@@ -800,7 +826,13 @@ function confirmPriceWarning() {
 onLoad((options: any) => {
   if (options?.id) {
     saleId.value = options.id
-    load()
+    void load()
+  }
+})
+
+onShow(() => {
+  if (saleId.value) {
+    void load()
   }
 })
 </script>

@@ -115,10 +115,16 @@
 <script setup lang="ts">
 import { reactive, computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
+import { usePageSync } from '@/composables/usePageSync'
+import { getLocalProjectionParams } from '@/localdb/domain-repository'
+import { localSyncRuntime } from '@/localdb/runtime'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import { formatFinanceAmount } from '@/utils/financeDisplay'
+
+const { currentFamily } = useAuth()
+usePageSync({ routePath: 'pages/finance/projection' })
 
 const DEFAULT_PARAMS = {
   activeDams: '5',
@@ -174,21 +180,20 @@ function getProfitClass(val: number) {
   return 'neutral'
 }
 
-const { run: getProjectionParams } = useCloudCall('finance-service', 'getProjectionParams', {
-  showLoading: false,
-})
-
 async function loadParams() {
   try {
-    const res = await getProjectionParams()
-    if (res?.data) {
-      const data = res.data as any
-      if (data.activeDams !== undefined && data.activeDams !== null) params.activeDams = String(data.activeDams)
-      if (data.littersPerYear !== undefined && data.littersPerYear !== null) params.littersPerYear = String(data.littersPerYear)
-      if (data.avgIncomePerLitter !== undefined && data.avgIncomePerLitter !== null) params.avgIncomePerLitter = String(data.avgIncomePerLitter)
-      if (data.avgCostPerLitter !== undefined && data.avgCostPerLitter !== null) params.avgCostPerLitter = String(data.avgCostPerLitter)
-      if (data.monthlySharedCost !== undefined && data.monthlySharedCost !== null) params.monthlySharedCost = String(data.monthlySharedCost)
+    const familyId = currentFamily.value?._id || ''
+    if (!familyId) {
+      Object.assign(params, DEFAULT_PARAMS)
+      return
     }
+    localSyncRuntime.setCurrentFamilyId(familyId)
+    const data = await getLocalProjectionParams(familyId)
+    if (data.activeDams !== undefined && data.activeDams !== null) params.activeDams = String(data.activeDams)
+    if (data.littersPerYear !== undefined && data.littersPerYear !== null) params.littersPerYear = String(data.littersPerYear)
+    if (data.avgIncomePerLitter !== undefined && data.avgIncomePerLitter !== null) params.avgIncomePerLitter = String(data.avgIncomePerLitter)
+    if (data.avgCostPerLitter !== undefined && data.avgCostPerLitter !== null) params.avgCostPerLitter = String(data.avgCostPerLitter)
+    if (data.monthlySharedCost !== undefined && data.monthlySharedCost !== null) params.monthlySharedCost = String(data.monthlySharedCost)
   } catch {
     Object.assign(params, DEFAULT_PARAMS)
   } finally {

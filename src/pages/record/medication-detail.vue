@@ -300,6 +300,10 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
+import { usePageSync } from '@/composables/usePageSync'
+import { getLocalMedicationTaskDetail } from '@/localdb/domain-repository'
+import { localSyncRuntime } from '@/localdb/runtime'
 import { consumeSubmitFeedback, queueSubmitFeedback } from '@/composables/useSubmitFeedback'
 import BButton from '@/components/base/BButton.vue'
 import BCard from '@/components/base/BCard.vue'
@@ -325,6 +329,8 @@ const selectedIllnessDisposition = ref<'observation' | 'recovered' | 'keep_treat
 let taskId = ''
 let hasShownOnce = false
 let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
+const { currentFamily } = useAuth()
+usePageSync({ routePath: 'pages/record/medication-detail' })
 
 const DAY_MS = 86400000
 
@@ -547,7 +553,6 @@ function formatDate(ts: number | undefined): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-const { run: fetchTask } = useCloudCall('health-service', 'getMedicationTaskDetail')
 const { run: completeDay } = useCloudCall('health-service', 'batchCompleteMedicationDay', {
   successMode: 'silent',
   loadingMode: 'local',
@@ -560,10 +565,14 @@ const { run: cancelTask } = useCloudCall('health-service', 'endMedication', {
 
 async function loadTask() {
   loading.value = true
-  const result = await fetchTask({ id: taskId })
-  if (result) {
-    task.value = result.data || result
+  const familyId = currentFamily.value?._id || ''
+  if (!familyId) {
+    task.value = null
+    loading.value = false
+    return
   }
+  localSyncRuntime.setCurrentFamilyId(familyId)
+  task.value = await getLocalMedicationTaskDetail(familyId, taskId)
   loading.value = false
 }
 
