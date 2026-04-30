@@ -1,22 +1,35 @@
 import { describe, expect, it } from 'vitest'
 import { localDb } from '../../src/localdb/db'
 import {
+  findLocalDuplicateIllnesses,
+  findLocalDuplicateMedicationTasks,
   getLocalBreedingCycleDetail,
+  getLocalDogDetail,
+  getLocalDogFinanceSummary,
   getLocalExpenseDetail,
   getLocalFinancialSummary,
   getLocalIncomeDetail,
   getLocalKennelDashboardStats,
+  getLocalLitterProfit,
   getLocalProjectionParams,
   getLocalSaleDetail,
+  getLocalTaskById,
+  getLocalTransactionList,
+  getLocalDamRoi,
   listLocalBreedingCycles,
+  listLocalDogHealthHistory,
+  listLocalDogMedicationHistory,
+  listLocalDogWeights,
   listLocalDogsWithStatus,
+  listLocalLittersByDam,
   listLocalLitters,
   listLocalMedicationProtocols,
+  listLocalTasksByIds,
 } from '../../src/localdb/domain-repository'
 
 describe('local domain repository', () => {
   it('应从本地集合投影出犬只状态', async () => {
-    const now = new Date('2026-04-24T10:00:00+08:00').getTime()
+    const now = Date.now()
     await localDb.replaceTable('dogs', [{
       _id: 'dog_1',
       family_id: 'fam_1',
@@ -383,6 +396,281 @@ describe('local domain repository', () => {
       avgIncomePerLitter: 3600,
       avgCostPerLitter: 500,
       monthlySharedCost: 100,
+    })
+
+    const litterProfit = await getLocalLitterProfit('fam_3', 'litter_30')
+    expect(litterProfit).toMatchObject({
+      totalIncome: 3600,
+      totalCost: 500,
+      netProfit: 3100,
+      puppyCount: 1,
+      aliveCount: 1,
+    })
+    expect(litterProfit?.incomeItems).toHaveLength(1)
+
+    const damRoi = await getLocalDamRoi('fam_3', 'dog_30')
+    expect(damRoi).toMatchObject({
+      totalBreedingIncome: 3600,
+      totalBreedingCost: 500,
+      healthCost: 320,
+      cycleCount: 0,
+      litterCount: 1,
+      puppyCount: 1,
+    })
+    expect(damRoi?.litters).toHaveLength(1)
+
+    const txList = await getLocalTransactionList('fam_3', {
+      period: 'monthly',
+      month: 4,
+      year: 2026,
+      type: 'expense',
+      expenseCategoryGroups: ['health'],
+      sort: 'amount_desc',
+    })
+    expect(txList.map(item => item._id)).toEqual(['expense_31', 'expense_30'])
+    expect(txList[0]).toMatchObject({
+      _txType: 'expense',
+      category_group_label: '医疗健康',
+    })
+  })
+
+  it('应为犬只详情页提供本地详情、历史、窝统计与体重投影', async () => {
+    const now = new Date('2026-04-24T10:00:00+08:00').getTime()
+    const runtimeNow = Date.now()
+    await localDb.replaceTable('dogs', [{
+      _id: 'dog_40',
+      family_id: 'fam_4',
+      name: '团子',
+      gender: '母',
+      role: '种狗',
+      disposition: '在养',
+      purchase_price: 3200,
+      birth_date: now - (500 * 86400000),
+      updated_at: now,
+    }, {
+      _id: 'puppy_40_a',
+      family_id: 'fam_4',
+      name: '团子窝-1号',
+      gender: '母',
+      role: '幼崽',
+      disposition: '在养',
+      origin_litter_id: 'litter_40',
+      updated_at: now,
+    }, {
+      _id: 'puppy_40_b',
+      family_id: 'fam_4',
+      name: '团子窝-2号',
+      gender: '公',
+      role: '幼崽',
+      disposition: '已售',
+      origin_litter_id: 'litter_40',
+      updated_at: now,
+    }])
+    await localDb.replaceTable('breeding_cycles', [{
+      _id: 'cycle_40',
+      family_id: 'fam_4',
+      dam_id: 'dog_40',
+      dam_name: '团子',
+      status: '已生产',
+      birth_date: now - (12 * 86400000),
+      updated_at: now,
+      created_at: now - (60 * 86400000),
+    }])
+    await localDb.replaceTable('litters', [{
+      _id: 'litter_40',
+      family_id: 'fam_4',
+      dam_id: 'dog_40',
+      dam_name: '团子',
+      cycle_id: 'cycle_40',
+      birth_date: now - (12 * 86400000),
+      born_alive: 2,
+      total_born: 2,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('health_records', [{
+      _id: 'ill_40',
+      family_id: 'fam_4',
+      dog_id: 'dog_40',
+      type: 'illness',
+      date: now - (2 * 86400000),
+      updated_at: now,
+      details: {
+        treatment_status: '治疗中',
+        primary_condition: '乳房炎',
+      },
+    }, {
+      _id: 'vac_40',
+      family_id: 'fam_4',
+      dog_id: 'dog_40',
+      type: 'vaccination',
+      date: now - (30 * 86400000),
+      updated_at: now - 1000,
+      details: {
+        vaccine_type: '四联',
+      },
+    }])
+    await localDb.replaceTable('medication_tasks', [{
+      _id: 'med_40',
+      family_id: 'fam_4',
+      dog_id: 'dog_40',
+      dog_name: '团子',
+      status: '进行中',
+      drug_name: '头孢',
+      frequency: 2,
+      duration_days: 5,
+      actual_start_date: runtimeNow - 86400000,
+      updated_at: runtimeNow,
+      daily_doses: { 1: 2 },
+    }])
+    await localDb.replaceTable('expenses', [{
+      _id: 'expense_40',
+      family_id: 'fam_4',
+      total_amount: 240,
+      category: '保健品',
+      linked_dog_ids: ['dog_40'],
+      date: now - 86400000,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('incomes', [{
+      _id: 'income_40',
+      family_id: 'fam_4',
+      dog_id: 'dog_40',
+      dog_name: '团子',
+      type: '销售',
+      amount: 900,
+      date: now,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('dog_weights', [{
+      _id: 'weight_40_a',
+      family_id: 'fam_4',
+      dog_id: 'dog_40',
+      weight: 3200,
+      date: now - (7 * 86400000),
+      created_at: now - (7 * 86400000),
+    }, {
+      _id: 'weight_40_b',
+      family_id: 'fam_4',
+      dog_id: 'dog_40',
+      weight: 3350,
+      date: now - 86400000,
+      created_at: now - 86400000,
+    }])
+
+    const detail = await getLocalDogDetail('fam_4', 'dog_40')
+    expect(detail?.statuses.map(item => item.type)).toEqual(['生病中', '用药中', '哺乳中'])
+
+    const history = await listLocalDogHealthHistory('fam_4', 'dog_40')
+    expect(history.map(item => item._id)).toEqual(['ill_40', 'vac_40'])
+
+    const medicationHistory = await listLocalDogMedicationHistory('fam_4', 'dog_40')
+    expect(medicationHistory[0]).toMatchObject({
+      _id: 'med_40',
+      status: 'active',
+      progress: {
+        current: 2,
+        total: 5,
+      },
+    })
+
+    const litters = await listLocalLittersByDam('fam_4', 'dog_40')
+    expect(litters[0]).toMatchObject({
+      _id: 'litter_40',
+      pupStats: {
+        total: 2,
+        alive: 2,
+        sold: 1,
+        kept: 1,
+        available: 0,
+      },
+    })
+
+    const finance = await getLocalDogFinanceSummary('fam_4', 'dog_40')
+    expect(finance).toMatchObject({
+      purchaseCost: 3200,
+      directExpenses: 240,
+      salesIncome: 900,
+      netProfit: -2540,
+    })
+    expect(finance?.recent).toHaveLength(2)
+
+    const weights = await listLocalDogWeights('fam_4', 'dog_40')
+    expect(weights.map(item => item._id)).toEqual(['weight_40_b', 'weight_40_a'])
+  })
+
+  it('应支持本地任务读取与重复疾病/用药预检', async () => {
+    const now = new Date('2026-04-28T10:00:00+08:00').getTime()
+    await localDb.replaceTable('tasks', [{
+      _id: 'task_50_a',
+      family_id: 'fam_5',
+      dog_id: 'dog_50',
+      dog_name: '奶黄',
+      title: '今日疫苗',
+      type: 'vaccination',
+      status: 'pending',
+      due_date: now,
+      created_at: now,
+      updated_at: now,
+    }, {
+      _id: 'task_50_b',
+      family_id: 'fam_5',
+      dog_id: 'dog_51',
+      dog_name: '奶盖',
+      title: '今日驱虫',
+      type: 'deworming',
+      status: 'pending',
+      due_date: now,
+      created_at: now,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('health_records', [{
+      _id: 'ill_50',
+      family_id: 'fam_5',
+      dog_id: 'dog_50',
+      dog_name: '奶黄',
+      type: 'illness',
+      date: now,
+      created_at: now,
+      updated_at: now,
+      details: {
+        primary_condition: '皮肤炎',
+        treatment_status: '治疗中',
+      },
+    }])
+    await localDb.replaceTable('medication_tasks', [{
+      _id: 'med_50',
+      family_id: 'fam_5',
+      dog_id: 'dog_50',
+      dog_name: '奶黄',
+      drug_name: '头孢',
+      frequency: 2,
+      duration_days: 5,
+      actual_start_date: Date.now() - 86400000,
+      status: '进行中',
+      created_at: now,
+      updated_at: now,
+    }])
+
+    const task = await getLocalTaskById('fam_5', 'task_50_a')
+    expect(task?._id).toBe('task_50_a')
+
+    const taskList = await listLocalTasksByIds('fam_5', ['task_50_b', 'task_50_a'])
+    expect(taskList.map(item => item._id)).toEqual(['task_50_b', 'task_50_a'])
+
+    const illnessDup = await findLocalDuplicateIllnesses('fam_5', ['dog_50'], '皮肤炎')
+    expect(illnessDup).toEqual([{
+      dogId: 'dog_50',
+      recordId: 'ill_50',
+      condition: '皮肤炎',
+    }])
+
+    const medicationDup = await findLocalDuplicateMedicationTasks('fam_5', ['dog_50'], '头孢')
+    expect(medicationDup[0]).toMatchObject({
+      dog_id: 'dog_50',
+      dog_name: '奶黄',
+      task_id: 'med_50',
+      task_name: '头孢',
+      status: 'active',
     })
   })
 })

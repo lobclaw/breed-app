@@ -239,7 +239,7 @@
 import { ref, reactive, computed, nextTick, onBeforeUnmount } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useAuth } from '@/composables/useAuth'
-import { useCloudCall } from '@/composables/useCloudCall'
+import { usePageSync } from '@/composables/usePageSync'
 import BNavBar from '@/components/layout/BNavBar.vue'
 import BModal from '@/components/layout/BModal.vue'
 import { getLocalKennelDashboardStats } from '@/localdb/domain-repository'
@@ -259,6 +259,7 @@ type DrawerMenuGroup = {
 }
 
 const { currentFamily, currentUser, userRole, isInitialized, logout, loadFamily } = useAuth()
+usePageSync({ routePath: 'pages/profile/index' })
 
 const hasFamily = computed(() => !!currentFamily.value)
 const familyName = computed(() => currentFamily.value?.name || '')
@@ -410,15 +411,7 @@ async function loadStats() {
 }
 
 onShow(async () => {
-  localSyncRuntime.setCurrentFamilyId(currentFamily.value?._id || '')
-  await localSyncRuntime.setActiveScope('kennel-dashboard')
-  await localSyncRuntime.syncScope('kennel-dashboard')
   await loadStats()
-})
-
-const { run: doUpdateNickname } = useCloudCall('family-service', 'updateNickname', {
-  successMode: 'silent',
-  throwOnError: true,
 })
 
 const showNicknameModal = ref(false)
@@ -457,7 +450,7 @@ async function onNicknameConfirm() {
 
   if (!member) {
     showNicknameModal.value = false
-    await doUpdateNickname(nextNickname)
+    await localSyncRuntime.updateNicknameLocally(currentFamily.value?._id || '', currentUser.value?.uid || '', nextNickname)
     await loadFamily()
     return
   }
@@ -467,7 +460,7 @@ async function onNicknameConfirm() {
   updatingNickname.value = true
 
   try {
-    await doUpdateNickname(nextNickname)
+    await localSyncRuntime.updateNicknameLocally(currentFamily.value?._id || '', currentUser.value?.uid || '', nextNickname)
     await loadFamily()
   } catch {
     member.nickname = previousNickname

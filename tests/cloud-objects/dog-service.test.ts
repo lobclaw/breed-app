@@ -601,4 +601,68 @@ describe('dog-service', () => {
     const { data: dogs } = await db.collection('dogs').doc('dog_1').get()
     expect(dogs[0].latest_weight).toBe(2.5)
   })
+
+  it('changeDisposition 应支持 _sync 幂等重放', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+    const payload = {
+      id: 'dog_1',
+      disposition: '已退休',
+      disposition_date: mockNow,
+      disposition_notes: '完成繁育',
+      _sync: {
+        clientMutationId: 'dog-disposition-1',
+        deviceId: 'device_1',
+        clientTimestamp: mockNow,
+        baseVersions: { dog_1: 0 },
+      },
+    }
+
+    const first = await dogService.changeDisposition.call(ctx, payload)
+    const second = await dogService.changeDisposition.call(ctx, payload)
+
+    expect(first.ack).toBe('accepted')
+    expect(second).toEqual(first)
+
+    const { data: dogs } = await db.collection('dogs').doc('dog_1').get()
+    expect(dogs[0]).toMatchObject({
+      disposition: '已退休',
+      disposition_date: mockNow,
+      disposition_notes: '完成繁育',
+    })
+  })
+
+  it('upgradePuppyToBreeder 应支持 _sync 幂等重放', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+    seedCollection('dogs', [{
+      _id: 'pup_1',
+      name: '奶油',
+      gender: '母',
+      role: '幼崽',
+      disposition: '自留',
+      family_id: familyId,
+      deleted_at: null,
+    }])
+
+    const payload = {
+      id: 'pup_1',
+      _sync: {
+        clientMutationId: 'dog-upgrade-1',
+        deviceId: 'device_1',
+        clientTimestamp: mockNow,
+        baseVersions: { pup_1: 0 },
+      },
+    }
+
+    const first = await dogService.upgradePuppyToBreeder.call(ctx, payload)
+    const second = await dogService.upgradePuppyToBreeder.call(ctx, payload)
+
+    expect(first.ack).toBe('accepted')
+    expect(second).toEqual(first)
+
+    const { data: dogs } = await db.collection('dogs').doc('pup_1').get()
+    expect(dogs[0]).toMatchObject({
+      role: '种狗',
+      disposition: '在养',
+    })
+  })
 })

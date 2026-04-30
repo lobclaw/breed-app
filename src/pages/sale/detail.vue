@@ -475,7 +475,6 @@
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
-import { useCloudCall } from '@/composables/useCloudCall'
 import { useAuth } from '@/composables/useAuth'
 import { usePageSync } from '@/composables/usePageSync'
 import { getLocalSaleDetail, listLocalAgents } from '@/localdb/domain-repository'
@@ -637,11 +636,6 @@ function getDogCardBorderColor(status: string) {
   return map[status] || 'var(--amber)'
 }
 
-const { run: receiveDeposit } = useCloudCall('finance-service', 'receiveSaleDeposit', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
-const { run: completeSale } = useCloudCall('finance-service', 'completeSale', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
-const { run: settleSale } = useCloudCall('finance-service', 'settleSale', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
-const { run: cancelSale } = useCloudCall('finance-service', 'cancelSale', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
-
 function formatDate(ts: number) {
   if (!ts) return ''
   const d = new Date(ts)
@@ -685,7 +679,9 @@ function openSettleModal() {
 }
 
 async function doDeposit() {
-  const res = await receiveDeposit(saleId.value, {
+  const familyId = currentFamily.value?._id || ''
+  localSyncRuntime.setCurrentFamilyId(familyId)
+  const res = await localSyncRuntime.receiveSaleDepositLocally(familyId, saleId.value, {
     deposit_amount: parseFloat(depositForm.deposit_amount),
     agreed_price: depositForm.agreed_price ? parseFloat(depositForm.agreed_price) : null,
     buyer_info: depositForm.buyer_info || null,
@@ -709,7 +705,9 @@ async function doComplete() {
 
   if (sale.value?.floor_price && receivedAmount != null && receivedAmount < sale.value.floor_price) {
     checkPriceWarning(receivedAmount, async () => {
-      const res = await completeSale(saleId.value, {
+      const familyId = currentFamily.value?._id || ''
+      localSyncRuntime.setCurrentFamilyId(familyId)
+      const res = await localSyncRuntime.completeSaleLocally(familyId, saleId.value, {
         received_amount: receivedAmount,
         agreed_price: completeForm.agreed_price ? parseFloat(completeForm.agreed_price) : null,
         buyer_info: completeForm.buyer_info || null,
@@ -725,7 +723,9 @@ async function doComplete() {
     return
   }
 
-  const res = await completeSale(saleId.value, {
+  const familyId = currentFamily.value?._id || ''
+  localSyncRuntime.setCurrentFamilyId(familyId)
+  const res = await localSyncRuntime.completeSaleLocally(familyId, saleId.value, {
     received_amount: receivedAmount,
     agreed_price: completeForm.agreed_price ? parseFloat(completeForm.agreed_price) : null,
     buyer_info: completeForm.buyer_info || null,
@@ -742,7 +742,9 @@ async function doComplete() {
 async function doSettle() {
   const receivedAmount = parseFloat(settleForm.received_amount)
   if (!receivedAmount || receivedAmount <= 0) return
-  const res = await settleSale(saleId.value, {
+  const familyId = currentFamily.value?._id || ''
+  localSyncRuntime.setCurrentFamilyId(familyId)
+  const res = await localSyncRuntime.settleSaleLocally(familyId, saleId.value, {
     received_amount: receivedAmount,
     agreed_price: settleForm.agreed_price ? parseFloat(settleForm.agreed_price) : null,
     settlement_status: settleForm.settlement_status,
@@ -760,7 +762,9 @@ async function doSettle() {
 async function doRefundSheet() {
   const amount = parseFloat(refundSheetForm.refund_amount)
   if (!amount || amount <= 0) return
-  const res = await cancelSale(saleId.value, {
+  const familyId = currentFamily.value?._id || ''
+  localSyncRuntime.setCurrentFamilyId(familyId)
+  const res = await localSyncRuntime.cancelSaleLocally(familyId, saleId.value, {
     refund_amount: amount,
     refund_reason: refundSheetForm.refund_reason || null,
     refund_date: refundSheetForm.refund_date || Date.now(),
@@ -775,7 +779,9 @@ async function doRefundSheet() {
 async function doCancelSheet() {
   const refundAmt = cancelSheetForm.refund_amount ? parseFloat(cancelSheetForm.refund_amount) : 0
   const kept = (sale.value?.deposit_amount || 0) - refundAmt
-  const res = await cancelSale(saleId.value, {
+  const familyId = currentFamily.value?._id || ''
+  localSyncRuntime.setCurrentFamilyId(familyId)
+  const res = await localSyncRuntime.cancelSaleLocally(familyId, saleId.value, {
     deposit_kept_amount: kept > 0 ? kept : 0,
     refund_reason: cancelSheetForm.reason || null,
   })

@@ -1397,6 +1397,53 @@ describe('breeding-service', () => {
       expect(dewormingTasks.map(item => item.dog_name)).toEqual(expect.arrayContaining(['花花窝-1号', '奶球']))
       expect(vaccinationTasks.map(item => item.dog_name)).toEqual(expect.arrayContaining(['花花窝-1号', '奶球']))
     })
+
+    it('addBirthRecord 应支持 _sync 幂等重放并复用客户端实体 ID', async () => {
+      const birthDate = Date.now()
+      const cycleId = await seedPregnantCycle()
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+      const payload = {
+        cycle_id: cycleId,
+        birth_date: birthDate,
+        birth_type: '顺产',
+        create_first_deworming_task: true,
+        puppies: [
+          { name: '', gender: '母', weight: 101, alive: true },
+          { name: '奶球', gender: '公', weight: 99, alive: true },
+        ],
+        _sync: {
+          clientMutationId: 'birth-sync-1',
+          deviceId: 'device_1',
+          clientTimestamp: birthDate,
+          baseVersions: { [cycleId]: 0 },
+          clientEntityIds: {
+            breeding_records: 'birth_record_local_1',
+            litters: 'litter_local_1',
+            dogs: ['puppy_local_1', 'puppy_local_2'],
+            dog_weights: ['weight_local_1', 'weight_local_2'],
+            tasks: ['task_local_weaning', 'task_local_deworm_1', 'task_local_deworm_2'],
+          },
+        },
+      }
+
+      const first = await breedingService.addBirthRecord.call(ctx, payload)
+      const second = await breedingService.addBirthRecord.call(ctx, payload)
+
+      expect(first.ack).toBe('accepted')
+      expect(second).toEqual(first)
+      expect(first.data.litterId).toBe('litter_local_1')
+      expect(first.data.puppyIds).toEqual(['puppy_local_1', 'puppy_local_2'])
+
+      const { data: litters } = await db.collection('litters').where({ _id: 'litter_local_1' }).get()
+      expect(litters).toHaveLength(1)
+
+      const { data: dogs } = await db.collection('dogs').where({ _id: db.command.in(['puppy_local_1', 'puppy_local_2']) }).get()
+      expect(dogs).toHaveLength(2)
+
+      const { data: tasks } = await db.collection('tasks').where({ _id: db.command.in(['task_local_weaning', 'task_local_deworm_1', 'task_local_deworm_2']) }).get()
+      expect(tasks).toHaveLength(3)
+    })
   })
 
   describe('确认断奶', () => {
@@ -1881,6 +1928,138 @@ describe('breeding-service', () => {
       expect(tasks[0].due_date).toBe(now + 2 * 86400000)
       expect(tasks[0].details.kind).toBe('recheck_observe')
       expect(tasks[0].details.notes).toBe('后天复查')
+    })
+
+    it('updateBreedingRecord 应支持 _sync 幂等重放', async () => {
+      const now = Date.now()
+      seedCollection('breeding_records', [{
+        _id: 'record_sync_1',
+        type: 'heat_observation',
+        cycle_id: 'cycle_sync_2',
+        dog_id: 'dam_1',
+        dog_name: '花花',
+        family_id: familyId,
+        date: now - 86400000,
+        notes: '旧备注',
+        details: {
+          vulva_status: '硬/肿胀',
+          discharge_status: '鲜红较多',
+          symptoms: [],
+        },
+        version: 1,
+        created_at: now - 86400000,
+        updated_at: now - 86400000,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      const payload = {
+        id: 'record_sync_1',
+        date: now,
+        notes: '新备注',
+        details: {
+          vulva_status: '开始软化',
+          discharge_status: '淡粉/草黄色',
+          symptoms: ['主动靠近公犬'],
+        },
+        _sync: {
+          clientMutationId: 'breeding-record-sync-1',
+          deviceId: 'device_1',
+          clientTimestamp: now,
+          baseVersions: { record_sync_1: 1 },
+        },
+      }
+
+      const first = await breedingService.updateBreedingRecord.call(ctx, payload)
+      const second = await breedingService.updateBreedingRecord.call(ctx, payload)
+
+      expect(first.ack).toBe('accepted')
+      expect(second).toEqual(first)
+
+      const { data: records } = await db.collection('breeding_records').doc('record_sync_1').get()
+      expect(records[0].notes).toBe('新备注')
+      expect(records[0].version).toBe(2)
+    })
+  })
+
+  describe('同步', () => {
+    it('closeCycle 应支持 _sync 幂等重放', async () => {
+      const now = Date.now()
+      seedCollection('breeding_cycles', [{
+        _id: 'cycle_sync_1',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        status: '怀孕中',
+        version: 2,
+        created_at: now - 86400000,
+        updated_at: now - 86400000,
+      }])
+      seedCollection('tasks', [{
+        _id: 'task_cycle_sync_1',
+        cycle_id: 'cycle_sync_1',
+        family_id: familyId,
+        status: 'pending',
+        type: 'breeding_milestone',
+        created_at: now - 86400000,
+        updated_at: now - 86400000,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      const payload = {
+        cycleId: 'cycle_sync_1',
+        reason: '失败',
+        _sync: {
+          clientMutationId: 'breeding-close-sync-1',
+          deviceId: 'device_1',
+          clientTimestamp: now,
+          baseVersions: { cycle_sync_1: 2 },
+        },
+      }
+
+      const first = await breedingService.closeCycle.call(ctx, payload)
+      const second = await breedingService.closeCycle.call(ctx, payload)
+
+      expect(first.ack).toBe('accepted')
+      expect(second).toEqual(first)
+
+      const { data: cycles } = await db.collection('breeding_cycles').doc('cycle_sync_1').get()
+      expect(cycles[0].status).toBe('失败')
+      expect(cycles[0].version).toBe(3)
+    })
+
+    it('confirmWeaning 在 baseVersion 过期时应返回 conflict', async () => {
+      const now = Date.now()
+      seedCollection('litters', [{
+        _id: 'litter_sync_conflict_1',
+        cycle_id: 'cycle_litter_1',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        birth_date: now - 45 * 86400000,
+        version: 4,
+        weaned_at: null,
+        created_at: now - 45 * 86400000,
+        updated_at: now - 45 * 86400000,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      const result = await breedingService.confirmWeaning.call(ctx, {
+        litterId: 'litter_sync_conflict_1',
+        _sync: {
+          clientMutationId: 'breeding-weaning-conflict-1',
+          deviceId: 'device_1',
+          clientTimestamp: now,
+          baseVersions: { litter_sync_conflict_1: 3 },
+        },
+      })
+
+      expect(result.ack).toBe('conflict')
+      expect(result.conflict).toEqual(expect.objectContaining({
+        collection: 'litters',
+        entityId: 'litter_sync_conflict_1',
+        baseVersion: 3,
+        serverVersion: 4,
+      }))
     })
   })
 })

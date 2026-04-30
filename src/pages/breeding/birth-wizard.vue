@@ -289,14 +289,18 @@
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
+import { usePageSync } from '@/composables/usePageSync'
 import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
+import { localSyncRuntime } from '@/localdb/runtime'
 import { buildTimestampFromDayOffset, formatDateInputValue, getLocalCalendarDayDiff } from '@/utils/date'
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
 
 let cycleId = ''
 const damName = ref('花花')
+const { currentFamily } = useAuth()
+usePageSync({ routePath: 'pages/breeding/birth-wizard' })
 
 const step = ref(1)
 const submitState = ref<'idle' | 'submitting' | 'success'>('idle')
@@ -375,18 +379,12 @@ function removePuppy(idx: number) {
   puppies.splice(idx, 1)
 }
 
-const { run: addBirthRecord } = useCloudCall('breeding-service', 'addBirthRecord', {
-  successMode: 'silent',
-  loadingMode: 'local',
-  throwOnError: true,
-})
-
 async function submit() {
   submitState.value = 'submitting'
   try {
     const cost = costInput.value ? parseFloat(costInput.value) : null
 
-    const res = await addBirthRecord({
+    const res = await localSyncRuntime.addBirthRecordLocally(currentFamily.value?._id || '', {
       cycle_id: cycleId,
       birth_date: form.birth_date,
       birth_type: form.birth_type,

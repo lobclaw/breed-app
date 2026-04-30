@@ -82,8 +82,8 @@ import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
+import { usePageSync } from '@/composables/usePageSync'
 import { consumeSubmitFeedback } from '@/composables/useSubmitFeedback'
-import { localSyncRuntime } from '@/localdb/runtime'
 import { BREEDING_RECORD_ITEMS, FINANCE_RECORD_ITEMS, HEALTH_RECORD_ITEMS, type UnifiedRecordItem } from '@/utils/iconRegistry'
 
 type RecordType = Pick<UnifiedRecordItem, 'icon' | 'iconBg' | 'iconColor' | 'label' | 'url'>
@@ -100,6 +100,7 @@ const financeTypes: RecordType[] = FINANCE_RECORD_ITEMS
 
 const submitBannerMessage = ref('')
 let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
+usePageSync({ routePath: 'pages/record/index' })
 
 function showSubmitBanner(message: string) {
   submitBannerMessage.value = message
@@ -118,8 +119,6 @@ function shortenLabel(label: string) {
 }
 
 onShow(() => {
-  void localSyncRuntime.setActiveScope('record-entry')
-  void localSyncRuntime.syncScope('record-entry')
   const feedback = consumeSubmitFeedback('/pages/record/index')
   if (feedback?.message) {
     showSubmitBanner(feedback.message)

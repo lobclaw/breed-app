@@ -178,12 +178,18 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
+import { usePageSync } from '@/composables/usePageSync'
+import { getLocalDamRoi } from '@/localdb/domain-repository'
+import { localSyncRuntime } from '@/localdb/runtime'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import { formatFinanceAmount, getFinanceAmountParts } from '@/utils/financeDisplay'
+
+const { currentFamily } = useAuth()
+usePageSync({ routePath: 'pages/finance/dam-roi' })
 
 const selectedDam = ref<any>(null)
 const showDamPickerVisible = ref(false)
@@ -214,7 +220,7 @@ const roiToneClass = computed(() => {
 
 // 当选择犬只变化时自动加载 ROI
 watch(selectedDam, (dog) => {
-  if (dog?._id) loadRoi(dog._id)
+  if (dog?._id) void loadRoi(dog._id)
 })
 
 const totalInvestment = computed(() => {
@@ -329,19 +335,14 @@ function handleDamSelect(dog: any) {
   selectedDam.value = dog
 }
 
-const { run: getDamRoi } = useCloudCall('finance-service', 'getDamRoi', {
-  showLoading: true,
-  loadingText: '计算中...',
-})
-
 async function loadRoi(damId: string) {
+  const familyId = currentFamily.value?._id || ''
   loading.value = true
   roiData.value = null
   try {
-    const res = await getDamRoi({ dog_id: damId })
-    if (res?.data) {
-      roiData.value = res.data as RoiData
-    }
+    if (!familyId) return
+    localSyncRuntime.setCurrentFamilyId(familyId)
+    roiData.value = await getLocalDamRoi(familyId, damId) as RoiData | null
   } finally {
     loading.value = false
   }

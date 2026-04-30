@@ -19,8 +19,12 @@ const {
   getSyncMeta,
   buildTouchedEntity,
   buildSyncAck,
+  buildConflictAck,
   findAppliedMutation,
   markMutationApplied,
+  getBaseVersion,
+  getServerVersion,
+  buildVersionUpdate,
   buildVersionedCreate,
 } = syncUtils
 
@@ -92,6 +96,19 @@ const SALE_ACTIVE_STATUSES = ['待售', '已预定']
 const SALE_RECORD_STATUSES = ['待售', '已预定', '已成交', '已退款', '定金取消']
 const SALE_MODES = ['自售', '代理', '代卖']
 const SALE_SETTLEMENT_STATUSES = ['未结算', '部分结算', '已结算']
+
+function getEntityConflict(syncMeta, collection, entity) {
+  const baseVersion = getBaseVersion(syncMeta, entity?._id)
+  if (baseVersion === null) return null
+  const serverVersion = getServerVersion(entity)
+  if (baseVersion === serverVersion) return null
+  return buildConflictAck(syncMeta, {
+    collection,
+    entityId: entity._id,
+    baseVersion,
+    serverVersion,
+  })
+}
 
 function normalizeExpenseCategoryGroupKey(groupKey) {
   return groupKey && PRESET_EXPENSE_CATEGORY_GROUPS.some(item => item.key === groupKey) ? groupKey : 'other'
@@ -901,16 +918,22 @@ module.exports = {
   async softDeleteExpense(id) {
     const expenseId = getIdArg(id, 'id')
     if (!expenseId) throw new Error('缺少记录 ID')
+    const syncMeta = getSyncMeta(id)
+    const appliedMutation = await findAppliedMutation(db, this.familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
 
     const { data: expenses } = await db.collection('expenses')
       .where({ _id: expenseId, family_id: this.familyId })
       .get()
     if (!expenses || expenses.length === 0) throw new Error('记录不存在')
     if (expenses[0].source_type === 'auto') throw new Error('自动生成的费用不可删除，请在来源记录中操作')
+    const conflict = getEntityConflict(syncMeta, 'expenses', expenses[0])
+    if (conflict) return conflict
+    const now = Date.now()
 
     await db.collection('expenses').doc(expenseId).update({
-      deleted_at: Date.now(),
-      updated_at: Date.now(),
+      deleted_at: now,
+      ...buildVersionUpdate(dbCmd, now),
     })
 
     await logFinanceOperation({
@@ -923,7 +946,22 @@ module.exports = {
       summary: `删除了支出 ${expenses[0].category || expenseId}`,
     })
 
-    return { message: '已删除' }
+    const { data: updatedExpenses } = await db.collection('expenses')
+      .where({ _id: expenseId, family_id: this.familyId })
+      .limit(1)
+      .get()
+    const response = {
+      message: '已删除',
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: updatedExpenses?.[0] ? [buildTouchedEntity('expenses', updatedExpenses[0])] : [],
+        resyncScopes: ['expenses'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**
@@ -932,16 +970,22 @@ module.exports = {
   async softDeleteIncome(id) {
     const incomeId = getIdArg(id, 'id')
     if (!incomeId) throw new Error('缺少记录 ID')
+    const syncMeta = getSyncMeta(id)
+    const appliedMutation = await findAppliedMutation(db, this.familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
 
     const { data: incomes } = await db.collection('incomes')
       .where({ _id: incomeId, family_id: this.familyId })
       .get()
     if (!incomes || incomes.length === 0) throw new Error('记录不存在')
     if (incomes[0].source_sale_id) throw new Error('自动生成的收入不可删除，请在销售记录中操作')
+    const conflict = getEntityConflict(syncMeta, 'incomes', incomes[0])
+    if (conflict) return conflict
+    const now = Date.now()
 
     await db.collection('incomes').doc(incomeId).update({
-      deleted_at: Date.now(),
-      updated_at: Date.now(),
+      deleted_at: now,
+      ...buildVersionUpdate(dbCmd, now),
     })
 
     await logFinanceOperation({
@@ -954,7 +998,22 @@ module.exports = {
       summary: `删除了收入 ${incomes[0].type || incomeId}`,
     })
 
-    return { message: '已删除' }
+    const { data: updatedIncomes } = await db.collection('incomes')
+      .where({ _id: incomeId, family_id: this.familyId })
+      .limit(1)
+      .get()
+    const response = {
+      message: '已删除',
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: updatedIncomes?.[0] ? [buildTouchedEntity('incomes', updatedIncomes[0])] : [],
+        resyncScopes: ['incomes'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   // ── 财务统计 ──
@@ -1187,11 +1246,11 @@ module.exports = {
   },
 
   async deleteExpense(id) {
-    return this.softDeleteExpense(id)
+    return module.exports.softDeleteExpense.call(this, id)
   },
 
   async deleteIncome(id) {
-    return this.softDeleteIncome(id)
+    return module.exports.softDeleteIncome.call(this, id)
   },
 
   async updateExpense(payload = {}, maybeData) {
@@ -1202,12 +1261,18 @@ module.exports = {
     if (!expenseId) throw new Error('缺少记录 ID')
     if (!data.total_amount || data.total_amount <= 0) throw new Error('请填写金额')
     if (!data.category) throw new Error('请选择分类')
+    const syncMeta = getSyncMeta(data)
+    const appliedMutation = await findAppliedMutation(db, this.familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
 
     const { data: expenses } = await db.collection('expenses')
       .where({ _id: expenseId, family_id: this.familyId, deleted_at: null })
       .get()
     if (!expenses || expenses.length === 0) throw new Error('记录不存在')
     if (expenses[0].source_type === 'auto') throw new Error('自动生成的费用不可编辑，请在来源记录中操作')
+    const conflict = getEntityConflict(syncMeta, 'expenses', expenses[0])
+    if (conflict) return conflict
+    const now = Date.now()
 
     await db.collection('expenses').doc(expenseId).update({
       total_amount: data.total_amount,
@@ -1221,7 +1286,7 @@ module.exports = {
       litter_number: data.litter_number || null,
       notes: data.notes || null,
       images: data.images || [],
-      updated_at: Date.now(),
+      ...buildVersionUpdate(dbCmd, now),
     })
 
     await logFinanceOperation({
@@ -1235,7 +1300,22 @@ module.exports = {
       meta: { amount: data.total_amount },
     })
 
-    return { message: '已更新' }
+    const { data: updatedExpenses } = await db.collection('expenses')
+      .where({ _id: expenseId, family_id: this.familyId })
+      .limit(1)
+      .get()
+    const response = {
+      message: '已更新',
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: updatedExpenses?.[0] ? [buildTouchedEntity('expenses', updatedExpenses[0])] : [],
+        resyncScopes: ['expenses'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   async updateIncome(payload = {}, maybeData) {
@@ -1247,12 +1327,18 @@ module.exports = {
     if (!data.amount || data.amount <= 0) throw new Error('请填写有效金额')
     const normalizedType = normalizeManualIncomeType(data.type)
     if (!normalizedType) throw new Error('请选择收入类型')
+    const syncMeta = getSyncMeta(data)
+    const appliedMutation = await findAppliedMutation(db, this.familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
 
     const { data: incomes } = await db.collection('incomes')
       .where({ _id: incomeId, family_id: this.familyId, deleted_at: null })
       .get()
     if (!incomes || incomes.length === 0) throw new Error('记录不存在')
     if (incomes[0].source_sale_id) throw new Error('自动生成的收入不可编辑，请在销售记录中操作')
+    const conflict = getEntityConflict(syncMeta, 'incomes', incomes[0])
+    if (conflict) return conflict
+    const now = Date.now()
 
     await db.collection('incomes').doc(incomeId).update({
       amount: data.amount,
@@ -1261,7 +1347,7 @@ module.exports = {
       dog_name: data.dog_name || null,
       date: data.date || incomes[0].date,
       notes: data.notes || null,
-      updated_at: Date.now(),
+      ...buildVersionUpdate(dbCmd, now),
     })
 
     await logFinanceOperation({
@@ -1275,7 +1361,22 @@ module.exports = {
       meta: { amount: data.amount },
     })
 
-    return { message: '已更新' }
+    const { data: updatedIncomes } = await db.collection('incomes')
+      .where({ _id: incomeId, family_id: this.familyId })
+      .limit(1)
+      .get()
+    const response = {
+      message: '已更新',
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: updatedIncomes?.[0] ? [buildTouchedEntity('incomes', updatedIncomes[0])] : [],
+        resyncScopes: ['incomes'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   async getProjectionParams() {
@@ -1371,6 +1472,7 @@ module.exports = {
     dog,
     familyId,
     now,
+    saleId = null,
     saleMode = '自售',
     floorPrice = null,
     buyerInfo = null,
@@ -1379,7 +1481,8 @@ module.exports = {
     platform = null,
     notes = null,
   }) {
-    const saleData = {
+    const saleData = buildVersionedCreate({
+      ...(saleId ? { _id: saleId } : {}),
       dog_id: dog._id,
       dog_name: dog.name,
       family_id: familyId,
@@ -1404,9 +1507,7 @@ module.exports = {
       notes,
       created_by: this.uid,
       deleted_at: null,
-      created_at: now,
-      updated_at: now,
-    }
+    }, now)
 
     const { id } = await db.collection('sale_records').add(saleData)
     return { id, saleData }
@@ -1419,6 +1520,7 @@ module.exports = {
     date,
     familyId,
     now,
+    clientIncomeId = null,
   }) {
     const { data: incomes } = await db.collection('incomes')
       .where({ family_id: familyId, source_sale_id: saleId, type: '销售', deleted_at: null })
@@ -1428,12 +1530,13 @@ module.exports = {
       await db.collection('incomes').doc(incomes[0]._id).update({
         amount,
         date,
-        updated_at: now,
+        ...buildVersionUpdate(dbCmd, now),
       })
       return incomes[0]._id
     }
 
-    const { id } = await db.collection('incomes').add({
+    const incomeData = buildVersionedCreate({
+      ...(clientIncomeId ? { _id: clientIncomeId } : {}),
       dog_id: sale.dog_id,
       dog_name: sale.dog_name,
       type: '销售',
@@ -1444,11 +1547,10 @@ module.exports = {
       family_id: familyId,
       created_by: this.uid,
       deleted_at: null,
-      created_at: now,
-      updated_at: now,
-    })
+    }, now)
+    const { id } = await db.collection('incomes').add(incomeData)
 
-    return id
+    return clientIncomeId || id
   },
 
   /**
@@ -1459,29 +1561,53 @@ module.exports = {
 
     const now = Date.now()
     const familyId = this.familyId
+    const syncMeta = getSyncMeta(data)
+    const appliedMutation = await findAppliedMutation(db, familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
 
-    const dog = await this.getDogSaleRecord(data.dog_id, familyId)
+    const dog = await (this.getDogSaleRecord
+      ? this.getDogSaleRecord(data.dog_id, familyId)
+      : module.exports.getDogSaleRecord.call(this, data.dog_id, familyId))
+    const dogConflict = getEntityConflict(syncMeta, 'dogs', dog)
+    if (dogConflict) return dogConflict
     if (dog.role !== '幼崽') throw new Error('只有幼崽可以开始销售')
     if (!['在养', '自留'].includes(dog.disposition)) throw new Error('当前犬只状态不可开始销售')
 
-    const activeSale = await this.getActiveSaleRecordForDog(data.dog_id, familyId)
+    const activeSale = await (this.getActiveSaleRecordForDog
+      ? this.getActiveSaleRecordForDog(data.dog_id, familyId)
+      : module.exports.getActiveSaleRecordForDog.call(this, data.dog_id, familyId))
     if (activeSale) throw new Error('该犬只已有进行中的销售记录')
 
-    const { id } = await this.createPendingSaleRecord({
-      dog,
-      familyId,
-      now,
-      saleMode: data.sale_mode,
-      floorPrice: data.floor_price ?? null,
-      buyerInfo: data.buyer_info || null,
-      notes: data.notes || null,
-    })
+    const clientSaleId = typeof syncMeta?.clientEntityIds?.sale_records === 'string'
+      ? syncMeta.clientEntityIds.sale_records
+      : null
+    const { id, saleData } = await (this.createPendingSaleRecord
+      ? this.createPendingSaleRecord({
+          dog,
+          familyId,
+          now,
+          saleId: clientSaleId,
+          saleMode: data.sale_mode,
+          floorPrice: data.floor_price ?? null,
+          buyerInfo: data.buyer_info || null,
+          notes: data.notes || null,
+        })
+      : module.exports.createPendingSaleRecord.call(this, {
+        dog,
+        familyId,
+        now,
+        saleId: clientSaleId,
+        saleMode: data.sale_mode,
+        floorPrice: data.floor_price ?? null,
+        buyerInfo: data.buyer_info || null,
+        notes: data.notes || null,
+      }))
 
     // 更新犬只去向为待售
     await db.collection('dogs').doc(data.dog_id).update({
       disposition: '待售',
       disposition_date: now,
-      updated_at: now,
+      ...buildVersionUpdate(dbCmd, now),
     })
 
     await logFinanceOperation({
@@ -1499,25 +1625,58 @@ module.exports = {
       },
     })
 
-    return { data: { saleId: id } }
+    const { data: updatedDogs } = await db.collection('dogs')
+      .where({ _id: data.dog_id, family_id: familyId })
+      .limit(1)
+      .get()
+    const response = {
+      data: { saleId: clientSaleId || id },
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: [
+          buildTouchedEntity('sale_records', { ...saleData, _id: clientSaleId || id }),
+          ...(updatedDogs?.[0] ? [buildTouchedEntity('dogs', updatedDogs[0])] : []),
+        ],
+        resyncScopes: ['sale_records', 'dogs'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**
    * 收定金 → 已预定
    */
-  async receiveSaleDeposit(saleId, data) {
+  async receiveSaleDeposit(input, data = null) {
+    const saleId = typeof input === 'object' ? (input.saleId || input.sale_id || input.id) : input
+    data = typeof input === 'object' ? input : (data || {})
     if (!saleId) throw new Error('缺少销售记录 ID')
     if (!data.deposit_amount || data.deposit_amount <= 0) throw new Error('请填写定金金额')
 
     const now = Date.now()
     const familyId = this.familyId
+    const syncMeta = getSyncMeta(data)
+    const appliedMutation = await findAppliedMutation(db, familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
 
     const { data: sales } = await db.collection('sale_records')
       .where({ _id: saleId, family_id: familyId })
       .get()
     if (!sales || sales.length === 0) throw new Error('记录不存在')
     const sale = sales[0]
+    const saleConflict = getEntityConflict(syncMeta, 'sale_records', sale)
+    if (saleConflict) return saleConflict
     if (sale.status !== '待售') throw new Error('只有待售状态可以收定金')
+
+    const { data: dogs } = await db.collection('dogs')
+      .where({ _id: sale.dog_id, family_id: familyId, deleted_at: null })
+      .limit(1)
+      .get()
+    const dog = dogs?.[0] || null
+    const dogConflict = getEntityConflict(syncMeta, 'dogs', dog)
+    if (dogConflict) return dogConflict
 
     await db.collection('sale_records').doc(saleId).update({
       status: '已预定',
@@ -1528,13 +1687,13 @@ module.exports = {
       seller_agent_id: data.seller_agent_id || data.agent_id || null,
       seller_agent_name: data.seller_agent_name || data.agent_name || sale.seller_agent_name || null,
       platform: data.platform || null,
-      updated_at: now,
+      ...buildVersionUpdate(dbCmd, now),
     })
 
     // 更新犬只去向
     await db.collection('dogs').doc(sale.dog_id).update({
       disposition: '已预定',
-      updated_at: now,
+      ...buildVersionUpdate(dbCmd, now),
     })
 
     await logFinanceOperation({
@@ -1549,24 +1708,57 @@ module.exports = {
       meta: { depositAmount: data.deposit_amount },
     })
 
-    return { message: '已收定金' }
+    const [updatedSales, updatedDogs] = await Promise.all([
+      db.collection('sale_records').where({ _id: saleId, family_id: familyId }).limit(1).get(),
+      db.collection('dogs').where({ _id: sale.dog_id, family_id: familyId }).limit(1).get(),
+    ])
+    const response = {
+      message: '已收定金',
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: [
+          ...(updatedSales?.data?.[0] ? [buildTouchedEntity('sale_records', updatedSales.data[0])] : []),
+          ...(updatedDogs?.data?.[0] ? [buildTouchedEntity('dogs', updatedDogs.data[0])] : []),
+        ],
+        resyncScopes: ['sale_records', 'dogs'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**
    * 完成交易 → 已成交
    */
-  async completeSale(saleId, data) {
+  async completeSale(input, data = null) {
+    const saleId = typeof input === 'object' ? (input.saleId || input.sale_id || input.id) : input
+    data = typeof input === 'object' ? input : (data || {})
     if (!saleId) throw new Error('缺少销售记录 ID')
 
     const now = Date.now()
     const familyId = this.familyId
+    const syncMeta = getSyncMeta(data)
+    const appliedMutation = await findAppliedMutation(db, familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
 
     const { data: sales } = await db.collection('sale_records')
       .where({ _id: saleId, family_id: familyId })
       .get()
     if (!sales || sales.length === 0) throw new Error('记录不存在')
     const sale = sales[0]
+    const saleConflict = getEntityConflict(syncMeta, 'sale_records', sale)
+    if (saleConflict) return saleConflict
     if (!['待售', '已预定'].includes(sale.status)) throw new Error('当前状态不可完成交易')
+
+    const { data: dogs } = await db.collection('dogs')
+      .where({ _id: sale.dog_id, family_id: familyId, deleted_at: null })
+      .limit(1)
+      .get()
+    const dog = dogs?.[0] || null
+    const dogConflict = getEntityConflict(syncMeta, 'dogs', dog)
+    if (dogConflict) return dogConflict
 
     const hasReceivedAmount = data.received_amount !== '' && data.received_amount != null
     const receivedAmount = hasReceivedAmount ? Number(data.received_amount) : null
@@ -1587,25 +1779,37 @@ module.exports = {
       seller_agent_name: data.seller_agent_name || data.agent_name || sale.seller_agent_name || null,
       platform: data.platform || sale.platform,
       buyer_info: data.buyer_info || sale.buyer_info,
-      updated_at: now,
+      ...buildVersionUpdate(dbCmd, now),
     })
 
+    let incomeId = null
     if (hasReceivedAmount) {
-      await this.upsertSaleIncomeRecord({
+      incomeId = await (this.upsertSaleIncomeRecord
+        ? this.upsertSaleIncomeRecord({
+            saleId,
+            sale,
+            amount: receivedAmount,
+            date: settledDate,
+            familyId,
+            now,
+            clientIncomeId: typeof syncMeta?.clientEntityIds?.incomes === 'string' ? syncMeta.clientEntityIds.incomes : null,
+          })
+        : module.exports.upsertSaleIncomeRecord.call(this, {
         saleId,
         sale,
         amount: receivedAmount,
         date: settledDate,
         familyId,
         now,
-      })
+        clientIncomeId: typeof syncMeta?.clientEntityIds?.incomes === 'string' ? syncMeta.clientEntityIds.incomes : null,
+      }))
     }
 
     // 更新犬只去向
     await db.collection('dogs').doc(sale.dog_id).update({
       disposition: '已售',
       disposition_date: settledDate,
-      updated_at: now,
+      ...buildVersionUpdate(dbCmd, now),
     })
 
     await logFinanceOperation({
@@ -1623,18 +1827,43 @@ module.exports = {
       },
     })
 
-    return { message: '交易完成' }
+    const [updatedSales, updatedDogs, updatedIncomes] = await Promise.all([
+      db.collection('sale_records').where({ _id: saleId, family_id: familyId }).limit(1).get(),
+      db.collection('dogs').where({ _id: sale.dog_id, family_id: familyId }).limit(1).get(),
+      incomeId ? db.collection('incomes').where({ _id: incomeId, family_id: familyId }).limit(1).get() : Promise.resolve({ data: [] }),
+    ])
+    const response = {
+      message: '交易完成',
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: [
+          ...(updatedSales?.data?.[0] ? [buildTouchedEntity('sale_records', updatedSales.data[0])] : []),
+          ...(updatedDogs?.data?.[0] ? [buildTouchedEntity('dogs', updatedDogs.data[0])] : []),
+          ...(updatedIncomes?.data?.[0] ? [buildTouchedEntity('incomes', updatedIncomes.data[0])] : []),
+        ],
+        resyncScopes: ['sale_records', 'dogs', 'incomes'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**
    * 补录成交后的结算信息
    */
-  async settleSale(saleId, data) {
+  async settleSale(input, data = null) {
+    const saleId = typeof input === 'object' ? (input.saleId || input.sale_id || input.id) : input
+    data = typeof input === 'object' ? input : (data || {})
     if (!saleId) throw new Error('缺少销售记录 ID')
     if (data.received_amount === '' || data.received_amount == null) throw new Error('请填写到手价')
 
     const now = Date.now()
     const familyId = this.familyId
+    const syncMeta = getSyncMeta(data)
+    const appliedMutation = await findAppliedMutation(db, familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
     const receivedAmount = Number(data.received_amount)
     if (!Number.isFinite(receivedAmount) || receivedAmount <= 0) throw new Error('请填写有效的到手价')
 
@@ -1643,6 +1872,8 @@ module.exports = {
       .get()
     if (!sales || sales.length === 0) throw new Error('记录不存在')
     const sale = sales[0]
+    const saleConflict = getEntityConflict(syncMeta, 'sale_records', sale)
+    if (saleConflict) return saleConflict
     if (sale.status !== '已成交') throw new Error('只有已成交状态可以补录结算')
 
     const settlementDate = Number.isFinite(Number(data.date)) ? Number(data.date) : (sale.date || now)
@@ -1652,17 +1883,28 @@ module.exports = {
       received_amount: receivedAmount,
       agreed_price: data.agreed_price != null ? data.agreed_price : sale.agreed_price || null,
       settlement_status: settlementStatus,
-      updated_at: now,
+      ...buildVersionUpdate(dbCmd, now),
     })
 
-    await this.upsertSaleIncomeRecord({
+    const incomeId = await (this.upsertSaleIncomeRecord
+      ? this.upsertSaleIncomeRecord({
+          saleId,
+          sale,
+          amount: receivedAmount,
+          date: settlementDate,
+          familyId,
+          now,
+          clientIncomeId: typeof syncMeta?.clientEntityIds?.incomes === 'string' ? syncMeta.clientEntityIds.incomes : null,
+        })
+      : module.exports.upsertSaleIncomeRecord.call(this, {
       saleId,
       sale,
       amount: receivedAmount,
       date: settlementDate,
       familyId,
       now,
-    })
+      clientIncomeId: typeof syncMeta?.clientEntityIds?.incomes === 'string' ? syncMeta.clientEntityIds.incomes : null,
+    }))
 
     await logFinanceOperation({
       familyId,
@@ -1679,24 +1921,60 @@ module.exports = {
       },
     })
 
-    return { message: '已补录结算' }
+    const [updatedSales, updatedIncomes] = await Promise.all([
+      db.collection('sale_records').where({ _id: saleId, family_id: familyId }).limit(1).get(),
+      db.collection('incomes').where({ _id: incomeId, family_id: familyId }).limit(1).get(),
+    ])
+    const response = {
+      message: '已补录结算',
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: [
+          ...(updatedSales?.data?.[0] ? [buildTouchedEntity('sale_records', updatedSales.data[0])] : []),
+          ...(updatedIncomes?.data?.[0] ? [buildTouchedEntity('incomes', updatedIncomes.data[0])] : []),
+        ],
+        resyncScopes: ['sale_records', 'incomes'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**
    * 取消销售
    * 支持：退款（已成交）、定金取消（已预定）
    */
-  async cancelSale(saleId, data) {
+  async cancelSale(input, data = null) {
+    const saleId = typeof input === 'object' ? (input.saleId || input.sale_id || input.id) : input
+    data = typeof input === 'object' ? input : (data || {})
     if (!saleId) throw new Error('缺少销售记录 ID')
 
     const now = Date.now()
     const familyId = this.familyId
+    const syncMeta = getSyncMeta(data)
+    const appliedMutation = await findAppliedMutation(db, familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
 
     const { data: sales } = await db.collection('sale_records')
       .where({ _id: saleId, family_id: familyId })
       .get()
     if (!sales || sales.length === 0) throw new Error('记录不存在')
     const sale = sales[0]
+    const saleConflict = getEntityConflict(syncMeta, 'sale_records', sale)
+    if (saleConflict) return saleConflict
+
+    const { data: dogs } = await db.collection('dogs')
+      .where({ _id: sale.dog_id, family_id: familyId, deleted_at: null })
+      .limit(1)
+      .get()
+    const dog = dogs?.[0] || null
+    const dogConflict = getEntityConflict(syncMeta, 'dogs', dog)
+    if (dogConflict) return dogConflict
+
+    const createdIncomeId = typeof syncMeta?.clientEntityIds?.incomes === 'string' ? syncMeta.clientEntityIds.incomes : null
+    let touchedIncomeId = null
 
     if (sale.status === '已成交') {
       // 退款处理
@@ -1709,11 +1987,12 @@ module.exports = {
         refund_amount: refundAmount,
         refund_reason: data.refund_reason || null,
         refund_date: refundDate,
-        updated_at: now,
+        ...buildVersionUpdate(dbCmd, now),
       })
 
       // 创建退款收入（负数）
-      await db.collection('incomes').add({
+      const refundIncomeData = buildVersionedCreate({
+        ...(createdIncomeId ? { _id: createdIncomeId } : {}),
         dog_id: sale.dog_id,
         dog_name: sale.dog_name,
         type: '退款',
@@ -1724,16 +2003,16 @@ module.exports = {
         family_id: familyId,
         created_by: this.uid,
         deleted_at: null,
-        created_at: now,
-        updated_at: now,
-      })
+      }, now)
+      const { id } = await db.collection('incomes').add(refundIncomeData)
+      touchedIncomeId = createdIncomeId || id
 
       // 全额退款时犬只回到待售
       if (isFullRefund) {
         await db.collection('dogs').doc(sale.dog_id).update({
           disposition: '待售',
           disposition_date: null,
-          updated_at: now,
+          ...buildVersionUpdate(dbCmd, now),
         })
       }
     } else if (sale.status === '已预定') {
@@ -1746,12 +2025,13 @@ module.exports = {
         deposit_kept_amount: keptAmount,
         refund_reason: data.refund_reason || null,
         refund_date: refundDate,
-        updated_at: now,
+        ...buildVersionUpdate(dbCmd, now),
       })
 
       // 如果保留了部分定金，计为收入
       if (keptAmount > 0) {
-        await db.collection('incomes').add({
+        const keptIncomeData = buildVersionedCreate({
+          ...(createdIncomeId ? { _id: createdIncomeId } : {}),
           dog_id: sale.dog_id,
           dog_name: sale.dog_name,
           type: '定金保留',
@@ -1762,15 +2042,15 @@ module.exports = {
           family_id: familyId,
           created_by: this.uid,
           deleted_at: null,
-          created_at: now,
-          updated_at: now,
-        })
+        }, now)
+        const { id } = await db.collection('incomes').add(keptIncomeData)
+        touchedIncomeId = createdIncomeId || id
       }
 
       // 犬只回到待售
       await db.collection('dogs').doc(sale.dog_id).update({
         disposition: '待售',
-        updated_at: now,
+        ...buildVersionUpdate(dbCmd, now),
       })
     } else {
       throw new Error('当前状态不可取消')
@@ -1788,7 +2068,27 @@ module.exports = {
       meta: { status: sale.status },
     })
 
-    return { message: '已取消' }
+    const [updatedSales, updatedDogs, updatedIncomes] = await Promise.all([
+      db.collection('sale_records').where({ _id: saleId, family_id: familyId }).limit(1).get(),
+      db.collection('dogs').where({ _id: sale.dog_id, family_id: familyId }).limit(1).get(),
+      touchedIncomeId ? db.collection('incomes').where({ _id: touchedIncomeId, family_id: familyId }).limit(1).get() : Promise.resolve({ data: [] }),
+    ])
+    const response = {
+      message: '已取消',
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: [
+          ...(updatedSales?.data?.[0] ? [buildTouchedEntity('sale_records', updatedSales.data[0])] : []),
+          ...(updatedDogs?.data?.[0] ? [buildTouchedEntity('dogs', updatedDogs.data[0])] : []),
+          ...(updatedIncomes?.data?.[0] ? [buildTouchedEntity('incomes', updatedIncomes.data[0])] : []),
+        ],
+        resyncScopes: ['sale_records', 'dogs', 'incomes'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**
@@ -1844,16 +2144,19 @@ module.exports = {
     if (!data.name) throw new Error('请填写中间商姓名')
 
     const now = Date.now()
+    const syncMeta = getSyncMeta(data)
+    const appliedMutation = await findAppliedMutation(db, this.familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
+    const clientAgentId = typeof syncMeta?.clientEntityIds?.agents === 'string' ? syncMeta.clientEntityIds.agents : null
 
-    const agentData = {
+    const agentData = buildVersionedCreate({
+      ...(clientAgentId ? { _id: clientAgentId } : {}),
       family_id: this.familyId,
       name: data.name,
       contact_info: data.contact_info || null,
       created_by: this.uid,
       deleted_at: null,
-      created_at: now,
-      updated_at: now,
-    }
+    }, now)
 
     const { id } = await db.collection('agents').add(agentData)
     await logFinanceOperation({
@@ -1866,25 +2169,43 @@ module.exports = {
       targetName: data.name,
       summary: `新增了代理人 ${data.name}`,
     })
-    return { data: { agentId: id } }
+    const response = {
+      data: { agentId: clientAgentId || id },
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: [buildTouchedEntity('agents', { ...agentData, _id: clientAgentId || id })],
+        resyncScopes: ['agents'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**
    * 更新中间商信息
    */
-  async updateAgent(id, data) {
+  async updateAgent(input, data = null) {
+    const id = typeof input === 'object' ? (input.agentId || input.agent_id || input.id) : input
+    data = typeof input === 'object' ? input : (data || {})
     if (!id) throw new Error('缺少中间商 ID')
     if (!data.name) throw new Error('请填写中间商姓名')
+    const syncMeta = getSyncMeta(data)
+    const appliedMutation = await findAppliedMutation(db, this.familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
 
     const { data: agents } = await db.collection('agents')
       .where({ _id: id, family_id: this.familyId, deleted_at: null })
       .get()
     if (!agents || agents.length === 0) throw new Error('中间商不存在')
+    const conflict = getEntityConflict(syncMeta, 'agents', agents[0])
+    if (conflict) return conflict
 
     await db.collection('agents').doc(id).update({
       name: data.name,
       contact_info: data.contact_info || null,
-      updated_at: Date.now(),
+      ...buildVersionUpdate(dbCmd, Date.now()),
     })
 
     await logFinanceOperation({
@@ -1898,23 +2219,44 @@ module.exports = {
       summary: `更新了代理人 ${data.name}`,
     })
 
-    return { message: '已更新' }
+    const { data: updatedAgents } = await db.collection('agents')
+      .where({ _id: id, family_id: this.familyId })
+      .limit(1)
+      .get()
+    const response = {
+      message: '已更新',
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: updatedAgents?.[0] ? [buildTouchedEntity('agents', updatedAgents[0])] : [],
+        resyncScopes: ['agents'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**
    * 软删除中间商
    */
-  async removeAgent(id) {
+  async removeAgent(input) {
+    const id = typeof input === 'object' ? (input.agentId || input.agent_id || input.id) : input
     if (!id) throw new Error('缺少中间商 ID')
+    const syncMeta = getSyncMeta(input)
+    const appliedMutation = await findAppliedMutation(db, this.familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
 
     const { data: agents } = await db.collection('agents')
       .where({ _id: id, family_id: this.familyId })
       .get()
     if (!agents || agents.length === 0) throw new Error('中间商不存在')
+    const conflict = getEntityConflict(syncMeta, 'agents', agents[0])
+    if (conflict) return conflict
 
     await db.collection('agents').doc(id).update({
       deleted_at: Date.now(),
-      updated_at: Date.now(),
+      ...buildVersionUpdate(dbCmd, Date.now()),
     })
 
     await logFinanceOperation({
@@ -1928,7 +2270,22 @@ module.exports = {
       summary: `删除了代理人 ${agents[0].name || id}`,
     })
 
-    return { message: '已删除' }
+    const { data: updatedAgents } = await db.collection('agents')
+      .where({ _id: id, family_id: this.familyId })
+      .limit(1)
+      .get()
+    const response = {
+      message: '已删除',
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: updatedAgents?.[0] ? [buildTouchedEntity('agents', updatedAgents[0])] : [],
+        resyncScopes: ['agents'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**
@@ -1969,27 +2326,35 @@ module.exports = {
   /**
    * 新增自定义支出分组
    */
-  async addExpenseCategoryGroup({ label } = {}) {
+  async addExpenseCategoryGroup(input = {}) {
+    const syncMeta = getSyncMeta(input)
+    const appliedMutation = await findAppliedMutation(db, this.familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
+    let { label, key } = input
     if (!label || !label.trim()) throw new Error('请填写分组名称')
     label = label.trim()
 
-    const { data } = await db.collection('families').doc(this.familyId).field({ settings: true }).get()
+    const { data } = await db.collection('families').doc(this.familyId).field({ settings: true, version: true }).get()
     const family = data[0] || data
+    const conflict = getEntityConflict(syncMeta, 'families', { _id: this.familyId, ...family })
+    if (conflict) return conflict
     const customGroups = normalizeCustomExpenseCategoryGroups(family.settings?.custom_expense_category_groups || [])
     const allGroups = buildExpenseCategoryGroups(customGroups)
 
     if (allGroups.some(item => item.label === label)) throw new Error('分组名称已存在')
 
     const nextGroup = {
-      key: createExpenseCategoryGroupKey(),
+      key: key || createExpenseCategoryGroupKey(),
       label,
     }
+    const now = Date.now()
 
     await db.collection('families').doc(this.familyId).update({
       'settings.custom_expense_category_groups': [
         ...customGroups,
         nextGroup,
       ],
+      ...buildVersionUpdate(dbCmd, now),
     })
 
     await logFinanceOperation({
@@ -2002,20 +2367,40 @@ module.exports = {
       summary: `新增了支出分组 ${label}`,
     })
 
-    return { data: { ...nextGroup, is_default: false }, message: '已添加' }
+    const { data: updatedFamilies } = await db.collection('families').doc(this.familyId).get()
+    const updatedFamily = updatedFamilies?.[0] || updatedFamilies
+    const response = {
+      data: { ...nextGroup, is_default: false },
+      message: '已添加',
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: updatedFamily ? [buildTouchedEntity('families', updatedFamily)] : [],
+        resyncScopes: ['families'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**
    * 更新自定义支出分组
    */
-  async updateExpenseCategoryGroup({ key, label } = {}) {
+  async updateExpenseCategoryGroup(input = {}) {
+    const syncMeta = getSyncMeta(input)
+    const appliedMutation = await findAppliedMutation(db, this.familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
+    let { key, label } = input
     if (!key || !label || !label.trim()) throw new Error('参数不完整')
     label = label.trim()
 
     if (PRESET_EXPENSE_CATEGORY_GROUPS.some(item => item.key === key)) throw new Error('预设分组不可编辑')
 
-    const { data } = await db.collection('families').doc(this.familyId).field({ settings: true }).get()
+    const { data } = await db.collection('families').doc(this.familyId).field({ settings: true, version: true }).get()
     const family = data[0] || data
+    const conflict = getEntityConflict(syncMeta, 'families', { _id: this.familyId, ...family })
+    if (conflict) return conflict
     const customGroups = normalizeCustomExpenseCategoryGroups(family.settings?.custom_expense_category_groups || [])
     const current = customGroups.find(item => item.key === key)
 
@@ -2029,9 +2414,11 @@ module.exports = {
         ? { ...item, label }
         : item
     ))
+    const now = Date.now()
 
     await db.collection('families').doc(this.familyId).update({
       'settings.custom_expense_category_groups': updatedGroups,
+      ...buildVersionUpdate(dbCmd, now),
     })
 
     await logFinanceOperation({
@@ -2044,19 +2431,38 @@ module.exports = {
       summary: `将支出分组 ${current.label} 更新为 ${label}`,
     })
 
-    return { message: '已更新' }
+    const { data: updatedFamilies } = await db.collection('families').doc(this.familyId).get()
+    const updatedFamily = updatedFamilies?.[0] || updatedFamilies
+    const response = {
+      message: '已更新',
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: updatedFamily ? [buildTouchedEntity('families', updatedFamily)] : [],
+        resyncScopes: ['families'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**
    * 删除自定义支出分组
    */
-  async removeExpenseCategoryGroup({ key } = {}) {
+  async removeExpenseCategoryGroup(input = {}) {
+    const syncMeta = getSyncMeta(input)
+    const appliedMutation = await findAppliedMutation(db, this.familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
+    const { key } = input
     if (!key) throw new Error('请指定分组')
 
     if (PRESET_EXPENSE_CATEGORY_GROUPS.some(item => item.key === key)) throw new Error('预设分组不可删除')
 
-    const { data } = await db.collection('families').doc(this.familyId).field({ settings: true }).get()
+    const { data } = await db.collection('families').doc(this.familyId).field({ settings: true, version: true }).get()
     const family = data[0] || data
+    const conflict = getEntityConflict(syncMeta, 'families', { _id: this.familyId, ...family })
+    if (conflict) return conflict
     const customGroups = normalizeCustomExpenseCategoryGroups(family.settings?.custom_expense_category_groups || [])
     const customCategories = normalizeCustomExpenseCategories(
       family.settings?.custom_expense_categories || [],
@@ -2066,9 +2472,11 @@ module.exports = {
 
     if (!current) throw new Error('分组不存在')
     if (customCategories.some(item => item.parent_group === key)) throw new Error('请先迁移或删除该分组下的分类')
+    const now = Date.now()
 
     await db.collection('families').doc(this.familyId).update({
       'settings.custom_expense_category_groups': customGroups.filter(item => item.key !== key),
+      ...buildVersionUpdate(dbCmd, now),
     })
 
     await logFinanceOperation({
@@ -2081,32 +2489,53 @@ module.exports = {
       summary: `删除了支出分组 ${current.label}`,
     })
 
-    return { message: '已删除' }
+    const { data: updatedFamilies } = await db.collection('families').doc(this.familyId).get()
+    const updatedFamily = updatedFamilies?.[0] || updatedFamilies
+    const response = {
+      message: '已删除',
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: updatedFamily ? [buildTouchedEntity('families', updatedFamily)] : [],
+        resyncScopes: ['families'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**
    * 新增自定义支出分类
    */
-  async addExpenseCategory({ name, parentGroup } = {}) {
+  async addExpenseCategory(input = {}) {
+    const syncMeta = getSyncMeta(input)
+    const appliedMutation = await findAppliedMutation(db, this.familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
+    let { name, parentGroup } = input
     if (!name || !name.trim()) throw new Error('请填写分类名称')
     name = name.trim()
 
     if (DEFAULT_EXPENSE_CATEGORIES.includes(name)) throw new Error('该分类名称与预设分类重复')
 
-    const { data } = await db.collection('families').doc(this.familyId).field({ settings: true }).get()
+    const { data } = await db.collection('families').doc(this.familyId).field({ settings: true, version: true }).get()
     const family = data[0] || data
+    const conflict = getEntityConflict(syncMeta, 'families', { _id: this.familyId, ...family })
+    if (conflict) return conflict
     const customGroups = normalizeCustomExpenseCategoryGroups(family.settings?.custom_expense_category_groups || [])
     const groupMap = getExpenseCategoryGroupMap(customGroups)
     const normalizedParentGroup = normalizeRuntimeExpenseCategoryGroupKey(parentGroup, groupMap)
     const custom = normalizeCustomExpenseCategories(family.settings?.custom_expense_categories || [], customGroups)
 
     if (custom.some(item => item.name === name)) throw new Error('分类名称已存在')
+    const now = Date.now()
 
     await db.collection('families').doc(this.familyId).update({
       'settings.custom_expense_categories': [
         ...custom,
         { name, parent_group: normalizedParentGroup },
       ],
+      ...buildVersionUpdate(dbCmd, now),
     })
 
     await logFinanceOperation({
@@ -2120,21 +2549,40 @@ module.exports = {
       meta: { parentGroup: normalizedParentGroup },
     })
 
-    return { message: '已添加' }
+    const { data: updatedFamilies } = await db.collection('families').doc(this.familyId).get()
+    const updatedFamily = updatedFamilies?.[0] || updatedFamilies
+    const response = {
+      message: '已添加',
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: updatedFamily ? [buildTouchedEntity('families', updatedFamily)] : [],
+        resyncScopes: ['families'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**
    * 重命名自定义支出分类（同步迁移历史账单）
    */
-  async updateExpenseCategory({ oldName, newName, parentGroup } = {}) {
+  async updateExpenseCategory(input = {}) {
+    const syncMeta = getSyncMeta(input)
+    const appliedMutation = await findAppliedMutation(db, this.familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
+    let { oldName, newName, parentGroup } = input
     if (!oldName || !newName || !newName.trim()) throw new Error('参数不完整')
     newName = newName.trim()
 
     if (DEFAULT_EXPENSE_CATEGORIES.includes(oldName)) throw new Error('预设分类不可编辑')
     if (DEFAULT_EXPENSE_CATEGORIES.includes(newName)) throw new Error('新名称与预设分类重复')
 
-    const { data } = await db.collection('families').doc(this.familyId).field({ settings: true }).get()
+    const { data } = await db.collection('families').doc(this.familyId).field({ settings: true, version: true }).get()
     const family = data[0] || data
+    const conflict = getEntityConflict(syncMeta, 'families', { _id: this.familyId, ...family })
+    if (conflict) return conflict
     const customGroups = normalizeCustomExpenseCategoryGroups(family.settings?.custom_expense_category_groups || [])
     const groupMap = getExpenseCategoryGroupMap(customGroups)
     const custom = normalizeCustomExpenseCategories(family.settings?.custom_expense_categories || [], customGroups)
@@ -2145,6 +2593,7 @@ module.exports = {
 
     const normalizedParentGroup = normalizeRuntimeExpenseCategoryGroupKey(parentGroup || current.parent_group, groupMap)
     if (newName === oldName && normalizedParentGroup === current.parent_group) return { message: '无变化' }
+    const now = Date.now()
     const updated = custom.map((item) => (
       item.name === oldName
         ? { ...item, name: newName, parent_group: normalizedParentGroup }
@@ -2152,6 +2601,7 @@ module.exports = {
     ))
     await db.collection('families').doc(this.familyId).update({
       'settings.custom_expense_categories': updated,
+      ...buildVersionUpdate(dbCmd, now),
     })
 
     // 迁移历史账单中的分类名称
@@ -2160,7 +2610,10 @@ module.exports = {
         family_id: this.familyId,
         category: oldName,
         deleted_at: null,
-      }).update({ category: newName })
+      }).update({
+        category: newName,
+        ...buildVersionUpdate(dbCmd, now),
+      })
     }
 
     await logFinanceOperation({
@@ -2174,26 +2627,47 @@ module.exports = {
       meta: { parentGroup: normalizedParentGroup },
     })
 
-    return { message: '已更新' }
+    const { data: updatedFamilies } = await db.collection('families').doc(this.familyId).get()
+    const updatedFamily = updatedFamilies?.[0] || updatedFamilies
+    const response = {
+      message: '已更新',
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: updatedFamily ? [buildTouchedEntity('families', updatedFamily)] : [],
+        resyncScopes: ['families', 'expenses'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**
    * 删除自定义支出分类
    */
-  async removeExpenseCategory({ name } = {}) {
+  async removeExpenseCategory(input = {}) {
+    const syncMeta = getSyncMeta(input)
+    const appliedMutation = await findAppliedMutation(db, this.familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
+    const { name } = input
     if (!name) throw new Error('请指定分类名称')
 
     if (DEFAULT_EXPENSE_CATEGORIES.includes(name)) throw new Error('预设分类不可删除')
 
-    const { data } = await db.collection('families').doc(this.familyId).field({ settings: true }).get()
+    const { data } = await db.collection('families').doc(this.familyId).field({ settings: true, version: true }).get()
     const family = data[0] || data
+    const conflict = getEntityConflict(syncMeta, 'families', { _id: this.familyId, ...family })
+    if (conflict) return conflict
     const customGroups = normalizeCustomExpenseCategoryGroups(family.settings?.custom_expense_category_groups || [])
     const custom = normalizeCustomExpenseCategories(family.settings?.custom_expense_categories || [], customGroups)
 
     if (!custom.some(item => item.name === name)) throw new Error('分类不存在')
+    const now = Date.now()
 
     await db.collection('families').doc(this.familyId).update({
       'settings.custom_expense_categories': custom.filter(item => item.name !== name),
+      ...buildVersionUpdate(dbCmd, now),
     })
 
     await logFinanceOperation({
@@ -2206,6 +2680,19 @@ module.exports = {
       summary: `删除了支出分类 ${name}`,
     })
 
-    return { message: '已删除' }
+    const { data: updatedFamilies } = await db.collection('families').doc(this.familyId).get()
+    const updatedFamily = updatedFamilies?.[0] || updatedFamilies
+    const response = {
+      message: '已删除',
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: updatedFamily ? [buildTouchedEntity('families', updatedFamily)] : [],
+        resyncScopes: ['families'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 }

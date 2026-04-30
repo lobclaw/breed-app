@@ -24,9 +24,9 @@ describe('dog detail loading contract', () => {
     expect(source).toContain("const showBootstrapSkeleton = !silent && !hasLoadedOnce")
     expect(source).toContain("pageLoadStage.value = 'bootstrapping'")
     expect(source).toContain("pageLoadStage.value = 'ready'")
-    expect(source).toContain('fetchHealth(dogId)')
-    expect(source).toContain('fetchMedicationHistory(dogId)')
-    expect(source).toContain('fetchDogFinance(dogId)')
+    expect(source).toContain('listLocalDogHealthHistory')
+    expect(source).toContain('listLocalDogMedicationHistory')
+    expect(source).toContain('getLocalDogFinanceSummary')
   })
 
   it('应让概览与各 tab 在数据未回齐时使用局部骨架而非提前空态', () => {
@@ -40,9 +40,9 @@ describe('dog detail loading contract', () => {
   })
 
   it('应保留来源页返回静默刷新，不回退整页骨架', () => {
-    expect(source).toContain("if (feedback && dogId) {")
+    expect(source).toContain("if (dogId && (feedback || hasLoadedOnce)) {")
     expect(source).toContain('loadData({')
-    expect(source).toContain('silent: true,')
-    expect(source).toContain("refreshBreedingSummary: activeTab.value === 'breeding'")
+    expect(source).toContain('silent: hasLoadedOnce,')
+    expect(source).toContain("refreshBreedingSummary: !!feedback && activeTab.value === 'breeding'")
   })
 })

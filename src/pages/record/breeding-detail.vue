@@ -436,7 +436,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
-import { useCloudCall } from '@/composables/useCloudCall'
 import { useAuth } from '@/composables/useAuth'
 import { usePageSync } from '@/composables/usePageSync'
 import { getLocalBreedingRecordDetail } from '@/localdb/domain-repository'
@@ -585,12 +584,6 @@ function formatAmount(n: number): string {
   return n.toLocaleString('zh-CN')
 }
 
-const { run: deleteRecord } = useCloudCall('breeding-service', 'deleteBreedingRecord', {
-  successMode: 'silent',
-  loadingMode: 'local',
-  throwOnError: true,
-})
-
 async function loadRecord() {
   loading.value = true
   const familyId = currentFamily.value?._id || ''
@@ -621,7 +614,7 @@ function confirmDelete() {
 }
 
 async function handleDeleteConfirm() {
-  const result = await deleteRecord(recordId)
+  const result = await localSyncRuntime.deleteBreedingRecordLocally(currentFamily.value?._id || '', recordId)
   if (result) {
     queueSubmitFeedback({ message: '已删除繁育记录' })
     await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)

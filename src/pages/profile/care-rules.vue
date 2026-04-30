@@ -118,7 +118,6 @@
 import { ref, reactive, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useAuth } from '@/composables/useAuth'
-import { useCloudCall } from '@/composables/useCloudCall'
 import { usePageSync } from '@/composables/usePageSync'
 import { listLocalCareRules } from '@/localdb/domain-repository'
 import { localSyncRuntime } from '@/localdb/runtime'
@@ -174,9 +173,6 @@ function selectTrigger(opt: string) {
   }
 }
 
-const { run: addCareRule } = useCloudCall('family-service', 'addCareRule', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
-const { run: removeCareRule } = useCloudCall('family-service', 'removeCareRule', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
-
 async function loadLocalRules() {
   const familyId = currentFamily.value?._id || ''
   if (!familyId) {
@@ -212,27 +208,27 @@ async function onConfirm() {
     task_description: form.task_description.trim(),
     frequency: form.frequency,
   }
-  rules.value = [...rules.value, newRule]
   showModal.value = false
-  addCareRule(newRule).catch(() => {
-    const idx = rules.value.findIndex(
-      (r: any) => r.status_trigger === newRule.status_trigger && r.task_description === newRule.task_description
-    )
-    if (idx !== -1) rules.value.splice(idx, 1)
+  try {
+    const familyId = currentFamily.value?._id || ''
+    localSyncRuntime.setCurrentFamilyId(familyId)
+    await localSyncRuntime.addCareRuleLocally(familyId, newRule)
+    await loadLocalRules()
+  } catch {
     uni.showToast({ title: '添加失败，请重试', icon: 'none' })
-  })
+  }
 }
 
 async function enableTemplate(tpl: typeof templates[0]) {
   const newRule = { status_trigger: tpl.status_trigger, task_description: tpl.task_description, frequency: tpl.frequency }
-  rules.value = [...rules.value, newRule]
-  addCareRule(newRule).catch(() => {
-    const idx = rules.value.findIndex(
-      (r: any) => r.status_trigger === newRule.status_trigger && r.task_description === newRule.task_description
-    )
-    if (idx !== -1) rules.value.splice(idx, 1)
+  try {
+    const familyId = currentFamily.value?._id || ''
+    localSyncRuntime.setCurrentFamilyId(familyId)
+    await localSyncRuntime.addCareRuleLocally(familyId, newRule)
+    await loadLocalRules()
+  } catch {
     uni.showToast({ title: '启用失败，请重试', icon: 'none' })
-  })
+  }
 }
 
 function askDelete(index: number) {
@@ -243,12 +239,15 @@ function askDelete(index: number) {
 async function confirmDelete() {
   const index = deletingIndex.value
   if (index < 0) return
-  const removed = rules.value.splice(index, 1)[0]
   showDeleteConfirm.value = false
-  removeCareRule(index).catch(() => {
-    rules.value.splice(index, 0, removed)
+  try {
+    const familyId = currentFamily.value?._id || ''
+    localSyncRuntime.setCurrentFamilyId(familyId)
+    await localSyncRuntime.removeCareRuleLocally(familyId, index)
+    await loadLocalRules()
+  } catch {
     uni.showToast({ title: '删除失败，请重试', icon: 'none' })
-  })
+  }
 }
 
 onShow(() => {

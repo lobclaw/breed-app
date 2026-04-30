@@ -1,6 +1,6 @@
 import type { BusinessCollectionName } from '@/localdb/types'
 
-export type SyncScopeMode = 'local-first' | 'online-first' | 'static'
+export type SyncScopeMode = 'local-first' | 'online-first' | 'static' | 'redirect-deprecated'
 
 export interface SyncScopeDefinition {
   key: string
@@ -58,7 +58,7 @@ export const SYNC_SCOPE_REGISTRY: SyncScopeDefinition[] = [
     collections: ['dogs', 'breeding_cycles', 'litters', 'health_records', 'medication_protocols'],
     routeMatchers: [
       'pages/record/index',
-      /^pages\/record\/(breeding|breeding-heat|breeding-follicle|breeding-mating|breeding-pregnancy|breeding-prenatal|breeding-prelabor|breeding-termination|health|health-vaccination|health-deworming|health-illness|health-medication|heat-observation|prelabor-monitor|breeding-edit|health-edit)$/,
+      /^pages\/record\/(breeding-heat|breeding-follicle|breeding-mating|breeding-pregnancy|breeding-prenatal|breeding-prelabor|breeding-termination|health-vaccination|health-deworming|health-illness|health-medication|heat-observation|prelabor-monitor|breeding-edit|health-edit)$/,
     ],
   },
   {
@@ -131,7 +131,7 @@ export const SYNC_SCOPE_REGISTRY: SyncScopeDefinition[] = [
     mode: 'local-first',
     ttlMs: DETAIL_TTL_MS,
     collections: ['expenses', 'incomes', 'sale_records', 'dogs', 'litters', 'breeding_cycles', 'agents'],
-    routeMatchers: ['pages/finance/expense-detail', 'pages/finance/income-detail', 'pages/finance/expense-edit', 'pages/finance/income-edit', 'pages/finance/expense-add', 'pages/finance/income-add'],
+    routeMatchers: ['pages/finance/expense-detail', 'pages/finance/income-detail', 'pages/finance/expense-edit', 'pages/finance/income-edit', 'pages/finance/expense-add'],
   },
   {
     key: 'sale-list',
@@ -226,6 +226,14 @@ export const SYNC_SCOPE_REGISTRY: SyncScopeDefinition[] = [
     ttlMs: 0,
     collections: [],
     routeMatchers: ['pages/profile/backup'],
+  },
+  {
+    key: 'redirect-deprecated',
+    label: '废弃重定向页',
+    mode: 'redirect-deprecated',
+    ttlMs: 0,
+    collections: [],
+    routeMatchers: ['pages/record/health', 'pages/record/breeding', 'pages/finance/income-add'],
   },
   {
     key: 'static-none',

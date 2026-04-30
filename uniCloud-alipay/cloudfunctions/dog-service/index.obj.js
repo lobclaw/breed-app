@@ -40,6 +40,19 @@ const LIST_STATUS_PRIORITY = {
   '正常': 5,
 }
 
+function getEntityConflict(syncMeta, collection, entity) {
+  const baseVersion = getBaseVersion(syncMeta, entity?._id)
+  if (baseVersion === null) return null
+  const serverVersion = getServerVersion(entity)
+  if (baseVersion === serverVersion) return null
+  return buildConflictAck(syncMeta, {
+    collection,
+    entityId: entity._id,
+    baseVersion,
+    serverVersion,
+  })
+}
+
 const DETAIL_STATUS_PRIORITY = {
   '生病中': 0,
   '用药中': 1,
@@ -852,9 +865,17 @@ module.exports = {
    * 变更犬只去向（disposition）
    * 包含异常状态转换处理
    */
-  async changeDisposition(dogId, newDisposition, data = {}) {
+  async changeDisposition(input, newDisposition = '', data = {}) {
+    const dogId = typeof input === 'object' ? (input.dogId || input.dog_id || input.id) : input
+    if (typeof input === 'object') {
+      newDisposition = input.disposition || input.newDisposition || input.new_disposition || newDisposition
+      data = input.data || input
+    }
     if (!dogId) throw new Error('缺少犬只 ID')
     if (!newDisposition) throw new Error('请选择去向')
+    const syncMeta = getSyncMeta(data)
+    const appliedMutation = await findAppliedMutation(db, this.familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
 
     // 获取当前犬只信息
     const { data: dogs } = await db.collection('dogs')
@@ -863,11 +884,17 @@ module.exports = {
 
     if (!dogs || dogs.length === 0) throw new Error('犬只不存在')
     const dog = dogs[0]
+    const dogConflict = getEntityConflict(syncMeta, 'dogs', dog)
+    if (dogConflict) return dogConflict
 
     // 检查进行中的繁育周期
     const { data: activeCycles } = await db.collection('breeding_cycles')
       .where({ dam_id: dogId, status: dbCmd.in(['发情中', '怀孕中']) })
       .get()
+    for (const cycle of activeCycles || []) {
+      const conflict = getEntityConflict(syncMeta, 'breeding_cycles', cycle)
+      if (conflict) return conflict
+    }
 
     // 异常状态转换规则
     if (activeCycles.length > 0) {
@@ -886,9 +913,17 @@ module.exports = {
         for (const c of activeCycles) {
           await db.collection('breeding_cycles').doc(c._id).update({
             status: '失败',
-            updated_at: Date.now(),
+            ...buildVersionUpdate(dbCmd, Date.now()),
           })
           // 取消该周期的所有待办任务
+          const { data: cycleTasks } = await db.collection('tasks').where({
+            cycle_id: c._id,
+            status: 'pending',
+          }).get()
+          for (const task of cycleTasks || []) {
+            const conflict = getEntityConflict(syncMeta, 'tasks', task)
+            if (conflict) return conflict
+          }
           await db.collection('tasks').where({
             cycle_id: c._id,
             status: 'pending',
@@ -897,9 +932,17 @@ module.exports = {
       }
 
       if (newDisposition === '已退休' && cycle.status === '发情中') {
+        const { data: cycleTasks } = await db.collection('tasks').where({
+          cycle_id: cycle._id,
+          status: 'pending',
+        }).get()
+        for (const task of cycleTasks || []) {
+          const conflict = getEntityConflict(syncMeta, 'tasks', task)
+          if (conflict) return conflict
+        }
         await db.collection('breeding_cycles').doc(cycle._id).update({
           status: '放弃',
-          updated_at: Date.now(),
+          ...buildVersionUpdate(dbCmd, Date.now()),
         })
         await db.collection('tasks').where({
           cycle_id: cycle._id,
@@ -910,6 +953,14 @@ module.exports = {
 
     // 已故时取消所有未完成任务
     if (newDisposition === '已故') {
+      const { data: dogTasks } = await db.collection('tasks').where({
+        dog_id: dogId,
+        status: 'pending',
+      }).get()
+      for (const task of dogTasks || []) {
+        const conflict = getEntityConflict(syncMeta, 'tasks', task)
+        if (conflict) return conflict
+      }
       await db.collection('tasks').where({
         dog_id: dogId,
         status: 'pending',
@@ -930,7 +981,10 @@ module.exports = {
 
     await db.collection('dogs')
       .where({ _id: dogId, family_id: this.familyId })
-      .update(updateData)
+      .update({
+        ...updateData,
+        ...buildVersionUpdate(dbCmd, now),
+      })
 
     await logDogOperation({
       familyId: this.familyId,
@@ -942,7 +996,31 @@ module.exports = {
       meta: { disposition: newDisposition },
     })
 
-    return { message: '去向已更新' }
+    const [updatedDogRes, updatedCyclesRes, updatedTasksRes] = await Promise.all([
+      db.collection('dogs').where({ _id: dogId, family_id: this.familyId }).limit(1).get(),
+      db.collection('breeding_cycles').where({ dam_id: dogId, status: dbCmd.in(['发情中', '怀孕中', '失败', '放弃']) }).get(),
+      db.collection('tasks').where({ dog_id: dogId }).get(),
+    ])
+    const response = {
+      message: '去向已更新',
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: [
+          ...(updatedDogRes?.data?.[0] ? [buildTouchedEntity('dogs', updatedDogRes.data[0])] : []),
+          ...((updatedCyclesRes?.data || []).map(row => buildTouchedEntity('breeding_cycles', row))),
+          ...((updatedTasksRes?.data || []).map(row => buildTouchedEntity('tasks', row))),
+        ],
+        resyncScopes: ['dogs', 'breeding_cycles', 'tasks'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
+  },
+
+  async updateDisposition(input, newDisposition = '', data = {}) {
+    return this.changeDisposition(input, newDisposition, data)
   },
 
   /**
@@ -1063,8 +1141,12 @@ module.exports = {
   /**
    * 幼崽升级为种狗
    */
-  async upgradePuppyToBreeder(dogId) {
+  async upgradePuppyToBreeder(input) {
+    const dogId = typeof input === 'object' ? (input.dogId || input.dog_id || input.id) : input
     if (!dogId) throw new Error('缺少犬只 ID')
+    const syncMeta = getSyncMeta(input)
+    const appliedMutation = await findAppliedMutation(db, this.familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
 
     const { data: dogs } = await db.collection('dogs')
       .where({ _id: dogId, family_id: this.familyId, role: '幼崽', deleted_at: null })
@@ -1073,13 +1155,15 @@ module.exports = {
     if (!dogs || dogs.length === 0) throw new Error('犬只不存在或不是幼崽')
 
     const dog = dogs[0]
+    const conflict = getEntityConflict(syncMeta, 'dogs', dog)
+    if (conflict) return conflict
 
     await db.collection('dogs')
       .where({ _id: dogId, family_id: this.familyId })
       .update({
         role: '种狗',
         disposition: '在养',
-        updated_at: Date.now(),
+        ...buildVersionUpdate(dbCmd, Date.now()),
       })
 
     await logDogOperation({
@@ -1092,6 +1176,25 @@ module.exports = {
       meta: { role: '种狗' },
     })
 
-    return { message: '已升级为种狗' }
+    const { data: updatedDogs } = await db.collection('dogs')
+      .where({ _id: dogId, family_id: this.familyId })
+      .limit(1)
+      .get()
+    const response = {
+      message: '已升级为种狗',
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: updatedDogs?.[0] ? [buildTouchedEntity('dogs', updatedDogs[0])] : [],
+        resyncScopes: ['dogs'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
+  },
+
+  async promoteToBreeder(input) {
+    return this.upgradePuppyToBreeder(input)
   },
 }

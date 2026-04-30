@@ -1163,8 +1163,22 @@ import BModal from '@/components/layout/BModal.vue'
 import BDeleteConfirm from '@/components/layout/BDeleteConfirm.vue'
 import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
 import BAddRecordSheet from '@/components/record/BAddRecordSheet.vue'
-import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
+import { usePageSync } from '@/composables/usePageSync'
 import { consumeSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
+import { localSyncRuntime } from '@/localdb/runtime'
+import {
+  getLocalBreedingCycleDetail,
+  getLocalDamRoi,
+  getLocalDogDetail,
+  getLocalDogFinanceSummary,
+  listLocalBreedingCycles,
+  listLocalDogHealthHistory,
+  listLocalDogMedicationHistory,
+  listLocalDogWeights,
+  listLocalLittersByDam,
+  listLocalSales,
+} from '@/localdb/domain-repository'
 import { useDogStore } from '@/stores/dogStore'
 import type { Dog, DeriveStatus } from '@/types/dog'
 import { buildMedicationDetailUrl, resolveDogDetailStatusRoute } from '@/utils/dogDetailNavigation'
@@ -1187,6 +1201,9 @@ import {
 } from '@/utils/breedingTimeline'
 import { buildTimestampFromDayOffset, formatDateInputValue } from '@/utils/date'
 import { formatFinanceAmount, getFinanceAmountParts, type FinanceAmountParts } from '@/utils/financeDisplay'
+
+const { currentFamily } = useAuth()
+usePageSync({ routePath: 'pages/dog/detail' })
 
 const dog = ref<Dog | null>(null)
 const statuses = ref<DeriveStatus[]>([])
@@ -1790,26 +1807,7 @@ const litterCards = computed(() => {
   })
 })
 
-const { run: fetchDetail } = useCloudCall<{ data: Dog }>('dog-service', 'getDogDetail')
-const { run: fetchCycles } = useCloudCall<{ data: any[] }>('breeding-service', 'getCycleHistory')
-const { loading: activeCycleDetailLoading, run: fetchCycleDetail } = useCloudCall<{ data: BreedingCycleDetailResponse }>('breeding-service', 'getCycleDetail', {
-  showError: false,
-})
-const { run: fetchHealth } = useCloudCall<{ data: any[] }>('health-service', 'getHealthHistory')
-const { run: fetchMedicationHistory } = useCloudCall<{ data: any[] }>('health-service', 'getMedicationHistory')
-const { run: fetchLitters } = useCloudCall<{ data: any[] }>('breeding-service', 'getLittersByDam')
-const { run: fetchDogFinance } = useCloudCall<{ data: any }>('finance-service', 'getDogFinanceSummary')
-const { run: fetchDamRoi } = useCloudCall<{ data: any }>('finance-service', 'getDamRoi')
-const { run: fetchSaleList } = useCloudCall<{ data: any[] }>('finance-service', 'getSaleList', {
-  showError: false,
-})
-const { run: cleanupDuplicateIllnesses } = useCloudCall('health-service', 'cleanupDuplicateIllnesses', {
-  showLoading: false,
-})
-const { run: recoverIllnesses } = useCloudCall('health-service', 'recoverIllnesses', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
-const { run: updateDisposition } = useCloudCall('dog-service', 'updateDisposition', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
-const { run: deleteDog } = useCloudCall('dog-service', 'deleteDog', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
-const { run: promoteToBreeder } = useCloudCall('dog-service', 'promoteToBreeder', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
+const activeCycleDetailLoading = ref(false)
 
 // ==================== 工具函数 ====================
 
@@ -2196,8 +2194,9 @@ function statusToneClass(type: string, prefix: 'hero' | 'row' | 'icon' | 'progre
 }
 
 async function ensureActiveCycleSummary(force = false) {
+  const familyId = currentFamily.value?._id || ''
   const cycleId = activeCycleId.value
-  if (!cycleId) {
+  if (!familyId || !cycleId) {
     activeCycleSummaryDetail.value = null
     return
   }
@@ -2208,17 +2207,22 @@ async function ensureActiveCycleSummary(force = false) {
   }
 
   const requestToken = ++latestActiveCycleSummaryToken
-  const result = await fetchCycleDetail(cycleId)
-  if (requestToken !== latestActiveCycleSummaryToken) return
+  activeCycleDetailLoading.value = true
+  try {
+    const detail = await getLocalBreedingCycleDetail(familyId, cycleId)
+    if (requestToken !== latestActiveCycleSummaryToken) return
+    if (!detail) return
 
-  const detail = result?.data || null
-  if (!detail) return
-
-  activeCycleSummaryCache.value = {
-    ...activeCycleSummaryCache.value,
-    [cycleId]: detail,
+    activeCycleSummaryCache.value = {
+      ...activeCycleSummaryCache.value,
+      [cycleId]: detail,
+    }
+    activeCycleSummaryDetail.value = detail
+  } finally {
+    if (requestToken === latestActiveCycleSummaryToken) {
+      activeCycleDetailLoading.value = false
+    }
   }
-  activeCycleSummaryDetail.value = detail
 }
 
 function formatFinanceOverviewAmount(amount: number) {
@@ -2550,9 +2554,9 @@ function openRetireConfirm() {
 }
 
 async function doRetire() {
-  await updateDisposition(dogId, '已退休', {
-    date: retireDate.value,
-    reason: retireReason.value || null,
+  await localSyncRuntime.changeDogDispositionLocally(currentFamily.value?._id || '', dogId, '已退休', {
+    disposition_date: retireDate.value,
+    disposition_notes: retireReason.value || null,
   })
   showRetireSheet.value = false
   await loadData()
@@ -2566,9 +2570,9 @@ const deceasedCause = ref('')
 const deceasedDateText = computed(() => formatDateInputValue(deceasedDate.value))
 
 async function doDeceased() {
-  await updateDisposition(dogId, '已故', {
-    date: deceasedDate.value,
-    cause: deceasedCause.value || null,
+  await localSyncRuntime.changeDogDispositionLocally(currentFamily.value?._id || '', dogId, '已故', {
+    disposition_date: deceasedDate.value,
+    disposition_notes: deceasedCause.value || null,
   })
   showDeceasedSheet.value = false
   await loadData()
@@ -2583,10 +2587,13 @@ const adoptionFee = ref('')
 const adoptionDateText = computed(() => formatDateInputValue(adoptionDate.value))
 
 async function doAdoption() {
-  await updateDisposition(dogId, '已领养', {
-    date: adoptionDate.value,
-    notes: adoptionNotes.value || null,
-    fee: adoptionFee.value ? Number(adoptionFee.value) : null,
+  const extraNotes = [
+    adoptionNotes.value?.trim() || '',
+    adoptionFee.value ? `领养费用：¥${Number(adoptionFee.value)}` : '',
+  ].filter(Boolean).join('；')
+  await localSyncRuntime.changeDogDispositionLocally(currentFamily.value?._id || '', dogId, '已领养', {
+    disposition_date: adoptionDate.value,
+    disposition_notes: extraNotes || null,
   })
   showAdoptionSheet.value = false
   await loadData()
@@ -2600,9 +2607,9 @@ const giftRecipient = ref('')
 const giftDateText = computed(() => formatDateInputValue(giftDate.value))
 
 async function doGift() {
-  await updateDisposition(dogId, '已赠送', {
-    date: giftDate.value,
-    recipient: giftRecipient.value || null,
+  await localSyncRuntime.changeDogDispositionLocally(currentFamily.value?._id || '', dogId, '已赠送', {
+    disposition_date: giftDate.value,
+    disposition_notes: giftRecipient.value || null,
   })
   showGiftSheet.value = false
   await loadData()
@@ -2613,7 +2620,7 @@ async function doGift() {
 const showCancelRetireModal = ref(false)
 
 async function doCancelRetire() {
-  await updateDisposition(dogId, '在养', {})
+  await localSyncRuntime.changeDogDispositionLocally(currentFamily.value?._id || '', dogId, '在养')
   showCancelRetireModal.value = false
   await loadData()
 }
@@ -2623,7 +2630,7 @@ async function doCancelRetire() {
 const showPromoteModal = ref(false)
 
 async function doPromote() {
-  await promoteToBreeder(dogId)
+  await localSyncRuntime.upgradePuppyToBreederLocally(currentFamily.value?._id || '', dogId)
   showPromoteModal.value = false
   await loadData()
 }
@@ -2643,7 +2650,7 @@ function openRecoveryConfirm() {
 async function doRecovery() {
   const illnessId = latestActiveIllnessRecord.value?._id
   if (!illnessId) return
-  await recoverIllnesses({ illnessIds: [illnessId], recoveredAt: recoveryDate.value })
+  await localSyncRuntime.recoverIllnessesLocally(currentFamily.value?._id || '', [illnessId])
   showRecoverySheet.value = false
   await loadData()
 }
@@ -2667,12 +2674,6 @@ const canSubmitWeight = computed(() => {
   return Number.isFinite(kg) && kg > 0 && !!weightDate.value
 })
 
-const { run: addWeightRecord } = useCloudCall('health-service', 'addWeightRecord', {
-  successMode: 'silent',
-  loadingMode: 'local',
-  throwOnError: true,
-})
-
 function openWeightEntry() {
   weightInput.value = ''
   weightDate.value = todayTs()
@@ -2693,7 +2694,7 @@ async function saveWeight() {
   const dateTs = weightDate.value
   weightSubmitState.value = 'submitting'
   try {
-    const res = await addWeightRecord({
+    const res = await localSyncRuntime.addWeightRecordLocally(currentFamily.value?._id || '', {
       dog_id: dogId,
       weight: grams,
       date: dateTs,
@@ -2757,13 +2758,13 @@ function sortWeightRecordsAsc(records: WeightRecord[]) {
 const recentWeightRecords = computed(() => sortWeightRecordsDesc(weightHistory.value))
 const weightTrendRecords = computed(() => sortWeightRecordsAsc(recentWeightRecords.value.slice(0, 10)))
 
-const { run: fetchWeightHistory } = useCloudCall<{ data: WeightRecord[] }>('health-service', 'getWeightHistory')
-
 async function loadWeightHistory() {
-  const res = await fetchWeightHistory(dogId)
-  if (res?.data) {
-    weightHistory.value = sortWeightRecordsDesc(res.data)
+  const familyId = currentFamily.value?._id || ''
+  if (!familyId || !dogId) {
+    weightHistory.value = []
+    return
   }
+  weightHistory.value = sortWeightRecordsDesc(await listLocalDogWeights(familyId, dogId))
 }
 
 function openWeightChart() {
@@ -2819,7 +2820,7 @@ function openDeleteConfirm() {
 }
 
 async function doDelete() {
-  await deleteDog(dogId)
+  await localSyncRuntime.softDeleteDogLocally(currentFamily.value?._id || '', dogId)
   useDogStore().removeDog(dogId)
   showDeleteModal.value = false
   uni.navigateBack()
@@ -2885,23 +2886,43 @@ async function loadData({
   }
 
   try {
-    if (shouldCleanup) {
-      await cleanupDuplicateIllnesses({ dog_id: dogId }).catch(() => {})
+    const familyId = currentFamily.value?._id || ''
+    if (!familyId || !dogId) {
+      if (loadToken === latestLoadToken) {
+        dog.value = null
+        statuses.value = []
+        healthRecords.value = []
+        medicationRecords.value = []
+        cycles.value = []
+        litters.value = []
+        dogFinance.value = null
+        damFinanceRoi.value = null
+        puppySaleRecords.value = []
+        weightHistory.value = []
+      }
+      return
     }
 
-    const detailRes = await fetchDetail(dogId)
+    if (shouldCleanup) {
+      await localSyncRuntime.cleanupDuplicateIllnessesLocally(familyId, dogId).catch(() => {})
+    }
+
+    const detail = await getLocalDogDetail(familyId, dogId)
 
     if (loadToken !== latestLoadToken) return
 
-    if (detailRes?.data) {
-      dog.value = detailRes.data
-      statuses.value = detailRes.data.statuses || []
-      if (detailRes.data.role === '幼崽' && activeTab.value === 'breeding') {
+    if (detail) {
+      dog.value = detail
+      statuses.value = detail.statuses || []
+      if (detail.role === '幼崽' && activeTab.value === 'breeding') {
         activeTab.value = 'overview'
       }
+    } else {
+      dog.value = null
+      statuses.value = []
     }
 
-    const isPuppy = detailRes?.data?.role === '幼崽'
+    const isPuppy = detail?.role === '幼崽'
     if (showBootstrapSkeleton) {
       resetSectionLoadingState(isPuppy)
       pageLoadStage.value = 'ready'
@@ -2919,10 +2940,10 @@ async function loadData({
       puppySaleRecords.value = []
     }
 
-    const healthPromise = fetchHealth(dogId)
-      .then((healthRes) => {
+    const healthPromise = Promise.resolve()
+      .then(async () => {
         if (loadToken !== latestLoadToken) return
-        healthRecords.value = healthRes?.data || []
+        healthRecords.value = await listLocalDogHealthHistory(familyId, dogId)
       })
       .catch(() => {
         if (loadToken !== latestLoadToken) return
@@ -2934,10 +2955,10 @@ async function loadData({
         }
       })
 
-    const medicationPromise = fetchMedicationHistory(dogId)
-      .then((medicationRes) => {
+    const medicationPromise = Promise.resolve()
+      .then(async () => {
         if (loadToken !== latestLoadToken) return
-        medicationRecords.value = medicationRes?.data || []
+        medicationRecords.value = await listLocalDogMedicationHistory(familyId, dogId)
       })
       .catch(() => {
         if (loadToken !== latestLoadToken) return
@@ -2950,10 +2971,10 @@ async function loadData({
       })
 
     const salePromise = isPuppy
-      ? fetchSaleList({ dog_id: dogId })
-          .then((saleRes) => {
+      ? listLocalSales(familyId, { dogId })
+          .then((sales) => {
             if (loadToken !== latestLoadToken) return
-            puppySaleRecords.value = saleRes?.data || []
+            puppySaleRecords.value = sales || []
           })
           .catch(() => {
             if (loadToken !== latestLoadToken) return
@@ -2966,22 +2987,22 @@ async function loadData({
           })
       : Promise.resolve()
 
-    const shouldLoadDamRoi = detailRes?.data?.role === '种狗' && detailRes?.data?.gender === '母'
+    const shouldLoadDamRoi = detail?.role === '种狗' && detail?.gender === '母'
     const financePromise = Promise.all([
-      fetchDogFinance(dogId)
+      getLocalDogFinanceSummary(familyId, dogId)
         .then((financeRes) => {
           if (loadToken !== latestLoadToken) return
-          dogFinance.value = financeRes?.data || null
+          dogFinance.value = financeRes || null
         })
         .catch(() => {
           if (loadToken !== latestLoadToken) return
           dogFinance.value = null
         }),
       shouldLoadDamRoi
-        ? fetchDamRoi(dogId)
+        ? getLocalDamRoi(familyId, dogId)
             .then((roiRes) => {
               if (loadToken !== latestLoadToken) return
-              damFinanceRoi.value = roiRes?.data || null
+              damFinanceRoi.value = roiRes || null
             })
             .catch(() => {
               if (loadToken !== latestLoadToken) return
@@ -3000,15 +3021,14 @@ async function loadData({
 
     const cyclesPromise = isPuppy
       ? Promise.resolve()
-      : fetchCycles(dogId)
-          .then(async (cyclesRes) => {
+      : listLocalBreedingCycles(familyId, { damId: dogId, includeClosed: true })
+          .then(async (nextCycles) => {
             if (loadToken !== latestLoadToken) return
 
-            const nextCycles = cyclesRes?.data || []
-            cycles.value = nextCycles
+            cycles.value = nextCycles || []
             const nextActiveCycleId = syncActiveCycleSummary({
               isPuppy,
-              nextCycles,
+              nextCycles: nextCycles || [],
               refreshBreedingSummary,
             })
 
@@ -3029,14 +3049,14 @@ async function loadData({
             if (loadToken === latestLoadToken) {
               cyclesLoaded.value = true
             }
-          })
+      })
 
     const littersPromise = isPuppy
       ? Promise.resolve()
-      : fetchLitters(dogId)
-          .then((littersRes) => {
+      : listLocalLittersByDam(familyId, dogId)
+          .then((localLitters) => {
             if (loadToken !== latestLoadToken) return
-            litters.value = littersRes?.data || []
+            litters.value = localLitters || []
           })
           .catch(() => {
             if (loadToken !== latestLoadToken) return
@@ -3110,11 +3130,11 @@ onShow(() => {
   if (feedback?.message) {
     showSubmitBanner(feedback.message)
   }
-  if (feedback && dogId) {
+  if (dogId && (feedback || hasLoadedOnce)) {
     loadData({
-      silent: true,
-      shouldCleanup: true,
-      refreshBreedingSummary: activeTab.value === 'breeding',
+      silent: hasLoadedOnce,
+      shouldCleanup: !!feedback,
+      refreshBreedingSummary: !!feedback && activeTab.value === 'breeding',
     })
   }
 })

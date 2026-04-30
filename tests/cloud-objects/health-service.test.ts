@@ -1073,6 +1073,65 @@ describe('health-service', () => {
       expect(dailyTasks.find(item => item._id === 'med_end_task_2')?.status).toBe('completed')
     })
 
+    it('endMedication 应支持 _sync 幂等重放', async () => {
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      seedCollection('health_records', [{
+        _id: 'ill_end_sync_1',
+        type: 'illness',
+        dog_id: 'dog_1',
+        dog_name: '花花',
+        family_id: familyId,
+        deleted_at: null,
+        date: Date.now() - DAY_MS,
+        details: { primary_condition: '感冒', condition: '感冒', treatment_status: '治疗中' },
+        created_at: Date.now() - DAY_MS,
+        updated_at: Date.now() - DAY_MS,
+        version: 1,
+      }])
+      seedCollection('medication_tasks', [{
+        _id: 'med_end_sync_1',
+        dog_id: 'dog_1',
+        dog_name: '花花',
+        family_id: familyId,
+        source_record_id: 'ill_end_sync_1',
+        drug_name: '头孢',
+        frequency: 1,
+        duration_days: 3,
+        actual_start_date: Date.now() - DAY_MS,
+        status: '进行中',
+        created_at: Date.now() - DAY_MS,
+        updated_at: Date.now() - DAY_MS,
+        version: 1,
+      }])
+      seedCollection('tasks', [
+        { _id: 'med_end_sync_task_1', medication_task_id: 'med_end_sync_1', status: 'pending', family_id: familyId, version: 1 },
+      ])
+
+      const payload = {
+        id: 'med_end_sync_1',
+        illnessDisposition: 'recovered',
+        _sync: {
+          clientMutationId: 'health-end-medication-sync-1',
+          deviceId: 'device_1',
+          clientTimestamp: Date.now(),
+          baseVersions: {
+            med_end_sync_1: 1,
+            ill_end_sync_1: 1,
+          },
+        },
+      }
+
+      const first = await healthService.endMedication.call(ctx, payload)
+      const second = await healthService.endMedication.call(ctx, payload)
+
+      expect(first.ack).toBe('accepted')
+      expect(second).toEqual(first)
+
+      const { data: medRows } = await db.collection('medication_tasks').doc('med_end_sync_1').get()
+      expect(medRows[0].status).toBe('已取消')
+      expect(medRows[0].version).toBe(2)
+    })
+
     it('独立用药结束时，不应误改疾病状态', async () => {
       const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
 
@@ -1367,6 +1426,119 @@ describe('health-service', () => {
     })
   })
 
+  it('updateHealthRecord 应支持 _sync 幂等重放', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+    seedCollection('health_records', [{
+      _id: 'health_update_sync_1',
+      type: 'vaccination',
+      dog_id: 'dog_1',
+      dog_name: '花花',
+      family_id: familyId,
+      deleted_at: null,
+      date: Date.now() - DAY_MS,
+      cost: 50,
+      notes: '原始备注',
+      details: { vaccine_type: '二联' },
+      created_at: Date.now() - DAY_MS,
+      updated_at: Date.now() - DAY_MS,
+      version: 1,
+    }])
+
+    const payload = {
+      id: 'health_update_sync_1',
+      date: Date.now(),
+      cost: 88,
+      notes: '补充加强针',
+      details: { vaccine_type: '四联' },
+      _sync: {
+        clientMutationId: 'health-update-record-sync-1',
+        deviceId: 'device_1',
+        clientTimestamp: Date.now(),
+        baseVersions: { health_update_sync_1: 1 },
+      },
+    }
+
+    const first = await healthService.updateHealthRecord.call(ctx, payload)
+    const second = await healthService.updateHealthRecord.call(ctx, payload)
+
+    expect(first.ack).toBe('accepted')
+    expect(second).toEqual(first)
+
+    const { data } = await db.collection('health_records').doc('health_update_sync_1').get()
+    expect(data[0]).toMatchObject({
+      cost: 88,
+      notes: '补充加强针',
+      details: { vaccine_type: '四联' },
+      version: 2,
+    })
+  })
+
+  it('deleteHealthRecord 应支持 _sync 幂等重放并取消关联提醒任务', async () => {
+    const now = Date.now()
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+    seedCollection('health_records', [{
+      _id: 'health_delete_sync_1',
+      type: 'vaccination',
+      dog_id: 'dog_1',
+      dog_name: '花花',
+      family_id: familyId,
+      deleted_at: null,
+      date: now - DAY_MS,
+      details: { vaccine_type: '四联' },
+      created_at: now - DAY_MS,
+      updated_at: now - DAY_MS,
+      version: 3,
+    }])
+    seedCollection('tasks', [{
+      _id: 'task_health_delete_sync_1',
+      family_id: familyId,
+      dog_id: 'dog_1',
+      dog_name: '花花',
+      type: 'vaccination',
+      title: '花花 · 下次疫苗',
+      status: 'pending',
+      due_date: now + DAY_MS,
+      source_record_id: 'health_delete_sync_1',
+      source_collection: 'health_records',
+      deleted_at: null,
+      created_at: now - DAY_MS,
+      updated_at: now - DAY_MS,
+      version: 4,
+    }])
+
+    const payload = {
+      id: 'health_delete_sync_1',
+      _sync: {
+        clientMutationId: 'health-delete-record-sync-1',
+        deviceId: 'device_1',
+        clientTimestamp: now,
+        baseVersions: {
+          health_delete_sync_1: 3,
+          task_health_delete_sync_1: 4,
+        },
+      },
+    }
+
+    const first = await healthService.deleteHealthRecord.call(ctx, payload)
+    const second = await healthService.deleteHealthRecord.call(ctx, payload)
+
+    expect(first.ack).toBe('accepted')
+    expect(second).toEqual(first)
+    expect(first.touchedEntities).toEqual(expect.arrayContaining([
+      expect.objectContaining({ collection: 'health_records', id: 'health_delete_sync_1', deletedAt: expect.any(Number) }),
+      expect.objectContaining({ collection: 'tasks', id: 'task_health_delete_sync_1', version: 5 }),
+    ]))
+
+    const { data: records } = await db.collection('health_records').doc('health_delete_sync_1').get()
+    expect(records[0].deleted_at).toEqual(expect.any(Number))
+    expect(records[0].version).toBe(4)
+
+    const { data: tasks } = await db.collection('tasks').doc('task_health_delete_sync_1').get()
+    expect(tasks[0].status).toBe('cancelled')
+    expect(tasks[0].version).toBe(5)
+  })
+
   describe('费用创建', () => {
     it('录入疫苗记录时应创建归一后的自动支出分类', async () => {
       const now = Date.now()
@@ -1415,6 +1587,147 @@ describe('health-service', () => {
 
       expect(expenses).toHaveLength(1)
       expect(expenses[0].total_amount).toBe(200)
+    })
+  })
+
+  describe('用药方案同步', () => {
+    it('addMedicationProtocol 应支持 _sync 稳定 ID 与幂等重放', async () => {
+      const now = Date.now()
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      const payload = {
+        name: '消炎常规',
+        drug_name: '阿莫西林',
+        duration_days: 5,
+        _sync: {
+          clientMutationId: 'protocol-sync-add-1',
+          deviceId: 'device_1',
+          clientTimestamp: now,
+          clientEntityIds: { medication_protocols: 'protocol_client_1' },
+        },
+      }
+
+      const first = await healthService.addMedicationProtocol.call(ctx, payload)
+      const second = await healthService.addMedicationProtocol.call(ctx, payload)
+
+      expect(first.ack).toBe('accepted')
+      expect(second).toEqual(first)
+      expect(first.data.protocolId).toBe('protocol_client_1')
+
+      const { data: protocols } = await db.collection('medication_protocols')
+        .where({ _id: 'protocol_client_1', family_id: familyId })
+        .get()
+      expect(protocols).toHaveLength(1)
+      expect(protocols[0]).toMatchObject({
+        name: '消炎常规',
+        drug_name: '阿莫西林',
+        version: 1,
+      })
+    })
+
+    it('removeMedicationProtocol 应支持 _sync 幂等重放', async () => {
+      const now = Date.now()
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      seedCollection('medication_protocols', [{
+        _id: 'protocol_remove_1',
+        family_id: familyId,
+        name: '保胎方案',
+        drug_name: '黄体酮',
+        deleted_at: null,
+        version: 1,
+        created_at: now - DAY_MS,
+        updated_at: now - DAY_MS,
+      }])
+
+      const payload = {
+        id: 'protocol_remove_1',
+        _sync: {
+          clientMutationId: 'protocol-sync-remove-1',
+          deviceId: 'device_1',
+          clientTimestamp: now,
+          baseVersions: { protocol_remove_1: 1 },
+        },
+      }
+
+      const first = await healthService.removeMedicationProtocol.call(ctx, payload)
+      const second = await healthService.removeMedicationProtocol.call(ctx, payload)
+
+      expect(first.ack).toBe('accepted')
+      expect(second).toEqual(first)
+
+      const { data: protocols } = await db.collection('medication_protocols').doc('protocol_remove_1').get()
+      expect(protocols[0].deleted_at).toBeTruthy()
+      expect(protocols[0].version).toBe(2)
+    })
+
+    it('removeMedicationProtocol 在 baseVersion 过期时应返回 conflict', async () => {
+      const now = Date.now()
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      seedCollection('medication_protocols', [{
+        _id: 'protocol_conflict_1',
+        family_id: familyId,
+        name: '冲突方案',
+        drug_name: '甲硝唑',
+        deleted_at: null,
+        version: 3,
+        created_at: now - DAY_MS,
+        updated_at: now - DAY_MS,
+      }])
+
+      const result = await healthService.removeMedicationProtocol.call(ctx, {
+        id: 'protocol_conflict_1',
+        _sync: {
+          clientMutationId: 'protocol-sync-conflict-1',
+          deviceId: 'device_1',
+          clientTimestamp: now,
+          baseVersions: { protocol_conflict_1: 2 },
+        },
+      })
+
+      expect(result.ack).toBe('conflict')
+      expect(result.conflict).toEqual(expect.objectContaining({
+        collection: 'medication_protocols',
+        entityId: 'protocol_conflict_1',
+        baseVersion: 2,
+        serverVersion: 3,
+      }))
+    })
+  })
+
+  describe('体重同步', () => {
+    it('addWeightRecord 应支持 _sync 稳定 ID 与幂等重放', async () => {
+      const now = Date.now()
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      const payload = {
+        dog_id: 'dog_1',
+        weight: 3500,
+        date: now,
+        notes: '晚餐前',
+        _sync: {
+          clientMutationId: 'weight-sync-1',
+          deviceId: 'device_1',
+          clientTimestamp: now,
+          clientEntityIds: { dog_weights: 'weight_client_1' },
+          baseVersions: { dog_1: 0 },
+        },
+      }
+
+      const first = await healthService.addWeightRecord.call(ctx, payload)
+      const second = await healthService.addWeightRecord.call(ctx, payload)
+
+      expect(first.ack).toBe('accepted')
+      expect(second).toEqual(first)
+
+      const { data: weights } = await db.collection('dog_weights')
+        .where({ _id: 'weight_client_1', family_id: familyId })
+        .get()
+      expect(weights).toHaveLength(1)
+      expect(weights[0]).toMatchObject({
+        dog_id: 'dog_1',
+        weight: 3500,
+      })
+
+      const { data: dogs } = await db.collection('dogs').doc('dog_1').get()
+      expect(dogs[0].latest_weight).toBe(3500)
     })
   })
 })

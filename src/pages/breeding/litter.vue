@@ -298,7 +298,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
-import { useCloudCall } from '@/composables/useCloudCall'
 import { useAuth } from '@/composables/useAuth'
 import { usePageSync } from '@/composables/usePageSync'
 import { getLocalLitterDetail } from '@/localdb/domain-repository'
@@ -325,16 +324,6 @@ let litterId = ''
 let sourceTaskId = ''
 const { currentFamily } = useAuth()
 usePageSync({ routePath: 'pages/breeding/litter' })
-
-const { run: doWeaning } = useCloudCall('breeding-service', 'confirmWeaning', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
-const { run: doAddPuppy } = useCloudCall('breeding-service', 'addPuppyToLitter', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
-const { run: doUpdateBirthDate } = useCloudCall('breeding-service', 'updateBirthDate', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
-const { run: doUpdateNotes } = useCloudCall('breeding-service', 'updateLitter', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
-const { run: completeTask } = useCloudCall('task-service', 'completeTask', {
-  successMode: 'silent',
-  loadingMode: 'local',
-  throwOnError: true,
-})
 
 // 编辑表单 Sheet 状态
 const editMode = ref<'birth_date' | 'notes' | 'puppy_name' | ''>('')
@@ -432,7 +421,7 @@ function editBirthDate() {
       if (typeof val !== 'number' || !Number.isFinite(val)) {
         throw new Error('请输入生产日期')
       }
-      await doUpdateBirthDate(litterId, val)
+      await localSyncRuntime.updateLitterBirthDateLocally(currentFamily.value?._id || '', litterId, val)
       await loadData()
     },
     '生产日期只能调整 ±3 天',
@@ -446,7 +435,7 @@ function editNotes() {
     '修改备注',
     litter.value?.birth_notes || '',
     async (val) => {
-      await doUpdateNotes(litterId, { birth_notes: val || '' })
+      await localSyncRuntime.updateLitterLocally(currentFamily.value?._id || '', litterId, { birth_notes: val || '' })
       await loadData()
     },
   )
@@ -503,18 +492,15 @@ async function confirmWeaning() {
 async function handleWeaningConfirm() {
   weaning.value = true
   try {
-    await doWeaning(litterId)
-    if (sourceTaskId) {
-      await completeTask(sourceTaskId)
-      queueSubmitFeedback({
-        message: '已确认断奶并处理待办',
-        homeSection: 'breeding',
-        completedTaskIds: [sourceTaskId],
-        suppressTaskIds: [sourceTaskId],
-        refreshHome: true,
-      })
-    }
-    loadData()
+    await localSyncRuntime.confirmWeaningLocally(currentFamily.value?._id || '', litterId)
+    queueSubmitFeedback({
+      message: sourceTaskId ? '已确认断奶并处理待办' : '已确认断奶',
+      homeSection: 'breeding',
+      completedTaskIds: sourceTaskId ? [sourceTaskId] : [],
+      suppressTaskIds: sourceTaskId ? [sourceTaskId] : [],
+      refreshHome: true,
+    })
+    await loadData()
   } finally {
     weaning.value = false
   }
@@ -526,7 +512,7 @@ function addPuppy() {
     '添加幼崽',
     '',
     async (val) => {
-      await doAddPuppy(litterId, { name: val || '' })
+      await localSyncRuntime.addPuppyToLitterLocally(currentFamily.value?._id || '', litterId, { name: val || '' })
       await loadData()
     },
   )

@@ -299,7 +299,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
-import { useCloudCall } from '@/composables/useCloudCall'
 import { useAuth } from '@/composables/useAuth'
 import { usePageSync } from '@/composables/usePageSync'
 import { getLocalMedicationTaskDetail } from '@/localdb/domain-repository'
@@ -553,16 +552,6 @@ function formatDate(ts: number | undefined): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-const { run: completeDay } = useCloudCall('health-service', 'batchCompleteMedicationDay', {
-  successMode: 'silent',
-  loadingMode: 'local',
-})
-const { run: cancelTask } = useCloudCall('health-service', 'endMedication', {
-  successMode: 'silent',
-  loadingMode: 'local',
-  loadingText: '取消中...',
-})
-
 async function loadTask() {
   loading.value = true
   const familyId = currentFamily.value?._id || ''
@@ -585,7 +574,7 @@ function showSubmitBanner(message: string) {
 }
 
 async function markTodayComplete() {
-  const result = await completeDay([taskId])
+  const result = await localSyncRuntime.batchCompleteMedicationDayLocally(currentFamily.value?._id || '', [taskId])
   if (result) {
     queueSubmitFeedback({ message: '已完成今日用药', homeSection: 'therapy' })
     showSubmitBanner('已完成今日用药')
@@ -619,7 +608,7 @@ async function handleCancelConfirm(illnessDisposition?: 'observation' | 'recover
   const payload = illnessDisposition
     ? { id: taskId, illnessDisposition }
     : { id: taskId }
-  const result = await cancelTask(payload)
+  const result = await localSyncRuntime.endMedicationLocally(currentFamily.value?._id || '', taskId, payload)
   if (result) {
     queueSubmitFeedback({ message: '已取消用药任务', homeSection: 'therapy' })
     showSubmitBanner('已取消用药任务')

@@ -288,7 +288,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
-import { useCloudCall } from '@/composables/useCloudCall'
 import { useAuth } from '@/composables/useAuth'
 import { usePageSync } from '@/composables/usePageSync'
 import { getLocalBreedingCycleDetail } from '@/localdb/domain-repository'
@@ -331,8 +330,6 @@ let hasLoadedOnce = false
 const MORE_ACTION_CLOSE_DELAY_MS = 180
 const { currentFamily } = useAuth()
 usePageSync({ routePath: 'pages/breeding/cycle' })
-
-const { run: doClose } = useCloudCall('breeding-service', 'closeCycle', { successMessage: '已关闭' })
 
 const pageTitle = computed(() => {
   if (!cycle.value?.dam_name) return '繁育周期'
@@ -575,8 +572,8 @@ async function closeCycleAction() {
     itemList: ['放弃（未配种）', '失败（确认未怀孕/流产）'],
     success: async (res) => {
       const reason = res.tapIndex === 0 ? '放弃' : '失败'
-      await doClose(cycleId, reason)
-      loadData()
+      await localSyncRuntime.closeBreedingCycleLocally(currentFamily.value?._id || '', cycleId, reason)
+      await loadData()
     },
   })
 }

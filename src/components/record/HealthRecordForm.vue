@@ -334,10 +334,14 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { useCloudCall } from '@/composables/useCloudCall'
 import { useAuth } from '@/composables/useAuth'
 import { useRecordSubmitState } from '@/composables/useRecordSubmitState'
 import { buildRecordFeedbackMessage, buildTaskFeedbackMessage, queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
+import {
+  findLocalDuplicateIllnesses,
+  getLocalHealthRecordDetail,
+  getLocalTaskById,
+} from '@/localdb/domain-repository'
 import { localSyncRuntime } from '@/localdb/runtime'
 import { resolveHealthCreateRouteQuery, type MedicationRouteIllnessLink } from '@/utils/recordFormRoutes'
 import BDogPicker from '@/components/form/BDogPicker.vue'
@@ -595,30 +599,6 @@ const skeletonBlocks = computed<HealthSkeletonBlock[]>(() => {
   return blocks
 })
 
-const { run: updateFamilySettings } = useCloudCall('family-service', 'updateSettings')
-const { run: fetchTask } = useCloudCall('task-service', 'getTask')
-const { run: batchAddTask } = useCloudCall('task-service', 'batchCreateManualTasks', {
-  successMode: 'silent',
-  loadingMode: 'local',
-  throwOnError: true,
-})
-const { run: batchAddRecord } = useCloudCall('health-service', 'batchAddHealthRecords', {
-  successMode: 'silent',
-  loadingMode: 'local',
-  throwOnError: true,
-})
-const { run: getRecord } = useCloudCall('health-service', 'getHealthRecordDetail', {
-  showLoading: false,
-})
-const { run: updateRecord } = useCloudCall('health-service', 'updateHealthRecord', {
-  successMode: 'silent',
-  loadingMode: 'local',
-  throwOnError: true,
-})
-const { run: checkDuplicateIllness } = useCloudCall('health-service', 'checkDuplicateIllness', {
-  showLoading: false,
-})
-
 function getDewormSubtype(): DewormSubtype {
   const subtype = String(details.deworming_type || 'internal')
   if (subtype === 'external' || subtype === 'combo') return subtype
@@ -696,10 +676,10 @@ async function loadCreateQuery() {
   applyPrefillDetails(routeQuery.details)
 
   if (routeQuery.sourceTaskIds[0]) {
-    const taskRes = await fetchTask(routeQuery.sourceTaskIds[0])
-    if (taskRes?.data) {
-      applyTaskDog(taskRes.data)
-      applyPrefillDetails(taskRes.data.details || {})
+    const task = await getLocalTaskById(currentFamily.value?._id || '', routeQuery.sourceTaskIds[0])
+    if (task) {
+      applyTaskDog(task)
+      applyPrefillDetails((task as any).details || {})
     }
   }
 }
@@ -713,7 +693,7 @@ async function loadEditRecord() {
   loading.value = true
   try {
     resetFormState()
-    const record = await getRecord({ id: props.recordId })
+    const record = await getLocalHealthRecordDetail(currentFamily.value?._id || '', props.recordId)
     if (!record) return
 
     currentRecord.value = record
@@ -786,7 +766,7 @@ async function saveCustomValue(kind: CustomModalKind, value: string) {
     if (!PRESET_VACCINE_TYPES.includes(value)) {
       const existing = currentFamily.value?.settings?.custom_vaccine_types || []
       if (!existing.includes(value)) {
-        await updateFamilySettings({ custom_vaccine_types: [...existing, value] })
+        await localSyncRuntime.updateFamilySettingsLocally(currentFamily.value?._id || '', { custom_vaccine_types: [...existing, value] })
         await loadFamily()
       }
     }
@@ -806,7 +786,7 @@ async function saveCustomValue(kind: CustomModalKind, value: string) {
       }) as Record<DewormSubtype, string[]>
       const existing = customSettings[subtype] || []
       if (!existing.includes(value)) {
-        await updateFamilySettings({
+        await localSyncRuntime.updateFamilySettingsLocally(currentFamily.value?._id || '', {
           custom_deworming_drugs: {
             ...customSettings,
             [subtype]: [...existing, value],
@@ -824,7 +804,7 @@ async function saveCustomValue(kind: CustomModalKind, value: string) {
     if (!PRESET_CONDITION_TYPES.includes(value)) {
       const existing = currentFamily.value?.settings?.custom_condition_types || []
       if (!existing.includes(value)) {
-        await updateFamilySettings({ custom_condition_types: [...existing, value] })
+        await localSyncRuntime.updateFamilySettingsLocally(currentFamily.value?._id || '', { custom_condition_types: [...existing, value] })
         await loadFamily()
       }
     }
@@ -837,7 +817,7 @@ async function saveCustomValue(kind: CustomModalKind, value: string) {
     const settings = (currentFamily.value?.settings || {}) as Record<string, any>
     const existing = settings.custom_symptom_tags || []
     if (!existing.includes(value)) {
-      await updateFamilySettings({ custom_symptom_tags: [...existing, value] })
+      await localSyncRuntime.updateFamilySettingsLocally(currentFamily.value?._id || '', { custom_symptom_tags: [...existing, value] })
       await loadFamily()
     }
   }
@@ -858,7 +838,7 @@ async function deleteCustomValue(kind: CustomModalKind, value: string) {
       if (details.vaccine_type === value) details.vaccine_type = ''
       if (customVaccine.value === value) customVaccine.value = ''
       const existing = currentFamily.value?.settings?.custom_vaccine_types || []
-      await updateFamilySettings({ custom_vaccine_types: existing.filter((item: string) => item !== value) })
+      await localSyncRuntime.updateFamilySettingsLocally(currentFamily.value?._id || '', { custom_vaccine_types: existing.filter((item: string) => item !== value) })
       await loadFamily()
       deletedCustomVaccines.value = deletedCustomVaccines.value.filter(item => item !== value)
       return
@@ -874,7 +854,7 @@ async function deleteCustomValue(kind: CustomModalKind, value: string) {
         external: [],
         combo: [],
       }) as Record<DewormSubtype, string[]>
-      await updateFamilySettings({
+      await localSyncRuntime.updateFamilySettingsLocally(currentFamily.value?._id || '', {
         custom_deworming_drugs: {
           ...customSettings,
           [subtype]: (customSettings[subtype] || []).filter((item: string) => item !== value),
@@ -891,7 +871,7 @@ async function deleteCustomValue(kind: CustomModalKind, value: string) {
       if (customSymptom.value === value) customSymptom.value = ''
       const settings = (currentFamily.value?.settings || {}) as Record<string, any>
       const existing = settings.custom_symptom_tags || []
-      await updateFamilySettings({ custom_symptom_tags: existing.filter((item: string) => item !== value) })
+      await localSyncRuntime.updateFamilySettingsLocally(currentFamily.value?._id || '', { custom_symptom_tags: existing.filter((item: string) => item !== value) })
       await loadFamily()
       deletedCustomSymptoms.value = deletedCustomSymptoms.value.filter(item => item !== value)
       return
@@ -902,7 +882,7 @@ async function deleteCustomValue(kind: CustomModalKind, value: string) {
     if (details.condition === value) details.condition = ''
     if (customCondition.value === value) customCondition.value = ''
     const existing = currentFamily.value?.settings?.custom_condition_types || []
-    await updateFamilySettings({ custom_condition_types: existing.filter((item: string) => item !== value) })
+    await localSyncRuntime.updateFamilySettingsLocally(currentFamily.value?._id || '', { custom_condition_types: existing.filter((item: string) => item !== value) })
     await loadFamily()
     deletedCustomConditions.value = deletedCustomConditions.value.filter(item => item !== value)
   }
@@ -1014,17 +994,12 @@ async function handleDuplicateIllnessIfNeeded() {
     : selectedDogs.value.map((dog: any) => dog._id)
   if (dogIds.length === 0) return false
 
-  let duplicateRes
-  try {
-    duplicateRes = await checkDuplicateIllness({
-      dog_ids: dogIds,
-      condition,
-      exclude_record_id: isEdit.value ? props.recordId : undefined,
-    })
-  } catch {
-    return false
-  }
-  const duplicates = duplicateRes?.data?.duplicates || []
+  const duplicates = await findLocalDuplicateIllnesses(
+    currentFamily.value?._id || '',
+    dogIds,
+    condition,
+    isEdit.value ? props.recordId : '',
+  )
   if (duplicates.length === 0) return false
 
   if (duplicates.length === 1 && dogIds.length === 1) {
@@ -1154,7 +1129,7 @@ async function submitCreateRecord() {
 async function submitEditRecord() {
   const cost = costInput.value ? parseFloat(costInput.value) : null
   const detailPayload = buildDetails()
-  await updateRecord({
+  await localSyncRuntime.updateHealthRecordLocally(currentFamily.value?._id || '', {
     id: props.recordId,
     date: date.value,
     cost: cost && cost > 0 ? cost : null,

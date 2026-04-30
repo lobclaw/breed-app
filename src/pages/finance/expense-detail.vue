@@ -120,7 +120,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
-import { useCloudCall } from '@/composables/useCloudCall'
 import { useAuth } from '@/composables/useAuth'
 import { usePageSync } from '@/composables/usePageSync'
 import { consumeSubmitFeedback, queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
@@ -165,12 +164,6 @@ function formatDateTime(ts: number | undefined): string {
   const d = new Date(ts)
   return `${formatDate(ts)} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
-
-const { run: deleteRecord } = useCloudCall('finance-service', 'deleteExpense', {
-  successMode: 'silent',
-  loadingMode: 'local',
-  throwOnError: true,
-})
 
 async function loadRecord() {
   const familyId = currentFamily.value?._id || ''
@@ -218,7 +211,7 @@ function confirmDelete() {
 }
 
 async function handleDeleteConfirm() {
-  const result = await deleteRecord(recordId)
+  const result = await localSyncRuntime.deleteExpenseLocally(currentFamily.value?._id || '', recordId)
   if (result) {
     queueSubmitFeedback({ message: '已删除支出记录' })
     await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)

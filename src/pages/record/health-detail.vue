@@ -306,7 +306,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
-import { useCloudCall } from '@/composables/useCloudCall'
 import { useAuth } from '@/composables/useAuth'
 import { usePageSync } from '@/composables/usePageSync'
 import { getLocalHealthRecordDetail } from '@/localdb/domain-repository'
@@ -528,17 +527,6 @@ function linkedMedicationSummary(taskItem: any) {
   return parts.join(' · ') || '查看疗程详情'
 }
 
-const { run: deleteRecord } = useCloudCall('health-service', 'deleteHealthRecord', {
-  successMode: 'silent',
-  loadingMode: 'local',
-  throwOnError: true,
-})
-const { run: recoverIllnesses } = useCloudCall('health-service', 'recoverIllnesses', {
-  successMode: 'silent',
-  loadingMode: 'local',
-  throwOnError: true,
-})
-
 async function loadRecord() {
   loading.value = true
   const familyId = currentFamily.value?._id || ''
@@ -576,7 +564,7 @@ function confirmDelete() {
 }
 
 async function handleDeleteConfirm() {
-  const result = await deleteRecord(recordId)
+  const result = await localSyncRuntime.deleteHealthRecordLocally(currentFamily.value?._id || '', recordId)
   if (result) {
     queueSubmitFeedback({ message: '已删除健康记录' })
     await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)
@@ -587,7 +575,11 @@ async function handleDeleteConfirm() {
 async function markRecovered() {
   if (!recordId) return
   showMore.value = false
-  const result = await recoverIllnesses({ illnessIds: [recordId] })
+  const result = await localSyncRuntime.recoverIllnessesLocally(
+    currentFamily.value?._id || '',
+    [recordId],
+    linkedMedicationTasks.value.map((item: any) => item.taskId || item.id).filter(Boolean),
+  )
   if (result) {
     showSubmitBanner('已标记康复')
     await loadRecord()

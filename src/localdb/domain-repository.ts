@@ -6,6 +6,7 @@ import type { CareRule, Family, FamilySettings } from '@/types/family'
 import type { HealthRecord, MedicationTask } from '@/types/health'
 import type { RecycleBinItem } from '@/types/recycle'
 import type { DeriveStatus, DogWithStatus } from '@/types/dog'
+import type { Task } from '@/types/task'
 import {
   buildExpenseCategoryGroups,
   getExpenseCategoryGroupKey,
@@ -166,41 +167,9 @@ function buildListMedicationStatus(tasks: any[] = [], nowTs = Date.now(), active
   }]
 }
 
-export async function listLocalDogsWithStatus(familyId: string, filters: Record<string, any> = {}): Promise<DogWithStatus[]> {
-  if (!familyId) return []
-  const now = Date.now()
-  const allowedDispositions = ['在养', '待售', '已预定', '自留']
-  const dogDisposition = filters.disposition || null
-
-  const [dogs, cycles, illnesses, medicationTasks, activeLitters] = await Promise.all([
-    localDb.query<any>('dogs', (dog) => {
-      if (dog.family_id !== familyId) return false
-      if (dog.deleted_at) return false
-      if (filters.gender && dog.gender !== filters.gender) return false
-      if (filters.role && dog.role !== filters.role) return false
-      if (dogDisposition) return dog.disposition === dogDisposition
-      return allowedDispositions.includes(dog.disposition)
-    }),
-    localDb.query<any>('breeding_cycles', cycle =>
-      cycle.family_id === familyId
-      && ['发情中', '怀孕中', '已生产'].includes(cycle.status),
-    ),
-    localDb.query<any>('health_records', record =>
-      record.family_id === familyId
-      && record.type === 'illness'
-      && record?.details?.treatment_status !== '已康复',
-    ),
-    localDb.query<any>('medication_tasks', task =>
-      task.family_id === familyId
-      && isMedicationTaskActive(task, now),
-    ),
-    localDb.query<any>('litters', litter =>
-      litter.family_id === familyId
-      && !litter.weaned_at,
-    ),
-  ])
-
+function buildBreedingStatusMap(cycles: any[] = [], activeLitters: any[] = [], now = Date.now()) {
   const breedingStatusMap = new Map<string, DeriveStatus[]>()
+
   for (const cycle of cycles) {
     const damId = cycle.dam_id
     if (!damId) continue
@@ -242,31 +211,121 @@ export async function listLocalDogsWithStatus(familyId: string, filters: Record<
     }
   }
 
-  const illnessMap = new Map<string, any[]>()
-  for (const illness of illnesses) {
-    const bucket = illnessMap.get(illness.dog_id) || []
-    bucket.push(illness)
-    illnessMap.set(illness.dog_id, bucket)
-  }
+  return breedingStatusMap
+}
 
-  const medicationMap = new Map<string, any[]>()
-  for (const task of medicationTasks) {
-    const bucket = medicationMap.get(task.dog_id) || []
-    bucket.push(task)
-    medicationMap.set(task.dog_id, bucket)
-  }
+function groupRowsByDogId(rows: Array<Record<string, any>> = []) {
+  const grouped = new Map<string, any[]>()
+  rows.forEach((row) => {
+    const dogId = typeof row?.dog_id === 'string' ? row.dog_id : ''
+    if (!dogId) return
+    const bucket = grouped.get(dogId) || []
+    bucket.push(row)
+    grouped.set(dogId, bucket)
+  })
+  return grouped
+}
+
+function buildDogStatuses(
+  dog: Record<string, any>,
+  breedingStatusMap: Map<string, DeriveStatus[]>,
+  illnessMap: Map<string, any[]>,
+  medicationMap: Map<string, any[]>,
+  now = Date.now(),
+) {
+  const statuses = sortListStatuses([
+    ...buildListIllnessStatuses(illnessMap.get(dog._id) || [], medicationMap.get(dog._id) || []),
+    ...(breedingStatusMap.get(dog._id) || []),
+    ...buildListMedicationStatus(medicationMap.get(dog._id) || [], now, illnessMap.get(dog._id) || []),
+  ])
+
+  return statuses.length > 0 ? statuses : [{ type: '正常' as const }]
+}
+
+export async function listLocalDogsWithStatus(familyId: string, filters: Record<string, any> = {}): Promise<DogWithStatus[]> {
+  if (!familyId) return []
+  const now = Date.now()
+  const allowedDispositions = ['在养', '待售', '已预定', '自留']
+  const dogDisposition = filters.disposition || null
+
+  const [dogs, cycles, illnesses, medicationTasks, activeLitters] = await Promise.all([
+    localDb.query<any>('dogs', (dog) => {
+      if (dog.family_id !== familyId) return false
+      if (dog.deleted_at) return false
+      if (filters.gender && dog.gender !== filters.gender) return false
+      if (filters.role && dog.role !== filters.role) return false
+      if (dogDisposition) return dog.disposition === dogDisposition
+      return allowedDispositions.includes(dog.disposition)
+    }),
+    localDb.query<any>('breeding_cycles', cycle =>
+      cycle.family_id === familyId
+      && ['发情中', '怀孕中', '已生产'].includes(cycle.status),
+    ),
+    localDb.query<any>('health_records', record =>
+      record.family_id === familyId
+      && record.type === 'illness'
+      && record?.details?.treatment_status !== '已康复',
+    ),
+    localDb.query<any>('medication_tasks', task =>
+      task.family_id === familyId
+      && isMedicationTaskActive(task, now),
+    ),
+    localDb.query<any>('litters', litter =>
+      litter.family_id === familyId
+      && !litter.weaned_at,
+    ),
+  ])
+  const breedingStatusMap = buildBreedingStatusMap(cycles, activeLitters, now)
+  const illnessMap = groupRowsByDogId(illnesses)
+  const medicationMap = groupRowsByDogId(medicationTasks)
 
   return dogs.map((dog) => {
-    const statuses = sortListStatuses([
-      ...buildListIllnessStatuses(illnessMap.get(dog._id) || [], medicationMap.get(dog._id) || []),
-      ...(breedingStatusMap.get(dog._id) || []),
-      ...buildListMedicationStatus(medicationMap.get(dog._id) || [], now, illnessMap.get(dog._id) || []),
-    ])
     return {
       ...dog,
-      statuses: statuses.length > 0 ? statuses : [{ type: '正常' }],
+      statuses: buildDogStatuses(dog, breedingStatusMap, illnessMap, medicationMap, now),
     }
   })
+}
+
+export async function getLocalDogDetail(familyId: string, dogId: string): Promise<DogWithStatus | null> {
+  if (!familyId || !dogId) return null
+
+  const now = Date.now()
+  const [dog, cycles, illnesses, medicationTasks, activeLitters] = await Promise.all([
+    localDb.findById<DogWithStatus & { deleted_at?: number | null }>('dogs', dogId),
+    localDb.query<any>('breeding_cycles', cycle =>
+      cycle.family_id === familyId
+      && cycle.dam_id === dogId
+      && ['发情中', '怀孕中', '已生产'].includes(cycle.status),
+    ),
+    localDb.query<any>('health_records', record =>
+      record.family_id === familyId
+      && record.dog_id === dogId
+      && record.type === 'illness'
+      && record?.details?.treatment_status !== '已康复',
+    ),
+    localDb.query<any>('medication_tasks', task =>
+      task.family_id === familyId
+      && task.dog_id === dogId
+      && isMedicationTaskActive(task, now),
+    ),
+    localDb.query<any>('litters', litter =>
+      litter.family_id === familyId
+      && litter.dam_id === dogId
+      && !litter.weaned_at,
+    ),
+  ])
+
+  if (!dog || dog.family_id !== familyId || dog.deleted_at) return null
+
+  const breedingStatusMap = buildBreedingStatusMap(cycles, activeLitters, now)
+  const illnessMap = groupRowsByDogId(illnesses)
+  const medicationMap = groupRowsByDogId(medicationTasks)
+
+  return {
+    ...dog,
+    statuses: buildDogStatuses(dog, breedingStatusMap, illnessMap, medicationMap, now),
+  }
 }
 
 export async function listLocalMedicationProtocols(familyId: string): Promise<MedicationProtocol[]> {
@@ -496,6 +555,305 @@ export async function listLocalSales(
   })
 }
 
+export async function listLocalDogHealthHistory(familyId: string, dogId: string, type?: string) {
+  if (!familyId || !dogId) return []
+  return localDb.query<any>('health_records', row => {
+    if (row.family_id !== familyId) return false
+    if (row.deleted_at) return false
+    if (row.dog_id !== dogId) return false
+    if (type && row.type !== type) return false
+    return true
+  }, {
+    sort: (left, right) => Number(right.date || 0) - Number(left.date || 0),
+  })
+}
+
+function getMedicationHistorySortTs(task: Record<string, any>) {
+  return Number(task?.actual_start_date) || Number(task?.updated_at) || Number(task?.created_at) || 0
+}
+
+function getMedicationHistoryStatusRank(task: Record<string, any>) {
+  const status = getMedicationDetailStatus(task?.status)
+  if (status === 'active') return 0
+  if (status === 'completed') return 1
+  return 2
+}
+
+export async function listLocalDogMedicationHistory(familyId: string, dogId: string) {
+  if (!familyId || !dogId) return []
+  const tasks = await localDb.query<any>('medication_tasks', row =>
+    row.family_id === familyId
+    && row.dog_id === dogId
+    && !row.deleted_at,
+  )
+
+  return tasks
+    .map(task => {
+      const normalizedTask = normalizeMedicationTaskDetail(task, null)
+      const progress = getMedicationTaskProgress(task)
+      return {
+        ...normalizedTask,
+        activity_ts: getMedicationHistorySortTs(task),
+        progress: normalizedTask.status === 'active'
+          ? {
+              current: Math.min(progress.currentDay, progress.totalDays),
+              total: progress.totalDays,
+            }
+          : null,
+      }
+    })
+    .sort((left, right) => {
+      const rankDiff = getMedicationHistoryStatusRank(left) - getMedicationHistoryStatusRank(right)
+      if (rankDiff !== 0) return rankDiff
+      return getMedicationHistorySortTs(right) - getMedicationHistorySortTs(left)
+    })
+}
+
+function buildLitterPupStats(puppies: Array<Record<string, any>> = []) {
+  return {
+    total: puppies.length,
+    alive: puppies.filter(puppy => puppy.disposition !== '已故').length,
+    sold: puppies.filter(puppy => ['已售', '已预定'].includes(puppy.disposition)).length,
+    kept: puppies.filter(puppy => puppy.disposition === '自留' || puppy.disposition === '在养').length,
+    available: puppies.filter(puppy => puppy.disposition === '待售').length,
+  }
+}
+
+export async function listLocalLittersByDam(familyId: string, damId: string) {
+  if (!familyId || !damId) return []
+  const litters = await listLocalLitters(familyId, { damId })
+  if (!litters.length) return []
+
+  const litterIds = litters.map(item => item._id)
+  const puppies = await localDb.query<any>('dogs', row =>
+    row.family_id === familyId
+    && !row.deleted_at
+    && litterIds.includes(row.origin_litter_id),
+  )
+  const puppyMap = new Map<string, Array<Record<string, any>>>()
+  puppies.forEach((puppy) => {
+    const litterId = typeof puppy.origin_litter_id === 'string' ? puppy.origin_litter_id : ''
+    if (!litterId) return
+    const bucket = puppyMap.get(litterId) || []
+    bucket.push(puppy)
+    puppyMap.set(litterId, bucket)
+  })
+
+  return litters.map(litter => ({
+    ...litter,
+    pupStats: buildLitterPupStats(puppyMap.get(litter._id) || []),
+  }))
+}
+
+export async function getLocalDogFinanceSummary(familyId: string, dogId: string) {
+  if (!familyId || !dogId) return null
+
+  const [dog, expenses, incomes] = await Promise.all([
+    localDb.findById<any>('dogs', dogId),
+    localDb.query<Expense>('expenses', row =>
+      row.family_id === familyId
+      && !row.deleted_at
+      && Array.isArray(row.linked_dog_ids)
+      && row.linked_dog_ids.includes(dogId),
+    ),
+    localDb.query<Income>('incomes', row =>
+      row.family_id === familyId
+      && !row.deleted_at
+      && row.dog_id === dogId,
+    ),
+  ])
+
+  if (!dog || dog.family_id !== familyId || dog.deleted_at) return null
+
+  const purchaseCost = Number(dog.purchase_price || 0)
+  const directExpenses = expenses.reduce((sum, expense) => {
+    const linkedCount = Array.isArray(expense.linked_dog_ids) && expense.linked_dog_ids.length > 0
+      ? expense.linked_dog_ids.length
+      : 1
+    return sum + (Number(expense.total_amount || 0) / linkedCount)
+  }, 0)
+  const salesIncome = incomes.reduce((sum, income) => sum + Number(income.amount || 0), 0)
+  const recent = [
+    ...expenses.map(expense => ({ ...expense, _txType: 'expense' as const })),
+    ...incomes.map(income => ({
+      ...income,
+      _txType: 'income' as const,
+      type: normalizeIncomeTypeLabel(income.type),
+      type_label: normalizeIncomeTypeLabel(income.type),
+    })),
+  ]
+    .sort((left, right) => Number(right.date || 0) - Number(left.date || 0))
+    .slice(0, 10)
+
+  return {
+    purchaseCost,
+    directExpenses,
+    salesIncome,
+    netProfit: salesIncome - purchaseCost - directExpenses,
+    recent,
+  }
+}
+
+export async function listLocalDogWeights(familyId: string, dogId: string) {
+  if (!familyId || !dogId) return []
+  const weights = await localDb.query<any>('dog_weights', row =>
+    row.family_id === familyId
+    && row.dog_id === dogId,
+  )
+  return weights
+    .map(item => ({
+      ...item,
+      date: Number(item.date || item.measured_at || item.created_at || 0),
+    }))
+    .sort((left, right) => {
+      if (right.date !== left.date) return right.date - left.date
+      return Number(right.created_at || 0) - Number(left.created_at || 0)
+    })
+}
+
+export async function getLocalTaskById(familyId: string, taskId: string): Promise<Task | null> {
+  if (!familyId || !taskId) return null
+  const task = await localDb.findById<Task & { deleted_at?: number | null }>('tasks', taskId)
+  if (!task || (task as any).family_id !== familyId || (task as any).deleted_at) return null
+  return task
+}
+
+export async function listLocalTasksByIds(familyId: string, taskIds: string[]): Promise<Task[]> {
+  if (!familyId || !Array.isArray(taskIds) || taskIds.length === 0) return []
+  const taskIdSet = new Set(taskIds.filter(Boolean))
+  const tasks = await localDb.query<Task & { deleted_at?: number | null }>('tasks', row =>
+    (row as any).family_id === familyId
+    && taskIdSet.has(row._id)
+    && !(row as any).deleted_at,
+  )
+  const orderMap = new Map(taskIds.map((id, index) => [id, index]))
+  return tasks.sort((left, right) => (orderMap.get(left._id) ?? 0) - (orderMap.get(right._id) ?? 0))
+}
+
+export async function findLocalDuplicateIllnesses(
+  familyId: string,
+  dogIds: string[],
+  condition: string,
+  excludeRecordId = '',
+) {
+  if (!familyId || !dogIds.length || !condition.trim()) return []
+  const dogIdSet = new Set(dogIds.filter(Boolean))
+  const normalizedCondition = condition.trim()
+  const rows = await localDb.query<any>('health_records', row => {
+    if (row.family_id !== familyId) return false
+    if (row.deleted_at) return false
+    if (row.type !== 'illness') return false
+    if (!dogIdSet.has(row.dog_id)) return false
+    if (excludeRecordId && row._id === excludeRecordId) return false
+    const treatmentStatus = String(row?.details?.treatment_status || '观察中').trim()
+    if (treatmentStatus === '已康复') return false
+    const rowCondition = String(row?.details?.primary_condition || row?.details?.condition || '').trim()
+    return rowCondition === normalizedCondition
+  }, { sort: sortByRecent })
+
+  return rows.map((row) => ({
+    dogId: row.dog_id,
+    recordId: row._id,
+    condition: String(row?.details?.primary_condition || row?.details?.condition || '').trim(),
+  }))
+}
+
+export async function findLocalDuplicateMedicationTasks(
+  familyId: string,
+  dogIds: string[],
+  drugName: string,
+) {
+  if (!familyId || !dogIds.length || !drugName.trim()) return []
+  const dogIdSet = new Set(dogIds.filter(Boolean))
+  const normalizedDrugName = drugName.trim().toLowerCase()
+  const tasks = await localDb.query<any>('medication_tasks', row =>
+    row.family_id === familyId
+    && !row.deleted_at,
+  )
+
+  return tasks
+    .map(task => normalizeMedicationTaskDetail(task, null))
+    .filter(task => dogIdSet.has(task.dog_id))
+    .filter(task => task.status === 'active')
+    .filter(task => String(task.drug_name || '').trim().toLowerCase() === normalizedDrugName)
+    .sort((left, right) => sortByRecent(left, right))
+    .map(task => ({
+      dog_id: task.dog_id,
+      dog_name: task.dog_name || '',
+      task_id: task._id,
+      task_name: task.drug_name || '',
+      start_date: task.start_date || null,
+      status: task.status,
+    }))
+}
+
+export async function getLocalNextMatingNumberPreview(
+  familyId: string,
+  input: {
+    dogId?: string
+    cycleId?: string
+  } = {},
+) {
+  const dogId = String(input.dogId || '').trim()
+  let cycleId = String(input.cycleId || '').trim()
+  if (!familyId || !dogId) {
+    return { mating_number: 1, cycle_id: cycleId || null }
+  }
+
+  if (!cycleId) {
+    const activeCycles = await localDb.query<any>('breeding_cycles', row =>
+      row.family_id === familyId
+      && row.dam_id === dogId
+      && ['发情中', '怀孕中'].includes(row.status),
+      { sort: sortByRecent },
+    )
+    cycleId = activeCycles[0]?._id || ''
+  }
+
+  if (!cycleId) {
+    return { mating_number: 1, cycle_id: null }
+  }
+
+  const matingRecords = await localDb.query<any>('breeding_records', row =>
+    row.family_id === familyId
+    && row.cycle_id === cycleId
+    && row.type === 'mating'
+    && !row.deleted_at,
+  )
+
+  const maxMatingNumber = matingRecords.reduce((max, row) => {
+    const details = row?.details || {}
+    const candidate = Number(details.mating_number || details.mating_count || 0)
+    return Math.max(max, Number.isFinite(candidate) ? candidate : 0)
+  }, 0)
+
+  return {
+    mating_number: maxMatingNumber + 1,
+    cycle_id: cycleId,
+  }
+}
+
+export async function listLocalPreLaborTemperatureHistory(familyId: string, dogId: string) {
+  if (!familyId || !dogId) return []
+  const records = await localDb.query<any>('breeding_records', row =>
+    row.family_id === familyId
+    && row.dog_id === dogId
+    && row.type === 'pre_labor'
+    && !row.deleted_at,
+    { sort: sortByRecent },
+  )
+
+  return records
+    .map((row) => ({
+      temp: Number(row?.details?.temperature || 0),
+      label: '',
+      time: Number(row.date || row.created_at || 0),
+    }))
+    .filter(item => item.temp > 0 && item.time > 0)
+    .sort((left, right) => left.time - right.time)
+    .slice(-6)
+}
+
 function formatDogAgeText(birthTs?: number | null) {
   if (!birthTs) return ''
   const days = Math.floor((Date.now() - birthTs) / 86400000)
@@ -575,6 +933,10 @@ function buildExpenseLinkedRef(expense: Expense & Record<string, any>, linkedDog
     return linkedDogs.length === 1 ? '单犬记录' : `${linkedDogs.length}只犬分摊`
   }
   return ''
+}
+
+function buildExpenseName(expense: Partial<Expense> & Record<string, any>, fallback = '费用') {
+  return expense.notes || normalizeExpenseCategoryName(expense.category) || fallback
 }
 
 export async function getLocalExpenseDetail(familyId: string, expenseId: string) {
@@ -719,6 +1081,202 @@ export async function getLocalFinancialSummary(
   }
 }
 
+function normalizeLocalFinanceFilters(filters: Record<string, any> = {}) {
+  const normalizeStringArray = (rawValue: unknown) => {
+    if (!rawValue) return []
+    const values = Array.isArray(rawValue) ? rawValue : [rawValue]
+    return Array.from(new Set(
+      values
+        .map(item => (typeof item === 'string' ? item.trim() : ''))
+        .filter(Boolean),
+    ))
+  }
+
+  const type = String(filters.type || '')
+  const normalized = {
+    type,
+    incomeTypes: normalizeStringArray(filters.incomeTypes).map(item => normalizeIncomeTypeLabel(item)),
+    expenseCategoryGroups: normalizeStringArray(filters.expenseCategoryGroups),
+    expenseCategories: normalizeStringArray(filters.expenseCategories || filters.subCategory || filters.category),
+    dogIds: normalizeStringArray(filters.dogIds || filters.dogId),
+    litterIds: normalizeStringArray(filters.litterIds || filters.litterId),
+    cycleIds: normalizeStringArray(filters.cycleIds || filters.cycleId),
+    unlinkedOnly: !!filters.unlinkedOnly,
+    sort: String(filters.sort || 'date_desc'),
+  }
+
+  if (type === 'income') {
+    normalized.expenseCategoryGroups = []
+    normalized.expenseCategories = []
+    normalized.litterIds = []
+    normalized.cycleIds = []
+  }
+
+  if (type === 'expense') {
+    normalized.incomeTypes = []
+  }
+
+  if (normalized.unlinkedOnly) {
+    normalized.dogIds = []
+    normalized.litterIds = []
+    normalized.cycleIds = []
+  }
+
+  return normalized
+}
+
+function resolveLocalFinanceDateRange(filters: Record<string, any> = {}) {
+  if (filters.startDate != null && filters.endDate != null) {
+    return {
+      startDate: Number(filters.startDate),
+      endDate: Number(filters.endDate),
+    }
+  }
+
+  const rangeValue = typeof filters.dateRange === 'string'
+    ? filters.dateRange
+    : (filters.dateRange?.value || filters.dateRange?.kind || '')
+
+  if (rangeValue === 'custom') {
+    const startDate = Number(filters.dateRange?.startDate || filters.customStartDate || 0)
+    const endDate = Number(filters.dateRange?.endDate || filters.customEndDate || 0)
+    if (startDate && endDate) {
+      return { startDate, endDate: endDate + 86400000 }
+    }
+  }
+
+  const now = new Date()
+  const year = Number(filters.year || now.getFullYear())
+  const month = Number(filters.month || (now.getMonth() + 1))
+  const anchorDate = new Date(year, month - 1, 1)
+
+  if (rangeValue === 'last_month') {
+    return {
+      startDate: new Date(year, month - 2, 1).getTime(),
+      endDate: new Date(year, month - 1, 1).getTime(),
+    }
+  }
+
+  if (rangeValue === 'this_quarter') {
+    const quarterStartMonth = Math.floor(anchorDate.getMonth() / 3) * 3
+    return {
+      startDate: new Date(anchorDate.getFullYear(), quarterStartMonth, 1).getTime(),
+      endDate: new Date(anchorDate.getFullYear(), quarterStartMonth + 3, 1).getTime(),
+    }
+  }
+
+  if (rangeValue === 'this_year' || filters.period === 'yearly') {
+    return {
+      startDate: new Date(anchorDate.getFullYear(), 0, 1).getTime(),
+      endDate: new Date(anchorDate.getFullYear() + 1, 0, 1).getTime(),
+    }
+  }
+
+  return {
+    startDate: new Date(year, month - 1, 1).getTime(),
+    endDate: new Date(year, month, 1).getTime(),
+  }
+}
+
+function hasIntersection(left: string[] = [], right: string[] = []) {
+  if (!left.length || !right.length) return false
+  const rightSet = new Set(right)
+  return left.some(item => rightSet.has(item))
+}
+
+function isExpenseUnlinked(expense: Partial<Expense> & Record<string, any>) {
+  return (!expense.linked_dog_ids || expense.linked_dog_ids.length === 0)
+    && !expense.linked_litter_id
+    && !expense.linked_cycle_id
+}
+
+function isIncomeUnlinked(income: Partial<Income> & Record<string, any>) {
+  return !income.dog_id
+}
+
+export async function getLocalTransactionList(familyId: string, filters: Record<string, any> = {}) {
+  if (!familyId) return []
+
+  const family = await getLocalFamilyRow(familyId)
+  const groups = buildExpenseCategoryGroups(family?.settings?.custom_expense_category_groups || [])
+  const categories = normalizeExpenseCategories(family?.settings?.custom_expense_categories || [], groups)
+  const { startDate, endDate } = resolveLocalFinanceDateRange(filters)
+  const normalizedFilters = normalizeLocalFinanceFilters(filters)
+  const [expenses, incomes] = await Promise.all([
+    (!normalizedFilters.type || normalizedFilters.type === 'expense')
+      ? localDb.query<Expense>('expenses', row => (
+        row.family_id === familyId
+        && !row.deleted_at
+        && Number(row.date || 0) >= startDate
+        && Number(row.date || 0) < endDate
+      ))
+      : Promise.resolve([] as Expense[]),
+    (!normalizedFilters.type || normalizedFilters.type === 'income')
+      ? localDb.query<Income>('incomes', row => (
+        row.family_id === familyId
+        && !row.deleted_at
+        && Number(row.date || 0) >= startDate
+        && Number(row.date || 0) < endDate
+      ))
+      : Promise.resolve([] as Income[]),
+  ])
+
+  const expenseItems = expenses
+    .filter((expense) => {
+      const hasCategoryFilter = normalizedFilters.expenseCategoryGroups.length > 0 || normalizedFilters.expenseCategories.length > 0
+      if (hasCategoryFilter) {
+        const normalizedCategory = normalizeExpenseCategoryName(expense.category, categories)
+        const groupKey = getExpenseCategoryGroupKey(expense.category, categories)
+        if (
+          !normalizedFilters.expenseCategoryGroups.includes(groupKey)
+          && !normalizedFilters.expenseCategories.includes(normalizedCategory)
+        ) {
+          return false
+        }
+      }
+      if (normalizedFilters.unlinkedOnly) return isExpenseUnlinked(expense)
+      if (normalizedFilters.dogIds.length > 0 && !hasIntersection(expense.linked_dog_ids || [], normalizedFilters.dogIds)) return false
+      if (normalizedFilters.litterIds.length > 0 && !normalizedFilters.litterIds.includes(expense.linked_litter_id || '')) return false
+      if (normalizedFilters.cycleIds.length > 0 && !normalizedFilters.cycleIds.includes(expense.linked_cycle_id || '')) return false
+      return true
+    })
+    .map(expense => ({
+      ...expense,
+      category: normalizeExpenseCategoryName(expense.category, categories),
+      _txType: 'expense',
+      category_group_label: getExpenseCategoryGroupLabel(
+        getExpenseCategoryGroupKey(expense.category, categories),
+        groups,
+      ),
+    }))
+
+  const incomeItems = incomes
+    .filter((income) => {
+      const normalizedType = normalizeIncomeTypeLabel(income.type)
+      if (normalizedFilters.incomeTypes.length > 0 && !normalizedFilters.incomeTypes.includes(normalizedType)) return false
+      if (normalizedFilters.unlinkedOnly) return isIncomeUnlinked(income)
+      if (normalizedFilters.dogIds.length > 0 && !normalizedFilters.dogIds.includes(income.dog_id || '')) return false
+      return true
+    })
+    .map(income => ({
+      ...income,
+      _txType: 'income',
+      type: normalizeIncomeTypeLabel(income.type),
+      type_label: normalizeIncomeTypeLabel(income.type),
+    }))
+
+  const transactions = [...expenseItems, ...incomeItems]
+  transactions.sort((left: any, right: any) => {
+    const leftAmount = left._txType === 'expense' ? Number(left.total_amount || 0) : Math.abs(Number(left.amount || 0))
+    const rightAmount = right._txType === 'expense' ? Number(right.total_amount || 0) : Math.abs(Number(right.amount || 0))
+    if (normalizedFilters.sort === 'amount_desc') return rightAmount - leftAmount
+    if (normalizedFilters.sort === 'amount_asc') return leftAmount - rightAmount
+    return Number(right.date || 0) - Number(left.date || 0)
+  })
+
+  return transactions.slice(0, 100)
+}
+
 export async function getLocalProjectionParams(familyId: string) {
   if (!familyId) {
     return {
@@ -786,6 +1344,228 @@ export async function getLocalProjectionParams(familyId: string) {
     avgIncomePerLitter,
     avgCostPerLitter,
     monthlySharedCost,
+  }
+}
+
+export async function getLocalLitterProfit(familyId: string, litterId: string) {
+  if (!familyId || !litterId) return null
+
+  const [litter, puppies, incomes, sales, expenses] = await Promise.all([
+    localDb.findById<Litter>('litters', litterId),
+    localDb.query<any>('dogs', row => row.family_id === familyId && row.origin_litter_id === litterId && !row.deleted_at),
+    localDb.query<Income>('incomes', row => row.family_id === familyId && !row.deleted_at),
+    localDb.query<SaleRecord>('sale_records', row => row.family_id === familyId && !row.deleted_at),
+    localDb.query<Expense>('expenses', row => row.family_id === familyId && !row.deleted_at),
+  ])
+
+  if (!litter || litter.family_id !== familyId) return null
+
+  const puppyIds = puppies.map(item => item._id)
+  const litterIncomes = incomes.filter(item => puppyIds.includes(item.dog_id || ''))
+  const litterSales = sales.filter(item => puppyIds.includes(item.dog_id))
+  const cycleExpenses = litter.cycle_id
+    ? expenses.filter(item => item.linked_cycle_id === litter.cycle_id)
+    : []
+  const litterExpenses = expenses.filter(item => item.linked_litter_id === litterId)
+
+  const incomeByDog = litterIncomes.reduce<Record<string, number>>((map, income) => {
+    const dogId = income.dog_id || ''
+    if (!dogId) return map
+    map[dogId] = (map[dogId] || 0) + Number(income.amount || 0)
+    return map
+  }, {})
+
+  const saleByDog = litterSales.reduce<Record<string, SaleRecord>>((map, sale) => {
+    const existing = map[sale.dog_id]
+    if (!existing || Number(sale.updated_at || 0) > Number(existing.updated_at || 0)) {
+      map[sale.dog_id] = sale
+    }
+    return map
+  }, {})
+
+  const litterExpenseIds = new Set(litterExpenses.map(item => item._id))
+  const exclusiveCycleExpenses = cycleExpenses.filter(expense => !litterExpenseIds.has(expense._id))
+
+  const breedingCosts = exclusiveCycleExpenses.map(expense => ({
+    id: expense._id,
+    name: buildExpenseName(expense, '繁育费用'),
+    amount: Number(expense.total_amount || 0),
+  }))
+  const litterCosts = litterExpenses.map(expense => ({
+    id: expense._id,
+    name: buildExpenseName(expense, '窝费用'),
+    amount: Number(expense.total_amount || 0),
+  }))
+
+  const countedExpenseIds = new Set([
+    ...exclusiveCycleExpenses.map(item => item._id),
+    ...litterExpenses.map(item => item._id),
+  ])
+  const puppyCosts: Array<{ id: string; name: string; amount: number }> = []
+
+  for (const expense of expenses) {
+    if (countedExpenseIds.has(expense._id)) continue
+    if (!Array.isArray(expense.linked_dog_ids) || !expense.linked_dog_ids.length) continue
+    const matchedCount = expense.linked_dog_ids.filter(id => puppyIds.includes(id)).length
+    if (!matchedCount) continue
+    const shareAmount = Number(expense.total_amount || 0) * matchedCount / expense.linked_dog_ids.length
+    puppyCosts.push({
+      id: expense._id,
+      name: buildExpenseName(expense, '幼崽费用'),
+      amount: Math.round(shareAmount * 100) / 100,
+    })
+  }
+
+  const totalIncome = litterIncomes.reduce((sum, item) => sum + Number(item.amount || 0), 0)
+  const totalExpense = [...breedingCosts, ...litterCosts, ...puppyCosts]
+    .reduce((sum, item) => sum + Number(item.amount || 0), 0)
+  const alivePuppies = puppies.filter(item => item.disposition !== '已故')
+  const avgCostPerPuppy = alivePuppies.length > 0 ? totalExpense / alivePuppies.length : 0
+  const incomeItems = puppies.map((puppy, index) => {
+    const actualIncome = incomeByDog[puppy._id] || 0
+    const sale = saleByDog[puppy._id]
+    if (actualIncome !== 0) {
+      return {
+        id: puppy._id,
+        name: puppy.name || `幼崽${index + 1}`,
+        gender: puppy.gender || '',
+        disposition: puppy.disposition || '',
+        status: 'sold',
+        amount: actualIncome,
+        estimated_amount: 0,
+      }
+    }
+    if (sale && sale.status === '已预定') {
+      return {
+        id: puppy._id,
+        name: puppy.name || `幼崽${index + 1}`,
+        gender: puppy.gender || '',
+        disposition: puppy.disposition || '',
+        status: 'reserved',
+        amount: 0,
+        estimated_amount: sale.agreed_price || sale.floor_price || 0,
+      }
+    }
+    if ((sale && sale.status === '待售') || puppy.disposition === '已预定') {
+      return {
+        id: puppy._id,
+        name: puppy.name || `幼崽${index + 1}`,
+        gender: puppy.gender || '',
+        disposition: puppy.disposition || '',
+        status: puppy.disposition === '已预定' ? 'reserved' : 'pending',
+        amount: 0,
+        estimated_amount: sale?.agreed_price || sale?.floor_price || 0,
+      }
+    }
+    return {
+      id: puppy._id,
+      name: puppy.name || `幼崽${index + 1}`,
+      gender: puppy.gender || '',
+      disposition: puppy.disposition || '',
+      status: 'pending',
+      amount: 0,
+      estimated_amount: 0,
+    }
+  })
+
+  return {
+    litter,
+    puppies,
+    totalIncome,
+    totalExpense,
+    totalCost: totalExpense,
+    netProfit: totalIncome - totalExpense,
+    puppyCount: alivePuppies.length,
+    totalPuppyCount: puppies.length,
+    aliveCount: alivePuppies.length,
+    costPerPuppy: Math.round(avgCostPerPuppy),
+    avgCostPerPuppy: Math.round(avgCostPerPuppy),
+    incomeItems,
+    breedingCosts,
+    litterCosts,
+    puppyCosts,
+  }
+}
+
+export async function getLocalDamRoi(familyId: string, damId: string) {
+  if (!familyId || !damId) return null
+
+  const [dam, cycles, litters, allExpenses, allPuppies] = await Promise.all([
+    localDb.findById<any>('dogs', damId),
+    localDb.query<BreedingCycle>('breeding_cycles', row => row.family_id === familyId && row.dam_id === damId),
+    localDb.query<Litter>('litters', row => row.family_id === familyId && row.dam_id === damId),
+    localDb.query<Expense>('expenses', row => row.family_id === familyId && !row.deleted_at),
+    localDb.query<any>('dogs', row => row.family_id === familyId && !row.deleted_at),
+  ])
+
+  if (!dam || dam.family_id !== familyId || dam.deleted_at) return null
+
+  const litterSummariesRaw = await Promise.all(litters.map(litter => getLocalLitterProfit(familyId, litter._id)))
+  const litterSummaries = litterSummariesRaw.filter((item): item is NonNullable<typeof item> => !!item)
+  const totalBreedingIncome = litterSummaries.reduce((sum, item) => sum + Number(item.totalIncome || 0), 0)
+  const totalBreedingCost = litterSummaries.reduce((sum, item) => sum + Number(item.totalExpense || 0), 0)
+  const cycleIds = cycles.map(item => item._id)
+  const litterIds = litters.map(item => item._id)
+
+  const litterList = litterSummaries.map((summary, index) => {
+    const hasPending = (summary.incomeItems || []).some(item => item.status === 'pending')
+    let status = 'income'
+    if (hasPending) status = 'in_progress'
+    else if (summary.netProfit < 0) status = 'failed'
+    return {
+      id: summary.litter._id,
+      index: index + 1,
+      title: `${summary.litter.dam_name || dam.name}第${index + 1}窝`,
+      meta: `${summary.aliveCount}/${summary.totalPuppyCount}只存活`,
+      puppyCount: summary.aliveCount,
+      profit: summary.netProfit,
+      status,
+    }
+  })
+
+  const countedIds = new Set<string>()
+  for (const expense of allExpenses) {
+    if (
+      (expense.linked_cycle_id && cycleIds.includes(expense.linked_cycle_id))
+      || (expense.linked_litter_id && litterIds.includes(expense.linked_litter_id))
+    ) {
+      countedIds.add(expense._id)
+    }
+  }
+
+  let healthCost = 0
+  for (const expense of allExpenses) {
+    if (countedIds.has(expense._id)) continue
+    if (expense.category === '购入') continue
+    if (Array.isArray(expense.linked_dog_ids) && expense.linked_dog_ids.includes(damId)) {
+      healthCost += Number(expense.total_amount || 0) / expense.linked_dog_ids.length
+    }
+  }
+
+  const purchaseCost = Number(dam.purchase_price || 0)
+  const totalInvestment = purchaseCost + totalBreedingCost + healthCost
+  const netProfit = totalBreedingIncome - totalInvestment
+  const roiPercent = totalInvestment > 0
+    ? Math.round((netProfit / totalInvestment) * 1000) / 10
+    : 0
+
+  return {
+    damId,
+    damName: dam.name,
+    purchasePrice: purchaseCost,
+    purchaseCost,
+    totalIncome: totalBreedingIncome,
+    totalBreedingIncome,
+    totalBreedingCost,
+    healthCost,
+    totalExpense: totalInvestment,
+    netReturn: netProfit,
+    netProfit,
+    roiPercent,
+    cycleCount: cycles.length,
+    litterCount: litters.length,
+    puppyCount: allPuppies.filter(item => litterIds.includes(item.origin_litter_id)).length,
+    litters: litterList,
   }
 }
 

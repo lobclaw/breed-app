@@ -219,6 +219,86 @@ describe('family-service', () => {
         morning_summary_time: '25:61',
       })).rejects.toThrow('推送时间格式无效')
     })
+
+    it('应支持 _sync 幂等重放并返回 ack', async () => {
+      seedCollection('families', [{
+        _id: familyId,
+        name: '测试犬舍',
+        version: 3,
+        settings: {
+          default_weaning_days: 45,
+          default_vaccine_interval_puppy: 21,
+          default_vaccine_interval_adult: 365,
+          default_deworming_interval_puppy: 14,
+          default_deworming_interval_adult: 90,
+          push_enabled: true,
+          morning_summary_enabled: true,
+          morning_summary_time: '09:00',
+        },
+        created_at: 1000,
+        updated_at: 1000,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, role: 'creator' })
+      const payload = {
+        push_enabled: false,
+        _sync: {
+          clientMutationId: 'family-settings-sync-1',
+          deviceId: 'device_1',
+          clientTimestamp: 2000,
+          baseVersions: { [familyId]: 3 },
+        },
+      }
+
+      const first = await familyService.updateSettings.call(ctx, payload)
+      const second = await familyService.updateSettings.call(ctx, payload)
+
+      expect(first.ack).toBe('accepted')
+      expect(second).toEqual(first)
+
+      const { data } = await db.collection('families').doc(familyId).get()
+      expect(data[0].settings.push_enabled).toBe(false)
+      expect(data[0].version).toBe(4)
+    })
+
+    it('baseVersion 过期时应返回 conflict', async () => {
+      seedCollection('families', [{
+        _id: familyId,
+        name: '测试犬舍',
+        version: 5,
+        settings: {
+          default_weaning_days: 45,
+          default_vaccine_interval_puppy: 21,
+          default_vaccine_interval_adult: 365,
+          default_deworming_interval_puppy: 14,
+          default_deworming_interval_adult: 90,
+          push_enabled: true,
+          morning_summary_enabled: true,
+          morning_summary_time: '09:00',
+        },
+        created_at: 1000,
+        updated_at: 1000,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, role: 'creator' })
+      const result = await familyService.updateSettings.call(ctx, {
+        push_enabled: false,
+        _sync: {
+          clientMutationId: 'family-settings-conflict-1',
+          deviceId: 'device_1',
+          clientTimestamp: 2000,
+          baseVersions: { [familyId]: 4 },
+        },
+      })
+
+      expect(result.ack).toBe('conflict')
+      expect(result.conflict).toEqual(expect.objectContaining({
+        collection: 'families',
+        entityId: familyId,
+        baseVersion: 4,
+        serverVersion: 5,
+      }))
+    })
   })
 
   describe('addCareRule', () => {
@@ -246,6 +326,39 @@ describe('family-service', () => {
       expect(data[0].care_rules).toHaveLength(1)
       expect(data[0].care_rules[0].status_trigger).toBe('怀孕中')
       expect(data[0].care_rules[0].task_description).toBe('每日喂钙铁')
+    })
+
+    it('应支持 _sync 幂等添加', async () => {
+      seedCollection('families', [{
+        _id: familyId,
+        name: '测试犬舍',
+        version: 1,
+        care_rules: [],
+        updated_at: 1000,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, role: 'creator' })
+      const payload = {
+        status_trigger: '怀孕中',
+        task_description: '每日喂钙铁',
+        frequency: '每日',
+        _sync: {
+          clientMutationId: 'family-care-add-1',
+          deviceId: 'device_1',
+          clientTimestamp: 2000,
+          baseVersions: { [familyId]: 1 },
+        },
+      }
+
+      const first = await familyService.addCareRule.call(ctx, payload)
+      const second = await familyService.addCareRule.call(ctx, payload)
+
+      expect(first.ack).toBe('accepted')
+      expect(second).toEqual(first)
+
+      const { data } = await db.collection('families').doc(familyId).get()
+      expect(data[0].care_rules).toHaveLength(1)
+      expect(data[0].version).toBe(2)
     })
   })
 
@@ -277,6 +390,77 @@ describe('family-service', () => {
       const { data: updated } = await db.collection('families').doc(familyId).get()
       expect(updated[0].care_rules).toHaveLength(1)
       expect(updated[0].care_rules[0].status_trigger).toBe('哺乳中')
+    })
+
+    it('应支持 _sync 幂等删除', async () => {
+      seedCollection('families', [{
+        _id: familyId,
+        name: '测试犬舍',
+        version: 2,
+        care_rules: [
+          { status_trigger: '怀孕中', task_description: '每日喂钙铁', frequency: '每日' },
+        ],
+        updated_at: 1000,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, role: 'creator' })
+      const payload = {
+        index: 0,
+        _sync: {
+          clientMutationId: 'family-care-remove-1',
+          deviceId: 'device_1',
+          clientTimestamp: 2000,
+          baseVersions: { [familyId]: 2 },
+        },
+      }
+
+      const first = await familyService.removeCareRule.call(ctx, payload)
+      const second = await familyService.removeCareRule.call(ctx, payload)
+
+      expect(first.ack).toBe('accepted')
+      expect(second).toEqual(first)
+
+      const { data } = await db.collection('families').doc(familyId).get()
+      expect(data[0].care_rules).toEqual([])
+      expect(data[0].version).toBe(3)
+    })
+  })
+
+  describe('updateNickname', () => {
+    it('应支持 _sync 幂等更新昵称', async () => {
+      seedCollection('families', [{
+        _id: familyId,
+        name: '测试犬舍',
+        version: 1,
+        members: [
+          { user_id: 'test_uid', role: 'creator', status: 'active', joined_at: 1000, nickname: '旧昵称' },
+        ],
+        care_rules: [],
+        settings: {},
+        created_at: 1000,
+        updated_at: 1000,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'test_uid', role: 'creator' })
+      const payload = {
+        nickname: '新昵称',
+        _sync: {
+          clientMutationId: 'family-nickname-sync-1',
+          deviceId: 'device_1',
+          clientTimestamp: 2000,
+          baseVersions: { [familyId]: 1 },
+        },
+      }
+
+      const first = await familyService.updateNickname.call(ctx, payload)
+      const second = await familyService.updateNickname.call(ctx, payload)
+
+      expect(first.ack).toBe('accepted')
+      expect(second).toEqual(first)
+
+      const { data } = await db.collection('families').doc(familyId).get()
+      expect(data[0].members[0].nickname).toBe('新昵称')
+      expect(data[0].version).toBe(2)
     })
   })
 

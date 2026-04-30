@@ -359,10 +359,14 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useCloudCall } from '@/composables/useCloudCall'
 import { useAuth } from '@/composables/useAuth'
 import { useRecordSubmitState } from '@/composables/useRecordSubmitState'
 import { buildTaskFeedbackMessage, queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
+import {
+  findLocalDuplicateMedicationTasks,
+  getLocalHealthRecordDetail,
+  listLocalDogHealthHistory,
+} from '@/localdb/domain-repository'
 import { localSyncRuntime } from '@/localdb/runtime'
 import { resolveMedicationRouteQuery, type MedicationRouteIllnessLink } from '@/utils/recordFormRoutes'
 import { formatMedicationDosage } from '@/utils/medicationDisplay'
@@ -586,27 +590,6 @@ function setChip(chip: string) {
   chipActive.value = chip
 }
 
-const { run: batchStartMedication } = useCloudCall('health-service', 'batchStartMedication', {
-  successMode: 'silent',
-  loadingMode: 'local',
-  throwOnError: true,
-})
-const { run: batchCheckDuplicate } = useCloudCall<{ data: any[] }>('health-service', 'batchCheckDuplicateMedication')
-const { run: fetchHealthRecord } = useCloudCall('health-service', 'getHealthRecordDetail', {
-  successMode: 'silent',
-  loadingMode: 'local',
-})
-const { run: fetchHealthHistory } = useCloudCall<{ data: any[] }>('health-service', 'getHealthHistory', {
-  successMode: 'silent',
-  loadingMode: 'local',
-  showError: false,
-})
-const { run: saveProtocol } = useCloudCall('health-service', 'addMedicationProtocol', {
-  successMode: 'silent',
-  loadingMode: 'local',
-  throwOnError: true,
-})
-
 watch(() => selectedDogs.value.map((dog: any) => dog?._id || '').join(','), () => {
   void loadSingleDogIllnessOptions()
 })
@@ -647,10 +630,10 @@ async function loadSingleDogIllnessOptions() {
   if (!dogId) return
   if (isLinkedIllnessApplicable.value) return
 
-  const result = await fetchHealthHistory(dogId, 'illness')
+  const result = await listLocalDogHealthHistory(currentFamily.value?._id || '', dogId, 'illness')
   if (token !== singleIllnessLoadToken) return
 
-  const options = (result?.data || [])
+  const options = (result || [])
     .map(buildIllnessLinkFromRecord)
     .filter((item): item is MedicationRouteIllnessLink => !!item?.dogId && !!item?.illnessRecordId)
 
@@ -667,12 +650,7 @@ async function submit() {
     const drug = drugName.value.trim()
     const dogIds = selectedDogs.value.map((dog: any) => dog._id)
 
-    try {
-      const duplicateRes = await batchCheckDuplicate(dogIds, drug)
-      dupList.value = duplicateRes?.data || []
-    } catch {
-      dupList.value = []
-    }
+    dupList.value = await findLocalDuplicateMedicationTasks(currentFamily.value?._id || '', dogIds, drug)
     if (dupList.value.length > 0) {
       dupOverrideDogIds.value = []
       showDupModal.value = true
@@ -794,7 +772,7 @@ async function doSaveProtocol() {
     uni.showToast({ title: '请输入方案名称', icon: 'none' })
     return
   }
-  await saveProtocol({
+  await localSyncRuntime.addMedicationProtocolLocally(currentFamily.value?._id || '', {
     name: protocolName.value.trim(),
     drug_name: drugName.value.trim(),
     dosage: dosage.value || null,
@@ -866,8 +844,7 @@ async function initFromRoute() {
     : []
 
   if (!illnessRecordId.value) return
-  const result = await fetchHealthRecord({ id: illnessRecordId.value })
-  const record = result?.data || result
+  const record = await getLocalHealthRecordDetail(currentFamily.value?._id || '', illnessRecordId.value)
   if (!record || record.type !== 'illness') return
 
   const details = record.details || {}

@@ -146,7 +146,10 @@ import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
-import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
+import { usePageSync } from '@/composables/usePageSync'
+import { listLocalTasksByIds } from '@/localdb/domain-repository'
+import { localSyncRuntime } from '@/localdb/runtime'
 import { getHealthTypeTone } from '@/utils/themeSemantics'
 import { buildTimestampFromDayOffset, formatDateInputValue } from '@/utils/date'
 
@@ -157,6 +160,7 @@ interface TaskItem {
   detail: string
   taskType: string
 }
+usePageSync({ routePath: 'pages/home/batch-process' })
 
 interface TaskGroup {
   type: string
@@ -172,6 +176,7 @@ const selected = reactive(new Set<string>())
 let passedTaskIds: string[] = []
 let passedType = ''
 const showDatePicker = ref(false)
+const { currentFamily } = useAuth()
 
 const formData = reactive({
   vaccine_type: '',
@@ -202,13 +207,6 @@ const perDogCost = computed(() => {
   const total = parseFloat(costInput.value)
   if (!total || selected.size === 0) return '0'
   return (Math.round(total / selected.size * 100) / 100).toFixed(2)
-})
-
-const { run: fetchTasks } = useCloudCall<{ data: any[] }>('task-service', 'getTasksByIds')
-const { run: completeTasks } = useCloudCall('task-service', 'batchCompleteTask')
-const { run: addRecord } = useCloudCall('health-service', 'addHealthRecord', {
-  showLoading: true,
-  loadingText: '处理中...',
 })
 
 function isGroupAllSelected(group: TaskGroup): boolean {
@@ -246,29 +244,25 @@ async function batchComplete() {
   // 获取选中项的犬只信息
   const selectedItems = taskGroups.value.flatMap(g => g.items).filter(item => ids.includes(item.id))
 
-  // 为每只选中的犬创建健康记录
-  for (const item of selectedItems) {
-    const details: Record<string, any> = {}
-    if (passedType === 'vaccination' && formData.vaccine_type) {
-      details.vaccine_type = formData.vaccine_type
-    }
-    if (passedType === 'deworming') {
-      details.deworming_type = formData.deworming_type
-      if (formData.drug_name) details.drug_name = formData.drug_name
-    }
-
-    await addRecord({
-      type: passedType,
-      dog_id: item.dogId,
-      date: formDate.value,
-      cost: perCost,
-      notes: null,
-      details,
-    })
+  const details: Record<string, any> = {}
+  if (passedType === 'vaccination' && formData.vaccine_type) {
+    details.vaccine_type = formData.vaccine_type
+  }
+  if (passedType === 'deworming') {
+    details.deworming_type = formData.deworming_type
+    if (formData.drug_name) details.drug_name = formData.drug_name
   }
 
-  // 标记任务完成
-  await completeTasks(ids)
+  await localSyncRuntime.batchAddHealthRecordsLocally(currentFamily.value?._id || '', {
+    dog_ids: selectedItems.map(item => item.dogId),
+    type: passedType,
+    date: formDate.value,
+    cost: cost,
+    notes: null,
+    details,
+    create_task: false,
+    source_task_ids: ids,
+  })
 
   // 更新 UI
   taskGroups.value.forEach(g => {
@@ -295,15 +289,15 @@ async function loadData() {
   loading.value = true
   try {
     if (passedTaskIds.length > 0) {
-      const res = await fetchTasks(passedTaskIds)
-      if (res?.data) {
+      const rows = await listLocalTasksByIds(currentFamily.value?._id || '', passedTaskIds)
+      if (rows.length > 0) {
         const meta = typeLabels[passedType] || { title: passedType, icon: 'assignment', color: 'green' }
         taskGroups.value = [{
           type: passedType,
           title: meta.title,
           icon: meta.icon,
           color: meta.color,
-          items: res.data.map((t: any) => ({
+          items: rows.map((t: any) => ({
             id: t._id,
             dogId: t.dog_id,
             dogName: t.dog_name || '未知',
@@ -311,7 +305,6 @@ async function loadData() {
             taskType: t.type,
           })),
         }]
-        // 默认全选
         taskGroups.value[0].items.forEach(item => selected.add(item.id))
       }
     }

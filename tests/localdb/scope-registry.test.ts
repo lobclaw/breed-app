@@ -21,8 +21,11 @@ describe('sync scope registry', () => {
     expect(resolveSyncScopeForRoute('pages/record/medication-detail', { medication_task_id: 'med_1' })?.key).toBe('medication-task:med_1')
   })
 
-  it('应把静态页和在线优先页正确归类', () => {
+  it('应把静态页、在线优先页和废弃重定向页正确归类', () => {
     expect(resolveSyncScopeForRoute('pages/profile/about')?.mode).toBe('static')
     expect(resolveSyncScopeForRoute('pages/profile/backup')?.mode).toBe('online-first')
+    expect(resolveSyncScopeForRoute('pages/record/health')?.mode).toBe('redirect-deprecated')
+    expect(resolveSyncScopeForRoute('pages/record/breeding')?.mode).toBe('redirect-deprecated')
+    expect(resolveSyncScopeForRoute('pages/finance/income-add')?.mode).toBe('redirect-deprecated')
   })
 })

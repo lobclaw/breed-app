@@ -199,8 +199,11 @@
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
-import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
+import { usePageSync } from '@/composables/usePageSync'
 import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
+import { getLocalExpenseCategories, getLocalExpenseDetail } from '@/localdb/domain-repository'
+import { localSyncRuntime } from '@/localdb/runtime'
 import {
   DEFAULT_EXPENSE_CATEGORIES,
   getExpenseCategoryMeta,
@@ -218,6 +221,13 @@ import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
 import type { ExpenseCategory } from '@/types/finance'
 
 let expenseId = ''
+const { currentFamily } = useAuth()
+usePageSync({
+  resolveScope: (query) => {
+    const id = query.id || query.recordId || query.record_id || ''
+    return id ? `finance-detail:expense:${id}` : 'finance-detail'
+  },
+})
 
 const amountInput = ref('')
 const submitting = ref(false)
@@ -365,57 +375,51 @@ function addPhoto() {
   })
 }
 
-const { run: getExpense } = useCloudCall('finance-service', 'getExpenseDetail', {
-  showLoading: false,
-})
-
-const { run: fetchCategories } = useCloudCall<{ data: ExpenseCategory[] }>('finance-service', 'getExpenseCategories', {
-  showLoading: false,
-})
-
-const { run: updateExpense } = useCloudCall('finance-service', 'updateExpense', {
-  successMode: 'silent',
-  loadingMode: 'local',
-  throwOnError: true,
-})
-
 async function refreshCategoryOptions() {
-  const catRes = await fetchCategories()
-  expenseCategoryOptions.value = normalizeExpenseCategories(catRes?.data || [])
+  const familyId = currentFamily.value?._id || ''
+  if (!familyId) {
+    expenseCategoryOptions.value = normalizeExpenseCategories(DEFAULT_EXPENSE_CATEGORIES)
+  } else {
+    localSyncRuntime.setCurrentFamilyId(familyId)
+    expenseCategoryOptions.value = await getLocalExpenseCategories(familyId)
+  }
   syncRecentCategories()
 }
 
 async function loadExpense(id: string) {
+  const familyId = currentFamily.value?._id || ''
   loading.value = true
   try {
-    const [catRes, res] = await Promise.all([
-      fetchCategories(),
-      getExpense({ id }),
+    if (!familyId) return
+    localSyncRuntime.setCurrentFamilyId(familyId)
+    const [localCategories, data] = await Promise.all([
+      getLocalExpenseCategories(familyId),
+      getLocalExpenseDetail(familyId, id),
     ])
-    expenseCategoryOptions.value = normalizeExpenseCategories(catRes?.data || [])
+    expenseCategoryOptions.value = localCategories
     syncRecentCategories()
-    if (res?.data) {
-      const data = res.data as any
-      amountInput.value = String(data.total_amount || '')
-      form.category = data.category || '食品'
-      form.date = data.date || Date.now()
-      form.notes = data.notes || ''
-      photos.value = data.photos || data.images || []
-      linkedDogs.value = data.linked_dogs || []
-      if (data.linked_litter_id) {
+    if (data) {
+      const detail = data as any
+      amountInput.value = String(detail.total_amount || '')
+      form.category = detail.category || '食品'
+      form.date = detail.date || Date.now()
+      form.notes = detail.notes || ''
+      photos.value = detail.photos || detail.images || []
+      linkedDogs.value = detail.linked_dogs || []
+      if (detail.linked_litter_id) {
         linkedLitter.value = {
-          _id: data.linked_litter_id,
-          damName: data.dam_name,
-          litterNumber: data.litter_number,
+          _id: detail.linked_litter_id,
+          damName: detail.dam_name,
+          litterNumber: detail.litter_number,
         }
       } else {
         linkedLitter.value = null
       }
-      if (data.linked_cycle_id) {
+      if (detail.linked_cycle_id) {
         linkedCycle.value = {
-          _id: data.linked_cycle_id,
-          damName: data.dam_name,
-          cycleNumber: data.cycle_number,
+          _id: detail.linked_cycle_id,
+          damName: detail.dam_name,
+          cycleNumber: detail.cycle_number,
         }
       } else {
         linkedCycle.value = null
@@ -429,7 +433,7 @@ async function loadExpense(id: string) {
 async function submit() {
   submitting.value = true
   try {
-    const res = await updateExpense({
+    const res = await localSyncRuntime.updateExpenseLocally(currentFamily.value?._id || '', {
       id: expenseId,
       total_amount: parseFloat(amountInput.value),
       category: form.category,

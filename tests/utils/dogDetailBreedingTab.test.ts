@@ -97,17 +97,18 @@ describe('dog detail breeding tab source contract', () => {
   })
 
   it('应只在繁育 Tab 懒加载当前周期详情，并支持来源页返回刷新', () => {
-    expect(source).toContain("useCloudCall<{ data: BreedingCycleDetailResponse }>('breeding-service', 'getCycleDetail'")
+    expect(source).toContain('getLocalBreedingCycleDetail')
     expect(source).toContain('watch([activeTab, activeCycleId]')
     expect(source).toContain("if (tab === 'breeding')")
     expect(source).toContain('refreshBreedingSummary')
-    expect(source).toContain("refreshBreedingSummary: activeTab.value === 'breeding'")
-    expect(source).toContain("const isPuppy = detailRes?.data?.role === '幼崽'")
+    expect(source).toContain("refreshBreedingSummary: !!feedback && activeTab.value === 'breeding'")
+    expect(source).toContain("const isPuppy = detail?.role === '幼崽'")
     expect(source).toContain('const cyclesPromise = isPuppy')
     expect(source).toContain('const littersPromise = isPuppy')
-    expect(source).toContain('fetchCycles(dogId)')
-    expect(source).toContain('fetchLitters(dogId)')
-    expect(source).toContain("if (detailRes.data.role === '幼崽' && activeTab.value === 'breeding') {")
+    expect(source).toContain('listLocalBreedingCycles')
+    expect(source).toContain('listLocalLittersByDam')
+    expect(source).toContain("if (detail.role === '幼崽' && activeTab.value === 'breeding') {")
+    expect(source).toContain("usePageSync({ routePath: 'pages/dog/detail' })")
   })
 
   it('应让哺乳状态可点击进入周期详情，并展示副文案与窝信息', () => {

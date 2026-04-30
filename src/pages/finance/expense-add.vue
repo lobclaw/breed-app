@@ -172,9 +172,11 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
-import { useCloudCall } from '@/composables/useCloudCall'
 import { useAuth } from '@/composables/useAuth'
+import { usePageSync } from '@/composables/usePageSync'
 import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
+import { localDb } from '@/localdb/db'
+import { getLocalExpenseCategories } from '@/localdb/domain-repository'
 import { localSyncRuntime } from '@/localdb/runtime'
 import {
   DEFAULT_EXPENSE_CATEGORIES,
@@ -198,6 +200,7 @@ import type { ExpenseCategory } from '@/types/finance'
 // 模式：支出 / 收入
 const mode = ref<'expense' | 'income'>('expense')
 const { currentFamily } = useAuth()
+usePageSync({ routePath: 'pages/finance/expense-add' })
 
 const amountInput = ref('')
 const submitState = ref<'idle' | 'submitting' | 'success'>('idle')
@@ -413,26 +416,14 @@ function addPhoto() {
   })
 }
 
-const { run: addExpense } = useCloudCall('finance-service', 'addExpense', {
-  successMode: 'silent',
-  loadingMode: 'local',
-  throwOnError: true,
-})
-
-const { run: addIncome } = useCloudCall('finance-service', 'addIncome', {
-  successMode: 'silent',
-  loadingMode: 'local',
-  throwOnError: true,
-})
-
-const { run: fetchCategories } = useCloudCall<{ data: ExpenseCategory[] }>('finance-service', 'getExpenseCategories')
-const { run: fetchDogDetail } = useCloudCall<{ data: any }>('dog-service', 'getDogDetail', {
-  showLoading: false,
-})
-
 async function loadCategories() {
-  const res = await fetchCategories()
-  expenseCategoryOptions.value = normalizeExpenseCategories(res?.data || [])
+  const familyId = currentFamily.value?._id || ''
+  if (!familyId) {
+    expenseCategoryOptions.value = normalizeExpenseCategories(DEFAULT_EXPENSE_CATEGORIES)
+  } else {
+    localSyncRuntime.setCurrentFamilyId(familyId)
+    expenseCategoryOptions.value = await getLocalExpenseCategories(familyId)
+  }
   syncRecentExpenseCategories()
   syncRecentIncomeTypes()
 }
@@ -489,8 +480,8 @@ onLoad(async (query) => {
   const dogId = String(query.dogId)
   let dogName = query?.dogName ? decodeURIComponent(String(query.dogName)) : ''
   if (!dogName) {
-    const dogRes = await fetchDogDetail(dogId)
-    dogName = dogRes?.data?.name || ''
+    const dogRow = await localDb.findById<any>('dogs', dogId)
+    dogName = dogRow?.name || ''
   }
   if (mode.value === 'income') {
     incomeLinkedDog.value = { _id: dogId, name: dogName || '未命名' }

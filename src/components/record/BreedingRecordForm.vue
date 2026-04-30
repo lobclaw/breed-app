@@ -475,10 +475,14 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { useCloudCall } from '@/composables/useCloudCall'
 import { useAuth } from '@/composables/useAuth'
 import { useRecordSubmitState } from '@/composables/useRecordSubmitState'
 import { buildRecordFeedbackMessage, queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
+import {
+  getLocalBreedingRecordDetail,
+  getLocalNextMatingNumberPreview,
+  getLocalTaskById,
+} from '@/localdb/domain-repository'
 import { localSyncRuntime } from '@/localdb/runtime'
 import { resolveBreedingRouteQuery } from '@/utils/recordFormRoutes'
 import { getDefaultExtraArrangementDate, type ExtraArrangementKind } from '@/utils/breedingExtraArrangement'
@@ -781,34 +785,6 @@ const skeletonBlocks = computed<BreedingSkeletonBlock[]>(() => {
   return blocks
 })
 
-const { run: fetchTask } = useCloudCall('task-service', 'getTask')
-const { run: completeTask } = useCloudCall('task-service', 'completeTask', {
-  successMode: 'silent',
-  loadingMode: 'local',
-  throwOnError: true,
-})
-const { run: addRecord } = useCloudCall('breeding-service', 'addBreedingRecord', {
-  successMode: 'silent',
-  loadingMode: 'local',
-  throwOnError: true,
-})
-const { run: batchAddRecords } = useCloudCall('breeding-service', 'batchAddBreedingRecords', {
-  successMode: 'silent',
-  loadingMode: 'local',
-  throwOnError: true,
-})
-const { run: getRecord } = useCloudCall('breeding-service', 'getBreedingRecordDetail', {
-  showLoading: false,
-})
-const { run: updateRecord } = useCloudCall('breeding-service', 'updateBreedingRecord', {
-  successMode: 'silent',
-  loadingMode: 'local',
-  throwOnError: true,
-})
-const { run: getNextMatingNumber } = useCloudCall('breeding-service', 'getNextMatingNumber', {
-  showLoading: false,
-})
-
 function resetDetails() {
   currentRecord.value = null
   selectedDog.value = null
@@ -995,13 +971,12 @@ async function refreshMatingNumberPreview() {
 
   const requestToken = ++matingPreviewRequestToken.value
   try {
-    const result = await getNextMatingNumber({
-      dog_id: dogId,
-      cycle_id: cycleId.value || undefined,
+    const data = await getLocalNextMatingNumberPreview(currentFamily.value?._id || '', {
+      dogId,
+      cycleId: cycleId.value || undefined,
     })
     if (requestToken !== matingPreviewRequestToken.value) return
 
-    const data = result?.data || result || {}
     details.mating_number = Number(data.mating_number) || 1
     if (!cycleId.value && data.cycle_id) {
       cycleId.value = data.cycle_id
@@ -1031,8 +1006,8 @@ async function loadCreateState() {
   }
 
   if (prefillTaskId.value) {
-    const taskRes = await fetchTask(prefillTaskId.value)
-    if (taskRes?.data) applyTaskPrefill(taskRes.data)
+    const task = await getLocalTaskById(currentFamily.value?._id || '', prefillTaskId.value)
+    if (task) applyTaskPrefill(task)
   }
 }
 
@@ -1045,7 +1020,7 @@ async function loadEditState() {
   loading.value = true
   try {
     resetDetails()
-    const record = await getRecord({ id: props.recordId })
+    const record = await getLocalBreedingRecordDetail(currentFamily.value?._id || '', props.recordId)
     if (!record) return
 
     currentRecord.value = record
@@ -1189,7 +1164,7 @@ async function submitEdit() {
     payload.extra_arrangement = extraArrangementPayload.value || null
   }
 
-  await updateRecord(payload)
+  await localSyncRuntime.updateBreedingRecordLocally(currentFamily.value?._id || '', payload)
   markSuccess()
   queueSubmitFeedback({
     message: breedingType.value === 'heat_observation' ? '已更新观察记录' : '已更新繁育记录',

@@ -75,8 +75,10 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
+import { usePageSync } from '@/composables/usePageSync'
 import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
+import { localSyncRuntime } from '@/localdb/runtime'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
@@ -96,6 +98,8 @@ const selectedDog = ref<SelectedDog | null>(null)
 const dogLocked = ref(false)
 const submitState = ref<'idle' | 'submitting' | 'success'>('idle')
 const floorPriceInput = ref('')
+const { currentFamily } = useAuth()
+usePageSync({ routePath: 'pages/sale/create' })
 
 const form = reactive({
   sale_mode: '自售' as SaleMode,
@@ -114,12 +118,6 @@ const submitButtonText = computed(() => {
   return '确认开始销售'
 })
 
-const { run: createSale } = useCloudCall('finance-service', 'createSaleRecord', {
-  successMode: 'silent',
-  loadingMode: 'local',
-  throwOnError: true,
-})
-
 function decodeQueryText(value: string | undefined) {
   if (!value) return ''
   try {
@@ -133,7 +131,9 @@ async function submit() {
   if (!selectedDog.value?._id) return
   submitState.value = 'submitting'
   try {
-    const res = await createSale({
+    const familyId = currentFamily.value?._id || ''
+    localSyncRuntime.setCurrentFamilyId(familyId)
+    const res = await localSyncRuntime.createSaleRecordLocally(familyId, {
       dog_id: selectedDog.value._id,
       sale_mode: form.sale_mode,
       floor_price: floorPriceInput.value ? parseFloat(floorPriceInput.value) : null,

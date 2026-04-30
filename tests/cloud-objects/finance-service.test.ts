@@ -87,6 +87,43 @@ describe('finance-service', () => {
     ])
   })
 
+  it('addExpenseCategoryGroup 应支持 _sync 幂等重放并保留客户端 key', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+    seedCollection('families', [{
+      _id: familyId,
+      name: '测试犬舍',
+      version: 1,
+      settings: {
+        custom_expense_categories: [],
+        custom_expense_category_groups: [],
+      },
+    }])
+
+    const payload = {
+      key: 'custom_local_group_1',
+      label: '美容护理',
+      _sync: {
+        clientMutationId: 'expense-group-sync-1',
+        deviceId: 'device_1',
+        clientTimestamp: aprilTs,
+        baseVersions: { [familyId]: 1 },
+      },
+    }
+
+    const first = await financeService.addExpenseCategoryGroup.call(ctx, payload)
+    const second = await financeService.addExpenseCategoryGroup.call(ctx, payload)
+
+    expect(first.ack).toBe('accepted')
+    expect(second).toEqual(first)
+    expect(first.data.key).toBe('custom_local_group_1')
+
+    const { data } = await db.collection('families').doc(familyId).get()
+    expect(data[0].settings.custom_expense_category_groups).toEqual([
+      { key: 'custom_local_group_1', label: '美容护理' },
+    ])
+    expect(data[0].version).toBe(2)
+  })
+
   it('自定义分类可挂到自定义分组', async () => {
     const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
 
@@ -217,6 +254,256 @@ describe('finance-service', () => {
 
     expect(result.data.map((item: any) => item._id)).toEqual(['exp_beauty'])
     expect(result.data[0].category_group_label).toBe('美容护理')
+  })
+
+  it('updateExpenseCategory 应支持 _sync 幂等重放并同步本地账单分类名', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+    seedCollection('families', [{
+      _id: familyId,
+      name: '测试犬舍',
+      version: 2,
+      settings: {
+        custom_expense_category_groups: [{ key: 'beauty', label: '美容护理' }],
+        custom_expense_categories: [{ name: '洗护', parent_group: 'beauty' }],
+      },
+    }])
+    seedCollection('expenses', [{
+      _id: 'exp_beauty',
+      family_id: familyId,
+      category: '洗护',
+      total_amount: 180,
+      version: 1,
+      deleted_at: null,
+      date: aprilTs,
+    }])
+
+    const payload = {
+      oldName: '洗护',
+      newName: '洗澡美容',
+      parentGroup: 'beauty',
+      _sync: {
+        clientMutationId: 'expense-category-sync-1',
+        deviceId: 'device_1',
+        clientTimestamp: aprilTs,
+        baseVersions: { [familyId]: 2 },
+      },
+    }
+
+    const first = await financeService.updateExpenseCategory.call(ctx, payload)
+    const second = await financeService.updateExpenseCategory.call(ctx, payload)
+
+    expect(first.ack).toBe('accepted')
+    expect(second).toEqual(first)
+
+    const { data: familyRows } = await db.collection('families').doc(familyId).get()
+    expect(familyRows[0].settings.custom_expense_categories).toEqual([
+      { name: '洗澡美容', parent_group: 'beauty' },
+    ])
+    expect(familyRows[0].version).toBe(3)
+
+    const { data: expenses } = await db.collection('expenses').doc('exp_beauty').get()
+    expect(expenses[0].category).toBe('洗澡美容')
+  })
+
+  it('removeExpenseCategoryGroup 在 baseVersion 过期时应返回 conflict', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+    seedCollection('families', [{
+      _id: familyId,
+      name: '测试犬舍',
+      version: 4,
+      settings: {
+        custom_expense_category_groups: [{ key: 'beauty', label: '美容护理' }],
+        custom_expense_categories: [],
+      },
+    }])
+
+    const result = await financeService.removeExpenseCategoryGroup.call(ctx, {
+      key: 'beauty',
+      _sync: {
+        clientMutationId: 'expense-group-conflict-1',
+        deviceId: 'device_1',
+        clientTimestamp: aprilTs,
+        baseVersions: { [familyId]: 3 },
+      },
+    })
+
+    expect(result.ack).toBe('conflict')
+    expect(result.conflict).toEqual(expect.objectContaining({
+      collection: 'families',
+      entityId: familyId,
+      baseVersion: 3,
+      serverVersion: 4,
+    }))
+  })
+
+  it('updateExpense 应支持 _sync 幂等重放', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+    seedCollection('expenses', [{
+      _id: 'exp_sync_1',
+      family_id: familyId,
+      total_amount: 120,
+      category: '食品',
+      date: aprilTs,
+      linked_cycle_id: null,
+      linked_litter_id: null,
+      linked_dog_ids: ['dog_1'],
+      dog_names: ['花花'],
+      images: [],
+      notes: null,
+      source_type: 'manual',
+      deleted_at: null,
+      version: 1,
+    }])
+
+    const payload = {
+      id: 'exp_sync_1',
+      total_amount: 188,
+      category: '医疗',
+      date: aprilTs + 1000,
+      linked_dog_ids: ['dog_2'],
+      dog_names: ['可可'],
+      images: ['img://1'],
+      notes: '复查',
+      _sync: {
+        clientMutationId: 'finance-update-expense-1',
+        deviceId: 'device_1',
+        clientTimestamp: aprilTs,
+        baseVersions: { exp_sync_1: 1 },
+      },
+    }
+
+    const first = await financeService.updateExpense.call(ctx, payload)
+    const second = await financeService.updateExpense.call(ctx, payload)
+
+    expect(first.ack).toBe('accepted')
+    expect(second).toEqual(first)
+
+    const { data } = await db.collection('expenses').doc('exp_sync_1').get()
+    expect(data[0]).toMatchObject({
+      total_amount: 188,
+      category: '医疗',
+      linked_dog_ids: ['dog_2'],
+      dog_names: ['可可'],
+      notes: '复查',
+      version: 2,
+    })
+  })
+
+  it('updateIncome 应支持 _sync 幂等重放', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+    seedCollection('incomes', [{
+      _id: 'income_sync_1',
+      family_id: familyId,
+      dog_id: 'dog_1',
+      dog_name: '花花',
+      type: '销售',
+      amount: 800,
+      date: aprilTs,
+      source_sale_id: null,
+      notes: null,
+      deleted_at: null,
+      version: 1,
+    }])
+
+    const payload = {
+      id: 'income_sync_1',
+      amount: 960,
+      type: '领养',
+      dog_id: 'dog_2',
+      dog_name: '可可',
+      date: aprilTs + 1000,
+      notes: '改为领养款',
+      _sync: {
+        clientMutationId: 'finance-update-income-1',
+        deviceId: 'device_1',
+        clientTimestamp: aprilTs,
+        baseVersions: { income_sync_1: 1 },
+      },
+    }
+
+    const first = await financeService.updateIncome.call(ctx, payload)
+    const second = await financeService.updateIncome.call(ctx, payload)
+
+    expect(first.ack).toBe('accepted')
+    expect(second).toEqual(first)
+
+    const { data } = await db.collection('incomes').doc('income_sync_1').get()
+    expect(data[0]).toMatchObject({
+      amount: 960,
+      type: '领养',
+      dog_id: 'dog_2',
+      dog_name: '可可',
+      notes: '改为领养款',
+      version: 2,
+    })
+  })
+
+  it('deleteExpense 应支持 _sync 幂等重放', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+    seedCollection('expenses', [{
+      _id: 'exp_delete_sync_1',
+      family_id: familyId,
+      total_amount: 88,
+      category: '交通',
+      date: aprilTs,
+      source_type: 'manual',
+      deleted_at: null,
+      version: 2,
+    }])
+
+    const payload = {
+      id: 'exp_delete_sync_1',
+      _sync: {
+        clientMutationId: 'finance-delete-expense-1',
+        deviceId: 'device_1',
+        clientTimestamp: aprilTs,
+        baseVersions: { exp_delete_sync_1: 2 },
+      },
+    }
+
+    const first = await financeService.deleteExpense.call(ctx, payload)
+    const second = await financeService.deleteExpense.call(ctx, payload)
+
+    expect(first.ack).toBe('accepted')
+    expect(second).toEqual(first)
+
+    const { data } = await db.collection('expenses').doc('exp_delete_sync_1').get()
+    expect(data[0].deleted_at).toBeTruthy()
+    expect(data[0].version).toBe(3)
+  })
+
+  it('deleteIncome 在 baseVersion 过期时应返回 conflict', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+    seedCollection('incomes', [{
+      _id: 'income_delete_sync_1',
+      family_id: familyId,
+      dog_id: 'dog_1',
+      dog_name: '花花',
+      type: '其他',
+      amount: 66,
+      date: aprilTs,
+      source_sale_id: null,
+      deleted_at: null,
+      version: 3,
+    }])
+
+    const result = await financeService.deleteIncome.call(ctx, {
+      id: 'income_delete_sync_1',
+      _sync: {
+        clientMutationId: 'finance-delete-income-conflict-1',
+        deviceId: 'device_1',
+        clientTimestamp: aprilTs,
+        baseVersions: { income_delete_sync_1: 2 },
+      },
+    })
+
+    expect(result.ack).toBe('conflict')
+    expect(result.conflict).toEqual(expect.objectContaining({
+      collection: 'incomes',
+      entityId: 'income_delete_sync_1',
+      baseVersion: 2,
+      serverVersion: 3,
+    }))
   })
 
   it('全部类型下可同时筛收入分类与支出分组/分类', async () => {
@@ -727,5 +1014,121 @@ describe('finance-service', () => {
       netProfit: 0,
       roiPercent: 0,
     })
+  })
+
+  it('addIncome 应支持 _sync 稳定 ID 与幂等重放', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+    const payload = {
+      amount: 1888,
+      type: '销售',
+      dog_id: 'dog_1',
+      dog_name: '花花',
+      date: aprilTs,
+      _sync: {
+        clientMutationId: 'income-sync-1',
+        deviceId: 'device_1',
+        clientTimestamp: aprilTs,
+        clientEntityIds: { incomes: 'income_client_1' },
+      },
+    }
+
+    const first = await financeService.addIncome.call(ctx, payload)
+    const second = await financeService.addIncome.call(ctx, payload)
+
+    expect(first.ack).toBe('accepted')
+    expect(second).toEqual(first)
+    expect(first.data.incomeId).toBe('income_client_1')
+
+    const { data: incomes } = await db.collection('incomes')
+      .where({ _id: 'income_client_1', family_id: familyId })
+      .get()
+    expect(incomes).toHaveLength(1)
+    expect(incomes[0]).toMatchObject({
+      amount: 1888,
+      type: '销售',
+    })
+  })
+
+  it('createSaleRecord 应支持 _sync 稳定 ID 与幂等重放', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+    seedCollection('dogs', [{
+      _id: 'puppy_sale_1',
+      name: '奶油',
+      role: '幼崽',
+      disposition: '在养',
+      family_id: familyId,
+      deleted_at: null,
+    }])
+
+    const payload = {
+      dog_id: 'puppy_sale_1',
+      sale_mode: '自售',
+      floor_price: 2888,
+      buyer_info: '张三',
+      _sync: {
+        clientMutationId: 'sale-sync-1',
+        deviceId: 'device_1',
+        clientTimestamp: aprilTs,
+        clientEntityIds: { sale_records: 'sale_client_1' },
+        baseVersions: { puppy_sale_1: 0 },
+      },
+    }
+
+    const first = await financeService.createSaleRecord.call(ctx, payload)
+    const second = await financeService.createSaleRecord.call(ctx, payload)
+
+    expect(first.ack).toBe('accepted')
+    expect(second).toEqual(first)
+    expect(first.data.saleId).toBe('sale_client_1')
+
+    const { data: sales } = await db.collection('sale_records')
+      .where({ _id: 'sale_client_1', family_id: familyId })
+      .get()
+    expect(sales).toHaveLength(1)
+    expect(sales[0]).toMatchObject({
+      dog_id: 'puppy_sale_1',
+      status: '待售',
+      floor_price: 2888,
+    })
+
+    const { data: dogs } = await db.collection('dogs').doc('puppy_sale_1').get()
+    expect(dogs[0].disposition).toBe('待售')
+  })
+
+  it('addAgent 与 removeAgent 应支持 _sync 幂等重放', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+    const addPayload = {
+      name: '代理小王',
+      contact_info: 'wx-001',
+      _sync: {
+        clientMutationId: 'agent-sync-add-1',
+        deviceId: 'device_1',
+        clientTimestamp: aprilTs,
+        clientEntityIds: { agents: 'agent_client_1' },
+      },
+    }
+
+    const firstAdd = await financeService.addAgent.call(ctx, addPayload)
+    const secondAdd = await financeService.addAgent.call(ctx, addPayload)
+    expect(firstAdd.ack).toBe('accepted')
+    expect(secondAdd).toEqual(firstAdd)
+
+    const removePayload = {
+      id: 'agent_client_1',
+      _sync: {
+        clientMutationId: 'agent-sync-remove-1',
+        deviceId: 'device_1',
+        clientTimestamp: aprilTs,
+        baseVersions: { agent_client_1: 1 },
+      },
+    }
+    const firstRemove = await financeService.removeAgent.call(ctx, removePayload)
+    const secondRemove = await financeService.removeAgent.call(ctx, removePayload)
+    expect(firstRemove.ack).toBe('accepted')
+    expect(secondRemove).toEqual(firstRemove)
+
+    const { data: agents } = await db.collection('agents').doc('agent_client_1').get()
+    expect(agents[0].deleted_at).toBeTruthy()
   })
 })

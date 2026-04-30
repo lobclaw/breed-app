@@ -1888,6 +1888,11 @@ module.exports = {
     if (!medicationTaskId) throw new Error('缺少用药任务 ID')
 
     const now = Date.now()
+    const syncMeta = getSyncMeta(input)
+    if (syncMeta?.clientMutationId) {
+      const existing = await findAppliedMutation(db, this.familyId, syncMeta.clientMutationId)
+      if (existing?.response) return existing.response
+    }
     const nextIllnessStatus = mapIllnessDispositionToStatus(input?.illnessDisposition || input?.illness_disposition)
 
     const { data: meds } = await db.collection('medication_tasks')
@@ -1895,11 +1900,13 @@ module.exports = {
       .get()
     if (!meds || meds.length === 0) throw new Error('用药任务不存在')
     if (meds[0].status !== '进行中') throw new Error('该用药已结束')
+    const medicationConflict = getEntityConflict(syncMeta, 'medication_tasks', meds[0])
+    if (medicationConflict) return medicationConflict
 
     // 更新用药状态
     await db.collection('medication_tasks').doc(medicationTaskId).update({
       status: '已取消',
-      updated_at: now,
+      ...buildVersionUpdate(dbCmd, now),
     })
 
     // 兼容旧数据：取消关联的 daily tasks（新记录没有，旧记录可能有）
@@ -1908,9 +1915,10 @@ module.exports = {
       status: 'pending',
     }).update({
       status: 'cancelled',
-      updated_at: now,
+      ...buildVersionUpdate(dbCmd, now),
     })
 
+    let linkedIllnessId = null
     if (meds[0].source_record_id && nextIllnessStatus) {
       const { data: linkedIllnesses } = await db.collection('health_records')
         .where({
@@ -1924,9 +1932,12 @@ module.exports = {
 
       const linkedIllness = linkedIllnesses?.[0]
       if (linkedIllness && (linkedIllness.details?.treatment_status || '观察中') !== '已康复') {
+        const illnessConflict = getEntityConflict(syncMeta, 'health_records', linkedIllness)
+        if (illnessConflict) return illnessConflict
+        linkedIllnessId = linkedIllness._id
         await db.collection('health_records').doc(linkedIllness._id).update({
           'details.treatment_status': nextIllnessStatus,
-          updated_at: now,
+          ...buildVersionUpdate(dbCmd, now),
         })
       }
     }
@@ -1943,7 +1954,29 @@ module.exports = {
       meta: { drugName: meds[0].drug_name },
     })
 
-    return { message: '用药已提前结束' }
+    const [updatedMeds, updatedTasks, updatedIllnesses] = await Promise.all([
+      db.collection('medication_tasks').where({ _id: medicationTaskId, family_id: this.familyId }).get(),
+      db.collection('tasks').where({ medication_task_id: medicationTaskId, family_id: this.familyId }).get(),
+      linkedIllnessId
+        ? db.collection('health_records').where({ _id: linkedIllnessId, family_id: this.familyId }).get()
+        : Promise.resolve({ data: [] }),
+    ])
+    const response = {
+      message: '用药已提前结束',
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: [
+          ...(updatedMeds.data || []).map(record => buildTouchedEntity('medication_tasks', record)),
+          ...(updatedTasks.data || []).map(record => buildTouchedEntity('tasks', record)),
+          ...(updatedIllnesses.data || []).map(record => buildTouchedEntity('health_records', record)),
+        ],
+        resyncScopes: ['medication_tasks', 'tasks', 'health_records'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**
@@ -2091,18 +2124,29 @@ module.exports = {
     if (!data.drug_name) throw new Error('请填写药品名称')
 
     const now = Date.now()
+    const syncMeta = getSyncMeta(data)
+    const appliedMutation = await findAppliedMutation(db, this.familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
+    const clientProtocolId = typeof syncMeta?.clientEntityIds?.medication_protocols === 'string'
+      ? syncMeta.clientEntityIds.medication_protocols
+      : null
 
-    const { id } = await db.collection('medication_protocols').add({
+    const protocol = buildVersionedCreate({
+      ...(clientProtocolId ? { _id: clientProtocolId } : {}),
       name: data.name,
       drug_name: data.drug_name,
+      dosage: data.dosage || null,
+      dosage_unit: data.dosage_unit || null,
+      method: data.method || null,
+      frequency: data.frequency || null,
       duration_days: data.duration_days || null,
       notes: data.notes || null,
       family_id: this.familyId,
       created_by: this.uid,
       deleted_at: null,
-      created_at: now,
-      updated_at: now,
-    })
+    }, now)
+    const { id } = await db.collection('medication_protocols').add(protocol)
+    const protocolId = clientProtocolId || id
 
     await logHealthOperation({
       familyId: this.familyId,
@@ -2110,28 +2154,48 @@ module.exports = {
       actionType: 'create',
       domain: 'medication',
       targetType: 'medication_protocol',
-      targetId: id,
+      targetId: protocolId,
       targetName: data.name,
       summary: `新增了用药方案 ${data.name}`,
       meta: { drugName: data.drug_name },
     })
 
-    return { data: { protocolId: id } }
+    const response = {
+      data: { protocolId },
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: [buildTouchedEntity('medication_protocols', { ...protocol, _id: protocolId })],
+        resyncScopes: ['medication_protocols'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**
    * 软删除用药方案
    */
-  async removeMedicationProtocol(id) {
+  async removeMedicationProtocol(input) {
+    const id = getIdArg(input, 'id', 'protocolId', 'protocol_id')
     if (!id) throw new Error('缺少方案 ID')
+    const syncMeta = getSyncMeta(input)
+    const appliedMutation = await findAppliedMutation(db, this.familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
 
     const { data: protocols } = await db.collection('medication_protocols')
       .where({ _id: id, family_id: this.familyId })
       .get()
     if (!protocols || protocols.length === 0) throw new Error('方案不存在')
+    const protocol = protocols[0]
+    const conflict = getEntityConflict(syncMeta, 'medication_protocols', protocol)
+    if (conflict) return conflict
+    const now = Date.now()
 
     await db.collection('medication_protocols').doc(id).update({
-      deleted_at: Date.now(),
+      deleted_at: now,
+      ...buildVersionUpdate(dbCmd, now),
     })
 
     await logHealthOperation({
@@ -2141,11 +2205,27 @@ module.exports = {
       domain: 'medication',
       targetType: 'medication_protocol',
       targetId: id,
-      targetName: protocols[0].name || id,
-      summary: `删除了用药方案 ${protocols[0].name || id}`,
+      targetName: protocol.name || id,
+      summary: `删除了用药方案 ${protocol.name || id}`,
     })
 
-    return { message: '已删除' }
+    const response = {
+      message: '已删除',
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: [buildTouchedEntity('medication_protocols', {
+          ...protocol,
+          deleted_at: now,
+          updated_at: now,
+          version: Number(protocol.version || 0) + 1,
+        })],
+        resyncScopes: ['medication_protocols'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**
@@ -2258,14 +2338,22 @@ module.exports = {
   /**
    * 更新健康记录
    */
-  async updateHealthRecord({ id, date, cost, notes, details }) {
+  async updateHealthRecord(input = {}) {
+    const { id, date, cost, notes, details } = input
     if (!id) throw new Error('缺少记录 ID')
+    const syncMeta = getSyncMeta(input)
+    if (syncMeta?.clientMutationId) {
+      const existing = await findAppliedMutation(db, this.familyId, syncMeta.clientMutationId)
+      if (existing?.response) return existing.response
+    }
 
     const { data: records } = await db.collection('health_records')
       .where({ _id: id, family_id: this.familyId })
       .get()
     if (!records || records.length === 0) throw new Error('记录不存在')
     const record = records[0]
+    const conflict = getEntityConflict(syncMeta, 'health_records', record)
+    if (conflict) return conflict
 
     const normalizedDetails = record.type === 'illness' && details !== undefined
       ? normalizeIllnessDetails(details)
@@ -2283,7 +2371,8 @@ module.exports = {
       }
     }
 
-    const updateData = { updated_at: Date.now() }
+    const now = Date.now()
+    const updateData = { ...buildVersionUpdate(dbCmd, now) }
     if (date !== undefined) updateData.date = date
     if (cost !== undefined) updateData.cost = cost
     if (notes !== undefined) updateData.notes = notes
@@ -2302,7 +2391,110 @@ module.exports = {
       meta: { type: record.type },
     })
 
-    return { message: '已更新' }
+    const { data: updatedRecords } = await db.collection('health_records')
+      .where({ _id: id, family_id: this.familyId })
+      .get()
+    const response = {
+      message: '已更新',
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: (updatedRecords || []).map(item => buildTouchedEntity('health_records', item)),
+        resyncScopes: ['health_records'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
+  },
+
+  /**
+   * 删除健康记录，并取消关联提醒任务
+   */
+  async deleteHealthRecord(input = {}) {
+    const id = getIdArg(input, 'id', 'recordId', 'record_id')
+    if (!id) throw new Error('缺少记录 ID')
+    const syncMeta = getSyncMeta(input)
+    if (syncMeta?.clientMutationId) {
+      const existing = await findAppliedMutation(db, this.familyId, syncMeta.clientMutationId)
+      if (existing?.response) return existing.response
+    }
+
+    const { data: records } = await db.collection('health_records')
+      .where({ _id: id, family_id: this.familyId })
+      .get()
+    if (!records || records.length === 0 || records[0].deleted_at) throw new Error('记录不存在')
+    const record = records[0]
+    const conflict = getEntityConflict(syncMeta, 'health_records', record)
+    if (conflict) return conflict
+
+    const { data: linkedReminderTasks } = await db.collection('tasks')
+      .where({
+        family_id: this.familyId,
+        source_record_id: id,
+        status: 'pending',
+        deleted_at: null,
+      })
+      .get()
+    if (syncMeta?.clientMutationId) {
+      for (const task of (linkedReminderTasks || [])) {
+        const taskConflict = getEntityConflict(syncMeta, 'tasks', task)
+        if (taskConflict) return taskConflict
+      }
+    }
+
+    const now = Date.now()
+    await db.collection('health_records').doc(id).update({
+      deleted_at: now,
+      ...buildVersionUpdate(dbCmd, now),
+    })
+
+    if (linkedReminderTasks && linkedReminderTasks.length > 0) {
+      await db.collection('tasks').where({
+        _id: dbCmd.in(linkedReminderTasks.map(task => task._id)),
+        family_id: this.familyId,
+      }).update({
+        status: 'cancelled',
+        ...buildVersionUpdate(dbCmd, now),
+      })
+    }
+
+    await logHealthOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'delete',
+      targetType: 'health_record',
+      targetId: id,
+      targetName: record.dog_name || record.dog_id || id,
+      summary: `删除了 ${record.dog_name || '未命名犬只'} 的${HEALTH_RECORD_LABEL_MAP[record.type] || '健康记录'}`,
+      meta: { type: record.type },
+    })
+
+    const [updatedRecordRes, updatedTasksRes] = await Promise.all([
+      db.collection('health_records').where({ _id: id, family_id: this.familyId }).get(),
+      linkedReminderTasks && linkedReminderTasks.length > 0
+        ? db.collection('tasks').where({
+            _id: dbCmd.in(linkedReminderTasks.map(task => task._id)),
+            family_id: this.familyId,
+          }).get()
+        : Promise.resolve({ data: [] }),
+    ])
+
+    const response = {
+      message: '已删除',
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: [
+          ...(updatedRecordRes.data || []).map(item => buildTouchedEntity('health_records', item)),
+          ...((updatedTasksRes.data || []).map(item => buildTouchedEntity('tasks', item))),
+        ],
+        resyncScopes: ['health_records', 'tasks'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**
@@ -2311,28 +2503,42 @@ module.exports = {
   /**
    * 单犬体重录入
    */
-  async addWeightRecord({ dog_id, weight, date, notes } = {}) {
+  async addWeightRecord(input = {}) {
+    const dog_id = input.dog_id || input.dogId
+    const weight = input.weight
+    const date = input.date
+    const notes = input.notes
     if (!dog_id) throw new Error('缺少犬只 ID')
     if (!weight || Number(weight) <= 0) throw new Error('请输入有效体重')
 
     const now = Date.now()
     const familyId = this.familyId
+    const syncMeta = getSyncMeta(input)
+    const appliedMutation = await findAppliedMutation(db, familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
 
     const { data: dogs } = await db.collection('dogs')
       .where({ _id: dog_id, family_id: familyId, deleted_at: null })
       .get()
     if (!dogs || dogs.length === 0) throw new Error('犬只不存在')
+    const dogConflict = getEntityConflict(syncMeta, 'dogs', dogs[0])
+    if (dogConflict) return dogConflict
 
-    await db.collection('dog_weights').add({
+    const clientWeightId = typeof syncMeta?.clientEntityIds?.dog_weights === 'string'
+      ? syncMeta.clientEntityIds.dog_weights
+      : null
+    const weightRecord = buildVersionedCreate({
+      ...(clientWeightId ? { _id: clientWeightId } : {}),
       dog_id,
       weight: Number(weight),
       date: date || now,
       notes: notes || null,
       family_id: familyId,
       created_by: this.uid,
-      created_at: now,
-      updated_at: now,
-    })
+      deleted_at: null,
+    }, now)
+    const { id } = await db.collection('dog_weights').add(weightRecord)
+    const resolvedWeightId = clientWeightId || id
 
     // 更新犬只 latest_weight（取最新日期的记录）
     const { data: latest } = await db.collection('dog_weights')
@@ -2342,7 +2548,7 @@ module.exports = {
       .limit(1)
       .get()
     if (latest?.[0]?.weight) {
-      await db.collection('dogs').doc(dog_id).update({ latest_weight: latest[0].weight })
+      await db.collection('dogs').doc(dog_id).update({ latest_weight: latest[0].weight, ...buildVersionUpdate(dbCmd, now) })
     }
 
     await logHealthOperation({
@@ -2356,7 +2562,25 @@ module.exports = {
       meta: { weight: Number(weight), date: date || now },
     })
 
-    return { message: '已保存' }
+    const { data: updatedDogs } = await db.collection('dogs')
+      .where({ _id: dog_id, family_id: familyId })
+      .limit(1)
+      .get()
+    const response = {
+      message: '已保存',
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: [
+          buildTouchedEntity('dog_weights', { ...weightRecord, _id: resolvedWeightId }),
+          ...(updatedDogs?.[0] ? [buildTouchedEntity('dogs', updatedDogs[0])] : []),
+        ],
+        resyncScopes: ['dog_weights', 'dogs'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   async getWeightHistory(dogId) {

@@ -213,9 +213,9 @@
 <script setup lang="ts">
 import { ref, computed, reactive, watch } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-import { useCloudCall } from '@/composables/useCloudCall'
 import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
 import { useAuth } from '@/composables/useAuth'
+import { usePageSync } from '@/composables/usePageSync'
 import { localSyncRuntime } from '@/localdb/runtime'
 import { formatDateInputValue } from '@/utils/date'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
@@ -226,6 +226,7 @@ import { useDogStore } from '@/stores/dogStore'
 
 const dogStore = useDogStore()
 const { currentFamily, loadFamily } = useAuth()
+usePageSync({ routePath: 'pages/dog/add' })
 
 const isEdit = ref(false)
 let editDogId = ''
@@ -267,8 +268,6 @@ function addCustomBreed() {
   showBreedModal.value = true
 }
 
-const { run: updateFamilySettings } = useCloudCall('family-service', 'updateSettings')
-
 function deleteCustomBreed(val: string) {
   pendingDeleteVal.value = val
   confirmDeleteFn = async () => {
@@ -279,7 +278,7 @@ function deleteCustomBreed(val: string) {
     const existing = currentFamily.value?.settings?.custom_breed_types || []
     const updated = existing.filter((v: string) => v !== val)
     try {
-      await updateFamilySettings({ custom_breed_types: updated })
+      await localSyncRuntime.updateFamilySettingsLocally(currentFamily.value?._id || '', { custom_breed_types: updated })
       await loadFamily()
       deletedCustomBreeds.value = deletedCustomBreeds.value.filter(v => v !== val)
     } catch {
@@ -305,7 +304,7 @@ async function onBreedConfirm() {
   if (!PRESET_BREEDS.includes(val)) {
     const existing = currentFamily.value?.settings?.custom_breed_types || []
     if (!existing.includes(val)) {
-      await updateFamilySettings({ custom_breed_types: [...existing, val] })
+      await localSyncRuntime.updateFamilySettingsLocally(currentFamily.value?._id || '', { custom_breed_types: [...existing, val] })
       await loadFamily()
     }
   }
@@ -357,7 +356,6 @@ function onPurchaseDateConfirm(value: number | string) {
   form.purchase_date = value
 }
 
-const { run: fetchDetail } = useCloudCall<{ data: any }>('dog-service', 'getDogDetail')
 let originalName = ''
 
 function applyDogToForm(dog: any, { syncOriginalName = false } = {}) {
@@ -443,9 +441,9 @@ onLoad(async (query) => {
       applyDogToForm(cachedDog, { syncOriginalName: true })
     }
 
-    const res = await fetchDetail(editDogId)
-    if (res?.data) {
-      applyDogToForm(res.data, { syncOriginalName: true })
+    const localDog = await localSyncRuntime.findLocal<any>('dogs', editDogId)
+    if (localDog) {
+      applyDogToForm(localDog, { syncOriginalName: true })
     }
   }
 })

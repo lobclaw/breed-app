@@ -220,6 +220,7 @@ import BEmpty from '@/components/feedback/BEmpty.vue'
 import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
 import BNavBar from '@/components/layout/BNavBar.vue'
 import BSheet from '@/components/layout/BSheet.vue'
+import { usePageSync } from '@/composables/usePageSync'
 import { consumeSubmitFeedback } from '@/composables/useSubmitFeedback'
 import { localSyncRuntime } from '@/localdb/runtime'
 import { useDogStore } from '@/stores/dogStore'
@@ -230,6 +231,7 @@ import { getDogStatusTone } from '@/utils/themeSemantics'
 type QuickFilterValue = 'all' | 'breeding' | 'puppy' | 'sale' | 'external'
 type FilterGroup = 'genders' | 'roles' | 'breeds' | 'dispositions' | 'statuses'
 type TagColor = 'red' | 'amber' | 'green' | 'blue' | 'plum' | 'rose' | 'teal'
+usePageSync({ routePath: 'pages/dog/list' })
 
 interface AppliedFilterChip {
   group: FilterGroup
@@ -805,7 +807,6 @@ async function loadDogs() {
 }
 
 onShow(() => {
-  void localSyncRuntime.setActiveScope('dog-list')
   loadDogs().then(() => applyDogListFeedback())
 })
 </script>

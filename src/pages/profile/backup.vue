@@ -22,6 +22,12 @@
       </view>
     </view>
 
+    <view v-if="hasUnsyncedData" class="sync-warning-card">
+      <text class="sync-warning-card__title">仍有本地数据未完全同步</text>
+      <text class="sync-warning-card__desc">{{ syncWarningText }}</text>
+      <text class="sync-warning-card__hint">请先恢复联网并等待同步完成，再执行备份或导出，避免遗漏离线期间的数据。</text>
+    </view>
+
     <!-- 操作按钮 -->
     <view class="backup-actions">
       <BSubmitButton :loading="exporting" @click="startBackup">
@@ -53,7 +59,7 @@
     <!-- 回收站 -->
     <view class="recycle-section">
       <text class="recycle-section__title">回收站</text>
-      <text class="recycle-section__desc">30天内删除的犬只可恢复</text>
+      <text class="recycle-section__desc">30 天内删除的犬只、财务、代理人、用药方案可恢复</text>
       <text class="recycle-section__link" @click="goToRecycleBin">进入回收站 →</text>
     </view>
 
@@ -71,24 +77,58 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BModal from '@/components/layout/BModal.vue'
+import { localSyncRuntime } from '@/localdb/runtime'
 
 const exporting = ref(false)
 const exportProgress = ref(0)
 const lastBackupDate = ref('')
 const autoBackup = ref(true)
 const showRepairConfirm = ref(false)
+const syncStatus = ref({
+  pending: 0,
+  processing: 0,
+  failed: 0,
+  conflict: 0,
+  pendingUpload: 0,
+})
 
 const { run: getBackupInfo } = useCloudCall<{ data: { last_backup?: number; auto_backup?: boolean } }>('family-service', 'getBackupInfo')
 const { run: exportData } = useCloudCall<{ data: { url: string } }>('family-service', 'exportData', {
   showLoading: false,
 })
 const { run: updateSettings } = useCloudCall('family-service', 'updateSettings')
+
+const hasUnsyncedData = computed(() => {
+  const current = syncStatus.value
+  return current.pending > 0
+    || current.processing > 0
+    || current.failed > 0
+    || current.conflict > 0
+    || current.pendingUpload > 0
+})
+
+const syncWarningText = computed(() => {
+  const parts: string[] = []
+  if (syncStatus.value.pending > 0 || syncStatus.value.processing > 0) {
+    parts.push(`待同步 ${syncStatus.value.pending + syncStatus.value.processing} 条`)
+  }
+  if (syncStatus.value.failed > 0) {
+    parts.push(`失败 ${syncStatus.value.failed} 条`)
+  }
+  if (syncStatus.value.conflict > 0) {
+    parts.push(`冲突 ${syncStatus.value.conflict} 条`)
+  }
+  if (syncStatus.value.pendingUpload > 0) {
+    parts.push(`待上传 ${syncStatus.value.pendingUpload} 条`)
+  }
+  return parts.join(' · ') || '仍有未同步数据'
+})
 
 function formatDate(ts: number): string {
   if (!ts) return ''
@@ -97,12 +137,22 @@ function formatDate(ts: number): string {
 }
 
 async function loadInfo() {
-  const res = await getBackupInfo()
+  const [res, currentSyncStatus] = await Promise.all([
+    getBackupInfo(),
+    localSyncRuntime.getSyncStatus(),
+  ])
   if (res?.data?.last_backup) {
     lastBackupDate.value = formatDate(res.data.last_backup)
   }
   if (res?.data?.auto_backup !== undefined) {
     autoBackup.value = res.data.auto_backup
+  }
+  syncStatus.value = {
+    pending: Number(currentSyncStatus?.pending || 0),
+    processing: Number(currentSyncStatus?.processing || 0),
+    failed: Number(currentSyncStatus?.failed || 0),
+    conflict: Number(currentSyncStatus?.conflict || 0),
+    pendingUpload: Number(currentSyncStatus?.pendingUpload || 0),
   }
 }
 
@@ -111,7 +161,27 @@ async function toggleAutoBackup() {
   await updateSettings({ auto_backup: autoBackup.value })
 }
 
+async function ensureBackupReady() {
+  const currentSyncStatus = await localSyncRuntime.getSyncStatus()
+  syncStatus.value = {
+    pending: Number(currentSyncStatus?.pending || 0),
+    processing: Number(currentSyncStatus?.processing || 0),
+    failed: Number(currentSyncStatus?.failed || 0),
+    conflict: Number(currentSyncStatus?.conflict || 0),
+    pendingUpload: Number(currentSyncStatus?.pendingUpload || 0),
+  }
+  if (!hasUnsyncedData.value) return true
+  uni.showToast({
+    title: '仍有本地数据未同步，请稍后再备份',
+    icon: 'none',
+  })
+  return false
+}
+
 async function runExport(format: string) {
+  const ready = await ensureBackupReady()
+  if (!ready) return
+
   exporting.value = true
   exportProgress.value = 0
 
@@ -171,7 +241,7 @@ function handleRepairConfirm() {
 }
 
 function goToRecycleBin() {
-  uni.showToast({ title: '功能开发中', icon: 'none' })
+  uni.navigateTo({ url: '/pages/profile/recycle' })
 }
 
 onShow(() => loadInfo())
@@ -185,6 +255,35 @@ onShow(() => loadInfo())
   border-radius: var(--radius-card);
   padding: 4px 16px;
   box-shadow: var(--shadow);
+}
+
+.sync-warning-card {
+  margin: 0 var(--space-page) 18px;
+  padding: 16px;
+  border-radius: var(--radius-card);
+  background: rgba(214, 65, 65, 0.08);
+  border: 1px solid rgba(214, 65, 65, 0.16);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  &__title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--red);
+  }
+
+  &__desc {
+    font-size: 13px;
+    color: var(--text-1);
+    line-height: 1.5;
+  }
+
+  &__hint {
+    font-size: 12px;
+    color: var(--text-3);
+    line-height: 1.5;
+  }
 }
 
 /* ==================== CUSTOM TOGGLE ==================== */

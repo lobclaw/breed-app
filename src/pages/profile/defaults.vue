@@ -40,7 +40,6 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { useCloudCall } from '@/composables/useCloudCall'
 import { useAuth } from '@/composables/useAuth'
 import { usePageSync } from '@/composables/usePageSync'
 import { getLocalFamilySettings } from '@/localdb/domain-repository'
@@ -76,12 +75,6 @@ const settingsItems = reactive<SettingItem[]>([
   { key: 'default_deworming_interval_puppy', label: '幼犬驱虫间隔', unit: '天', value: getSettingValue('default_deworming_interval_puppy', '14') },
   { key: 'default_deworming_interval_adult', label: '种狗驱虫间隔', unit: '天', value: getSettingValue('default_deworming_interval_adult', '90') },
 ])
-
-const { run: updateSettings } = useCloudCall('family-service', 'updateSettings', {
-  successMode: 'silent',
-  loadingMode: 'local',
-  throwOnError: true,
-})
 
 async function loadLocalSettings() {
   const familyId = currentFamily.value?._id || ''
@@ -123,7 +116,9 @@ async function saveAll() {
         data[item.key] = parseInt(item.value, 10) || 0
       }
     }
-    await updateSettings(data)
+    const familyId = currentFamily.value?._id || ''
+    localSyncRuntime.setCurrentFamilyId(familyId)
+    await localSyncRuntime.updateFamilySettingsLocally(familyId, data)
     // 保存后同步内存缓存
     await loadFamily()
   } finally {

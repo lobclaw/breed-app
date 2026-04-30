@@ -182,8 +182,11 @@
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
+import { usePageSync } from '@/composables/usePageSync'
 import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
+import { getLocalIncomeDetail } from '@/localdb/domain-repository'
+import { localSyncRuntime } from '@/localdb/runtime'
 import { buildTimestampFromDayOffset, formatDateInputValue } from '@/utils/date'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
@@ -193,6 +196,13 @@ import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
 import { INCOME_TYPES, getIncomeTypeMeta } from '@/constants/financeCategories'
 
 let incomeId = ''
+const { currentFamily } = useAuth()
+usePageSync({
+  resolveScope: (query) => {
+    const id = query.id || query.recordId || query.record_id || ''
+    return id ? `finance-detail:income:${id}` : 'finance-detail'
+  },
+})
 
 const amountInput = ref('')
 const submitting = ref(false)
@@ -270,28 +280,21 @@ function addPhoto() {
   })
 }
 
-const { run: getIncome } = useCloudCall('finance-service', 'getIncomeDetail', {
-  showLoading: false,
-})
-
-const { run: updateIncome } = useCloudCall('finance-service', 'updateIncome', {
-  successMode: 'silent',
-  loadingMode: 'local',
-  throwOnError: true,
-})
-
 async function loadIncome(id: string) {
+  const familyId = currentFamily.value?._id || ''
   loading.value = true
   try {
-    const res = await getIncome({ id })
-    if (res?.data) {
-      const data = res.data as any
-      amountInput.value = String(data.amount || '')
-      form.type = data.type || '其他'
-      form.date = data.date || Date.now()
-      form.notes = data.notes || ''
-      photos.value = data.photos || data.images || []
-      linkedDog.value = data.dog_id ? { _id: data.dog_id, name: data.dog_name || '未命名' } : null
+    if (!familyId) return
+    localSyncRuntime.setCurrentFamilyId(familyId)
+    const data = await getLocalIncomeDetail(familyId, id)
+    if (data) {
+      const detail = data as any
+      amountInput.value = String(detail.amount || '')
+      form.type = detail.type || '其他'
+      form.date = detail.date || Date.now()
+      form.notes = detail.notes || ''
+      photos.value = detail.photos || detail.images || []
+      linkedDog.value = detail.dog_id ? { _id: detail.dog_id, name: detail.dog_name || '未命名' } : null
     }
   } finally {
     loading.value = false
@@ -301,7 +304,7 @@ async function loadIncome(id: string) {
 async function submit() {
   submitting.value = true
   try {
-    const res = await updateIncome({
+    const res = await localSyncRuntime.updateIncomeLocally(currentFamily.value?._id || '', {
       id: incomeId,
       amount: parseFloat(amountInput.value),
       type: form.type,

@@ -171,7 +171,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-import { useCloudCall } from '@/composables/useCloudCall'
 import { useAuth } from '@/composables/useAuth'
 import { usePageSync } from '@/composables/usePageSync'
 import { listLocalLitters } from '@/localdb/domain-repository'
@@ -256,12 +255,6 @@ const isMinWarning = computed(() => {
 const daysSinceBirth = computed(() => {
   if (!selectedLitter.value?.birth_date) return 0
   return Math.floor((Date.now() - selectedLitter.value.birth_date) / 86400000)
-})
-
-const { run: batchAdd } = useCloudCall<{ data?: { count?: number } }>('health-service', 'batchAddWeights', {
-  successMode: 'silent',
-  loadingMode: 'local',
-  throwOnError: true,
 })
 
 let preselectedLitterId = ''
@@ -477,8 +470,10 @@ async function submit() {
     .filter(entry => entry.weight > 0)
 
   try {
-    const res = await batchAdd(selectedLitter.value._id, weightEntries)
-    const savedCount = res?.data?.count || weightEntries.length
+    const familyId = currentFamily.value?._id || ''
+    localSyncRuntime.setCurrentFamilyId(familyId)
+    await Promise.all(weightEntries.map(entry => localSyncRuntime.addWeightRecordLocally(familyId, entry)))
+    const savedCount = weightEntries.length
     applyLocalWeightUpdates(weightEntries)
     queueSubmitFeedback({
       message: savedCount > 1 ? `已保存 ${savedCount} 条体重记录` : '已保存体重记录',

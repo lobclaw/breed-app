@@ -80,7 +80,6 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { useCloudCall } from '@/composables/useCloudCall'
 import { useAuth } from '@/composables/useAuth'
 import { usePageSync } from '@/composables/usePageSync'
 import { listLocalAgents } from '@/localdb/domain-repository'
@@ -102,10 +101,6 @@ const editingId = ref('')
 const deletingId = ref('')
 const form = reactive({ name: '', contact_info: '' })
 
-const { run: addAgent } = useCloudCall('finance-service', 'addAgent', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
-const { run: updateAgent } = useCloudCall('finance-service', 'updateAgent', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
-const { run: removeAgent } = useCloudCall('finance-service', 'removeAgent', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
-
 async function load() {
   const familyId = currentFamily.value?._id || ''
   if (!familyId) {
@@ -125,35 +120,35 @@ function openSheet(agent?: any) {
   showSheet.value = true
 }
 
-function save() {
+async function save() {
   const name = form.name.trim()
   if (!name) return
   showSheet.value = false
 
   if (editingId.value) {
-    // 乐观更新：重命名
-    const idx = agentList.value.findIndex(a => a._id === editingId.value)
-    if (idx !== -1) {
-      const updated = [...agentList.value]
-      updated[idx] = { ...updated[idx], name, contact_info: form.contact_info || null }
-      agentList.value = updated
-    }
-    const id = editingId.value
-    updateAgent(id, { name, contact_info: form.contact_info || null }).catch(() => {
-      load()
+    const familyId = currentFamily.value?._id || ''
+    localSyncRuntime.setCurrentFamilyId(familyId)
+    try {
+      await localSyncRuntime.updateAgentLocally(familyId, editingId.value, {
+        name,
+        contact_info: form.contact_info || null,
+      })
+      await load()
+    } catch {
       uni.showToast({ title: '更新失败，请重试', icon: 'none' })
-    })
+    }
   } else {
-    // 乐观更新：新建（临时占位）
-    const tempId = `tmp_${Date.now()}`
-    const newAgent = { _id: tempId, name, contact_info: form.contact_info || null }
-    agentList.value = [...agentList.value, newAgent]
-    addAgent({ name, contact_info: form.contact_info || null }).then(() => {
-      load() // 刷新换真实 _id
-    }).catch(() => {
-      agentList.value = agentList.value.filter(a => a._id !== tempId)
+    const familyId = currentFamily.value?._id || ''
+    localSyncRuntime.setCurrentFamilyId(familyId)
+    try {
+      await localSyncRuntime.addAgentLocally(familyId, {
+        name,
+        contact_info: form.contact_info || null,
+      })
+      await load()
+    } catch {
       uni.showToast({ title: '添加失败，请重试', icon: 'none' })
-    })
+    }
   }
 }
 
@@ -162,15 +157,17 @@ function askDelete(id: string) {
   showDeleteConfirm.value = true
 }
 
-function confirmDelete() {
+async function confirmDelete() {
   const id = deletingId.value
-  const prev = [...agentList.value]
-  agentList.value = agentList.value.filter(a => a._id !== id)
   showDeleteConfirm.value = false
-  removeAgent(id).catch(() => {
-    agentList.value = prev
+  const familyId = currentFamily.value?._id || ''
+  localSyncRuntime.setCurrentFamilyId(familyId)
+  try {
+    await localSyncRuntime.removeAgentLocally(familyId, id)
+    await load()
+  } catch {
     uni.showToast({ title: '删除失败，请重试', icon: 'none' })
-  })
+  }
 }
 
 onShow(() => {

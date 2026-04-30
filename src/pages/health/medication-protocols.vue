@@ -97,7 +97,8 @@
 <script setup lang="ts">
 import { ref, reactive, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
+import { usePageSync } from '@/composables/usePageSync'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSheet from '@/components/layout/BSheet.vue'
@@ -107,9 +108,11 @@ import { localSyncRuntime } from '@/localdb/runtime'
 import { useProtocolStore } from '@/stores/protocolStore'
 import { formatMedicationDosage } from '@/utils/medicationDisplay'
 
+const { currentFamily } = useAuth()
 const protocolStore = useProtocolStore()
 const protocols = computed(() => protocolStore.list)
 const loading = ref(protocolStore.list.length === 0)
+usePageSync({ routePath: 'pages/health/medication-protocols' })
 
 const showSheet = ref(false)
 const showDeleteConfirm = ref(false)
@@ -117,9 +120,6 @@ const deletingIndex = ref(-1)
 const form = reactive({ name: '', drug_name: '', duration_days: '', notes: '' })
 
 const canSave = computed(() => !!form.name.trim() && !!form.drug_name.trim())
-
-const { run: addProtocol } = useCloudCall('health-service', 'addMedicationProtocol', { successMessage: '已添加' })
-const { run: removeProtocol } = useCloudCall('health-service', 'removeMedicationProtocol', { successMode: 'silent' })
 
 function openSheet() {
   form.name = ''
@@ -144,17 +144,12 @@ async function saveProtocol() {
     notes: form.notes.trim() || null,
   }
 
-  // 乐观更新：立即加入列表（临时占位）
-  const tempId = `tmp_${Date.now()}`
-  protocolStore.list = [...protocolStore.list, { ...newP, _id: tempId } as any]
-
-  addProtocol(newP).then(() => {
-    // 后台静默刷新，替换临时数据
-    protocolStore.fetchFromServer()
-  }).catch(() => {
-    protocolStore.list = protocolStore.list.filter((p: any) => p._id !== tempId)
+  try {
+    await localSyncRuntime.addMedicationProtocolLocally(currentFamily.value?._id || '', newP)
+    await protocolStore.reload()
+  } catch {
     uni.showToast({ title: '添加失败，请重试', icon: 'none' })
-  })
+  }
 }
 
 function askDelete(index: number) {
@@ -166,20 +161,15 @@ function confirmDelete() {
   const index = deletingIndex.value
   if (index < 0) return
   const p = protocols.value[index]
-  const prev = [...protocolStore.list]
-
-  // 乐观删除
-  protocolStore.list = protocolStore.list.filter((_: any, i: number) => i !== index)
   showDeleteConfirm.value = false
-
-  removeProtocol(p._id).catch(() => {
-    protocolStore.list = prev
+  localSyncRuntime.removeMedicationProtocolLocally(currentFamily.value?._id || '', p._id).then(() => {
+    protocolStore.reload()
+  }).catch(() => {
     uni.showToast({ title: '删除失败，请重试', icon: 'none' })
   })
 }
 
 onShow(async () => {
-  await localSyncRuntime.setActiveScope('settings-local')
   // stale-while-revalidate：有缓存立即显示，后台静默刷新
   await protocolStore.ensure()
   loading.value = false

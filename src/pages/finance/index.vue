@@ -492,7 +492,13 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useAuth } from '@/composables/useAuth'
-import { useCloudCall } from '@/composables/useCloudCall'
+import { usePageSync } from '@/composables/usePageSync'
+import {
+  getLocalExpenseCategories,
+  getLocalExpenseCategoryGroups,
+  getLocalFinancialSummary,
+  getLocalTransactionList,
+} from '@/localdb/domain-repository'
 import { localSyncRuntime } from '@/localdb/runtime'
 import BNavBar from '@/components/layout/BNavBar.vue'
 import BIconBox from '@/components/base/BIconBox.vue'
@@ -526,6 +532,7 @@ type FinanceDateRangeValue = typeof FINANCE_DATE_RANGE_OPTIONS[number]['value']
 type FinanceSortValue = typeof FINANCE_SORT_OPTIONS[number]['value']
 const FINANCE_ENTRY_DOG_FILTER_KEY = 'finance_entry_dog_filter'
 const { currentFamily } = useAuth()
+usePageSync({ routePath: 'pages/finance/index' })
 
 interface FinanceFilterState {
   type: FinanceFilterType
@@ -856,11 +863,6 @@ const canApplyDraftFilters = computed(() => {
   return !!draftFilters.customStartDate && !!draftFilters.customEndDate && draftFilters.customEndDate >= draftFilters.customStartDate
 })
 
-const { run: fetchTransactions } = useCloudCall<{ data: any[] }>('finance-service', 'getTransactionList')
-const { run: fetchSummary } = useCloudCall<{ data: any }>('finance-service', 'getFinancialSummary')
-const { run: fetchCategories } = useCloudCall<{ data: ExpenseCategory[] }>('finance-service', 'getExpenseCategories')
-const { run: fetchExpenseGroups } = useCloudCall<{ data: ExpenseCategoryGroup[] }>('finance-service', 'getExpenseCategoryGroups')
-
 function buildQueryPayload(filters: FinanceFilterState) {
   const payload: Record<string, any> = {
     type: filters.type || undefined,
@@ -1067,28 +1069,45 @@ function getFlowMeta(tx: any) {
 }
 
 async function loadCategories() {
-  const [groupRes, categoryRes] = await Promise.all([
-    fetchExpenseGroups(),
-    fetchCategories(),
+  const familyId = currentFamily.value?._id || ''
+  if (!familyId) {
+    expenseGroups.value = buildExpenseCategoryGroups()
+    categories.value = normalizeExpenseCategories(DEFAULT_EXPENSE_CATEGORIES, expenseGroups.value)
+    return
+  }
+  localSyncRuntime.setCurrentFamilyId(familyId)
+  const [groups, localCategories] = await Promise.all([
+    getLocalExpenseCategoryGroups(familyId),
+    getLocalExpenseCategories(familyId),
   ])
-  expenseGroups.value = buildExpenseCategoryGroups(groupRes?.data || [])
-  categories.value = normalizeExpenseCategories(categoryRes?.data || [], expenseGroups.value)
+  expenseGroups.value = groups
+  categories.value = localCategories
 }
 
 async function loadPage() {
+  const familyId = currentFamily.value?._id || ''
   const hasData = transactions.value.length > 0
   if (!hasData) loading.value = true
+  if (!familyId) {
+    transactions.value = []
+    summary.totalIncome = 0
+    summary.totalExpense = 0
+    summary.netProfit = 0
+    loading.value = false
+    return
+  }
 
   const payload = buildQueryPayload(appliedFilters)
-  const [txResult, sumResult] = await Promise.all([
-    fetchTransactions(payload),
-    fetchSummary(payload),
+  localSyncRuntime.setCurrentFamilyId(familyId)
+  const [txList, sumResult] = await Promise.all([
+    getLocalTransactionList(familyId, payload),
+    getLocalFinancialSummary(familyId, payload),
   ])
 
-  transactions.value = txResult?.data || []
-  summary.totalIncome = sumResult?.data?.totalIncome || 0
-  summary.totalExpense = sumResult?.data?.totalExpense || 0
-  summary.netProfit = sumResult?.data?.netProfit || 0
+  transactions.value = txList || []
+  summary.totalIncome = sumResult?.totalIncome || 0
+  summary.totalExpense = sumResult?.totalExpense || 0
+  summary.netProfit = sumResult?.netProfit || 0
   loading.value = false
 }
 

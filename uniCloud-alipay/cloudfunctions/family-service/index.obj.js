@@ -20,8 +20,11 @@ const {
   getSyncMeta,
   buildTouchedEntity,
   buildSyncAck,
+  buildConflictAck,
   findAppliedMutation,
   markMutationApplied,
+  getBaseVersion,
+  getServerVersion,
   buildVersionUpdate,
 } = syncUtils
 
@@ -105,6 +108,19 @@ function normalizeNotificationTypes(input, currentSettings) {
 
   normalized.overdue = true
   return normalized
+}
+
+function getEntityConflict(syncMeta, collection, entity) {
+  const baseVersion = getBaseVersion(syncMeta, entity?._id)
+  if (baseVersion === null) return null
+  const serverVersion = getServerVersion(entity)
+  if (baseVersion === serverVersion) return null
+  return buildConflictAck(syncMeta, {
+    collection,
+    entityId: entity._id,
+    baseVersion,
+    serverVersion,
+  })
 }
 
 const RECYCLE_RETENTION_DAYS = 30
@@ -354,6 +370,9 @@ module.exports = {
    */
   async updateSettings(settings) {
     requireAdmin(this.role)
+    const syncMeta = getSyncMeta(settings)
+    const appliedMutation = await findAppliedMutation(db, this.familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
 
     if (!settings || typeof settings !== 'object') {
       throw new Error('设置参数无效')
@@ -368,6 +387,8 @@ module.exports = {
     if (!family) {
       throw new Error('家庭不存在')
     }
+    const conflict = getEntityConflict(syncMeta, 'families', { _id: this.familyId, ...family })
+    if (conflict) return conflict
 
     const currentSettings = mergeFamilySettings(family.settings)
 
@@ -405,7 +426,8 @@ module.exports = {
       throw new Error('没有可更新的设置')
     }
 
-    updateData.updated_at = Date.now()
+    const now = Date.now()
+    Object.assign(updateData, buildVersionUpdate(dbCmd, now))
 
     await db.collection('families')
       .doc(this.familyId)
@@ -425,7 +447,22 @@ module.exports = {
       },
     })
 
-    return { message: '设置已更新' }
+    const { data: updatedFamilies } = await db.collection('families')
+      .doc(this.familyId)
+      .get()
+    const updatedFamily = updatedFamilies?.[0] || updatedFamilies
+    const response = {
+      message: '设置已更新',
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: updatedFamily ? [buildTouchedEntity('families', updatedFamily)] : [],
+        resyncScopes: ['families'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**
@@ -473,22 +510,35 @@ module.exports = {
    */
   async addCareRule(rule) {
     requireAdmin(this.role)
+    const syncMeta = getSyncMeta(rule)
+    const appliedMutation = await findAppliedMutation(db, this.familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
 
     if (!rule || !rule.status_trigger || !rule.task_description || !rule.frequency) {
       throw new Error('请填写完整的护理规则')
     }
+
+    const { data: families } = await db.collection('families')
+      .doc(this.familyId)
+      .field({ care_rules: true, version: true })
+      .get()
+    const family = families?.[0] || families
+    if (!family) throw new Error('家庭不存在')
+    const conflict = getEntityConflict(syncMeta, 'families', { _id: this.familyId, ...family })
+    if (conflict) return conflict
 
     const careRule = {
       status_trigger: rule.status_trigger,
       task_description: rule.task_description,
       frequency: rule.frequency,
     }
+    const now = Date.now()
 
     await db.collection('families')
       .doc(this.familyId)
       .update({
         care_rules: dbCmd.push(careRule),
-        updated_at: Date.now(),
+        ...buildVersionUpdate(dbCmd, now),
       })
 
     await safeWriteOperationLog({
@@ -503,15 +553,34 @@ module.exports = {
       meta: careRule,
     })
 
-    return { message: '护理规则已添加' }
+    const { data: updatedFamilies } = await db.collection('families')
+      .doc(this.familyId)
+      .get()
+    const updatedFamily = updatedFamilies?.[0] || updatedFamilies
+    const response = {
+      message: '护理规则已添加',
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: updatedFamily ? [buildTouchedEntity('families', updatedFamily)] : [],
+        resyncScopes: ['families'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**
    * 删除护理规则
    * @param {number} index - 规则在数组中的索引
    */
-  async removeCareRule(index) {
+  async removeCareRule(input) {
     requireAdmin(this.role)
+    const syncMeta = getSyncMeta(input)
+    const appliedMutation = await findAppliedMutation(db, this.familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
+    const index = typeof input === 'object' ? Number(input?.index) : Number(input)
 
     if (typeof index !== 'number' || index < 0) {
       throw new Error('无效的规则索引')
@@ -524,18 +593,22 @@ module.exports = {
       .get()
 
     const family = data[0] || data
+    if (!family) throw new Error('家庭不存在')
+    const conflict = getEntityConflict(syncMeta, 'families', { _id: this.familyId, ...family })
+    if (conflict) return conflict
     if (!family.care_rules || index >= family.care_rules.length) {
       throw new Error('规则不存在')
     }
 
     const removedRule = family.care_rules[index]
     family.care_rules.splice(index, 1)
+    const now = Date.now()
 
     await db.collection('families')
       .doc(this.familyId)
       .update({
         care_rules: family.care_rules,
-        updated_at: Date.now(),
+        ...buildVersionUpdate(dbCmd, now),
       })
 
     await safeWriteOperationLog({
@@ -550,7 +623,22 @@ module.exports = {
       meta: removedRule,
     })
 
-    return { message: '护理规则已删除' }
+    const { data: updatedFamilies } = await db.collection('families')
+      .doc(this.familyId)
+      .get()
+    const updatedFamily = updatedFamilies?.[0] || updatedFamilies
+    const response = {
+      message: '护理规则已删除',
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: updatedFamily ? [buildTouchedEntity('families', updatedFamily)] : [],
+        resyncScopes: ['families'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   // ── 协作 ──
@@ -769,26 +857,34 @@ module.exports = {
    * 更新当前用户昵称
    * @param {string} nickname - 新昵称
    */
-  async updateNickname(nickname) {
+  async updateNickname(input) {
+    const nickname = typeof input === 'object' ? input?.nickname : input
     if (!nickname || !nickname.trim()) {
       throw new Error('请输入昵称')
     }
+    const syncMeta = getSyncMeta(input)
+    const appliedMutation = await findAppliedMutation(db, this.familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
 
     const { data } = await db.collection('families')
       .doc(this.familyId)
-      .field({ members: true })
+      .field({ members: true, version: true })
       .get()
 
     const family = data[0] || data
+    if (!family) throw new Error('家庭不存在')
+    const conflict = getEntityConflict(syncMeta, 'families', { _id: this.familyId, ...family })
+    if (conflict) return conflict
     const member = family.members.find(m => m.user_id === this.uid && m.status === 'active')
     if (!member) throw new Error('成员不存在')
 
     const nextNickname = nickname.trim()
     member.nickname = nextNickname
+    const now = Date.now()
 
     await db.collection('families').doc(this.familyId).update({
       members: family.members,
-      updated_at: Date.now(),
+      ...buildVersionUpdate(dbCmd, now),
     })
 
     await safeWriteOperationLog({
@@ -803,7 +899,22 @@ module.exports = {
       summary: `将昵称更新为 ${nextNickname}`,
     })
 
-    return { message: '昵称已更新' }
+    const { data: updatedFamilies } = await db.collection('families')
+      .doc(this.familyId)
+      .get()
+    const updatedFamily = updatedFamilies?.[0] || updatedFamilies
+    const response = {
+      message: '昵称已更新',
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: updatedFamily ? [buildTouchedEntity('families', updatedFamily)] : [],
+        resyncScopes: ['families'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   // ── 操作日志 / 回收站 / 备份 / 护理规则 ──

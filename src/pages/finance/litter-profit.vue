@@ -139,10 +139,16 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
+import { usePageSync } from '@/composables/usePageSync'
+import { getLocalLitterProfit } from '@/localdb/domain-repository'
+import { localSyncRuntime } from '@/localdb/runtime'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BLitterSelector from '@/components/form/BLitterSelector.vue'
 import { formatFinanceAmount, getFinanceAmountParts } from '@/utils/financeDisplay'
+
+const { currentFamily } = useAuth()
+usePageSync({ routePath: 'pages/finance/litter-profit' })
 
 const showLitterPickerVisible = ref(false)
 
@@ -232,22 +238,17 @@ function showLitterPicker() {
 function onLitterSelect(litter: any) {
   selectedLitterId.value = litter._id
   selectedLitterName.value = `${litter.damName || litter.dam_name}第${litter.litterNumber || litter.litter_number || '?'}窝`
-  loadProfit(litter._id)
+  void loadProfit(litter._id)
 }
 
-const { run: getLitterProfit } = useCloudCall('finance-service', 'getLitterProfit', {
-  showLoading: true,
-  loadingText: '计算中...',
-})
-
 async function loadProfit(litterId: string) {
+  const familyId = currentFamily.value?._id || ''
   loading.value = true
   profitData.value = null
   try {
-    const res = await getLitterProfit({ litter_id: litterId })
-    if (res?.data) {
-      profitData.value = res.data as ProfitData
-    }
+    if (!familyId) return
+    localSyncRuntime.setCurrentFamilyId(familyId)
+    profitData.value = await getLocalLitterProfit(familyId, litterId) as ProfitData | null
   } finally {
     loading.value = false
   }
@@ -258,7 +259,7 @@ onLoad((query) => {
   if (litterId) {
     selectedLitterId.value = litterId
     selectedLitterName.value = query?.litterName || ''
-    loadProfit(litterId)
+    void loadProfit(litterId)
   }
 })
 </script>

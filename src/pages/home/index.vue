@@ -572,6 +572,7 @@ import BSheet from '@/components/layout/BSheet.vue'
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BIconBox from '@/components/base/BIconBox.vue'
 import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
+import { usePageSync } from '@/composables/usePageSync'
 import { useTaskStore } from '@/stores/taskStore'
 import { localSyncRuntime } from '@/localdb/runtime'
 import { consumeSubmitFeedback } from '@/composables/useSubmitFeedback'
@@ -590,6 +591,7 @@ import type { MedicationRouteIllnessLink } from '@/utils/recordFormRoutes'
 
 const { hasFamily, currentFamily, loadFamily } = useAuth()
 const taskStore = useTaskStore()
+usePageSync({ routePath: 'pages/home/index' })
 
 // stale-while-revalidate：先用 taskStore 缓存渲染，后台刷新
 const cards = ref<any[]>(taskStore.cards)

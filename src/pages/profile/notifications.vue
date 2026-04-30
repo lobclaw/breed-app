@@ -64,7 +64,6 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { useCloudCall } from '@/composables/useCloudCall'
 import { useAuth } from '@/composables/useAuth'
 import { usePageSync } from '@/composables/usePageSync'
 import { getLocalFamilySettings } from '@/localdb/domain-repository'
@@ -97,8 +96,6 @@ const notifTypes = reactive<NotificationTypeItem[]>([
   { key: 'medication', label: '每日用药提醒', sub: '', enabled: true, disabled: false },
   { key: 'overdue', label: '逾期提醒', sub: '不可关闭', enabled: true, disabled: true },
 ])
-
-const { run: updateSettings } = useCloudCall('family-service', 'updateSettings')
 
 interface NotificationFormState {
   pushEnabled: boolean
@@ -176,15 +173,19 @@ function toggleType(key: string) {
 
 async function saveSettings(prevState: NotificationFormState) {
   const requestToken = ++saveToken.value
-  const res = await updateSettings({
-    push_enabled: pushEnabled.value,
-    morning_summary_enabled: summaryEnabled.value,
-    morning_summary_time: summaryTime.value,
-    notification_types: buildNotificationTypes(),
-  })
-
-  if (!res && requestToken === saveToken.value) {
-    applyState(prevState)
+  try {
+    const familyId = currentFamily.value?._id || ''
+    localSyncRuntime.setCurrentFamilyId(familyId)
+    await localSyncRuntime.updateFamilySettingsLocally(familyId, {
+      push_enabled: pushEnabled.value,
+      morning_summary_enabled: summaryEnabled.value,
+      morning_summary_time: summaryTime.value,
+      notification_types: buildNotificationTypes(),
+    })
+  } catch {
+    if (requestToken === saveToken.value) {
+      applyState(prevState)
+    }
   }
 }
 

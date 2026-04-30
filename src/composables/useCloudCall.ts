@@ -31,6 +31,20 @@ interface CloudCallResult<T> {
   run: (...args: any[]) => Promise<T | null>
 }
 
+async function isNetworkAvailable() {
+  try {
+    const result = await new Promise<any>((resolve) => {
+      uni.getNetworkType({
+        success: resolve,
+        fail: () => resolve({ networkType: 'unknown' }),
+      })
+    })
+    return result?.networkType !== 'none'
+  } catch {
+    return true
+  }
+}
+
 /**
  * 封装云对象调用
  * @param serviceName 云对象名称（如 'dog-service'）
@@ -75,6 +89,19 @@ export function useCloudCall<T = any>(
   }
 
   async function run(...args: any[]): Promise<T | null> {
+    const online = await isNetworkAvailable()
+    if (!online) {
+      const msg = '当前功能需要联网'
+      error.value = msg
+      if (showError) {
+        uni.showToast({ title: msg, icon: 'none', duration: 2000 })
+      }
+      if (throwOnError) {
+        throw new Error(msg)
+      }
+      return null
+    }
+
     loading.value = true
     error.value = null
 

@@ -151,9 +151,10 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-import { useCloudCall } from '@/composables/useCloudCall'
 import { useAuth } from '@/composables/useAuth'
+import { usePageSync } from '@/composables/usePageSync'
 import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
+import { listLocalPreLaborTemperatureHistory } from '@/localdb/domain-repository'
 import { localSyncRuntime } from '@/localdb/runtime'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
@@ -168,6 +169,7 @@ interface TempRecord {
 
 const selectedDog = ref<any>(null)
 const { currentFamily } = useAuth()
+usePageSync({ routePath: 'pages/record/prelabor-monitor' })
 
 // 体温
 const temperature = ref('')
@@ -229,18 +231,11 @@ onLoad((query: any) => {
 
 async function loadTempHistory(id: string) {
   try {
-    const db = uniCloud.database()
-    const res = await db.collection('health_records')
-      .where(`dog_id == "${id}" && type == "prelabor_monitor"`)
-      .orderBy('record_time', 'desc')
-      .limit(6)
-      .get()
-
-    const records = (res.result?.data || []).reverse()
+    const records = await listLocalPreLaborTemperatureHistory(currentFamily.value?._id || '', id)
     tempHistory.value = records.map((r: any) => ({
-      temp: r.temperature || 0,
-      label: formatTimeLabel(r.record_time),
-      time: r.record_time,
+      temp: r.temp || 0,
+      label: formatTimeLabel(r.time),
+      time: r.time,
     }))
   } catch (e) {
     console.error('加载体温记录失败', e)
@@ -284,12 +279,6 @@ function onDateTimeConfirm(value: number | string) {
   if (typeof value !== 'number') return
   recordTime.value = value
 }
-
-const { run: addBreedingRecord } = useCloudCall('breeding-service', 'addBreedingRecord', {
-  successMode: 'silent',
-  loadingMode: 'local',
-  throwOnError: true,
-})
 
 async function handleSave() {
   if (submitting.value) return

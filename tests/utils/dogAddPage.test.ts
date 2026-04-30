@@ -13,11 +13,11 @@ describe('dog add/edit page source contract', () => {
     expect(source).toContain('角色创建后不可直接修改；幼崽升级请在详情页使用专门操作')
   })
 
-  it('编辑犬只时应先承接 dogStore 缓存，再请求详情校准', () => {
+  it('编辑犬只时应先承接 dogStore 缓存，再用本地镜像校准', () => {
     expect(source).toContain('const cachedDog = dogStore.list.find(dog => dog._id === editDogId)')
     expect(source).toContain('applyDogToForm(cachedDog, { syncOriginalName: true })')
-    expect(source).toContain('const res = await fetchDetail(editDogId)')
-    expect(source).toContain('applyDogToForm(res.data, { syncOriginalName: true })')
+    expect(source).toContain("const localDog = await localSyncRuntime.findLocal<any>('dogs', editDogId)")
+    expect(source).toContain('applyDogToForm(localDog, { syncOriginalName: true })')
   })
 
   it('应复用同一套表单回填逻辑，避免缓存承接和详情回填分叉', () => {
