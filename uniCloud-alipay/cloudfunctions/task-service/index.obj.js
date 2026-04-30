@@ -1322,16 +1322,18 @@ module.exports = {
       }))
     }
 
-    await logTaskOperation({
-      familyId: this.familyId,
-      actorUserId: this.uid,
-      actionType: 'complete',
-      targetType: 'task_batch',
-      targetId: `batch:${Date.now()}`,
-      targetName: `${completedTaskIds.length}个任务`,
-      summary: `批量完成了 ${completedTaskIds.length} 个任务`,
-      meta: { completed: completedTaskIds.length, completedTaskIds, autoRecord: Boolean(shouldAutoRecord) },
-    })
+    if (completedTaskIds.length > 0) {
+      await logTaskOperation({
+        familyId: this.familyId,
+        actorUserId: this.uid,
+        actionType: 'complete',
+        targetType: 'task_batch',
+        targetId: `batch:${Date.now()}`,
+        targetName: `${completedTaskIds.length}个任务`,
+        summary: `批量完成了 ${completedTaskIds.length} 个任务`,
+        meta: { completed: completedTaskIds.length, completedTaskIds, autoRecord: Boolean(shouldAutoRecord) },
+      })
+    }
 
     const { data: updatedTasks } = completedTaskIds.length > 0
       ? await db.collection('tasks').where({ _id: dbCmd.in(completedTaskIds), family_id: this.familyId }).get()
@@ -1772,16 +1774,18 @@ module.exports = {
       return { taskId: resolvedTaskId, dog_id: dog.dog_id, task: { ...taskData, _id: resolvedTaskId } }
     }))
 
-    await logTaskOperation({
-      familyId,
-      actorUserId: uid,
-      actionType: 'create',
-      targetType: 'task_batch',
-      targetId: `batch:${now}`,
-      targetName: `${results.length}个待办`,
-      summary: `批量创建了 ${results.length} 个待办任务`,
-      meta: { created: results.length, skipped: data.dogs.length - results.length },
-    })
+    if (results.length > 0) {
+      await logTaskOperation({
+        familyId,
+        actorUserId: uid,
+        actionType: 'create',
+        targetType: 'task_batch',
+        targetId: `batch:${now}`,
+        targetName: `${results.length}个待办`,
+        summary: `批量创建了 ${results.length} 个待办任务`,
+        meta: { created: results.length, skipped: data.dogs.length - results.length },
+      })
+    }
 
     const response = {
       data: {

@@ -1,5 +1,6 @@
 import { localDb } from '@/localdb/db'
 import { CORE_SYNC_COLLECTIONS, HOME_SYNC_COLLECTIONS } from '@/localdb/collections'
+import { createPendingLocalOperationLog } from '@/localdb/local-operation-log'
 import {
   applyTouchedEntityVersions,
   buildLocalDateCounts,
@@ -38,6 +39,7 @@ import type {
   BusinessCollectionName,
   LocalCollectionName,
   MutationStatus,
+  LocalOperationLogRow,
   OutboxMutation,
   SyncAckPayload,
   SyncMetadata,
@@ -102,10 +104,25 @@ function createLocalExpenseCategoryGroupKey() {
 const HOME_MUTATION_TYPES = LOCAL_MUTATION_TYPES
 type HomeMutationType = LocalMutationType
 type HomeMutationPayload = LocalMutationPayload
+const MAX_CONFLICT_REBASE_ATTEMPTS = 3
 
 function isOnlineError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error || '')
   return /network|timeout|offline|fail/i.test(message)
+}
+
+async function detectOnline() {
+  try {
+    const network = await new Promise<any>((resolve) => {
+      uni.getNetworkType({
+        success: resolve,
+        fail: () => resolve({ networkType: 'unknown' }),
+      })
+    })
+    return network?.networkType !== 'none'
+  } catch {
+    return true
+  }
 }
 
 function getNow() {
@@ -180,14 +197,16 @@ function toSyncStateRow(collection: BusinessCollectionName, current?: Partial<Sy
 }
 
 async function getHomeEntities(): Promise<HomeProjectionEntities> {
-  const [dogs, tasks, health_records, medication_tasks] = await Promise.all([
+  const [dogs, tasks, health_records, medication_tasks, breeding_cycles, breeding_records] = await Promise.all([
     localDb.getTable<any>('dogs'),
     localDb.getTable<any>('tasks'),
     localDb.getTable<any>('health_records'),
     localDb.getTable<any>('medication_tasks'),
+    localDb.getTable<any>('breeding_cycles'),
+    localDb.getTable<any>('breeding_records'),
   ])
 
-  return { dogs, tasks, health_records, medication_tasks }
+  return { dogs, tasks, health_records, medication_tasks, breeding_cycles, breeding_records }
 }
 
 function normalizePulledRows<T extends Record<string, any>>(rows: T[]): Array<T & { _id: string; updated_at?: number; created_at?: number; version: number }> {
@@ -198,6 +217,7 @@ function normalizePulledRows<T extends Record<string, any>>(rows: T[]): Array<T 
       _id: String(row._id || ''),
       version: Number(row.version || 0),
       updated_at: updatedAt || row.updated_at,
+      _local_pending: false,
     }
   })
 }
@@ -454,17 +474,70 @@ async function upsertOutboxMutation(mutation: OutboxMutation) {
 }
 
 async function updateOutboxStatus(mutationId: string, status: MutationStatus, extra: Partial<OutboxMutation> = {}) {
-  await localDb.transact(['outbox_mutations'], (tables) => {
+  await localDb.transact(['outbox_mutations', 'local_operation_logs', 'sync_conflicts'], (tables) => {
     tables.outbox_mutations = (tables.outbox_mutations as OutboxMutation[]).map((mutation) => {
       if (mutation._id !== mutationId) return mutation
+      const nextLastError = extra.last_error ?? (status === 'failed' ? mutation.last_error ?? null : null)
       return {
         ...mutation,
         status,
         updated_at: getNow(),
+        last_error: nextLastError,
         ...extra,
       }
     })
+    const logId = mutationId.replace(/^outbox_/, 'local_operation_')
+    if (status === 'synced') {
+      tables.local_operation_logs = (tables.local_operation_logs as LocalOperationLogRow[]).filter(log => log._id !== logId)
+      const clientMutationId = mutationId.replace(/^outbox_/, '')
+      tables.sync_conflicts = (tables.sync_conflicts as any[]).map((conflict) => {
+        if (String(conflict.client_mutation_id || '') !== clientMutationId || conflict.status !== 'open') return conflict
+        return {
+          ...conflict,
+          status: 'resolved',
+          updated_at: getNow(),
+        }
+      })
+      return
+    }
+    tables.local_operation_logs = (tables.local_operation_logs as LocalOperationLogRow[]).map((log) => {
+      if (log._id !== logId) return log
+      return {
+        ...log,
+        status,
+        last_error: extra.last_error ?? (status === 'failed' ? log.last_error ?? null : null),
+        updated_at: getNow(),
+      }
+    })
   })
+}
+
+function rebaseMutationForConflict(
+  mutation: OutboxMutation<HomeMutationPayload>,
+  conflict: NonNullable<SyncAckPayload['conflict']>,
+) {
+  if (!conflict.entityId || conflict.serverVersion === undefined || conflict.serverVersion === null) return null
+  const currentSyncMeta = (mutation.payload?._sync && typeof mutation.payload._sync === 'object'
+    ? mutation.payload._sync
+    : {}) as SyncMetadata
+
+  return {
+    ...mutation,
+    payload: {
+      ...mutation.payload,
+      _sync: {
+        ...currentSyncMeta,
+        baseVersions: {
+          ...(currentSyncMeta.baseVersions || {}),
+          [conflict.entityId]: Number(conflict.serverVersion || 0),
+        },
+      },
+    },
+    retry_count: mutation.retry_count + 1,
+    next_retry_at: 0,
+    last_error: null,
+    updated_at: getNow(),
+  } satisfies OutboxMutation<HomeMutationPayload>
 }
 
 function applyAckToCollectionRows(rows: Record<string, any>[], touchedEntities: NonNullable<SyncAckPayload['touchedEntities']>, collection: BusinessCollectionName) {
@@ -513,17 +586,7 @@ class LocalSyncRuntime {
     if (this.started) return
     this.started = true
 
-    try {
-      const network = await new Promise<any>((resolve) => {
-        uni.getNetworkType({
-          success: resolve,
-          fail: () => resolve({ networkType: 'unknown' }),
-        })
-      })
-      this.online = network?.networkType !== 'none'
-    } catch {
-      this.online = true
-    }
+    this.online = await detectOnline()
 
     try {
       uni.onNetworkStatusChange((result) => {
@@ -820,6 +883,112 @@ class LocalSyncRuntime {
 
   async getSyncStatus() {
     return getSyncStatus()
+  }
+
+  async getOutboxIssues(options: { limit?: number } = {}) {
+    const limit = options.limit ?? 5
+    const [outbox, conflicts] = await Promise.all([
+      localDb.getOutbox(),
+      localDb.getTable<any>('sync_conflicts'),
+    ])
+    const conflictMap = new Map(
+      conflicts
+        .filter(conflict => conflict.status === 'open')
+        .map(conflict => [String(conflict.client_mutation_id || ''), conflict]),
+    )
+    return outbox
+      .filter(mutation => mutation.status === 'failed' || mutation.status === 'conflict')
+      .sort((left, right) => Number(right.updated_at || 0) - Number(left.updated_at || 0))
+      .slice(0, limit)
+      .map((mutation) => {
+        const conflict = conflictMap.get(mutation.client_mutation_id)
+        const conflictMessage = conflict
+          ? `版本冲突：${conflict.collection}/${conflict.entity_id} 本地 ${conflict.base_version}，云端 ${conflict.server_version}`
+          : ''
+        return {
+          _id: mutation._id,
+          type: mutation.type,
+          status: mutation.status,
+          retryCount: mutation.retry_count,
+          nextRetryAt: mutation.next_retry_at,
+          lastError: mutation.status === 'conflict' ? conflictMessage : mutation.last_error || '',
+          createdAt: mutation.created_at,
+          updatedAt: mutation.updated_at,
+        }
+      })
+  }
+
+  async retryFailedOutboxNow(familyIdInput: string) {
+    const familyId = getFamilyId(familyIdInput || this.currentFamilyId)
+    await this.init()
+    this.currentFamilyId = familyId
+    this.online = await detectOnline()
+    if (!this.online) throw new Error('当前网络不可用')
+
+    const now = getNow()
+    await localDb.transact(['outbox_mutations', 'local_operation_logs', 'sync_conflicts'], (tables) => {
+      const conflictMap = new Map(
+        (tables.sync_conflicts as any[])
+          .filter(conflict => conflict.status === 'open')
+          .map(conflict => [String(conflict.client_mutation_id || ''), conflict]),
+      )
+      const retryingIds = new Set(
+        (tables.outbox_mutations as OutboxMutation[])
+          .filter(mutation => mutation.family_id === familyId && (mutation.status === 'failed' || mutation.status === 'conflict'))
+          .map(mutation => mutation.client_mutation_id),
+      )
+
+      tables.outbox_mutations = (tables.outbox_mutations as OutboxMutation[]).map((mutation) => {
+        if (mutation.family_id !== familyId || (mutation.status !== 'failed' && mutation.status !== 'conflict')) return mutation
+        const conflict = conflictMap.get(mutation.client_mutation_id)
+        const currentSyncMeta = (mutation.payload?._sync && typeof mutation.payload._sync === 'object'
+          ? mutation.payload._sync
+          : {}) as SyncMetadata
+        const payload = conflict?.entity_id && conflict?.server_version !== undefined
+          ? {
+              ...mutation.payload,
+              _sync: {
+                ...currentSyncMeta,
+                baseVersions: {
+                  ...(currentSyncMeta.baseVersions || {}),
+                  [conflict.entity_id]: Number(conflict.server_version || 0),
+                },
+              },
+            }
+          : mutation.payload
+        return {
+          ...mutation,
+          payload,
+          status: 'pending',
+          next_retry_at: 0,
+          last_error: null,
+          updated_at: now,
+        }
+      })
+
+      tables.sync_conflicts = (tables.sync_conflicts as any[]).map((conflict) => {
+        if (!retryingIds.has(String(conflict.client_mutation_id || ''))) return conflict
+        return {
+          ...conflict,
+          status: 'retrying',
+          updated_at: now,
+        }
+      })
+
+      tables.local_operation_logs = (tables.local_operation_logs as LocalOperationLogRow[]).map((log) => {
+        if (!retryingIds.has(log.client_mutation_id)) return log
+        return {
+          ...log,
+          status: 'pending',
+          last_error: null,
+          updated_at: now,
+        }
+      })
+    })
+
+    await this.flushOutbox(familyId)
+    await this.syncActiveScope({ force: true })
+    return this.getSyncStatus()
   }
 
   async createDogLocally(familyIdInput: string, data: Record<string, any>) {
@@ -1154,9 +1323,38 @@ class LocalSyncRuntime {
   async enqueueMutation(type: HomeMutationType, familyId: string, payload: HomeMutationPayload, collectionScope: BusinessCollectionName[], syncMeta: SyncMetadata) {
     const mutation = buildOutboxMutation(type, familyId, payload, collectionScope, syncMeta.clientMutationId)
     await upsertOutboxMutation(mutation)
+    const localOperationLog = await createPendingLocalOperationLog(type, familyId, payload, syncMeta)
+    if (localOperationLog) {
+      await localDb.upsertRows('local_operation_logs', [localOperationLog])
+    }
     if (this.online) {
       void this.flushOutbox(familyId)
     }
+  }
+
+  async getLocalOperationLogs(familyId: string, options: {
+    start?: number
+    end?: number
+    actorUserIds?: string[]
+    actionTypes?: string[]
+    statuses?: MutationStatus[]
+  } = {}) {
+    const actorUserIds = new Set((options.actorUserIds || []).filter(Boolean))
+    const actionTypes = new Set((options.actionTypes || []).filter(Boolean))
+    const statuses = new Set((options.statuses || ['pending', 'processing', 'failed', 'conflict']).filter(Boolean) as MutationStatus[])
+    const start = Number(options.start || 0)
+    const end = Number(options.end || Date.now())
+
+    return localDb.query<LocalOperationLogRow>('local_operation_logs', (row) => {
+      if (row.family_id !== familyId) return false
+      if (!statuses.has(row.status)) return false
+      if (row.created_at < start || row.created_at > end) return false
+      if (actorUserIds.size > 0 && !actorUserIds.has(String(row.actor_user_id || ''))) return false
+      if (actionTypes.size > 0 && !actionTypes.has(String(row.action_type || ''))) return false
+      return true
+    }, {
+      sort: (left, right) => Number(right.created_at || 0) - Number(left.created_at || 0),
+    })
   }
 
   private async dispatchMutation(mutation: OutboxMutation<HomeMutationPayload>) {
@@ -1176,35 +1374,50 @@ class LocalSyncRuntime {
       )
 
       for (const mutation of pendingMutations) {
-        await updateOutboxStatus(mutation._id, 'processing')
+        let currentMutation = mutation
+        await updateOutboxStatus(currentMutation._id, 'processing')
         try {
-          const result = await this.dispatchMutation(mutation)
-          const ack = (result || {}) as SyncAckPayload
+          for (let attempt = 0; attempt < MAX_CONFLICT_REBASE_ATTEMPTS; attempt += 1) {
+            const result = await this.dispatchMutation(currentMutation)
+            const ack = (result || {}) as SyncAckPayload
 
-          if (ack.conflict) {
-            await localDb.upsertConflict({
-              _id: `conflict_${mutation.client_mutation_id}`,
-              client_mutation_id: mutation.client_mutation_id,
-              collection: ack.conflict.collection,
-              entity_id: ack.conflict.entityId,
-              base_version: ack.conflict.baseVersion,
-              server_version: ack.conflict.serverVersion,
-              status: 'open',
-              detail: ack.conflict ? { ...ack.conflict } : null,
-              created_at: now,
-              updated_at: now,
-            })
-            await updateOutboxStatus(mutation._id, 'conflict')
-            continue
+            if (ack.conflict) {
+              const rebasedMutation = rebaseMutationForConflict(currentMutation, ack.conflict)
+              if (rebasedMutation && attempt < MAX_CONFLICT_REBASE_ATTEMPTS - 1) {
+                currentMutation = rebasedMutation
+                await localDb.upsertRows('outbox_mutations', [{
+                  ...currentMutation,
+                  status: 'processing',
+                  updated_at: getNow(),
+                }])
+                continue
+              }
+
+              await localDb.upsertConflict({
+                _id: `conflict_${currentMutation.client_mutation_id}`,
+                client_mutation_id: currentMutation.client_mutation_id,
+                collection: ack.conflict.collection,
+                entity_id: ack.conflict.entityId,
+                base_version: ack.conflict.baseVersion,
+                server_version: ack.conflict.serverVersion,
+                status: 'open',
+                detail: ack.conflict ? { ...ack.conflict } : null,
+                created_at: now,
+                updated_at: getNow(),
+              })
+              await updateOutboxStatus(currentMutation._id, 'conflict')
+              break
+            }
+
+            await applySyncAck(ack, currentMutation.collection_scope, familyId)
+            await updateOutboxStatus(currentMutation._id, 'synced')
+            break
           }
-
-          await applySyncAck(ack, mutation.collection_scope, familyId)
-          await updateOutboxStatus(mutation._id, 'synced')
         } catch (error) {
-          const retryCount = mutation.retry_count + 1
+          const retryCount = currentMutation.retry_count + 1
           const retryAt = now + Math.min(60000, 1000 * (2 ** Math.min(retryCount, 6)))
           await updateOutboxStatus(
-            mutation._id,
+            currentMutation._id,
             isOnlineError(error) ? 'failed' : 'failed',
             {
               retry_count: retryCount,

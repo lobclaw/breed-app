@@ -16,8 +16,9 @@
 ## 当前状态
 
 - 技术栈：UniApp（Vue 3 + TypeScript + Pinia）+ UniCloud 云对象（支付宝云）+ UniCloud MongoDB
-- 阶段：Phase 1 功能与性能优化已完成；当前进入 `Local-First Foundation` 架构升级验收与补齐
-- 当前 local-first 状态：首页、部分表单与部分写路径已接入本地事实源 / outbox；全 App 页面级 sync scope、本地读路径和配置/销售/统计等边界仍需继续补齐
+- 阶段：Phase 1 功能与性能优化已完成；当前处于 `Local-First Foundation` 收口阶段
+- 当前 local-first 状态：全量 `local-first` 页面已接入页面级 scope、`usePageSync` 与本地事实源；核心读路径、主要写路径、回收站、配置、财务、销售、记录表单已接入本地事务 + outbox + `_sync` ack
+- 当前收尾重点：真实设备的 Network 验收、冲突/失败/待上传入口体验补强、多端并发场景回归
 - 固定路线：页面级 scope registry → 本地 projection/repository → 核心页面本地读 → 核心写入本地事务 + outbox → 云端 `_sync` 幂等 ack → 同步状态/冲突/失败 UX → Network 验收
 - 家庭协作已接入 `operation_logs` V1；路由保持 `/pages/profile/operation-log`，统一走 `family-service.getOperationLogs`
 - `care_group` 仅保留配置与数据结构，未接入自动任务链路，入口默认隐藏，不按已上线能力验收
@@ -52,6 +53,7 @@
 - 推荐 TTL：`home=20s`；普通列表 `120s`；财务/统计/销售列表 `300s`；详情 `45s`；配置类 `300s`；后台 core mirror `10min` 且低优先级分批执行
 - 首页只处理首页 scope：`dogs`、`tasks`、`health_records`、`medication_tasks`；首页不得预拉财务、销售、窝、代理人、协议等非首页数据
 - 其他页面必须使用自己的 sync scope：犬只、犬只详情、记录入口、繁育周期、窝、健康详情、用药详情、财务、财务报表、销售、代理人、犬舍总览、配置、体重、回收站分别按域同步
+- 所有 `local-first` 页面统一接入 `usePageSync`；不要再在页面里手写零散的 `setActiveScope/syncScope` 生命周期
 - 选择器与 store 不得绕过 localdb：`BDogPicker`、`BLitterSelector`、`BCycleSelector`、`BFinanceLinkSheet`、`dogStore`、`protocolStore`、`taskStore` 都应读本地 projection/cache，不直接 cloudCall/clientDB
 - 表单组件不得绕过 sync runtime：`BreedingRecordForm`、`HealthRecordForm`、`MedicationTaskForm` 的候选筛选、预填、提交应优先本地；重复疾病/重复用药/下一脚配种号本地预检，云端最终校验
 - 本地写入必须使用语义 mutation，不存页面 patch；例如 `dog.create`、`task.complete`、`breeding.addRecord`、`health.recoverIllnesses`、`finance.addExpense`、`sale.complete`、`settings.update`
@@ -74,11 +76,13 @@
 - `settings-local`：通知、默认参数、护理规则、财务分类/分类组、用药方案库；家庭成员/权限/邀请不属于此 scope
 - `recycle`：`dogs`、`expenses`、`incomes`、`agents`、`medication_protocols` 的 deleted rows 聚合、恢复、永久删除
 - 在线优先：`uni-id-pages/*`、`family/setup`、`family/join`、`family/invite`、`family/members`、`profile/operation-log`、`profile/backup`、云存储上传、token/账号资料/改密/绑定手机/注销账号
+- 旧重定向页：`record/health`、`record/breeding`、`finance/income-add` 统一视为 `redirect-deprecated`，只做跳转承接，不再当成真实业务页维护
 - 静态无同步：`profile/about` 等纯说明页
 - 服务端定时权威：每日审计、自动关闭周期、晨间摘要只在云端执行；客户端只同步最终实体变化，不本地伪造审计/摘要结果
 - `income-add.vue` 视为旧入口，统一重定向或收敛到 `finance/expense-add?type=income`，不要维护第二套收入写路径
 - `sale_records` 当前不纳入回收站；未定义自动收入与犬只去向回滚前不要顺手接入回收站
 - 备份导出只包含云端已同步数据；若存在 pending outbox / pending upload，备份页必须提示数据尚未完全同步
+- 在线优先页在断网时必须明确提示“当前功能需要联网”，不要等云调用超时后再模糊报错
 - 图片/附件第一版在线上传；业务主体可离线创建，但附件失败时标记 `pending_upload`，不能显示为完整同步
 
 ## 改动前后 Checklist
@@ -187,7 +191,7 @@
 - 详情页刷新：若既要首屏加载又要子页返回刷新，必须避免 `onLoad` 与紧随其后的 `onShow` 双请求；犬只详情从子页返回时默认保留现有内容并静默后台刷新，只有首屏加载才进入整页骨架；静默刷新只在来源页有提交反馈时触发，且必须保留 latest token / 请求令牌保护
 - 详情页路由参数改口径时必须保留旧入口兼容；主口径改为 `id` 后仍需兼容 `taskId`、`recordId/record_id`、`medicationTaskId/medication_task_id`
 - 当前记录域重构后的回归验证优先按 `docs/record-form-acceptance.md` 执行
-- 已知限制：V1 单家庭模式；`_before` 默认从用户信息注入 `familyId`；当前是 Local-First Foundation，尚未完成全 App 页面级 scope 覆盖与所有写入冲突 UX；`operation_logs` 需随 schema 部署后才会真实积累，未部署阶段只显示空态
+- 已知限制：V1 单家庭模式；`_before` 默认从用户信息注入 `familyId`；当前页面级 scope 覆盖与主要写路径已接通，但多端并发冲突呈现、待上传入口与真实设备网络验收仍需继续加强；`operation_logs` 需随 schema 部署后才会真实积累，未部署阶段只显示空态
 
 ## 测试 / 清库 / 验收
 

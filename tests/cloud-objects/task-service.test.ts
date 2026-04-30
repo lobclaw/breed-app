@@ -424,6 +424,28 @@ describe('task-service', () => {
       expect(records.every(r => r.type === 'vaccination')).toBe(true)
     })
 
+    it('批量完成没有 pending 任务时不应写入 0 条操作日志', async () => {
+      const now = Date.now()
+      seedCollection('tasks', [{
+        _id: 'task_done_1',
+        family_id: familyId,
+        dog_id: 'dog_1',
+        dog_name: '奶盖',
+        type: 'vaccination',
+        status: 'completed',
+        due_date: now,
+        title: '疫苗',
+      }])
+      seedCollection('operation_logs', [])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      const result = await taskService.batchCompleteTask.call(ctx, ['task_done_1'], false)
+
+      const { data: logs } = await db.collection('operation_logs').where({ family_id: familyId }).get()
+      expect(result.data.completed).toBe(0)
+      expect(logs).toHaveLength(0)
+    })
+
     it('completeTask 应支持 _sync 幂等重放并返回 touchedEntities', async () => {
       const now = Date.now()
       const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
@@ -465,6 +487,37 @@ describe('task-service', () => {
       const { data: tasks } = await db.collection('tasks').doc('task_sync_1').get()
       expect(tasks[0].status).toBe('completed')
       expect(tasks[0].version).toBe(4)
+    })
+  })
+
+  describe('batchCreateManualTasks 批量创建待办', () => {
+    it('所有待办已存在时不应写入 0 条操作日志', async () => {
+      const now = Date.now()
+      seedCollection('tasks', [{
+        _id: 'existing_task_1',
+        family_id: familyId,
+        dog_id: 'dog_1',
+        dog_name: '奶盖',
+        type: 'vaccination',
+        status: 'pending',
+        due_date: now,
+        title: '疫苗',
+        details: { vaccine_type: '卫佳5' },
+      }])
+      seedCollection('operation_logs', [])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      const result = await taskService.batchCreateManualTasks.call(ctx, {
+        dogs: [{ dog_id: 'dog_1', dog_name: '奶盖' }],
+        type: 'vaccination',
+        due_date: now,
+        details: { vaccine_type: '卫佳5' },
+      })
+
+      const { data: logs } = await db.collection('operation_logs').where({ family_id: familyId }).get()
+      expect(result.data.created).toBe(0)
+      expect(result.data.skipped).toBe(1)
+      expect(logs).toHaveLength(0)
     })
   })
 

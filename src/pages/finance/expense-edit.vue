@@ -285,7 +285,7 @@ const canSubmit = computed(() => {
 function setDateChip(chip: string) {
   dateChipActive.value = chip
   const offsetMap: Record<string, number> = { today: 0, yesterday: -1, dayBefore: -2 }
-  form.date = buildTimestampFromDayOffset(offsetMap[chip] || 0, form.date)
+  form.date = buildTimestampFromDayOffset(offsetMap[chip] || 0)
 }
 
 function onDateConfirm(value: number | string) {

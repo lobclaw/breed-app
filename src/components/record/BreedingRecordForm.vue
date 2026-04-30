@@ -827,7 +827,7 @@ function resetDetails() {
 function setDateChip(chip: 'today' | 'yesterday' | 'dayBefore') {
   dateChipActive.value = chip
   const offsetMap = { today: 0, yesterday: -1, dayBefore: -2 }
-  date.value = buildTimestampFromDayOffset(offsetMap[chip], date.value || Date.now())
+  date.value = buildTimestampFromDayOffset(offsetMap[chip])
 }
 
 function onDateConfirm(value: number | string) {

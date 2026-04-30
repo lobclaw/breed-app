@@ -43,8 +43,8 @@ describe('page loading skeletons', () => {
   it('操作日志页首屏和追加加载都使用列表骨架', () => {
     const source = readSource('../../src/pages/profile/operation-log.vue')
 
-    expect(source).toContain('v-if="loading && !logs.length" class="log-list"')
-    expect(source).toContain('v-if="loadingMore && logs.length" class="log-list log-list--append"')
+    expect(source).toContain('v-if="loading && !displayLogs.length" class="log-list"')
+    expect(source).toContain('v-if="loadingMore && displayLogs.length" class="log-list log-list--append"')
     expect(source).toContain('class="log-item log-item--skeleton"')
     expect(source).toContain('class="log-icon log-icon--skeleton log-skeleton__shimmer"')
     expect(source).toContain('>加载更多<')

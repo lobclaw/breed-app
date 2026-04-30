@@ -11,6 +11,9 @@ describe('backup page contract', () => {
     const source = readSource('src/pages/profile/backup.vue')
 
     expect(source).toContain('localSyncRuntime.getSyncStatus()')
+    expect(source).toContain('localSyncRuntime.getOutboxIssues')
+    expect(source).toContain('localSyncRuntime.retryFailedOutboxNow')
+    expect(source).toContain('立即重试同步')
     expect(source).toContain('仍有本地数据未同步')
     expect(source).toContain("uni.navigateTo({ url: '/pages/profile/recycle' })")
   })

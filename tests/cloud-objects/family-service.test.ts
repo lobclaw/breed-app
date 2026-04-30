@@ -829,6 +829,64 @@ describe('family-service', () => {
       expect(result.list.map((item: any) => item._id)).toEqual(['log_1', 'log_2'])
     })
 
+    it('获取操作日志时应过滤批量任务 0 条历史日志', async () => {
+      seedCollection('operation_logs', [
+        {
+          _id: 'log_valid',
+          family_id: familyId,
+          actor_user_id: 'user_1',
+          actor_name: '小林',
+          action_type: 'create',
+          domain: 'task',
+          target_type: 'task_batch',
+          target_id: 'batch:1',
+          target_name: '2个待办',
+          summary: '批量创建了 2 个待办任务',
+          meta: { created: 2, skipped: 0 },
+          created_at: 3000,
+        },
+        {
+          _id: 'log_zero_create',
+          family_id: familyId,
+          actor_user_id: 'user_1',
+          actor_name: '小林',
+          action_type: 'create',
+          domain: 'task',
+          target_type: 'task_batch',
+          target_id: 'batch:2',
+          target_name: '0个待办',
+          summary: '批量创建了 0 个待办任务',
+          meta: { created: 0, skipped: 1 },
+          created_at: 2000,
+        },
+        {
+          _id: 'log_zero_complete',
+          family_id: familyId,
+          actor_user_id: 'user_1',
+          actor_name: '小林',
+          action_type: 'complete',
+          domain: 'task',
+          target_type: 'task_batch',
+          target_id: 'batch:3',
+          target_name: '0个任务',
+          summary: '批量完成了 0 个任务',
+          meta: { completed: 0, completedTaskIds: [] },
+          created_at: 1000,
+        },
+      ])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'test_uid', role: 'creator' })
+      const result = await familyService.getOperationLogs.call(ctx, {
+        start: 0,
+        end: 4000,
+        page: 1,
+        pageSize: 20,
+      })
+
+      expect(result.total).toBe(1)
+      expect(result.list.map((item: any) => item._id)).toEqual(['log_valid'])
+    })
+
     it('operation_logs 集合缺失时应静默返回空列表', async () => {
       const originalCollection = mockUniCloud.database().collection
       const ctx = createCloudObjectContext({ familyId, uid: 'test_uid', role: 'creator' })

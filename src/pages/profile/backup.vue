@@ -26,6 +26,16 @@
       <text class="sync-warning-card__title">仍有本地数据未完全同步</text>
       <text class="sync-warning-card__desc">{{ syncWarningText }}</text>
       <text class="sync-warning-card__hint">请先恢复联网并等待同步完成，再执行备份或导出，避免遗漏离线期间的数据。</text>
+      <view v-if="syncIssues.length" class="sync-warning-card__issues">
+        <view v-for="issue in syncIssues" :key="issue._id" class="sync-warning-card__issue">
+          <text class="sync-warning-card__issue-type">{{ issue.type }}</text>
+          <text class="sync-warning-card__issue-error">{{ issue.lastError || '同步失败，等待重试' }}</text>
+        </view>
+      </view>
+      <button class="sync-warning-card__retry" :disabled="retryingSync" @click="retrySyncNow">
+        <text class="material-icons-round sync-warning-card__retry-icon">sync</text>
+        <text>{{ retryingSync ? '正在重试' : '立即重试同步' }}</text>
+      </button>
     </view>
 
     <!-- 操作按钮 -->
@@ -80,16 +90,26 @@
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { useAuth } from '@/composables/useAuth'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BModal from '@/components/layout/BModal.vue'
 import { localSyncRuntime } from '@/localdb/runtime'
 
 const exporting = ref(false)
+const retryingSync = ref(false)
 const exportProgress = ref(0)
 const lastBackupDate = ref('')
 const autoBackup = ref(true)
 const showRepairConfirm = ref(false)
+interface SyncIssue {
+  _id: string
+  type: string
+  status: string
+  lastError: string
+}
+
+const syncIssues = ref<SyncIssue[]>([])
 const syncStatus = ref({
   pending: 0,
   processing: 0,
@@ -98,6 +118,7 @@ const syncStatus = ref({
   pendingUpload: 0,
 })
 
+const { currentFamily } = useAuth()
 const { run: getBackupInfo } = useCloudCall<{ data: { last_backup?: number; auto_backup?: boolean } }>('family-service', 'getBackupInfo')
 const { run: exportData } = useCloudCall<{ data: { url: string } }>('family-service', 'exportData', {
   showLoading: false,
@@ -136,10 +157,20 @@ function formatDate(ts: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
+function normalizeSyncIssues(items: Array<Record<string, any>> = []): SyncIssue[] {
+  return items.map(item => ({
+    _id: String(item._id || ''),
+    type: String(item.type || 'unknown'),
+    status: String(item.status || ''),
+    lastError: String(item.lastError || ''),
+  }))
+}
+
 async function loadInfo() {
-  const [res, currentSyncStatus] = await Promise.all([
+  const [res, currentSyncStatus, currentIssues] = await Promise.all([
     getBackupInfo(),
     localSyncRuntime.getSyncStatus(),
+    localSyncRuntime.getOutboxIssues({ limit: 3 }),
   ])
   if (res?.data?.last_backup) {
     lastBackupDate.value = formatDate(res.data.last_backup)
@@ -154,6 +185,7 @@ async function loadInfo() {
     conflict: Number(currentSyncStatus?.conflict || 0),
     pendingUpload: Number(currentSyncStatus?.pendingUpload || 0),
   }
+  syncIssues.value = normalizeSyncIssues(currentIssues as Array<Record<string, any>>)
 }
 
 async function toggleAutoBackup() {
@@ -163,6 +195,7 @@ async function toggleAutoBackup() {
 
 async function ensureBackupReady() {
   const currentSyncStatus = await localSyncRuntime.getSyncStatus()
+  syncIssues.value = normalizeSyncIssues(await localSyncRuntime.getOutboxIssues({ limit: 3 }))
   syncStatus.value = {
     pending: Number(currentSyncStatus?.pending || 0),
     processing: Number(currentSyncStatus?.processing || 0),
@@ -176,6 +209,34 @@ async function ensureBackupReady() {
     icon: 'none',
   })
   return false
+}
+
+async function retrySyncNow() {
+  if (retryingSync.value) return
+  const familyId = currentFamily.value?._id || ''
+  if (!familyId) {
+    uni.showToast({ title: '缺少家庭信息，无法同步', icon: 'none' })
+    return
+  }
+
+  retryingSync.value = true
+  try {
+    await localSyncRuntime.retryFailedOutboxNow(familyId)
+    await loadInfo()
+    const hasRemainingIssues = syncStatus.value.failed > 0 || syncStatus.value.conflict > 0
+    uni.showToast({
+      title: hasRemainingIssues ? '仍有数据未同步成功' : '同步已完成',
+      icon: hasRemainingIssues ? 'none' : 'success',
+    })
+  } catch (error) {
+    await loadInfo()
+    uni.showToast({
+      title: error instanceof Error ? error.message : '重试同步失败',
+      icon: 'none',
+    })
+  } finally {
+    retryingSync.value = false
+  }
 }
 
 async function runExport(format: string) {
@@ -283,6 +344,59 @@ onShow(() => loadInfo())
     font-size: 12px;
     color: var(--text-3);
     line-height: 1.5;
+  }
+
+  &__issues {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 4px;
+  }
+
+  &__issue {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.72);
+  }
+
+  &__issue-type {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-2);
+  }
+
+  &__issue-error {
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--red);
+  }
+
+  &__retry {
+    width: 100%;
+    height: 38px;
+    margin-top: 4px;
+    border: none;
+    border-radius: 19px;
+    background: var(--red);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+
+    &[disabled] {
+      opacity: 0.72;
+    }
+  }
+
+  &__retry-icon {
+    font-size: 16px;
+    color: #fff;
   }
 }
 

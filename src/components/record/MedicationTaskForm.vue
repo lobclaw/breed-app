@@ -586,7 +586,7 @@ function onDateConfirm(value: number | string) {
 
 function setChip(chip: string) {
   const offsets: Record<string, number> = { today: 0, yesterday: -1, dayBefore: -2 }
-  date.value = buildTimestampFromDayOffset(offsets[chip] || 0, date.value)
+  date.value = buildTimestampFromDayOffset(offsets[chip] || 0)
   chipActive.value = chip
 }
 

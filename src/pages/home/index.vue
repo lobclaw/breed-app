@@ -781,7 +781,7 @@ function setPostponeQuick(option: string) {
     dayAfter: 2,
     nextWeek: 7,
   }
-  postponeDate.value = buildTimestampFromDayOffset(offsetMap[option] || 1, postponeDate.value)
+  postponeDate.value = buildTimestampFromDayOffset(offsetMap[option] || 1)
 }
 
 // H-5: 批量完成
@@ -1126,6 +1126,7 @@ async function loadTodayCards(loadToken = latestLoadToken) {
     taskStore.cards = cards.value
     taskStore.counts = { today: counts.today, week: counts.week, month30: counts.month30, hasOverdue: counts.hasOverdue }
     taskStore.loaded = true
+    syncTodayDayCountFromVisibleCards()
   }
   loading.value = false
 }
@@ -1168,12 +1169,7 @@ async function loadAll() {
   if (loadToken !== latestLoadToken) return
   // 两个请求都完成后：以实际可见卡片数修正今天的红点
   // 不依赖 counts.today（它含用药卡，即使今日剂量全给完仍为 1）
-  const todayTs = startOfDay(Date.now())
-  if (cards.value.length === 0) {
-    dayCounts.value[todayTs] = 0
-  } else if (!dayCounts.value[todayTs]) {
-    dayCounts.value[todayTs] = 1
-  }
+  syncTodayDayCountFromVisibleCards()
 }
 
 async function onDateSelect(ts: number) {
@@ -1242,6 +1238,11 @@ function onHomeCalendarConfirm(value: number | string) {
 
 function buildDateCountRangeKey(startDate: number, endDate: number) {
   return `${startDate}:${endDate}`
+}
+
+function syncTodayDayCountFromVisibleCards() {
+  const todayTs = startOfDay(Date.now())
+  dayCounts.value[todayTs] = cards.value.length
 }
 
 function mergeDateCountsRange(startDate: number, endDate: number, nextCounts?: Record<number, number>) {
@@ -1398,7 +1399,7 @@ function removeCardLocally(taskId: string, forceRemoveCard = false, showSuccess 
             if (currentIdx >= 0) list.value.splice(currentIdx, 1)
             clearCardCompleting(card.id)
             counts.today = Math.max(0, counts.today - 1)
-            dayCounts.value[startOfDay(Date.now())] = counts.today
+            syncTodayDayCountFromVisibleCards()
           }, 220)
         }, 280)
       } else {
@@ -1409,7 +1410,7 @@ function removeCardLocally(taskId: string, forceRemoveCard = false, showSuccess 
           if (currentIdx >= 0) list.value.splice(currentIdx, 1)
           clearCardCompleting(card.id)
           counts.today = Math.max(0, counts.today - 1)
-          dayCounts.value[startOfDay(Date.now())] = counts.today
+          syncTodayDayCountFromVisibleCards()
         }, 220)
       }
     } else {
@@ -1642,7 +1643,7 @@ async function doPostpone() {
           if (ci >= 0) list.value.splice(ci, 1)
           clearCardCompleting(card.id)
           counts.today = Math.max(0, counts.today - 1)
-          dayCounts.value[startOfDay(Date.now())] = counts.today
+          syncTodayDayCountFromVisibleCards()
         }, 450)
         break
       }
@@ -1780,7 +1781,7 @@ function removeSickDogLocally(dogId: string, illnessId?: string) {
         if (ci >= 0) list.value.splice(ci, 1)
         clearCardCompleting(card.id)
         counts.today = Math.max(0, counts.today - 1)
-        dayCounts.value[startOfDay(Date.now())] = counts.today
+        syncTodayDayCountFromVisibleCards()
       }, 450)
     } else {
       card.dogs = remaining

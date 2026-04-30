@@ -270,6 +270,15 @@ function normalizeOperationLogQuery(input = {}) {
   }
 }
 
+function isZeroEffectOperationLog(log) {
+  if (!log || log.domain !== 'task' || log.target_type !== 'task_batch') return false
+  const meta = log.meta && typeof log.meta === 'object' ? log.meta : {}
+  if (Number(meta.created || 0) === 0 && Number(meta.skipped || 0) > 0) return true
+  if (Number(meta.completed || 0) === 0 && Array.isArray(meta.completedTaskIds)) return true
+  const summary = String(log.summary || '')
+  return /批量创建了\s*0\s*个/.test(summary) || /批量完成了\s*0\s*个/.test(summary)
+}
+
 module.exports = {
   _before: async function() {
     // createFamily 和 joinFamily 允许无家庭用户调用
@@ -958,7 +967,8 @@ module.exports = {
       }
     }
 
-    const sortedLogs = logs.sort((left, right) => (right.created_at || 0) - (left.created_at || 0))
+    const visibleLogs = logs.filter(log => !isZeroEffectOperationLog(log))
+    const sortedLogs = visibleLogs.sort((left, right) => (right.created_at || 0) - (left.created_at || 0))
     const total = sortedLogs.length
     const startIndex = (query.page - 1) * query.pageSize
     const list = sortedLogs.slice(startIndex, startIndex + query.pageSize)

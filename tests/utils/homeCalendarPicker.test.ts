@@ -39,6 +39,12 @@ describe('home calendar picker contract', () => {
     expect(source).toContain('loadedDateCountRanges.clear()')
   })
 
+  it('首页今日红点应以实际可见卡片数为准，而不是直接依赖 counts.today', () => {
+    expect(source).toContain('function syncTodayDayCountFromVisibleCards() {')
+    expect(source).toContain('dayCounts.value[todayTs] = cards.value.length')
+    expect(source).toContain('syncTodayDayCountFromVisibleCards()')
+  })
+
   it('首页顶部副标题应随 selectedDate 在今日概览和当日安排之间切换', () => {
     expect(source).toContain('<text class="greeting-sub">{{ greetingSubText }}</text>')
     expect(source).toContain("const suffix = isSelectedToday.value ? '今日概览' : '当日安排'")

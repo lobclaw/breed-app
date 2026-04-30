@@ -58,4 +58,43 @@ describe('localdb repository public api', () => {
       recentSyncAt: 200,
     })
   })
+
+  it('同步状态中的冲突数量应按 mutation 去重', async () => {
+    await localDb.replaceTable('dogs', [])
+    await localDb.replaceTable('outbox_mutations', [])
+    await localDb.replaceTable('sync_conflicts', [])
+    await localDb.replaceTable('sync_state', [])
+
+    await localDb.upsertRows('outbox_mutations', [{
+      _id: 'outbox_1',
+      type: 'task.batchComplete',
+      collection_scope: ['tasks'],
+      payload: {},
+      family_id: 'fam_1',
+      status: 'conflict',
+      retry_count: 0,
+      next_retry_at: 0,
+      last_error: null,
+      client_mutation_id: 'mutation_1',
+      device_id: 'device_1',
+      created_at: 1,
+      updated_at: 1,
+    }])
+    await localDb.upsertRows('sync_conflicts', [{
+      _id: 'conflict_mutation_1',
+      client_mutation_id: 'mutation_1',
+      collection: 'tasks',
+      entity_id: 'task_1',
+      base_version: 0,
+      server_version: 2,
+      status: 'open',
+      detail: null,
+      created_at: 1,
+      updated_at: 1,
+    }])
+
+    expect(await getSyncStatus()).toMatchObject({
+      conflict: 1,
+    })
+  })
 })

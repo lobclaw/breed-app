@@ -1,0 +1,102 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { localDb } from '../../src/localdb/db'
+import { createPendingLocalOperationLog, getLocalOperationStatusText } from '../../src/localdb/local-operation-log'
+import { LOCAL_MUTATION_TYPES } from '../../src/localdb/mutation-registry'
+
+describe('local operation log', () => {
+  beforeEach(async () => {
+    await localDb.replaceTable('families', [{
+      _id: 'fam_1',
+      members: [{ user_id: 'user_1', nickname: 'mooling', status: 'active' }],
+      updated_at: 1,
+    } as any])
+    await localDb.replaceTable('dogs', [{
+      _id: 'dog_1',
+      name: '十一',
+      family_id: 'fam_1',
+      updated_at: 1,
+    } as any])
+    await localDb.replaceTable('tasks', [{
+      _id: 'task_1',
+      title: '十一 · 发情检查',
+      family_id: 'fam_1',
+      updated_at: 1,
+    } as any])
+
+    ;(globalThis as any).uniCloud = {
+      getCurrentUserInfo: vi.fn(() => ({ uid: 'user_1' })),
+    }
+  })
+
+  it('应为新增繁育记录生成本地待同步日志', async () => {
+    const row = await createPendingLocalOperationLog(
+      LOCAL_MUTATION_TYPES.CREATE_BREEDING_RECORD,
+      'fam_1',
+      { dog_id: 'dog_1', type: 'heat' },
+      {
+        clientMutationId: 'mutation_1',
+        deviceId: 'device_1',
+        clientTimestamp: 1000,
+      },
+    )
+
+    expect(row).toMatchObject({
+      client_mutation_id: 'mutation_1',
+      actor_name: 'mooling',
+      action_type: 'create',
+      domain: 'breeding',
+      target_name: '十一',
+      summary: '为 十一 新增了发情记录',
+      status: 'pending',
+    })
+  })
+
+  it('应为完成任务生成本地待同步日志', async () => {
+    const row = await createPendingLocalOperationLog(
+      LOCAL_MUTATION_TYPES.COMPLETE_TASK,
+      'fam_1',
+      { taskId: 'task_1' },
+      {
+        clientMutationId: 'mutation_2',
+        deviceId: 'device_1',
+        clientTimestamp: 1001,
+      },
+    )
+
+    expect(row).toMatchObject({
+      action_type: 'complete',
+      domain: 'task',
+      target_name: '十一 · 发情检查',
+      summary: '完成了任务 十一 · 发情检查',
+    })
+  })
+
+  it('应按 dogs 数组数量生成批量待办日志文案', async () => {
+    const row = await createPendingLocalOperationLog(
+      LOCAL_MUTATION_TYPES.BATCH_CREATE_TASKS,
+      'fam_1',
+      {
+        dogs: [{ _id: 'dog_1' }, { _id: 'dog_2' }],
+      },
+      {
+        clientMutationId: 'mutation_3',
+        deviceId: 'device_1',
+        clientTimestamp: 1002,
+      },
+    )
+
+    expect(row).toMatchObject({
+      action_type: 'create',
+      domain: 'task',
+      target_name: '2个任务',
+      summary: '批量创建了 2 个任务',
+    })
+  })
+
+  it('应暴露本地同步状态文案', () => {
+    expect(getLocalOperationStatusText('pending')).toBe('待同步')
+    expect(getLocalOperationStatusText('processing')).toBe('同步中')
+    expect(getLocalOperationStatusText('failed')).toBe('同步失败')
+    expect(getLocalOperationStatusText('conflict')).toBe('同步冲突')
+  })
+})

@@ -143,7 +143,7 @@ function setChip(chip: string) {
     tomorrow: 1,
     dayAfter: 2,
   }
-  emit('update:date', buildTimestampFromDayOffset(offsetMap[chip] || 0, props.date || Date.now()))
+  emit('update:date', buildTimestampFromDayOffset(offsetMap[chip] || 0))
 }
 
 function onDateConfirm(value: number | string) {
@@ -169,10 +169,10 @@ function toggleReminder() {
 watch(() => props.isTodo, (val) => {
   if (val) {
     chipActive.value = 'tomorrow'
-    emit('update:date', buildTimestampFromDayOffset(1, props.date || Date.now()))
+    emit('update:date', buildTimestampFromDayOffset(1))
   } else {
     chipActive.value = 'today'
-    emit('update:date', buildTimestampFromDayOffset(0, props.date || Date.now()))
+    emit('update:date', buildTimestampFromDayOffset(0))
   }
 })
 

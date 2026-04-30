@@ -329,7 +329,7 @@ function selectLitter(litter: any) {
 function setDateChip(chip: Exclude<DateChipKey, ''>) {
   dateChipActive.value = chip
   const offsetMap = { today: 0, yesterday: -1, dayBefore: -2 }
-  recordDateTime.value = buildTimestampFromDayOffset(offsetMap[chip], recordDateTime.value)
+  recordDateTime.value = buildTimestampFromDayOffset(offsetMap[chip])
 }
 
 function syncDateChipActive() {

@@ -19,6 +19,8 @@ export interface HomeProjectionEntities {
   tasks: GenericRow[]
   health_records: GenericRow[]
   medication_tasks: GenericRow[]
+  breeding_cycles?: GenericRow[]
+  breeding_records?: GenericRow[]
 }
 
 function getBeijingDayContext(now = Date.now()) {
@@ -44,6 +46,13 @@ function startOfDay(ts: number) {
 
 function getBeijingDayDiff(laterTs: number, earlierTs: number) {
   return Math.floor((startOfDay(laterTs) - startOfDay(earlierTs)) / DAY_MS)
+}
+
+function getMaxTimestamp(...values: Array<number | null | undefined>) {
+  return values.reduce<number>((max, value) => {
+    const next = Number(value || 0)
+    return next > max ? next : max
+  }, 0)
 }
 
 function getOverdueDays(dueDate?: number | null, now = Date.now()) {
@@ -183,6 +192,260 @@ function dedupeBreedingMilestones(tasks: GenericRow[]) {
   }
 
   return deduped
+}
+
+function getLatestBreedingRecord(records: GenericRow[], type: string) {
+  return records
+    .filter(record => !record.deleted_at && record.type === type)
+    .slice()
+    .sort((left, right) => {
+      const dateDiff = Number(right?.date || 0) - Number(left?.date || 0)
+      if (dateDiff !== 0) return dateDiff
+      const updatedDiff = Number(right?.updated_at || right?.created_at || 0) - Number(left?.updated_at || left?.created_at || 0)
+      if (updatedDiff !== 0) return updatedDiff
+      return `${right?._id || ''}`.localeCompare(`${left?._id || ''}`)
+    })[0] || null
+}
+
+function getEarliestBreedingRecord(records: GenericRow[], type: string) {
+  return records
+    .filter(record => !record.deleted_at && record.type === type)
+    .slice()
+    .sort((left, right) => {
+      const dateDiff = Number(left?.date || 0) - Number(right?.date || 0)
+      if (dateDiff !== 0) return dateDiff
+      const updatedDiff = Number(left?.updated_at || left?.created_at || 0) - Number(right?.updated_at || right?.created_at || 0)
+      if (updatedDiff !== 0) return updatedDiff
+      return `${left?._id || ''}`.localeCompare(`${right?._id || ''}`)
+    })[0] || null
+}
+
+function countBreedingRecords(records: GenericRow[], type: string) {
+  return records.filter(record => !record.deleted_at && record.type === type).length
+}
+
+function getFollicleResult(details: Record<string, any> = {}) {
+  return typeof details?.result === 'string' ? details.result : ''
+}
+
+function isFollicleReady(details: Record<string, any> = {}) {
+  return getFollicleResult(details) === '已成熟'
+}
+
+function isFollicleAbnormal(details: Record<string, any> = {}) {
+  return getFollicleResult(details) === '发育不良'
+}
+
+function isPregnancyConfirmed(details: Record<string, any> = {}) {
+  return details.confirmed === '是' || details.confirmed === true
+}
+
+function hasPendingBreedingMutation(cycle: GenericRow, records: GenericRow[]) {
+  if (cycle?._local_pending) return true
+  return records.some(record => record?._local_pending && record.type !== 'heat_observation')
+}
+
+function buildSyntheticBreedingMilestoneTask(
+  cycle: GenericRow,
+  familyId: string,
+  stepType: string,
+  title: string,
+  dueDate: number,
+  sourceRecordId: string | null,
+  details: Record<string, any>,
+  updatedAt: number,
+) {
+  const now = Date.now()
+  return {
+    _id: `synthetic_breeding_milestone:${cycle._id}:${stepType}`,
+    card_type: 'individual',
+    dog_id: cycle.dam_id,
+    dog_name: cycle.dam_name || '',
+    cycle_id: cycle._id,
+    type: 'breeding_milestone',
+    title,
+    due_date: dueDate,
+    status: 'pending',
+    priority: dueDate <= now ? 'overdue' : 'upcoming',
+    source_record_id: sourceRecordId,
+    source_collection: 'breeding_records',
+    family_id: familyId,
+    postpone_count: 0,
+    details,
+    created_at: updatedAt,
+    updated_at: updatedAt,
+    _synthetic_local: true,
+  }
+}
+
+function buildPendingBreedingMilestones(entities: HomeProjectionEntities) {
+  const cycles = (entities.breeding_cycles || []).filter(cycle => !cycle.deleted_at)
+  const records = (entities.breeding_records || []).filter(record => !record.deleted_at)
+  if (!cycles.length || !records.length) return []
+
+  const recordsByCycleId = new Map<string, GenericRow[]>()
+  for (const record of records) {
+    const cycleId = typeof record?.cycle_id === 'string' ? record.cycle_id : ''
+    if (!cycleId) continue
+    const bucket = recordsByCycleId.get(cycleId) || []
+    bucket.push(record)
+    recordsByCycleId.set(cycleId, bucket)
+  }
+
+  const syntheticTasks: GenericRow[] = []
+  for (const cycle of cycles) {
+    const cycleRecords = recordsByCycleId.get(cycle._id) || []
+    if (!hasPendingBreedingMutation(cycle, cycleRecords)) continue
+
+    if (cycle.status === '发情中') {
+      const latestMatingRecord = getLatestBreedingRecord(cycleRecords, 'mating')
+      if (latestMatingRecord) continue
+
+      const heatRecord = getEarliestBreedingRecord(cycleRecords, 'heat')
+      const heatDate = Number(heatRecord?.date || cycle.start_date || cycle.created_at || 0)
+      if (!heatDate) continue
+
+      const latestFollicleRecord = getLatestBreedingRecord(cycleRecords, 'follicle_check')
+      const follicleCheckCount = countBreedingRecords(cycleRecords, 'follicle_check')
+      const updatedAt = getMaxTimestamp(
+        cycle.updated_at,
+        latestFollicleRecord?.updated_at,
+        latestFollicleRecord?.created_at,
+        heatRecord?.updated_at,
+        heatRecord?.created_at,
+      ) || Date.now()
+
+      if (latestFollicleRecord) {
+        const follicleResult = getFollicleResult(latestFollicleRecord.details || {})
+        if (isFollicleReady(latestFollicleRecord.details || {})) {
+          syntheticTasks.push(buildSyntheticBreedingMilestoneTask(
+            cycle,
+            cycle.family_id || latestFollicleRecord.family_id || '',
+            'mating',
+            `${cycle.dam_name || '母犬'} · 配种`,
+            Number(latestFollicleRecord.date || updatedAt),
+            latestFollicleRecord._id || null,
+            {
+              step_type: 'mating',
+              follicle_check_date: latestFollicleRecord.date || null,
+              heat_date: heatDate,
+              follicle_result: follicleResult || null,
+            },
+            updatedAt,
+          ))
+          continue
+        }
+
+        syntheticTasks.push(buildSyntheticBreedingMilestoneTask(
+          cycle,
+          cycle.family_id || latestFollicleRecord.family_id || '',
+          'follicle_check',
+          `${cycle.dam_name || '母犬'} · 建议卵泡检查`,
+          Number(latestFollicleRecord.date || updatedAt) + DAY_MS,
+          latestFollicleRecord._id || null,
+          {
+            step_type: 'follicle_check',
+            heat_date: heatDate,
+            follicle_check_count: follicleCheckCount,
+            follicle_result: follicleResult || null,
+            latest_follicle_check_date: latestFollicleRecord.date || null,
+            abnormal_result: isFollicleAbnormal(latestFollicleRecord.details || {}),
+          },
+          updatedAt,
+        ))
+        continue
+      }
+
+      syntheticTasks.push(buildSyntheticBreedingMilestoneTask(
+        cycle,
+        cycle.family_id || heatRecord?.family_id || '',
+        'follicle_check',
+        `${cycle.dam_name || '母犬'} · 建议卵泡检查`,
+        heatDate + 10 * DAY_MS,
+        heatRecord?._id || null,
+        {
+          step_type: 'follicle_check',
+          heat_date: heatDate,
+          follicle_check_count: 0,
+          follicle_result: null,
+          latest_follicle_check_date: null,
+          abnormal_result: false,
+        },
+        updatedAt,
+      ))
+      continue
+    }
+
+    if (cycle.status === '怀孕中') {
+      const latestMatingRecord = getLatestBreedingRecord(cycleRecords, 'mating')
+      if (!latestMatingRecord?.date) continue
+
+      const latestPregnancyRecord = getLatestBreedingRecord(cycleRecords, 'pregnancy_check')
+      const updatedAt = getMaxTimestamp(
+        cycle.updated_at,
+        latestPregnancyRecord?.updated_at,
+        latestPregnancyRecord?.created_at,
+        latestMatingRecord?.updated_at,
+        latestMatingRecord?.created_at,
+      ) || Date.now()
+
+      if (latestPregnancyRecord && isPregnancyConfirmed(latestPregnancyRecord.details || {})) {
+        const expectedDueDate = Number(
+          latestMatingRecord.details?.expected_due_date
+          || (latestMatingRecord.date + 59 * DAY_MS),
+        )
+        syntheticTasks.push(buildSyntheticBreedingMilestoneTask(
+          cycle,
+          cycle.family_id || latestMatingRecord.family_id || '',
+          'birth',
+          `${cycle.dam_name || '母犬'} · 生产`,
+          expectedDueDate,
+          latestPregnancyRecord._id || latestMatingRecord._id || null,
+          {
+            step_type: 'birth',
+            expected_due_date: expectedDueDate,
+            mating_date: latestMatingRecord.date || null,
+            mating_number: latestMatingRecord.details?.mating_number || null,
+          },
+          updatedAt,
+        ))
+        continue
+      }
+
+      const expectedCheckupDate = Number(
+        latestMatingRecord.details?.expected_checkup_date
+        || (latestMatingRecord.date + 25 * DAY_MS),
+      )
+      const expectedDueDate = Number(
+        latestMatingRecord.details?.expected_due_date
+        || (latestMatingRecord.date + 59 * DAY_MS),
+      )
+      syntheticTasks.push(buildSyntheticBreedingMilestoneTask(
+        cycle,
+        cycle.family_id || latestMatingRecord.family_id || '',
+        'pregnancy_check',
+        `${cycle.dam_name || '母犬'} · 建议孕检`,
+        expectedCheckupDate,
+        latestMatingRecord._id || null,
+        {
+          step_type: 'pregnancy_check',
+          expected_due_date: expectedDueDate,
+          expected_checkup_date: expectedCheckupDate,
+          mating_number: latestMatingRecord.details?.mating_number || null,
+        },
+        updatedAt,
+      ))
+    }
+  }
+
+  return syntheticTasks
+}
+
+function getPendingHomeTasks(entities: HomeProjectionEntities) {
+  return [
+    ...((entities.tasks || []).filter(task => !task.deleted_at && task.status === 'pending')),
+    ...buildPendingBreedingMilestones(entities),
+  ]
 }
 
 function highestPriority(tasks: GenericRow[]) {
@@ -591,10 +854,9 @@ function getPendingTasksForToday(entities: HomeProjectionEntities, now = Date.no
   const todayContext = getBeijingDayContext(now)
   const todayStartTs = todayContext.dayStart
   const todayEndTs = todayContext.dayEnd
-  const pendingTasks = (entities.tasks || [])
-    .filter(task => !task.deleted_at && task.status === 'pending' && task.due_date <= todayEndTs)
-  const workflowTasks = (entities.tasks || [])
-    .filter(task => !task.deleted_at && task.status === 'pending' && task.type === 'breeding_milestone')
+  const allPendingTasks = getPendingHomeTasks(entities)
+  const pendingTasks = allPendingTasks.filter(task => task.due_date <= todayEndTs)
+  const workflowTasks = allPendingTasks.filter(task => task.type === 'breeding_milestone')
 
   const mergedTasks = [...pendingTasks]
   const existingTaskIds = new Set(mergedTasks.map(task => task._id))
@@ -635,7 +897,7 @@ export function buildLocalHomeCards(entities: HomeProjectionEntities, now = Date
   const sundayEndTs = todayStartTs + (daysToSunday * DAY_MS) + DAY_MS - 1
   const day30EndTs = todayStartTs + (30 * DAY_MS) + DAY_MS - 1
 
-  const pendingTasks = (entities.tasks || []).filter(task => !task.deleted_at && task.status === 'pending')
+  const pendingTasks = dedupeBreedingMilestones(getPendingHomeTasks(entities))
   const weekCount = pendingTasks.filter(task => task.due_date <= sundayEndTs).length
   const month30Count = pendingTasks.filter(task => task.due_date <= day30EndTs).length
 
@@ -658,8 +920,8 @@ export function buildLocalHomeCards(entities: HomeProjectionEntities, now = Date
 
 export function buildLocalDateCounts(entities: HomeProjectionEntities, startDate: number, endDate: number) {
   const tasks = dedupeBreedingMilestones(
-    (entities.tasks || [])
-      .filter(task => !task.deleted_at && task.status === 'pending' && task.due_date >= startDate && task.due_date <= endDate),
+    getPendingHomeTasks(entities)
+      .filter(task => task.due_date >= startDate && task.due_date <= endDate),
   )
   const activeMedications = getActiveMedicationTasks(entities)
 
@@ -683,8 +945,8 @@ export function buildLocalDateCounts(entities: HomeProjectionEntities, startDate
 
 export function buildLocalWeekCards(entities: HomeProjectionEntities, startDate: number, endDate: number, now = Date.now()) {
   const tasks = dedupeBreedingMilestones(
-    (entities.tasks || [])
-      .filter(task => !task.deleted_at && task.status === 'pending' && task.due_date >= startDate && task.due_date <= endDate),
+    getPendingHomeTasks(entities)
+      .filter(task => task.due_date >= startDate && task.due_date <= endDate),
   )
   const activeIllnesses = getActiveIllnesses(entities)
   const activeMedications = getActiveMedicationTasks(entities)
@@ -759,6 +1021,7 @@ export function applyTouchedEntityVersions(entities: GenericRow[], touchedEntiti
       version: touched.version,
       updated_at: touched.updatedAt,
       deleted_at: touched.deletedAt ?? entity.deleted_at ?? null,
+      _local_pending: false,
     }
   })
 }

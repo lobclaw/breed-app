@@ -51,11 +51,24 @@ function buildConflictAck(syncMeta, {
   })
 }
 
+function isCollectionMissingError(error) {
+  const message = error?.message || error?.errMsg || ''
+  return typeof message === 'string' && message.toLowerCase().includes('not found collection')
+}
+
 async function findAppliedMutation(db, familyId, clientMutationId) {
   if (!clientMutationId) return null
   const mutationId = `${familyId}:${clientMutationId}`
-  const { data } = await db.collection('sync_mutations').doc(mutationId).get()
-  return data && data.length > 0 ? data[0] : null
+  try {
+    const { data } = await db.collection('sync_mutations').doc(mutationId).get()
+    return data && data.length > 0 ? data[0] : null
+  } catch (error) {
+    if (isCollectionMissingError(error)) {
+      console.warn('[breed-sync] sync_mutations collection missing, skip idempotency lookup')
+      return null
+    }
+    throw error
+  }
 }
 
 async function markMutationApplied(db, familyId, clientMutationId, response) {
@@ -71,16 +84,24 @@ async function markMutationApplied(db, familyId, clientMutationId, response) {
     updated_at: now,
   }
 
-  const { data } = await db.collection('sync_mutations').doc(mutationId).get()
-  if (data && data.length > 0) {
-    await db.collection('sync_mutations').doc(mutationId).update({
-      response,
-      updated_at: now,
-    })
-    return
-  }
+  try {
+    const { data } = await db.collection('sync_mutations').doc(mutationId).get()
+    if (data && data.length > 0) {
+      await db.collection('sync_mutations').doc(mutationId).update({
+        response,
+        updated_at: now,
+      })
+      return
+    }
 
-  await db.collection('sync_mutations').add(payload)
+    await db.collection('sync_mutations').add(payload)
+  } catch (error) {
+    if (isCollectionMissingError(error)) {
+      console.warn('[breed-sync] sync_mutations collection missing, skip idempotency mark')
+      return
+    }
+    throw error
+  }
 }
 
 function getBaseVersion(syncMeta, entityId) {
@@ -114,6 +135,7 @@ module.exports = {
   buildTouchedEntity,
   buildSyncAck,
   buildConflictAck,
+  isCollectionMissingError,
   findAppliedMutation,
   markMutationApplied,
   getBaseVersion,
@@ -121,4 +143,3 @@ module.exports = {
   buildVersionUpdate,
   buildVersionedCreate,
 }
-

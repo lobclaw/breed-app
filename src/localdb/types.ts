@@ -17,6 +17,7 @@ export const BUSINESS_COLLECTIONS = [
 
 export const SYSTEM_COLLECTIONS = [
   'outbox_mutations',
+  'local_operation_logs',
   'sync_state',
   'sync_conflicts',
   'local_meta',
@@ -59,6 +60,26 @@ export interface OutboxMutation<T = Record<string, unknown>> {
   last_error?: string | null
   client_mutation_id: string
   device_id: string
+  created_at: number
+  updated_at: number
+}
+
+export interface LocalOperationLogRow {
+  _id: string
+  family_id: string
+  client_mutation_id: string
+  mutation_type: string
+  actor_user_id?: string | null
+  actor_name?: string | null
+  action_type: string
+  domain: string
+  target_type: string
+  target_id: string
+  target_name: string
+  summary: string
+  status: MutationStatus
+  last_error?: string | null
+  meta?: Record<string, unknown> | null
   created_at: number
   updated_at: number
 }

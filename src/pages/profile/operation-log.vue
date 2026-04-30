@@ -36,7 +36,7 @@
       </scroll-view>
     </view>
 
-    <view v-if="logs.length" class="timeline">
+    <view v-if="displayLogs.length" class="timeline">
       <view v-for="group in groupedLogs" :key="group.key" class="timeline-group">
         <view class="timeline-group__header">
           <view class="timeline-group__title-wrap">
@@ -60,6 +60,8 @@
 
               <view class="log-card__meta">
                 <text class="log-card__meta-item log-card__meta-item--action">{{ log.actionLabel }}</text>
+                <text v-if="log.syncStatusText" class="log-card__meta-divider">·</text>
+                <text v-if="log.syncStatusText" class="log-card__meta-item" :class="`log-card__meta-item--sync log-card__meta-item--sync-${log.syncStatusTone}`">{{ log.syncStatusText }}</text>
                 <text v-if="log.target_name" class="log-card__meta-divider">·</text>
                 <text v-if="log.target_name" class="log-card__meta-item log-card__meta-item--target">{{ log.target_name }}</text>
                 <text class="log-card__meta-divider">·</text>
@@ -71,7 +73,7 @@
       </view>
     </view>
 
-    <view v-if="loadingMore && logs.length" class="log-list log-list--append">
+    <view v-if="loadingMore && displayLogs.length" class="log-list log-list--append">
       <view class="timeline-group">
         <view class="timeline-group__list">
           <view v-for="index in 2" :key="`append-${index}`" class="log-item log-item--skeleton">
@@ -86,11 +88,11 @@
       </view>
     </view>
 
-    <view v-if="hasMore && logs.length && !loadingMore" class="load-more" @click="loadMore">
+    <view v-if="hasMore && displayLogs.length && !loadingMore" class="load-more" @click="loadMore">
       <text>加载更多</text>
     </view>
 
-    <view v-if="!logs.length && !loading" class="empty-state">
+    <view v-if="!displayLogs.length && !loading" class="empty-state">
       <view class="empty-state__icon-wrap">
         <text class="material-icons-round empty-state__icon">history</text>
       </view>
@@ -101,7 +103,7 @@
       </view>
     </view>
 
-    <view v-if="loading && !logs.length" class="log-list">
+    <view v-if="loading && !displayLogs.length" class="log-list">
       <view class="timeline-group">
         <view class="timeline-group__list">
           <view v-for="index in 4" :key="`loading-${index}`" class="log-item log-item--skeleton">
@@ -227,6 +229,9 @@ import { computed, ref } from 'vue'
 import { onLoad, onReachBottom } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import { useAuth } from '@/composables/useAuth'
+import { getLocalOperationStatusText } from '@/localdb/local-operation-log'
+import { localSyncRuntime } from '@/localdb/runtime'
+import { mergeOperationLogs } from '@/utils/operationLogMerge'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
@@ -253,6 +258,12 @@ interface LogItem {
   groupKey: string
   groupLabel: string
   created_at: number
+  target_type?: string
+  target_id?: string
+  summary?: string
+  clientMutationId?: string
+  syncStatusText?: string
+  syncStatusTone?: 'amber' | 'green' | 'red' | 'blue'
 }
 
 interface LogGroup {
@@ -264,6 +275,7 @@ interface LogGroup {
 const loading = ref(false)
 const loadingMore = ref(false)
 const logs = ref<LogItem[]>([])
+const localLogs = ref<LogItem[]>([])
 const hasMore = ref(false)
 const page = ref(1)
 const pageSize = 20
@@ -386,7 +398,7 @@ const activeFilterChips = computed<Array<{ key: ActiveFilterChipKey; label: stri
 const groupedLogs = computed<LogGroup[]>(() => {
   const groups: LogGroup[] = []
 
-  logs.value.forEach((log) => {
+  displayLogs.value.forEach((log) => {
     const lastGroup = groups[groups.length - 1]
     if (!lastGroup || lastGroup.key !== log.groupKey) {
       groups.push({
@@ -401,6 +413,10 @@ const groupedLogs = computed<LogGroup[]>(() => {
   })
 
   return groups
+})
+
+const displayLogs = computed(() => {
+  return mergeOperationLogs(localLogs.value, logs.value)
 })
 
 const draftStartDateStr = computed(() => formatDateInput(draftCustomStartDate.value))
@@ -533,6 +549,13 @@ function buildLogDetail(raw: Record<string, any>): string {
 function processLog(raw: Record<string, any>): LogItem {
   const action = String(raw.action_type || 'update')
   const createdAt = Number(raw.created_at || Date.now())
+  const clientMutationId = String(
+    raw.client_mutation_id
+      || raw.clientMutationId
+      || raw.meta?.clientMutationId
+      || raw.meta?.client_mutation_id
+      || '',
+  ).trim()
 
   return {
     _id: String(raw._id || createdAt),
@@ -548,6 +571,47 @@ function processLog(raw: Record<string, any>): LogItem {
     groupKey: getDateKey(createdAt),
     groupLabel: formatGroupLabel(createdAt),
     created_at: createdAt,
+    target_type: String(raw.target_type || ''),
+    target_id: String(raw.target_id || ''),
+    summary: String(raw.summary || ''),
+    clientMutationId,
+  }
+}
+
+function processLocalLog(raw: Record<string, any>): LogItem {
+  const action = String(raw.action_type || 'update')
+  const createdAt = Number(raw.created_at || Date.now())
+  const status = String(raw.status || 'pending')
+  const clientMutationId = String(raw.client_mutation_id || raw.clientMutationId || '').trim()
+  const syncStatusText = getLocalOperationStatusText(status as any)
+  const syncStatusTone = status === 'failed' || status === 'conflict'
+    ? 'red'
+    : status === 'processing'
+      ? 'blue'
+      : status === 'synced'
+        ? 'green'
+        : 'amber'
+
+  return {
+    _id: String(raw._id || createdAt),
+    actor_user_id: String(raw.actor_user_id || ''),
+    actor_name: String(raw.actor_name || '我'),
+    action_type: action,
+    actionLabel: actionLabels[action] || '操作',
+    detail: buildLogDetail(raw),
+    target_name: String(raw.target_name || ''),
+    time_text: formatClock(createdAt),
+    actionClass: actionClasses[action] || 'icon-blue',
+    actionIcon: actionIcons[action] || 'edit',
+    groupKey: getDateKey(createdAt),
+    groupLabel: formatGroupLabel(createdAt),
+    created_at: createdAt,
+    target_type: String(raw.target_type || ''),
+    target_id: String(raw.target_id || ''),
+    summary: String(raw.summary || ''),
+    clientMutationId,
+    syncStatusText,
+    syncStatusTone,
   }
 }
 
@@ -598,6 +662,7 @@ async function loadLogs(reset = true) {
   if (reset) {
     page.value = 1
     logs.value = []
+    localLogs.value = []
     loading.value = true
   } else {
     if (loading.value || loadingMore.value || !hasMore.value) return
@@ -606,6 +671,16 @@ async function loadLogs(reset = true) {
 
   try {
     const range = getFilterRange(activeDateRange.value, activeCustomStartDate.value, activeCustomEndDate.value)
+    const familyId = currentFamily.value?._id || ''
+    if (familyId) {
+      const localRows = await localSyncRuntime.getLocalOperationLogs(familyId, {
+        start: range.start,
+        end: range.end,
+        actorUserIds: activeMemberIds.value.length > 0 ? activeMemberIds.value : undefined,
+        actionTypes: activeActionTypes.value.length > 0 ? activeActionTypes.value : undefined,
+      })
+      localLogs.value = (localRows || []).map((item: any) => processLocalLog(item))
+    }
     const res = await fetchLogs({
       start: range.start,
       end: range.end,
@@ -765,6 +840,26 @@ onReachBottom(() => {
   &__chip-icon {
     color: inherit;
   }
+}
+
+.log-card__meta-item--sync {
+  font-weight: 700;
+}
+
+.log-card__meta-item--sync-amber {
+  color: var(--amber);
+}
+
+.log-card__meta-item--sync-blue {
+  color: var(--blue);
+}
+
+.log-card__meta-item--sync-red {
+  color: var(--red);
+}
+
+.log-card__meta-item--sync-green {
+  color: var(--green);
 }
 
 .timeline {

@@ -13,6 +13,7 @@
 - 除 `families.settings.morning_summary_time` 外，业务日期字段统一使用毫秒级 timestamp，并保留真实时分秒毫秒
 - 用户只选择“日期”时，前端按“所选年月日 + 当前本地时分秒毫秒”构造 timestamp
 - 任何按“天”消费的逻辑，统一在读取 timestamp 后按北京时间换算日边界，不依赖库里值是零点
+- 当前协作主线是 `Local-First Foundation` 收口：页面级 scope、本地事务、`_sync` 幂等 ack、在线优先边界与 Network 验收
 
 ## 推荐阅读顺序
 

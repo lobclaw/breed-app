@@ -11,12 +11,19 @@ export async function getSyncStatus() {
   ])
   const pendingUpload = localRows.flat().filter(row => row?._pending_upload || row?.pending_upload).length
   const recentSyncAt = syncStates.reduce((max, item) => Math.max(max, Number(item.updated_at || item.last_pulled_at || 0)), 0)
+  const conflictMutationIds = new Set<string>()
+  outbox
+    .filter(item => item.status === 'conflict')
+    .forEach(item => conflictMutationIds.add(item.client_mutation_id || item._id))
+  conflicts
+    .filter(item => item.status === 'open')
+    .forEach(item => conflictMutationIds.add(item.client_mutation_id || item._id))
 
   return {
     pending: outbox.filter(item => item.status === 'pending').length,
     processing: outbox.filter(item => item.status === 'processing').length,
     failed: outbox.filter(item => item.status === 'failed').length,
-    conflict: outbox.filter(item => item.status === 'conflict').length + conflicts.filter(item => item.status === 'open').length,
+    conflict: conflictMutationIds.size,
     pendingUpload,
     activeScope: activeScope || '',
     recentSyncAt,

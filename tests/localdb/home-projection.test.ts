@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildLocalDateCounts, buildLocalHomeCards } from '../../src/localdb/home-projection'
+import { applyTouchedEntityVersions, buildLocalDateCounts, buildLocalHomeCards } from '../../src/localdb/home-projection'
 
 describe('local home projection', () => {
   it('应从本地实体投影出今日用药与疾病观察卡', () => {
@@ -86,5 +86,65 @@ describe('local home projection', () => {
     expect(counts).toBeTruthy()
     expect(Object.values(counts).some(value => value === 1)).toBe(true)
   })
-})
 
+  it('应为本地待同步的发情记录即时投影首页繁育卡片', () => {
+    const now = new Date('2026-04-30T15:00:00+08:00').getTime()
+    const heatDate = new Date('2026-04-30T10:00:00+08:00').getTime()
+
+    const result = buildLocalHomeCards({
+      dogs: [{ _id: 'dog_1', name: '奶糖' }],
+      tasks: [],
+      health_records: [],
+      medication_tasks: [],
+      breeding_cycles: [{
+        _id: 'cycle_1',
+        family_id: 'family_1',
+        dam_id: 'dog_1',
+        dam_name: '奶糖',
+        status: '发情中',
+        created_at: now,
+        updated_at: now,
+        _local_pending: true,
+      }],
+      breeding_records: [{
+        _id: 'record_1',
+        family_id: 'family_1',
+        cycle_id: 'cycle_1',
+        dog_id: 'dog_1',
+        dog_name: '奶糖',
+        type: 'heat',
+        date: heatDate,
+        details: {},
+        created_at: now,
+        updated_at: now,
+        _local_pending: true,
+      }],
+    }, now)
+
+    const breedingCard = result.cards.find(card => card.cardType === 'dog' && card.tasks?.[0]?.type === 'breeding_milestone')
+    expect(breedingCard).toBeTruthy()
+    expect(breedingCard?.tasks?.[0]?.details?.step_type).toBe('follicle_check')
+    expect(result.counts.today).toBeGreaterThan(0)
+  })
+
+  it('应在同步确认后清除本地 pending 标记', () => {
+    const rows = applyTouchedEntityVersions(
+      [{
+        _id: 'record_1',
+        version: 0,
+        updated_at: 1,
+        _local_pending: true,
+      }],
+      [{
+        collection: 'breeding_records',
+        id: 'record_1',
+        version: 2,
+        updatedAt: 100,
+      }],
+      'breeding_records',
+    )
+
+    expect(rows[0].version).toBe(2)
+    expect(rows[0]._local_pending).toBe(false)
+  })
+})

@@ -25,9 +25,10 @@
 
 Local-First Foundation：
 
-- 先把核心业务读写升级为“本地事务 + outbox + 后台同步”
-- 首页作为第一批接入页，改为本地实体投影，不再依赖云端首页聚合响应
+- 核心业务读写已升级为“本地事务 + outbox + 后台同步”
+- `local-first` 页面已统一接入页面级 scope 与 `usePageSync`
 - 产品按“本地优先单主端”落地，但同步底座保留升级到多端并发的能力
+- 当前剩余重点转为 Network 验收、冲突 UX 与待上传入口补强
 
 ## 3. 服务边界
 
@@ -152,6 +153,14 @@ Local-First Foundation：
 - 记录表单的离线创建与客户端稳定 ID
 - 财务、回收站与更多增量拉取覆盖面
 
+### 当前收尾状态
+
+- 犬只、繁育、健康、用药、财务、销售、代理人、回收站、配置页均已接入本地读路径
+- 核心写路径已收口到本地事务 + outbox，并由各域云对象处理 `_sync` 幂等 ack
+- 备份页已接入 pending outbox / pending upload 阻断提示
+- 在线优先页已补断网联网提示
+- 旧入口 `pages/record/health`、`pages/record/breeding`、`pages/finance/income-add` 已归类为 `redirect-deprecated`
+
 ## 7. 当前重点页面
 
 ### 核心页面
@@ -221,9 +230,7 @@ pnpm test
 
 以 `docs/ROADMAP.md` 为准，当前固定顺序：
 
-1. `src/localdb`、outbox、sync worker、设备 ID 与客户端稳定 ID
-2. 首页本地投影与首页动作本地事务化
-3. 首页相关云对象幂等 / ack / version contract
-4. 犬只、健康、用药详情接入本地读取
-5. 记录表单、财务、回收站接入本地优先
-6. 冲突呈现与多端同步升级能力补强
+1. 真实设备 Network 验收与断网/恢复网络回归
+2. 冲突、失败、待上传入口与页面承接 UX 补强
+3. 多端并发场景与 `_sync` 冲突测试继续补齐
+4. 在保持 current contract 的前提下，再评估多端同步升级能力

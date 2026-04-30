@@ -119,7 +119,7 @@ function selectKind(value: ExtraArrangementKind) {
 function setChip(chip: 'today' | 'tomorrow' | 'dayAfter') {
   chipActive.value = chip
   const offsetMap = { today: 0, tomorrow: 1, dayAfter: 2 }
-  emit('update:dueDate', buildTimestampFromDayOffset(offsetMap[chip], props.dueDate || Date.now()))
+  emit('update:dueDate', buildTimestampFromDayOffset(offsetMap[chip]))
 }
 
 function onDateConfirm(value: number | string) {

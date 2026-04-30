@@ -61,7 +61,7 @@
               :key="chip.label"
               class="date-chip"
               :class="{ 'date-chip--active': chip.active }"
-              @click="form.birth_date = buildTimestampFromDayOffset(chip.offset, form.birth_date || Date.now())"
+              @click="form.birth_date = buildTimestampFromDayOffset(chip.offset)"
             >
               <text>{{ chip.label }}</text>
             </view>
