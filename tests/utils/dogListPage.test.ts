@@ -52,6 +52,11 @@ describe('dog list page source contract', () => {
     expect(source).toContain("return dog.role !== '外部种公'")
   })
 
+  it('应让出生当天的列表年龄最低显示为 1 天', () => {
+    expect(source).toContain('const days = Math.max(1, Math.floor((now - birthTs) / 86400000))')
+    expect(source).not.toContain('const days = Math.floor((now - birthTs) / 86400000)')
+  })
+
   it('从档案页进入新建页时应显式传回跳目标路由，并在后台刷新后继续尝试承接新犬只', () => {
     expect(source).toContain("uni.navigateTo({ url: `/pages/dog/add?targetRoute=${encodeURIComponent('/pages/dog/list')}` })")
     expect(source).toContain("pendingFeedbackDogId = feedback.targetDogId")

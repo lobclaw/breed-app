@@ -120,6 +120,24 @@ const scopeCollectionsText = computed(() => scopeStatus.collections.length ? sco
 const canRetryIssues = computed(() => syncStatus.failed > 0 || syncStatus.conflict > 0)
 const issueMetaText = computed(() => issues.value.length ? `${issues.value.length} 项` : '正常')
 
+function hasRemainingSyncWork() {
+  return syncStatus.pending > 0
+    || syncStatus.processing > 0
+    || syncStatus.failed > 0
+    || syncStatus.conflict > 0
+    || syncStatus.pendingUpload > 0
+}
+
+function getRemainingSyncToast() {
+  if (!hasRemainingSyncWork()) {
+    return { title: '同步已完成', icon: 'success' as const }
+  }
+  if (syncStatus.failed > 0 || syncStatus.conflict > 0) {
+    return { title: '仍有待处理项', icon: 'none' as const }
+  }
+  return { title: '仍有数据待同步', icon: 'none' as const }
+}
+
 function formatTime(ts: number) {
   if (!ts) return '暂无'
   const d = new Date(ts)
@@ -188,7 +206,7 @@ async function retryIssues() {
   try {
     await localSyncRuntime.retryFailedOutboxNow(familyId)
     await loadStatus()
-    uni.showToast({ title: canRetryIssues.value ? '仍有待处理项' : '同步已完成', icon: canRetryIssues.value ? 'none' : 'success' })
+    uni.showToast(getRemainingSyncToast())
   } catch (error) {
     await loadStatus()
     uni.showToast({ title: error instanceof Error ? error.message : '重试失败', icon: 'none' })

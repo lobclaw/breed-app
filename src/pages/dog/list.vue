@@ -711,7 +711,7 @@ function roleLabel(dog: DogWithStatus) {
 
 function formatAge(birthTs: number) {
   const now = Date.now()
-  const days = Math.floor((now - birthTs) / 86400000)
+  const days = Math.max(1, Math.floor((now - birthTs) / 86400000))
   if (days < 30) return `${days}天`
   if (days < 365) return `${Math.floor(days / 30)}月龄`
   const years = Math.floor(days / 365)

@@ -1308,7 +1308,7 @@ export async function listLocalPreLaborTemperatureHistory(familyId: string, dogI
 
 function formatDogAgeText(birthTs?: number | null) {
   if (!birthTs) return ''
-  const days = Math.floor((Date.now() - birthTs) / 86400000)
+  const days = Math.max(1, Math.floor((Date.now() - birthTs) / 86400000))
   if (days < 30) return `${days}天`
   if (days < 365) return `${Math.floor(days / 30)}月龄`
   const years = Math.floor(days / 365)

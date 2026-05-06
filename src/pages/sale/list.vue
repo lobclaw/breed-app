@@ -1,6 +1,12 @@
 <template>
   <view class="page">
-    <BPageHeader title="销售管理" />
+    <BPageHeader title="销售管理">
+      <template #right>
+        <view class="primary-page-header__action primary-page-header__action--primary" @click="goToCreate">
+          <text class="primary-page-header__icon primary-page-header__icon--primary">add</text>
+        </view>
+      </template>
+    </BPageHeader>
 
     <BChipFilterStrip v-model="activeFilter" :options="statusFilters" @change="load" />
 

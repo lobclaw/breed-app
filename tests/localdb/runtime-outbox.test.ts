@@ -328,6 +328,65 @@ describe('local sync runtime outbox diagnostics', () => {
     })
   })
 
+  it('手动重试应恢复遗留 processing outbox 并重新同步', async () => {
+    await localDb.upsertRows('outbox_mutations', [{
+      _id: 'outbox_processing',
+      type: 'task.complete',
+      collection_scope: [],
+      payload: {
+        taskId: 'task_processing',
+        _sync: {
+          clientMutationId: 'mutation_processing',
+          deviceId: 'device_1',
+          clientTimestamp: 1,
+          baseVersions: {},
+        },
+      },
+      family_id: 'fam_1',
+      status: 'processing',
+      retry_count: 0,
+      next_retry_at: 999999,
+      last_error: null,
+      client_mutation_id: 'mutation_processing',
+      device_id: 'device_1',
+      created_at: 1,
+      updated_at: 1,
+    }])
+    await localDb.upsertRows('local_operation_logs', [{
+      _id: 'local_operation_mutation_processing',
+      family_id: 'fam_1',
+      client_mutation_id: 'mutation_processing',
+      action_type: 'task.complete',
+      status: 'processing',
+      actor_user_id: '',
+      title: '完成任务',
+      summary: '',
+      entity_refs: [],
+      detail: null,
+      last_error: null,
+      created_at: 1,
+      updated_at: 1,
+    }])
+
+    const dispatchSpy = vi.spyOn(localSyncRuntime as any, 'dispatchMutation')
+      .mockResolvedValue({
+        ack: 'accepted',
+        clientMutationId: 'mutation_processing',
+        touchedEntities: [],
+        resyncScopes: [],
+        conflict: null,
+      })
+
+    await localSyncRuntime.retryFailedOutboxNow('fam_1')
+
+    expect(dispatchSpy).toHaveBeenCalledTimes(1)
+    expect(await localDb.findById<any>('outbox_mutations', 'outbox_processing')).toMatchObject({
+      status: 'synced',
+      next_retry_at: 0,
+    })
+    expect(await localDb.findById<any>('local_operation_logs', 'local_operation_mutation_processing')).toBeNull()
+  })
+
   it('强制同步应复用同 scope 的 in-flight 请求', async () => {
     const releasePull = createDeferred()
     const getCalls: string[] = []

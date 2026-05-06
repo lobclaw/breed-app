@@ -848,6 +848,39 @@ async function updateOutboxStatus(mutationId: string, status: MutationStatus, ex
   })
 }
 
+async function recoverStaleProcessingOutbox(familyId: string) {
+  const now = getNow()
+  await localDb.transact(['outbox_mutations', 'local_operation_logs'], (tables) => {
+    const recoveringIds = new Set(
+      (tables.outbox_mutations as OutboxMutation[])
+        .filter(mutation => mutation.family_id === familyId && mutation.status === 'processing')
+        .map(mutation => mutation.client_mutation_id)
+        .filter(Boolean),
+    )
+
+    if (!recoveringIds.size) return
+
+    tables.outbox_mutations = (tables.outbox_mutations as OutboxMutation[]).map((mutation) => {
+      if (mutation.family_id !== familyId || mutation.status !== 'processing') return mutation
+      return {
+        ...mutation,
+        status: 'pending',
+        next_retry_at: 0,
+        updated_at: now,
+      }
+    })
+
+    tables.local_operation_logs = (tables.local_operation_logs as LocalOperationLogRow[]).map((log) => {
+      if (!recoveringIds.has(log.client_mutation_id) || log.status !== 'processing') return log
+      return {
+        ...log,
+        status: 'pending',
+        updated_at: now,
+      }
+    })
+  })
+}
+
 function rebaseMutationForConflict(
   mutation: OutboxMutation<HomeMutationPayload>,
   conflict: NonNullable<SyncAckPayload['conflict']>,
@@ -1868,6 +1901,7 @@ class LocalSyncRuntime {
     this.processing = true
 
     try {
+      await recoverStaleProcessingOutbox(familyId)
       const outbox = await localDb.getOutbox()
       const now = getNow()
       const pendingMutations = outbox.filter(mutation =>

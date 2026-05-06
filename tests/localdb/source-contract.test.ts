@@ -33,6 +33,16 @@ describe('local-first source contract', () => {
     }
   })
 
+  it('应让选择器与本地派生销售犬龄最低显示为 1 天', () => {
+    const pickerSource = readWorkspaceFile('src/components/form/BDogPicker.vue')
+    const repositorySource = readWorkspaceFile('src/localdb/domain-repository.ts')
+
+    expect(pickerSource).toContain('const days = Math.max(1, Math.floor((Date.now() - birthTs) / 86400000))')
+    expect(pickerSource).not.toContain('const days = Math.floor((Date.now() - birthTs) / 86400000)')
+    expect(repositorySource).toContain('const days = Math.max(1, Math.floor((Date.now() - birthTs) / 86400000))')
+    expect(repositorySource).not.toContain('const days = Math.floor((Date.now() - birthTs) / 86400000)')
+  })
+
   it('应确保已迁移的页面详情读取不再直接依赖云端 detail 接口', () => {
     const pageReadContracts: Array<{ file: string; forbiddenReads: string[] }> = [
       {

@@ -179,6 +179,16 @@ const syncWarningCount = computed(() => {
     + current.pendingUpload
 })
 
+function getRemainingSyncToast() {
+  if (!hasUnsyncedData.value) {
+    return { title: '同步已完成', icon: 'success' as const }
+  }
+  if (syncStatus.value.failed > 0 || syncStatus.value.conflict > 0) {
+    return { title: '仍有数据未同步成功', icon: 'none' as const }
+  }
+  return { title: '仍有数据待同步', icon: 'none' as const }
+}
+
 function formatDate(ts: number): string {
   if (!ts) return ''
   const d = new Date(ts)
@@ -251,11 +261,7 @@ async function retrySyncNow() {
   try {
     await localSyncRuntime.retryFailedOutboxNow(familyId)
     await loadInfo()
-    const hasRemainingIssues = syncStatus.value.failed > 0 || syncStatus.value.conflict > 0
-    uni.showToast({
-      title: hasRemainingIssues ? '仍有数据未同步成功' : '同步已完成',
-      icon: hasRemainingIssues ? 'none' : 'success',
-    })
+    uni.showToast(getRemainingSyncToast())
   } catch (error) {
     await loadInfo()
     uni.showToast({
