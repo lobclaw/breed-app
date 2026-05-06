@@ -1282,6 +1282,7 @@ async function refreshWeekCacheFromLocal(extraDays: number[] = []) {
 
 async function refreshHomeAfterLocalMutation(extraDays: number[] = []) {
   const selectedTs = selectedDate.value
+  await waitForPendingCardExits()
   await loadTodayCards()
   await refreshWeekCacheFromLocal(extraDays)
   if (selectedTs !== startOfDay(Date.now())) {
@@ -1431,6 +1432,20 @@ function filterSuppressedCards(cardList: any[]) {
 // 乐观更新：标记正在消失的卡片
 const completingCards = ref(new Set<string>())
 const completedCards = ref(new Set<string>())
+const pendingCardExitPromises = new Set<Promise<void>>()
+const CARD_COMPLETE_CONFIRM_MS = 280
+const CARD_EXIT_MS = 220
+
+function trackCardExit(promise: Promise<void>) {
+  pendingCardExitPromises.add(promise)
+  promise.finally(() => pendingCardExitPromises.delete(promise))
+  return promise
+}
+
+async function waitForPendingCardExits() {
+  if (!pendingCardExitPromises.size) return
+  await Promise.allSettled(Array.from(pendingCardExitPromises))
+}
 
 function markCardCompleted(cardId: string) {
   const next = new Set(completedCards.value)
@@ -1467,9 +1482,26 @@ function removeCardLocally(taskId: string, forceRemoveCard = false, showSuccess 
       if (showSuccess) {
         // 完成：极短确认后退场，优先保证首页操作流畅
         markCardCompleted(card.id)
-        setTimeout(() => {
-          clearCardCompleted(card.id)
-          markCardCompleting(card.id)
+        trackCardExit(new Promise((resolve) => {
+          setTimeout(() => {
+            clearCardCompleted(card.id)
+            markCardCompleting(card.id)
+            setTimeout(() => {
+              const currentIdx = list.value.findIndex(c => c.id === card.id)
+              if (currentIdx >= 0) {
+                list.value.splice(currentIdx, 1)
+                counts.today = Math.max(0, counts.today - 1)
+                syncTodayDayCountFromVisibleCards()
+              }
+              clearCardCompleting(card.id)
+              resolve()
+            }, CARD_EXIT_MS)
+          }, CARD_COMPLETE_CONFIRM_MS)
+        }))
+      } else {
+        // 推迟/跳过：直接滑出
+        markCardCompleting(card.id)
+        trackCardExit(new Promise((resolve) => {
           setTimeout(() => {
             const currentIdx = list.value.findIndex(c => c.id === card.id)
             if (currentIdx >= 0) {
@@ -1478,20 +1510,9 @@ function removeCardLocally(taskId: string, forceRemoveCard = false, showSuccess 
               syncTodayDayCountFromVisibleCards()
             }
             clearCardCompleting(card.id)
-          }, 220)
-        }, 280)
-      } else {
-        // 推迟/跳过：直接滑出
-        markCardCompleting(card.id)
-        setTimeout(() => {
-          const currentIdx = list.value.findIndex(c => c.id === card.id)
-          if (currentIdx >= 0) {
-            list.value.splice(currentIdx, 1)
-            counts.today = Math.max(0, counts.today - 1)
-            syncTodayDayCountFromVisibleCards()
-          }
-          clearCardCompleting(card.id)
-        }, 220)
+            resolve()
+          }, CARD_EXIT_MS)
+        }))
       }
     } else {
       syncCardMeta(card, remainingTasks)
@@ -1729,15 +1750,18 @@ async function doPostpone() {
       if (idx >= 0) {
         const card = list.value[idx]
         markCardCompleting(card.id)
-        setTimeout(() => {
-          const ci = list.value.findIndex(c => c.id === card.id)
-          if (ci >= 0) {
-            list.value.splice(ci, 1)
-            counts.today = Math.max(0, counts.today - 1)
-            syncTodayDayCountFromVisibleCards()
-          }
-          clearCardCompleting(card.id)
-        }, 450)
+        trackCardExit(new Promise((resolve) => {
+          setTimeout(() => {
+            const ci = list.value.findIndex(c => c.id === card.id)
+            if (ci >= 0) {
+              list.value.splice(ci, 1)
+              counts.today = Math.max(0, counts.today - 1)
+              syncTodayDayCountFromVisibleCards()
+            }
+            clearCardCompleting(card.id)
+            resolve()
+          }, 450)
+        }))
         break
       }
     }
@@ -2190,7 +2214,6 @@ onShow(async () => {
   if (!familyId) return
   localSyncRuntime.setCurrentFamilyId(familyId)
   await localSyncRuntime.setActiveScope('home')
-  await localSyncRuntime.syncScope('home')
   selectedDate.value = startOfDay(Date.now())
   viewMode.value = 'today'
   dayCards.value = []
@@ -2204,7 +2227,11 @@ onShow(async () => {
     }
   }
 
+  // 首页回到前台先读本地事实源，云端同步只做后台校正，避免表单返回后卡片延迟出现。
   await loadAll()
+  void localSyncRuntime.syncScope('home').then(() => {
+    if (isHomeActive.value) void loadAll()
+  })
   if (deferredTarget) {
     scheduleHomeCardFocus(deferredTarget)
   }

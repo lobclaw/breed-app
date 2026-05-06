@@ -622,7 +622,10 @@ describe('dog-service', () => {
 
   it('updateDogName 应同步更新财务、销售与记录冗余犬名', async () => {
     const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
-    seedCollection('tasks', [{ _id: 'task_rename_1', family_id: familyId, dog_id: 'dog_1', dog_name: '肉肉' }])
+    seedCollection('tasks', [
+      { _id: 'task_rename_1', family_id: familyId, dog_id: 'dog_1', dog_name: '肉肉' },
+      { _id: 'task_rename_other_1', family_id: 'other_family', dog_id: 'dog_1', dog_name: '其他家庭犬' },
+    ])
     seedCollection('health_records', [{ _id: 'health_rename_1', family_id: familyId, dog_id: 'dog_1', dog_name: '肉肉' }])
     seedCollection('medication_tasks', [{ _id: 'med_rename_1', family_id: familyId, dog_id: 'dog_1', dog_name: '肉肉' }])
     seedCollection('breeding_records', [{ _id: 'breed_rename_1', family_id: familyId, dog_id: 'dog_1', dog_name: '肉肉' }])
@@ -644,6 +647,15 @@ describe('dog-service', () => {
     const result = await dogService.updateDogName.call(ctx, { id: 'dog_1', name: '奶糖' })
 
     expect(result.ack).toBe('accepted')
+    expect(result.touchedEntities).toEqual(expect.arrayContaining([
+      expect.objectContaining({ collection: 'tasks', id: 'task_rename_1' }),
+      expect.objectContaining({ collection: 'expenses', id: 'expense_rename_1' }),
+      expect.objectContaining({ collection: 'incomes', id: 'income_rename_1' }),
+      expect.objectContaining({ collection: 'sale_records', id: 'sale_rename_1' }),
+    ]))
+    expect(result.touchedEntities).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ collection: 'tasks', id: 'task_rename_other_1' }),
+    ]))
     expect(result.resyncScopes).toEqual(expect.arrayContaining([
       'expenses',
       'incomes',
@@ -669,6 +681,9 @@ describe('dog-service', () => {
     })
     await expect(db.collection('breeding_records').doc('breed_rename_1').get()).resolves.toMatchObject({
       data: [expect.objectContaining({ dog_name: '奶糖' })],
+    })
+    await expect(db.collection('tasks').doc('task_rename_other_1').get()).resolves.toMatchObject({
+      data: [expect.objectContaining({ dog_name: '其他家庭犬' })],
     })
   })
 
@@ -760,6 +775,72 @@ describe('dog-service', () => {
       disposition_date: mockNow,
       disposition_notes: '完成繁育',
     })
+  })
+
+  it('changeDisposition 自动取消任务时不得影响其他家庭同犬只引用', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+    seedCollection('breeding_cycles', [
+      {
+        _id: 'cycle_disposition_scope_1',
+        dam_id: 'dog_1',
+        dam_name: '花花',
+        family_id: familyId,
+        status: '发情中',
+        version: 1,
+        created_at: mockNow,
+        updated_at: mockNow,
+      },
+      {
+        _id: 'cycle_disposition_other_1',
+        dam_id: 'dog_1',
+        dam_name: '其他家庭犬',
+        family_id: 'other_family',
+        status: '发情中',
+        version: 1,
+        created_at: mockNow,
+        updated_at: mockNow,
+      },
+    ])
+    seedCollection('tasks', [
+      {
+        _id: 'task_disposition_scope_1',
+        dog_id: 'dog_1',
+        cycle_id: 'cycle_disposition_scope_1',
+        family_id: familyId,
+        status: 'pending',
+        version: 1,
+        created_at: mockNow,
+        updated_at: mockNow,
+      },
+      {
+        _id: 'task_disposition_other_1',
+        dog_id: 'dog_1',
+        cycle_id: 'cycle_disposition_other_1',
+        family_id: 'other_family',
+        status: 'pending',
+        version: 1,
+        created_at: mockNow,
+        updated_at: mockNow,
+      },
+    ])
+
+    const result = await dogService.changeDisposition.call(ctx, {
+      id: 'dog_1',
+      disposition: '已故',
+      disposition_date: mockNow,
+    })
+
+    expect(result.touchedEntities).toEqual(expect.arrayContaining([
+      expect.objectContaining({ collection: 'tasks', id: 'task_disposition_scope_1' }),
+    ]))
+    expect(result.touchedEntities).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ collection: 'tasks', id: 'task_disposition_other_1' }),
+    ]))
+
+    const { data: tasks } = await db.collection('tasks').get()
+    const taskMap = new Map(tasks.map(item => [item._id, item]))
+    expect(taskMap.get('task_disposition_scope_1')?.status).toBe('cancelled')
+    expect(taskMap.get('task_disposition_other_1')?.status).toBe('pending')
   })
 
   it('changeDisposition 领养时应创建收入，改回在养时应回滚该收入', async () => {

@@ -693,6 +693,52 @@ describe('health-service', () => {
       expect(illnesses[0].details.treatment_status).toBe('治疗中')
     })
 
+    it('覆盖同名用药时应取消旧任务并在 ack 返回新旧任务', async () => {
+      const now = Date.now()
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+      seedCollection('medication_tasks', [{
+        _id: 'med_old_override_cloud',
+        dog_id: 'dog_1',
+        dog_name: '花花',
+        family_id: familyId,
+        drug_name: '阿莫西林',
+        frequency: 1,
+        duration_days: 5,
+        actual_start_date: now,
+        status: '进行中',
+        daily_doses: {},
+        created_at: now - 1000,
+        updated_at: now - 1000,
+      }])
+
+      const result = await healthService.batchStartMedication.call(ctx, {
+        dog_ids: ['dog_1'],
+        drug_name: '阿莫西林',
+        dosage: '1',
+        dosage_unit: 'tablet',
+        method: '口服',
+        frequency: 1,
+        duration_days: 3,
+        actual_start_date: now,
+        override_dog_ids: ['dog_1'],
+      })
+
+      const newMedicationId = result.data.medications[0].medicationId
+      const { data: meds } = await db.collection('medication_tasks')
+        .where({ dog_id: 'dog_1', family_id: familyId, drug_name: '阿莫西林' })
+        .get()
+      const oldMed = meds.find(item => item._id === 'med_old_override_cloud')
+      const newMed = meds.find(item => item._id === newMedicationId)
+
+      expect(oldMed?.status).toBe('已取消')
+      expect(newMed?.status).toBe('进行中')
+      expect(result.touchedEntities).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'medication_tasks', id: 'med_old_override_cloud' }),
+        expect.objectContaining({ collection: 'medication_tasks', id: newMedicationId }),
+      ]))
+    })
+
     it('批量疾病发起批量用药时，应按犬只分别写入 source_record_id 并只升级各自疾病', async () => {
       const now = Date.now()
       const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
@@ -1085,6 +1131,12 @@ describe('health-service', () => {
       const result = await healthService.endMedicationByDog.call(ctx, 'dog_1')
 
       expect(result.data.cancelledMedicationTaskIds).toEqual(['med_stop_dog_1', 'med_stop_dog_2'])
+      expect(result.touchedEntities).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'medication_tasks', id: 'med_stop_dog_1' }),
+        expect.objectContaining({ collection: 'medication_tasks', id: 'med_stop_dog_2' }),
+        expect.objectContaining({ collection: 'tasks', id: 'stop_daily_1' }),
+        expect.objectContaining({ collection: 'tasks', id: 'stop_daily_2' }),
+      ]))
 
       const { data: meds } = await db.collection('medication_tasks').where({ family_id: familyId }).get()
       const medMap = new Map(meds.map(item => [item._id, item]))

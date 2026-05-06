@@ -1062,6 +1062,10 @@ module.exports = {
         .where({ _id: result.cycleId, family_id: familyId })
         .get()
       if (cycles?.[0]) touchedEntities.push(buildTouchedEntity('breeding_cycles', cycles[0]))
+      const { data: milestones } = await db.collection('tasks')
+        .where({ cycle_id: result.cycleId, family_id: familyId, type: 'breeding_milestone' })
+        .get()
+      touchedEntities.push(...((milestones || []).map(task => buildTouchedEntity('tasks', task))))
     }
     if (result.expenseId) {
       const { data: expenses } = await db.collection('expenses')
@@ -1255,7 +1259,7 @@ module.exports = {
     // 为每窝附加幼崽统计
     const litterIds = litters.map(l => l._id)
     const { data: puppies } = await db.collection('dogs')
-      .where({ origin_litter_id: dbCmd.in(litterIds), deleted_at: null })
+      .where({ origin_litter_id: dbCmd.in(litterIds), family_id: this.familyId, deleted_at: null })
       .get()
 
     const puppyMap = {}
@@ -1339,6 +1343,7 @@ module.exports = {
     // 取消该周期的所有待办任务
     await db.collection('tasks').where({
       cycle_id: cycleId,
+      family_id: this.familyId,
       status: 'pending',
     }).update({ status: 'cancelled', ...buildVersionUpdate(dbCmd, now) })
 
@@ -1357,11 +1362,17 @@ module.exports = {
       .where({ _id: cycleId, family_id: this.familyId })
       .limit(1)
       .get()
+    const { data: updatedTasks } = await db.collection('tasks')
+      .where({ cycle_id: cycleId, family_id: this.familyId })
+      .get()
     const response = {
       message: '周期已关闭',
       ...buildSyncAck(syncMeta, {
         ack: 'accepted',
-        touchedEntities: updatedCycles?.[0] ? [buildTouchedEntity('breeding_cycles', updatedCycles[0])] : [],
+        touchedEntities: [
+          ...(updatedCycles?.[0] ? [buildTouchedEntity('breeding_cycles', updatedCycles[0])] : []),
+          ...((updatedTasks || []).map(task => buildTouchedEntity('tasks', task))),
+        ],
         resyncScopes: ['breeding_cycles', 'tasks'],
       }),
     }
@@ -1642,7 +1653,7 @@ module.exports = {
       db.collection('litters').where({ _id: litterId, family_id: familyId }).get(),
       puppyIds.length ? db.collection('dogs').where({ _id: dbCmd.in(puppyIds), family_id: familyId }).get() : Promise.resolve({ data: [] }),
       weightIds.length ? db.collection('dog_weights').where({ _id: dbCmd.in(weightIds), family_id: familyId }).get() : Promise.resolve({ data: [] }),
-      createdTaskIds.length ? db.collection('tasks').where({ _id: dbCmd.in(createdTaskIds), family_id: familyId }).get() : Promise.resolve({ data: [] }),
+      db.collection('tasks').where({ cycle_id: data.cycle_id, family_id: familyId }).get(),
       createdExpenseId ? db.collection('expenses').where({ _id: createdExpenseId, family_id: familyId }).get() : Promise.resolve({ data: [] }),
     ])
 
@@ -1690,7 +1701,7 @@ module.exports = {
 
     // 获取幼崽
     const { data: puppies } = await db.collection('dogs')
-      .where({ origin_litter_id: litterId, deleted_at: null })
+      .where({ origin_litter_id: litterId, family_id: this.familyId, deleted_at: null })
       .get()
 
     return {
@@ -2139,12 +2150,18 @@ module.exports = {
       .where({ _id: id, family_id: this.familyId })
       .limit(1)
       .get()
+    const { data: updatedMilestones } = record.type === 'follicle_check'
+      ? await db.collection('tasks')
+        .where({ cycle_id: record.cycle_id, family_id: this.familyId, type: 'breeding_milestone' })
+        .get()
+      : { data: [] }
     const response = {
       message: '已更新',
       ...buildSyncAck(syncMeta, {
         ack: 'accepted',
         touchedEntities: [
           ...(updatedRecords?.[0] ? [buildTouchedEntity('breeding_records', updatedRecords[0])] : []),
+          ...((updatedMilestones || []).map(task => buildTouchedEntity('tasks', task))),
           ...(expenseSyncResult.touchedEntities || []),
         ],
         resyncScopes: ['breeding_records', 'tasks', 'expenses'],
@@ -2262,6 +2279,7 @@ module.exports = {
     // 取消断奶确认任务
     await db.collection('tasks').where({
       litter_id: litterId,
+      family_id: this.familyId,
       type: 'breeding_milestone',
       title: new RegExp('断奶'),
       status: 'pending',
@@ -2281,11 +2299,17 @@ module.exports = {
       .where({ _id: litterId, family_id: this.familyId })
       .limit(1)
       .get()
+    const { data: updatedTasks } = await db.collection('tasks')
+      .where({ litter_id: litterId, family_id: this.familyId, type: 'breeding_milestone' })
+      .get()
     const response = {
       message: '已确认断奶',
       ...buildSyncAck(syncMeta, {
         ack: 'accepted',
-        touchedEntities: updatedLitters?.[0] ? [buildTouchedEntity('litters', updatedLitters[0])] : [],
+        touchedEntities: [
+          ...(updatedLitters?.[0] ? [buildTouchedEntity('litters', updatedLitters[0])] : []),
+          ...((updatedTasks || []).map(task => buildTouchedEntity('tasks', task))),
+        ],
         resyncScopes: ['litters', 'tasks'],
       }),
     }

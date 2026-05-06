@@ -1226,6 +1226,24 @@ describe('breeding-service', () => {
       expect(pendingMilestone?.details?.step_type).toBe('follicle_check')
       expect(pendingMilestone?.details?.follicle_result).toBe('发育中')
       expect(pendingMilestone?.details?.latest_follicle_check_date).toBe(now - 86400000)
+
+      const result = await breedingService.updateBreedingRecord.call(ctx, {
+        id: 'record_follicle_edit',
+        details: {
+          left_count: 2,
+          right_count: 2,
+          result: '已成熟',
+        },
+        _sync: {
+          clientMutationId: 'follicle-edit-touch-tasks',
+          deviceId: 'device_1',
+          clientTimestamp: now,
+        },
+      })
+      expect(result.touchedEntities).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'breeding_records', id: 'record_follicle_edit' }),
+        expect.objectContaining({ collection: 'tasks' }),
+      ]))
     })
   })
 
@@ -1279,7 +1297,7 @@ describe('breeding-service', () => {
       }])
 
       const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
-      await breedingService.addBreedingRecord.call(ctx, {
+      const result = await breedingService.addBreedingRecord.call(ctx, {
         type: 'pregnancy_check',
         dog_id: 'dam_1',
         cycle_id: 'cycle_pregnancy_confirmed',
@@ -1307,6 +1325,12 @@ describe('breeding-service', () => {
       expect(birthMilestone?.due_date).toBe(now + 34 * 86400000)
       expect(birthMilestone?.details?.mating_number).toBe(2)
       expect(birthMilestone?.details?.mating_date).toBe(now - 25 * 86400000)
+      expect(result.touchedEntities).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'breeding_records' }),
+        expect.objectContaining({ collection: 'breeding_cycles', id: 'cycle_pregnancy_confirmed' }),
+        expect.objectContaining({ collection: 'tasks', id: 'pregnancy_milestone_existing' }),
+        expect.objectContaining({ collection: 'tasks', id: birthMilestone?._id }),
+      ]))
     })
   })
 
@@ -2250,10 +2274,58 @@ describe('breeding-service', () => {
 
       expect(first.ack).toBe('accepted')
       expect(second).toEqual(first)
+      expect(first.touchedEntities).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'breeding_cycles', id: 'cycle_sync_1' }),
+        expect.objectContaining({ collection: 'tasks', id: 'task_cycle_sync_1' }),
+      ]))
 
       const { data: cycles } = await db.collection('breeding_cycles').doc('cycle_sync_1').get()
       expect(cycles[0].status).toBe('失败')
       expect(cycles[0].version).toBe(3)
+    })
+
+    it('confirmWeaning 应返回完成的断奶任务', async () => {
+      const now = Date.now()
+      seedCollection('litters', [{
+        _id: 'litter_weaning_sync_1',
+        cycle_id: 'cycle_weaning_sync_1',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        birth_date: now - 45 * 86400000,
+        version: 2,
+        weaned_at: null,
+        created_at: now - 45 * 86400000,
+        updated_at: now - 45 * 86400000,
+      }])
+      seedCollection('tasks', [{
+        _id: 'task_weaning_sync_1',
+        litter_id: 'litter_weaning_sync_1',
+        family_id: familyId,
+        type: 'breeding_milestone',
+        title: '花花窝 · 确认断奶',
+        status: 'pending',
+        version: 1,
+        created_at: now,
+        updated_at: now,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      const result = await breedingService.confirmWeaning.call(ctx, {
+        litterId: 'litter_weaning_sync_1',
+        _sync: {
+          clientMutationId: 'breeding-weaning-sync-1',
+          deviceId: 'device_1',
+          clientTimestamp: now,
+          baseVersions: { litter_weaning_sync_1: 2 },
+        },
+      })
+
+      expect(result.ack).toBe('accepted')
+      expect(result.touchedEntities).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'litters', id: 'litter_weaning_sync_1' }),
+        expect.objectContaining({ collection: 'tasks', id: 'task_weaning_sync_1' }),
+      ]))
     })
 
     it('confirmWeaning 在 baseVersion 过期时应返回 conflict', async () => {

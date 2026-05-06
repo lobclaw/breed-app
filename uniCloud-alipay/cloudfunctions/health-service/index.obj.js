@@ -1578,10 +1578,12 @@ module.exports = {
         || ((orderedDogs.length === 1 && singleIllnessRecordId) ? singleIllnessRecordId : '')
 
       // 覆盖模式：先取消该犬的同名进行中任务
+      let cancelledMedicationIds = []
       if (data.override_dog_ids && data.override_dog_ids.includes(dog._id)) {
         const { data: existingMeds } = await db.collection('medication_tasks')
           .where({ dog_id: dog._id, family_id: familyId, drug_name: data.drug_name, status: '进行中' })
           .get()
+        cancelledMedicationIds = (existingMeds || []).map(med => med._id).filter(Boolean)
         await Promise.all((existingMeds || []).map(med =>
           db.collection('medication_tasks').doc(med._id).update({ status: '已取消', updated_at: now })
         ))
@@ -1632,6 +1634,7 @@ module.exports = {
       }
 
       // 疾病升级：观察中 → 治疗中
+      const touchedIllnessIds = []
       if (linkedIllnessRecordId) {
         // 显式关联：只升级当前犬对应的疾病记录
         const { data: ill } = await db.collection('health_records')
@@ -1641,6 +1644,7 @@ module.exports = {
           await db.collection('health_records').doc(linkedIllnessRecordId).update({
             'details.treatment_status': '治疗中', updated_at: now,
           })
+          touchedIllnessIds.push(linkedIllnessRecordId)
         }
       } else if (orderedDogs.length === 1 && normalizedIllnessLinks.length === 0 && !singleIllnessRecordId) {
         // 兼容旧单犬入口：未显式绑定疾病时，仍保留单犬兜底升级逻辑
@@ -1655,11 +1659,12 @@ module.exports = {
             await db.collection('health_records').doc(r._id).update({
               'details.treatment_status': '治疗中', updated_at: now,
             })
+            touchedIllnessIds.push(r._id)
           }
         }
       }
 
-      return { medicationId: resolvedMedicationId, dog_id: dog._id, expenseId, medication: { ...medicationData, _id: resolvedMedicationId } }
+      return { medicationId: resolvedMedicationId, dog_id: dog._id, expenseId, cancelledMedicationIds, touchedIllnessIds, medication: { ...medicationData, _id: resolvedMedicationId } }
     }))
 
     await logHealthOperation({
@@ -1675,6 +1680,21 @@ module.exports = {
     })
 
     const touchedExpenseIds = results.map(r => r.expenseId).filter(Boolean)
+    const touchedMedicationIds = [
+      ...results.map(r => r.medicationId).filter(Boolean),
+      ...results.flatMap(r => r.cancelledMedicationIds || []),
+    ]
+    const touchedIllnessIds = results.flatMap(r => r.touchedIllnessIds || [])
+    const { data: touchedMedicationRows } = touchedMedicationIds.length > 0
+      ? await db.collection('medication_tasks')
+        .where({ _id: dbCmd.in(touchedMedicationIds), family_id: familyId })
+        .get()
+      : { data: [] }
+    const { data: touchedIllnessRows } = touchedIllnessIds.length > 0
+      ? await db.collection('health_records')
+        .where({ _id: dbCmd.in(touchedIllnessIds), family_id: familyId })
+        .get()
+      : { data: [] }
     const { data: touchedExpenses } = touchedExpenseIds.length > 0
       ? await db.collection('expenses')
         .where({ _id: dbCmd.in(touchedExpenseIds), family_id: familyId })
@@ -1686,7 +1706,8 @@ module.exports = {
       ...buildSyncAck(syncMeta, {
         ack: 'accepted',
         touchedEntities: [
-          ...results.map(result => buildTouchedEntity('medication_tasks', result.medication)),
+          ...(touchedMedicationRows || []).map(row => buildTouchedEntity('medication_tasks', row)),
+          ...(touchedIllnessRows || []).map(row => buildTouchedEntity('health_records', row)),
           ...(touchedExpenses || []).map(expense => buildTouchedEntity('expenses', expense)),
         ],
         resyncScopes: ['medication_tasks', 'health_records', 'expenses'],
@@ -2177,25 +2198,34 @@ module.exports = {
       // 兼容旧数据：取消关联的 daily tasks
       await db.collection('tasks').where({
         medication_task_id: dbCmd.in(cancelledMedicationTaskIds),
+        family_id: familyId,
         status: 'pending',
       }).update({
         status: 'cancelled',
-        updated_at: now,
+        ...buildVersionUpdate(dbCmd, now),
       })
     }
 
-    const { data: updatedMeds } = cancelledMedicationTaskIds.length > 0
-      ? await db.collection('medication_tasks')
-        .where({ _id: dbCmd.in(cancelledMedicationTaskIds), family_id: familyId })
-        .get()
-      : { data: [] }
+    const [updatedMedsResult, updatedTasksResult] = cancelledMedicationTaskIds.length > 0
+      ? await Promise.all([
+        db.collection('medication_tasks')
+          .where({ _id: dbCmd.in(cancelledMedicationTaskIds), family_id: familyId })
+          .get(),
+        db.collection('tasks')
+          .where({ medication_task_id: dbCmd.in(cancelledMedicationTaskIds), family_id: familyId })
+          .get(),
+      ])
+      : [{ data: [] }, { data: [] }]
     const response = {
       message: `已停止 ${cancelledMedicationTaskIds.length} 个用药方案`,
       data: { cancelled: cancelledMedicationTaskIds.length, cancelledMedicationTaskIds },
       ...buildSyncAck(syncMeta, {
         ack: 'accepted',
-        touchedEntities: (updatedMeds || []).map(record => buildTouchedEntity('medication_tasks', record)),
-        resyncScopes: ['medication_tasks'],
+        touchedEntities: [
+          ...(updatedMedsResult.data || []).map(record => buildTouchedEntity('medication_tasks', record)),
+          ...(updatedTasksResult.data || []).map(record => buildTouchedEntity('tasks', record)),
+        ],
+        resyncScopes: ['medication_tasks', 'tasks'],
       }),
     }
     if (syncMeta?.clientMutationId) {

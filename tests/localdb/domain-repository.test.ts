@@ -223,6 +223,271 @@ describe('local domain repository', () => {
     })
   })
 
+  it('录入卵泡检查后首页应立即基于本地记录刷新繁育节点', async () => {
+    const now = new Date('2026-05-06T10:00:00+08:00').getTime()
+    const heatDate = now - 6 * 86400000
+
+    await localDb.replaceTable('dogs', [{
+      _id: 'dam_home_follicle_1',
+      family_id: 'fam_home_follicle',
+      name: '妮蔻',
+      gender: '母',
+      role: '种狗',
+      disposition: '在养',
+      updated_at: now,
+    }])
+    await localDb.replaceTable('breeding_cycles', [{
+      _id: 'cycle_home_follicle_1',
+      family_id: 'fam_home_follicle',
+      dam_id: 'dam_home_follicle_1',
+      dam_name: '妮蔻',
+      status: '发情中',
+      created_at: heatDate,
+      updated_at: now,
+      version: 1,
+    }])
+    await localDb.replaceTable('breeding_records', [{
+      _id: 'record_home_heat_1',
+      family_id: 'fam_home_follicle',
+      cycle_id: 'cycle_home_follicle_1',
+      dog_id: 'dam_home_follicle_1',
+      dog_name: '妮蔻',
+      type: 'heat',
+      date: heatDate,
+      details: {},
+      created_at: heatDate,
+      updated_at: heatDate,
+    }])
+    await localDb.replaceTable('tasks', [{
+      _id: 'task_old_follicle_1',
+      family_id: 'fam_home_follicle',
+      dog_id: 'dam_home_follicle_1',
+      dog_name: '妮蔻',
+      cycle_id: 'cycle_home_follicle_1',
+      type: 'breeding_milestone',
+      title: '妮蔻 · 建议卵泡检查',
+      due_date: now,
+      status: 'pending',
+      details: { step_type: 'follicle_check' },
+      version: 3,
+      created_at: heatDate,
+      updated_at: heatDate,
+    }])
+    await localDb.replaceTable('health_records', [])
+    await localDb.replaceTable('medication_tasks', [])
+    await localDb.replaceTable('expenses', [])
+    await localDb.replaceTable('outbox_mutations', [])
+    await localDb.replaceTable('local_operation_logs', [])
+
+    await localSyncRuntime.addBreedingRecordLocally('fam_home_follicle', {
+      type: 'follicle_check',
+      dog_id: 'dam_home_follicle_1',
+      cycle_id: 'cycle_home_follicle_1',
+      date: now,
+      details: {
+        left_count: 2,
+        right_count: 1,
+        result: '发育中',
+      },
+    })
+
+    const oldTask = await getLocalTaskById('fam_home_follicle', 'task_old_follicle_1')
+    const home = await localSyncRuntime.getHomeCards()
+    const breedingCard = home.cards.find((card: any) =>
+      card.tasks?.[0]?.type === 'breeding_milestone'
+      && card.tasks?.[0]?.cycle_id === 'cycle_home_follicle_1',
+    )
+
+    expect(oldTask?.status).toBe('cancelled')
+    expect(breedingCard?.tasks?.[0]).toMatchObject({
+      type: 'breeding_milestone',
+      cycle_id: 'cycle_home_follicle_1',
+      title: '妮蔻 · 建议卵泡检查',
+      due_date: now + 86400000,
+      details: {
+        step_type: 'follicle_check',
+        follicle_check_count: 1,
+        follicle_result: '发育中',
+        latest_follicle_check_date: now,
+      },
+    })
+  })
+
+  it('编辑最近一次卵泡检查后首页应立即重算繁育节点', async () => {
+    const now = new Date('2026-05-06T10:00:00+08:00').getTime()
+    const heatDate = now - 6 * 86400000
+
+    await localDb.replaceTable('dogs', [{
+      _id: 'dam_home_follicle_edit',
+      family_id: 'fam_home_follicle_edit',
+      name: '花花',
+      gender: '母',
+      role: '种狗',
+      disposition: '在养',
+      updated_at: now,
+    }])
+    await localDb.replaceTable('breeding_cycles', [{
+      _id: 'cycle_home_follicle_edit',
+      family_id: 'fam_home_follicle_edit',
+      dam_id: 'dam_home_follicle_edit',
+      dam_name: '花花',
+      status: '发情中',
+      created_at: heatDate,
+      updated_at: now,
+      version: 1,
+    }])
+    await localDb.replaceTable('breeding_records', [
+      {
+        _id: 'record_home_heat_edit',
+        family_id: 'fam_home_follicle_edit',
+        cycle_id: 'cycle_home_follicle_edit',
+        dog_id: 'dam_home_follicle_edit',
+        dog_name: '花花',
+        type: 'heat',
+        date: heatDate,
+        details: {},
+        created_at: heatDate,
+        updated_at: heatDate,
+      },
+      {
+        _id: 'record_home_follicle_edit',
+        family_id: 'fam_home_follicle_edit',
+        cycle_id: 'cycle_home_follicle_edit',
+        dog_id: 'dam_home_follicle_edit',
+        dog_name: '花花',
+        type: 'follicle_check',
+        date: now - 86400000,
+        details: { left_count: 2, right_count: 2, result: '已成熟' },
+        created_at: now - 86400000,
+        updated_at: now - 86400000,
+      },
+    ])
+    await localDb.replaceTable('tasks', [{
+      _id: 'task_old_mating_edit',
+      family_id: 'fam_home_follicle_edit',
+      dog_id: 'dam_home_follicle_edit',
+      dog_name: '花花',
+      cycle_id: 'cycle_home_follicle_edit',
+      type: 'breeding_milestone',
+      title: '花花 · 配种',
+      due_date: now - 86400000,
+      status: 'pending',
+      details: { step_type: 'mating', follicle_check_date: now - 86400000 },
+      version: 2,
+      created_at: now - 86400000,
+      updated_at: now - 86400000,
+    }])
+    await localDb.replaceTable('health_records', [])
+    await localDb.replaceTable('medication_tasks', [])
+    await localDb.replaceTable('expenses', [])
+    await localDb.replaceTable('outbox_mutations', [])
+    await localDb.replaceTable('local_operation_logs', [])
+
+    await localSyncRuntime.updateBreedingRecordLocally('fam_home_follicle_edit', {
+      id: 'record_home_follicle_edit',
+      details: { left_count: 2, right_count: 2, result: '发育中' },
+    })
+
+    const oldTask = await getLocalTaskById('fam_home_follicle_edit', 'task_old_mating_edit')
+    const home = await localSyncRuntime.getHomeCards()
+    const breedingCard = home.cards.find((card: any) =>
+      card.tasks?.[0]?.type === 'breeding_milestone'
+      && card.tasks?.[0]?.cycle_id === 'cycle_home_follicle_edit',
+    )
+
+    expect(oldTask?.status).toBe('cancelled')
+    expect(breedingCard?.tasks?.[0]).toMatchObject({
+      title: '花花 · 建议卵泡检查',
+      due_date: now,
+      details: {
+        step_type: 'follicle_check',
+        follicle_check_count: 1,
+        follicle_result: '发育中',
+        latest_follicle_check_date: now - 86400000,
+      },
+    })
+  })
+
+  it('孕检未孕后首页应立即移除繁育待办并关闭周期', async () => {
+    const now = new Date('2026-05-06T10:00:00+08:00').getTime()
+    const matingDate = now - 25 * 86400000
+
+    await localDb.replaceTable('dogs', [{
+      _id: 'dam_home_pregnancy_rejected',
+      family_id: 'fam_home_pregnancy_rejected',
+      name: '奶茶',
+      gender: '母',
+      role: '种狗',
+      disposition: '在养',
+      updated_at: now,
+    }])
+    await localDb.replaceTable('breeding_cycles', [{
+      _id: 'cycle_home_pregnancy_rejected',
+      family_id: 'fam_home_pregnancy_rejected',
+      dam_id: 'dam_home_pregnancy_rejected',
+      dam_name: '奶茶',
+      status: '怀孕中',
+      created_at: matingDate,
+      updated_at: now - 1000,
+      version: 2,
+    }])
+    await localDb.replaceTable('breeding_records', [{
+      _id: 'record_home_mating_rejected',
+      family_id: 'fam_home_pregnancy_rejected',
+      cycle_id: 'cycle_home_pregnancy_rejected',
+      dog_id: 'dam_home_pregnancy_rejected',
+      dog_name: '奶茶',
+      type: 'mating',
+      date: matingDate,
+      details: {
+        expected_checkup_date: now,
+        expected_due_date: now + 34 * 86400000,
+      },
+      created_at: matingDate,
+      updated_at: matingDate,
+    }])
+    await localDb.replaceTable('tasks', [{
+      _id: 'task_old_pregnancy_rejected',
+      family_id: 'fam_home_pregnancy_rejected',
+      dog_id: 'dam_home_pregnancy_rejected',
+      dog_name: '奶茶',
+      cycle_id: 'cycle_home_pregnancy_rejected',
+      type: 'breeding_milestone',
+      title: '奶茶 · 建议孕检',
+      due_date: now,
+      status: 'pending',
+      details: { step_type: 'pregnancy_check' },
+      version: 4,
+      created_at: matingDate,
+      updated_at: matingDate,
+    }])
+    await localDb.replaceTable('health_records', [])
+    await localDb.replaceTable('medication_tasks', [])
+    await localDb.replaceTable('expenses', [])
+    await localDb.replaceTable('outbox_mutations', [])
+    await localDb.replaceTable('local_operation_logs', [])
+
+    await localSyncRuntime.addBreedingRecordLocally('fam_home_pregnancy_rejected', {
+      type: 'pregnancy_check',
+      dog_id: 'dam_home_pregnancy_rejected',
+      cycle_id: 'cycle_home_pregnancy_rejected',
+      date: now,
+      details: { confirmed: '否' },
+    })
+
+    const cycles = await localDb.getTable<any>('breeding_cycles')
+    const oldTask = await getLocalTaskById('fam_home_pregnancy_rejected', 'task_old_pregnancy_rejected')
+    const home = await localSyncRuntime.getHomeCards()
+    const breedingCard = home.cards.find((card: any) =>
+      card.tasks?.[0]?.type === 'breeding_milestone'
+      && card.tasks?.[0]?.cycle_id === 'cycle_home_pregnancy_rejected',
+    )
+
+    expect(cycles.find(item => item._id === 'cycle_home_pregnancy_rejected')?.status).toBe('失败')
+    expect(oldTask?.status).toBe('cancelled')
+    expect(breedingCard).toBeUndefined()
+  })
+
   it('购入犬只后应立即出现在本地财务列表', async () => {
     const now = new Date('2026-05-06T10:00:00+08:00').getTime()
 
@@ -468,6 +733,218 @@ describe('local domain repository', () => {
       total_amount: 300,
       notes: '阿莫西林 5天',
     })
+  })
+
+  it('覆盖同名用药时首页应立即只保留新疗程', async () => {
+    const now = new Date('2026-05-06T10:00:00+08:00').getTime()
+
+    await localDb.replaceTable('dogs', [{
+      _id: 'dog_med_override_1',
+      family_id: 'fam_med_override',
+      name: '花花',
+      gender: '母',
+      role: '种狗',
+      disposition: '在养',
+      updated_at: now,
+    }])
+    await localDb.replaceTable('health_records', [])
+    await localDb.replaceTable('medication_tasks', [{
+      _id: 'med_old_override_1',
+      dog_id: 'dog_med_override_1',
+      dog_name: '花花',
+      family_id: 'fam_med_override',
+      drug_name: '阿莫西林',
+      frequency: 1,
+      duration_days: 5,
+      actual_start_date: now,
+      status: '进行中',
+      daily_doses: {},
+      version: 2,
+      created_at: now - 1000,
+      updated_at: now - 1000,
+    }])
+    await localDb.replaceTable('tasks', [])
+    await localDb.replaceTable('expenses', [])
+    await localDb.replaceTable('outbox_mutations', [])
+    await localDb.replaceTable('local_operation_logs', [])
+
+    const result = await localSyncRuntime.batchStartMedicationLocally('fam_med_override', {
+      dog_ids: ['dog_med_override_1'],
+      drug_name: '阿莫西林',
+      dosage: '1',
+      dosage_unit: 'tablet',
+      method: '口服',
+      frequency: 1,
+      duration_days: 3,
+      actual_start_date: now,
+      override_dog_ids: ['dog_med_override_1'],
+    })
+
+    const meds = await localDb.getTable<any>('medication_tasks')
+    const home = await localSyncRuntime.getHomeCards()
+    const medicationCard = home.cards.find((card: any) => card.cardType === 'medication')
+    const newMedicationId = result.data.medications[0].medicationId
+
+    expect(meds.find(item => item._id === 'med_old_override_1')?.status).toBe('已取消')
+    expect(meds.find(item => item._id === newMedicationId)?.status).toBe('进行中')
+    expect(medicationCard?.medicationTaskIds).toEqual([newMedicationId])
+  })
+
+  it('按犬停止用药时应立即取消旧版每日任务', async () => {
+    const now = new Date('2026-05-06T10:00:00+08:00').getTime()
+
+    await localDb.replaceTable('medication_tasks', [{
+      _id: 'med_end_by_dog_1',
+      dog_id: 'dog_end_by_dog_1',
+      dog_name: '肉肉',
+      family_id: 'fam_end_by_dog',
+      drug_name: '益生菌',
+      frequency: 1,
+      duration_days: 3,
+      actual_start_date: now,
+      status: '进行中',
+      daily_doses: {},
+      version: 2,
+      created_at: now,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('tasks', [{
+      _id: 'task_daily_med_1',
+      family_id: 'fam_end_by_dog',
+      dog_id: 'dog_end_by_dog_1',
+      medication_task_id: 'med_end_by_dog_1',
+      type: 'medication',
+      title: '肉肉 · 益生菌',
+      due_date: now,
+      status: 'pending',
+      version: 1,
+      created_at: now,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('outbox_mutations', [])
+    await localDb.replaceTable('local_operation_logs', [])
+
+    const result = await localSyncRuntime.endMedicationByDogLocally('fam_end_by_dog', 'dog_end_by_dog_1')
+    const medication = await localDb.findById<any>('medication_tasks', 'med_end_by_dog_1')
+    const task = await getLocalTaskById('fam_end_by_dog', 'task_daily_med_1')
+
+    expect(medication?.status).toBe('已取消')
+    expect(task?.status).toBe('cancelled')
+    expect(result?.touchedEntities).toEqual(expect.arrayContaining([
+      expect.objectContaining({ collection: 'medication_tasks', id: 'med_end_by_dog_1' }),
+      expect.objectContaining({ collection: 'tasks', id: 'task_daily_med_1' }),
+    ]))
+  })
+
+  it('批量完成今日用药应返回已完全完成的本地任务', async () => {
+    const now = Date.now()
+
+    await localDb.replaceTable('medication_tasks', [
+      {
+        _id: 'med_day_full_1',
+        family_id: 'fam_med_day_full',
+        dog_id: 'dog_med_day_full_1',
+        drug_name: '益生菌',
+        frequency: 2,
+        duration_days: 1,
+        actual_start_date: now,
+        daily_doses: { 1: 1 },
+        status: '进行中',
+        version: 1,
+        created_at: now,
+        updated_at: now,
+      },
+      {
+        _id: 'med_day_partial_1',
+        family_id: 'fam_med_day_full',
+        dog_id: 'dog_med_day_full_2',
+        drug_name: '钙片',
+        frequency: 1,
+        duration_days: 2,
+        actual_start_date: now,
+        daily_doses: {},
+        status: '进行中',
+        version: 1,
+        created_at: now,
+        updated_at: now,
+      },
+    ])
+    await localDb.replaceTable('outbox_mutations', [])
+    await localDb.replaceTable('local_operation_logs', [])
+
+    const result = await localSyncRuntime.batchCompleteMedicationDayLocally('fam_med_day_full', ['med_day_full_1', 'med_day_partial_1'])
+    const full = await localDb.findById<any>('medication_tasks', 'med_day_full_1')
+    const partial = await localDb.findById<any>('medication_tasks', 'med_day_partial_1')
+
+    expect(full?.status).toBe('已完成')
+    expect(partial?.status).toBe('进行中')
+    expect(result?.data.completedMedicationTaskIds).toEqual(['med_day_full_1', 'med_day_partial_1'])
+    expect(result?.data.fullyCompletedMedicationTaskIds).toEqual(['med_day_full_1'])
+  })
+
+  it('关闭周期和确认断奶应在本地 ack 中包含关联任务', async () => {
+    const now = new Date('2026-05-06T10:00:00+08:00').getTime()
+
+    await localDb.replaceTable('breeding_cycles', [{
+      _id: 'cycle_close_ack_1',
+      family_id: 'fam_cycle_ack',
+      dam_id: 'dog_cycle_ack_1',
+      dam_name: '花花',
+      status: '怀孕中',
+      version: 2,
+      created_at: now,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('litters', [{
+      _id: 'litter_weaning_ack_1',
+      family_id: 'fam_cycle_ack',
+      cycle_id: 'cycle_weaning_ack_1',
+      dam_id: 'dog_cycle_ack_2',
+      dam_name: '奶茶',
+      birth_date: now - 45 * 86400000,
+      version: 3,
+      created_at: now,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('tasks', [
+      {
+        _id: 'task_cycle_close_ack_1',
+        family_id: 'fam_cycle_ack',
+        cycle_id: 'cycle_close_ack_1',
+        type: 'breeding_milestone',
+        status: 'pending',
+        version: 4,
+        created_at: now,
+        updated_at: now,
+      },
+      {
+        _id: 'task_weaning_ack_1',
+        family_id: 'fam_cycle_ack',
+        litter_id: 'litter_weaning_ack_1',
+        type: 'breeding_milestone',
+        title: '奶茶窝 · 确认断奶',
+        status: 'pending',
+        version: 5,
+        created_at: now,
+        updated_at: now,
+      },
+    ])
+    await localDb.replaceTable('outbox_mutations', [])
+    await localDb.replaceTable('local_operation_logs', [])
+
+    const closed = await localSyncRuntime.closeBreedingCycleLocally('fam_cycle_ack', 'cycle_close_ack_1', '失败')
+    const weaned = await localSyncRuntime.confirmWeaningLocally('fam_cycle_ack', 'litter_weaning_ack_1')
+    const closeTask = await getLocalTaskById('fam_cycle_ack', 'task_cycle_close_ack_1')
+    const weaningTask = await getLocalTaskById('fam_cycle_ack', 'task_weaning_ack_1')
+
+    expect(closeTask?.status).toBe('cancelled')
+    expect(weaningTask?.status).toBe('completed')
+    expect(closed.touchedEntities).toEqual(expect.arrayContaining([
+      expect.objectContaining({ collection: 'tasks', id: 'task_cycle_close_ack_1' }),
+    ]))
+    expect(weaned.touchedEntities).toEqual(expect.arrayContaining([
+      expect.objectContaining({ collection: 'tasks', id: 'task_weaning_ack_1' }),
+    ]))
   })
 
   it('领养带费用时应立即出现在本地财务列表', async () => {

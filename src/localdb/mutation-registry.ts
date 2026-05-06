@@ -140,7 +140,7 @@ export const LOCAL_MUTATION_REGISTRY: Record<LocalMutationType, LocalMutationDef
   [LOCAL_MUTATION_TYPES.RECOVER_ILLNESSES]: { service: 'health-service', method: 'recoverIllnesses', defaultScopes: ['health_records', 'medication_tasks'] },
   [LOCAL_MUTATION_TYPES.UPDATE_ILLNESS_STATUS]: { service: 'health-service', method: 'batchUpdateIllnessStatus', defaultScopes: ['health_records'] },
   [LOCAL_MUTATION_TYPES.CLEANUP_DUPLICATE_ILLNESSES]: { service: 'health-service', method: 'cleanupDuplicateIllnesses', defaultScopes: ['health_records', 'tasks'] },
-  [LOCAL_MUTATION_TYPES.END_MEDICATION_BY_DOG]: { service: 'health-service', method: 'endMedicationByDog', defaultScopes: ['medication_tasks'] },
+  [LOCAL_MUTATION_TYPES.END_MEDICATION_BY_DOG]: { service: 'health-service', method: 'endMedicationByDog', defaultScopes: ['medication_tasks', 'tasks'] },
   [LOCAL_MUTATION_TYPES.ADD_DOG_WEIGHT]: { service: 'health-service', method: 'addWeightRecord', defaultScopes: ['dog_weights', 'dogs'] },
 }
 

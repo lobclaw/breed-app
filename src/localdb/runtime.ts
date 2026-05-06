@@ -419,6 +419,35 @@ function buildLocalBreedingRecord(familyId: string, dog: Record<string, any>, da
   }
 }
 
+function isLocalPregnancyConfirmed(details: Record<string, any> = {}) {
+  return details.confirmed === '是' || details.confirmed === true
+}
+
+function isLocalPregnancyRejected(details: Record<string, any> = {}) {
+  return details.confirmed === '否' || details.confirmed === false
+}
+
+function shouldClearLocalBreedingMilestones(data: Record<string, any>) {
+  if (['heat', 'follicle_check', 'mating', 'abnormal_termination'].includes(data.type)) return true
+  if (data.type === 'pregnancy_check') {
+    return isLocalPregnancyConfirmed(data.details || {}) || isLocalPregnancyRejected(data.details || {})
+  }
+  return false
+}
+
+function getLatestLocalBreedingRecord(records: Record<string, any>[], type: string) {
+  return records
+    .filter(record => !record.deleted_at && record.type === type)
+    .slice()
+    .sort((left, right) => {
+      const dateDiff = Number(right.date || 0) - Number(left.date || 0)
+      if (dateDiff !== 0) return dateDiff
+      const updatedDiff = Number(right.updated_at || right.created_at || 0) - Number(left.updated_at || left.created_at || 0)
+      if (updatedDiff !== 0) return updatedDiff
+      return `${right._id || ''}`.localeCompare(`${left._id || ''}`)
+    })[0] || null
+}
+
 function buildLocalBreedingExtraTask(
   familyId: string,
   dog: Record<string, any>,
@@ -2028,6 +2057,15 @@ class LocalSyncRuntime {
     const startDate = Number.isFinite(Number(data.actual_start_date)) ? Number(data.actual_start_date) : now
     const endDate = startDate + ((durationDays - 1) * 86400000)
     const illnessLinks = new Map((data.illness_links || data.illnessLinks || []).map((item: any) => [item.dog_id, item.illness_record_id]))
+    const overrideDogIdSet = new Set(Array.isArray(data.override_dog_ids) ? data.override_dog_ids.filter(Boolean) : [])
+    const overriddenMedicationTasks = overrideDogIdSet.size > 0
+      ? await localDb.query<any>('medication_tasks', row =>
+        row.family_id === familyId
+        && overrideDogIdSet.has(row.dog_id)
+        && row.drug_name === data.drug_name
+        && row.status === '进行中',
+      )
+      : []
     const medicationTasks = dogs.map((dog) => ({
       _id: createStableEntityId('medication_task'),
       dog_id: dog._id,
@@ -2069,7 +2107,22 @@ class LocalSyncRuntime {
       ))
       : []
     const linkedIllnessIds = medicationTasks.map(task => task.source_record_id).filter(Boolean)
-    const syncMeta = buildSyncMeta({}, {
+    const linkedIllnessRows = linkedIllnessIds.length > 0
+      ? await localDb.query<any>('health_records', row =>
+        row.family_id === familyId
+        && linkedIllnessIds.includes(row._id),
+      )
+      : []
+    const syncMeta = buildSyncMeta({
+      ...overriddenMedicationTasks.reduce<Record<string, number>>((acc, row) => {
+        acc[row._id] = Number(row.version || 0)
+        return acc
+      }, {}),
+      ...linkedIllnessRows.reduce<Record<string, number>>((acc, row) => {
+        acc[row._id] = Number(row.version || 0)
+        return acc
+      }, {}),
+    }, {
       clientMutationId: createClientMutationId(HOME_MUTATION_TYPES.CREATE_MEDICATION_TASKS),
       clientEntityIds: {
         medication_tasks: medicationTasks.map(task => task._id),
@@ -2078,7 +2131,13 @@ class LocalSyncRuntime {
     })
 
     await localDb.transact(['medication_tasks', 'health_records', 'expenses'], (tables) => {
-      tables.medication_tasks = [...(tables.medication_tasks as any[]), ...medicationTasks]
+      const overriddenMedicationIds = new Set(overriddenMedicationTasks.map(row => row._id))
+      tables.medication_tasks = [
+        ...(tables.medication_tasks as any[]).map(row => overriddenMedicationIds.has(row._id)
+          ? { ...row, status: '已取消', updated_at: now, _local_pending: true }
+          : row),
+        ...medicationTasks,
+      ]
       if (expenseRows.length > 0) {
         tables.expenses = [...(tables.expenses as any[]), ...expenseRows]
       }
@@ -2108,6 +2167,18 @@ class LocalSyncRuntime {
           id: task._id,
           version: 0,
           updatedAt: task.updated_at,
+        })),
+        ...overriddenMedicationTasks.map(task => ({
+          collection: 'medication_tasks' as BusinessCollectionName,
+          id: task._id,
+          version: Number(task.version || 0),
+          updatedAt: now,
+        })),
+        ...linkedIllnessRows.map(record => ({
+          collection: 'health_records' as BusinessCollectionName,
+          id: record._id,
+          version: Number(record.version || 0),
+          updatedAt: now,
         })),
         ...expenseRows.map(row => ({
           collection: 'expenses' as BusinessCollectionName,
@@ -2141,11 +2212,22 @@ class LocalSyncRuntime {
         ? '怀孕中'
         : data.type === 'abnormal_termination'
           ? '失败'
-          : existingCycle?.status || '发情中'
+          : data.type === 'pregnancy_check' && isLocalPregnancyRejected(data.details || {})
+            ? '失败'
+            : existingCycle?.status || '发情中'
     const record = buildLocalBreedingRecord(familyId, dog, data, recordId, cycleId, now)
     const extraArrangementTask = data.extra_arrangement?.kind && data.extra_arrangement?.due_date
       ? buildLocalBreedingExtraTask(familyId, dog, cycleId, recordId, data.extra_arrangement, createStableEntityId('task'), now)
       : null
+    const pendingMilestoneTasks = shouldClearLocalBreedingMilestones(data)
+      ? await localDb.query<any>('tasks', row =>
+        row.family_id === familyId
+        && row.cycle_id === cycleId
+        && row.type === 'breeding_milestone'
+        && row.status === 'pending'
+        && !row.deleted_at,
+      )
+      : []
     const expenseId = data.type !== 'heat_observation' && Number(data.cost || 0) > 0
       ? createStableEntityId('expense')
       : ''
@@ -2184,6 +2266,12 @@ class LocalSyncRuntime {
       const cycleMap = new Map((tables.breeding_cycles as any[]).map(row => [row._id, row]))
       cycleMap.set(cycleId, { ...(cycleMap.get(cycleId) || {}), ...cycle })
       tables.breeding_cycles = Array.from(cycleMap.values())
+      if (pendingMilestoneTasks.length > 0) {
+        const pendingMilestoneIds = new Set(pendingMilestoneTasks.map(task => task._id))
+        tables.tasks = (tables.tasks as any[]).map(row => pendingMilestoneIds.has(row._id)
+          ? { ...row, status: 'cancelled', updated_at: now, _local_pending: true }
+          : row)
+      }
       if (extraArrangementTask) {
         tables.tasks = [...(tables.tasks as any[]), extraArrangementTask]
       }
@@ -2204,6 +2292,7 @@ class LocalSyncRuntime {
       ...buildLocalAck(syncMeta, [
         { collection: 'breeding_records' as BusinessCollectionName, id: recordId, version: 0, updatedAt: now },
         { collection: 'breeding_cycles' as BusinessCollectionName, id: cycleId, version: Number(cycle.version || 0), updatedAt: now },
+        ...pendingMilestoneTasks.map(task => ({ collection: 'tasks' as BusinessCollectionName, id: task._id, version: Number(task.version || 0), updatedAt: now })),
         ...(expenseRow ? [{ collection: 'expenses' as BusinessCollectionName, id: expenseRow._id, version: 0, updatedAt: now }] : []),
       ]),
     }
@@ -2543,6 +2632,7 @@ class LocalSyncRuntime {
         { collection: 'breeding_cycles', id: cycleId, version: Number(cycle.version || 0), updatedAt: now },
         ...puppies.map(row => ({ collection: 'dogs' as BusinessCollectionName, id: row._id, version: 0, updatedAt: now })),
         ...weightRows.map(row => ({ collection: 'dog_weights' as BusinessCollectionName, id: row._id, version: 0, updatedAt: now })),
+        ...pendingMilestones.map(row => ({ collection: 'tasks' as BusinessCollectionName, id: row._id, version: Number(row.version || 0), updatedAt: now })),
         ...createdTasks.map(row => ({ collection: 'tasks' as BusinessCollectionName, id: row._id, version: 0, updatedAt: now })),
         ...(expenseRow ? [{ collection: 'expenses' as BusinessCollectionName, id: expenseRow._id, version: 0, updatedAt: now }] : []),
       ]),
@@ -2599,6 +2689,25 @@ class LocalSyncRuntime {
           now,
         )
       : null
+    const cycleRecords = await localDb.query<any>('breeding_records', row =>
+      row.family_id === familyId
+      && row.cycle_id === record.cycle_id
+      && row.type === record.type
+      && !row.deleted_at,
+    )
+    const latestRecordAfterEdit = getLatestLocalBreedingRecord(
+      cycleRecords.map(row => row._id === recordId ? nextRecord : row),
+      record.type,
+    )
+    const pendingMilestoneTasks = record.type === 'follicle_check' && latestRecordAfterEdit?._id === recordId
+      ? await localDb.query<any>('tasks', row =>
+        row.family_id === familyId
+        && row.cycle_id === record.cycle_id
+        && row.type === 'breeding_milestone'
+        && row.status === 'pending'
+        && !row.deleted_at,
+      )
+      : []
     const linkedExpenses = await localDb.query<any>('expenses', row =>
       row.family_id === familyId
       && !row.deleted_at
@@ -2661,6 +2770,11 @@ class LocalSyncRuntime {
 
     await localDb.transact(['breeding_records', 'tasks', 'expenses'], (tables) => {
       tables.breeding_records = (tables.breeding_records as any[]).map(row => row._id === recordId ? nextRecord : row)
+      tables.tasks = (tables.tasks as any[]).map(row => (
+        pendingMilestoneTasks.some(task => task._id === row._id)
+          ? { ...row, status: 'cancelled', updated_at: now, _local_pending: true }
+          : row
+      ))
       tables.tasks = (tables.tasks as any[]).filter(row => {
         if (row.type !== 'breeding_extra_arrangement' || row.source_record_id !== recordId) return true
         return !!nextExtraTask && row._id === nextExtraTask._id
@@ -2695,6 +2809,12 @@ class LocalSyncRuntime {
       message: '已更新',
       ...buildLocalAck(syncMeta, [
         { collection: 'breeding_records', id: recordId, version: Number(record.version || 0), updatedAt: now },
+        ...pendingMilestoneTasks.map(task => ({
+          collection: 'tasks' as BusinessCollectionName,
+          id: task._id,
+          version: Number(task.version || 0),
+          updatedAt: now,
+        })),
         ...nextExpenseRows.map(row => ({
           collection: 'expenses' as BusinessCollectionName,
           id: row._id,
@@ -2753,15 +2873,27 @@ class LocalSyncRuntime {
     if (['已生产', '失败', '放弃'].includes(cycle.status)) throw new Error('周期已结束，不可再次关闭')
     const newStatus = reasonInput === '放弃' ? '放弃' : '失败'
     const now = getNow()
-    const syncMeta = buildSyncMeta({ [cycleId]: Number(cycle.version || 0) }, {
+    const pendingTasks = await localDb.query<any>('tasks', row =>
+      row.family_id === familyId
+      && row.cycle_id === cycleId
+      && row.status === 'pending',
+    )
+    const syncMeta = buildSyncMeta({
+      [cycleId]: Number(cycle.version || 0),
+      ...pendingTasks.reduce<Record<string, number>>((acc, row) => {
+        acc[row._id] = Number(row.version || 0)
+        return acc
+      }, {}),
+    }, {
       clientMutationId: createClientMutationId(LOCAL_MUTATION_TYPES.CLOSE_BREEDING_CYCLE),
     })
+    const pendingTaskIds = new Set(pendingTasks.map(row => row._id))
     await localDb.transact(['breeding_cycles', 'tasks'], (tables) => {
       tables.breeding_cycles = (tables.breeding_cycles as any[]).map(row => row._id === cycleId
         ? { ...row, status: newStatus, updated_at: now, _local_pending: true }
         : row)
       tables.tasks = (tables.tasks as any[]).map(row =>
-        row.cycle_id === cycleId && row.status === 'pending'
+        pendingTaskIds.has(row._id)
           ? { ...row, status: 'cancelled', updated_at: now, _local_pending: true }
           : row)
     })
@@ -2774,7 +2906,10 @@ class LocalSyncRuntime {
     )
     return {
       message: '周期已关闭',
-      ...buildLocalAck(syncMeta, [{ collection: 'breeding_cycles', id: cycleId, version: Number(cycle.version || 0), updatedAt: now }]),
+      ...buildLocalAck(syncMeta, [
+        { collection: 'breeding_cycles', id: cycleId, version: Number(cycle.version || 0), updatedAt: now },
+        ...pendingTasks.map(row => ({ collection: 'tasks' as BusinessCollectionName, id: row._id, version: Number(row.version || 0), updatedAt: now })),
+      ]),
     }
   }
 
@@ -2911,15 +3046,28 @@ class LocalSyncRuntime {
     const litter = await findLocalRow<any>('litters', litterId)
     if (!litter || litter.family_id !== familyId) throw new Error('窝不存在')
     const now = getNow()
-    const syncMeta = buildSyncMeta({ [litterId]: Number(litter.version || 0) }, {
+    const pendingTasks = await localDb.query<any>('tasks', row =>
+      row.family_id === familyId
+      && row.litter_id === litterId
+      && row.type === 'breeding_milestone'
+      && row.status === 'pending',
+    )
+    const syncMeta = buildSyncMeta({
+      [litterId]: Number(litter.version || 0),
+      ...pendingTasks.reduce<Record<string, number>>((acc, row) => {
+        acc[row._id] = Number(row.version || 0)
+        return acc
+      }, {}),
+    }, {
       clientMutationId: createClientMutationId(LOCAL_MUTATION_TYPES.CONFIRM_WEANING),
     })
+    const pendingTaskIds = new Set(pendingTasks.map(row => row._id))
     await localDb.transact(['litters', 'tasks'], (tables) => {
       tables.litters = (tables.litters as any[]).map(row => row._id === litterId
         ? { ...row, weaned_at: now, updated_at: now, _local_pending: true }
         : row)
       tables.tasks = (tables.tasks as any[]).map(row =>
-        row.litter_id === litterId && row.type === 'breeding_milestone' && row.status === 'pending'
+        pendingTaskIds.has(row._id)
           ? { ...row, status: 'completed', completed_at: now, updated_at: now, _local_pending: true }
           : row)
     })
@@ -2932,7 +3080,10 @@ class LocalSyncRuntime {
     )
     return {
       message: '已确认断奶',
-      ...buildLocalAck(syncMeta, [{ collection: 'litters', id: litterId, version: Number(litter.version || 0), updatedAt: now }]),
+      ...buildLocalAck(syncMeta, [
+        { collection: 'litters', id: litterId, version: Number(litter.version || 0), updatedAt: now },
+        ...pendingTasks.map(row => ({ collection: 'tasks' as BusinessCollectionName, id: row._id, version: Number(row.version || 0), updatedAt: now })),
+      ]),
     }
   }
 
@@ -4552,35 +4703,37 @@ class LocalSyncRuntime {
     const syncMeta = buildSyncMeta(baseVersions, {
       clientMutationId: createClientMutationId(HOME_MUTATION_TYPES.BATCH_COMPLETE_MEDICATION_DAY),
     })
+    const medicationPatches = activeRows.map((row) => {
+      const today = startOfDay(now)
+      const startDate = startOfDay(row.actual_start_date || row.start_date || row.created_at || now)
+      const currentDay = Math.floor((today - startDate) / 86400000) + 1
+      if (currentDay < 1 || currentDay > Number(row.duration_days || 1)) return null
+
+      const frequency = Number(row.frequency || 1)
+      const nextDailyDoses = {
+        ...(row.daily_doses || {}),
+        [String(currentDay)]: frequency,
+      }
+      let allComplete = true
+      for (let day = 1; day <= Number(row.duration_days || 1); day += 1) {
+        if (Number(nextDailyDoses[String(day)] || 0) < frequency) {
+          allComplete = false
+          break
+        }
+      }
+
+      return { id: row._id, nextDailyDoses, allComplete }
+    }).filter(Boolean) as Array<{ id: string, nextDailyDoses: Record<string, number>, allComplete: boolean }>
 
     await localDb.transact(['medication_tasks'], (tables) => {
-      const byId = new Map(activeRows.map(row => [row._id, row]))
+      const patchById = new Map(medicationPatches.map(row => [row.id, row]))
       tables.medication_tasks = (tables.medication_tasks as any[]).map((row) => {
-        const target = byId.get(row._id)
-        if (!target) return row
-
-        const today = startOfDay(now)
-        const startDate = startOfDay(target.actual_start_date || target.start_date || target.created_at || now)
-        const currentDay = Math.floor((today - startDate) / 86400000) + 1
-        if (currentDay < 1 || currentDay > Number(target.duration_days || 1)) return row
-
-        const frequency = Number(target.frequency || 1)
-        const nextDailyDoses = {
-          ...(target.daily_doses || {}),
-          [String(currentDay)]: frequency,
-        }
-        let allComplete = true
-        for (let day = 1; day <= Number(target.duration_days || 1); day += 1) {
-          if (Number(nextDailyDoses[String(day)] || 0) < frequency) {
-            allComplete = false
-            break
-          }
-        }
-
+        const patch = patchById.get(row._id)
+        if (!patch) return row
         return {
           ...row,
-          daily_doses: nextDailyDoses,
-          status: allComplete ? '已完成' : row.status,
+          daily_doses: patch.nextDailyDoses,
+          status: patch.allComplete ? '已完成' : row.status,
           updated_at: now,
         }
       })
@@ -4595,8 +4748,8 @@ class LocalSyncRuntime {
     )
     return {
       data: {
-        completedMedicationTaskIds: activeRows.map(task => task._id),
-        fullyCompletedMedicationTaskIds: [],
+        completedMedicationTaskIds: medicationPatches.map(task => task.id),
+        fullyCompletedMedicationTaskIds: medicationPatches.filter(task => task.allComplete).map(task => task.id),
       },
       syncMeta,
     }
@@ -5082,17 +5235,29 @@ class LocalSyncRuntime {
   async endMedicationByDogLocally(familyId: string, dogId: string) {
     const rows = await localDb.query<any>('medication_tasks', row => row.dog_id === dogId && row.status === '进行中')
     if (!rows.length) return null
+    const medicationTaskIds = rows.map(row => row._id)
+    const pendingDailyTasks = await localDb.query<any>('tasks', row =>
+      row.family_id === familyId
+      && medicationTaskIds.includes(row.medication_task_id)
+      && row.status === 'pending',
+    )
 
     const now = getNow()
-    const baseVersions = rows.reduce<Record<string, number>>((acc, row) => {
-      acc[row._id] = Number(row.version || 0)
-      return acc
-    }, {})
+    const baseVersions = {
+      ...rows.reduce<Record<string, number>>((acc, row) => {
+        acc[row._id] = Number(row.version || 0)
+        return acc
+      }, {}),
+      ...pendingDailyTasks.reduce<Record<string, number>>((acc, row) => {
+        acc[row._id] = Number(row.version || 0)
+        return acc
+      }, {}),
+    }
     const syncMeta = buildSyncMeta(baseVersions, {
       clientMutationId: createClientMutationId(HOME_MUTATION_TYPES.END_MEDICATION_BY_DOG),
     })
 
-    await localDb.transact(['medication_tasks'], (tables) => {
+    await localDb.transact(['medication_tasks', 'tasks'], (tables) => {
       const targetIds = new Set(rows.map(row => row._id))
       tables.medication_tasks = (tables.medication_tasks as any[]).map((row) => targetIds.has(row._id)
         ? {
@@ -5101,20 +5266,27 @@ class LocalSyncRuntime {
             updated_at: now,
           }
         : row)
+      const pendingTaskIds = new Set(pendingDailyTasks.map(row => row._id))
+      tables.tasks = (tables.tasks as any[]).map((row) => pendingTaskIds.has(row._id)
+        ? { ...row, status: 'cancelled', updated_at: now, _local_pending: true }
+        : row)
     })
 
     await this.enqueueMutation(
       HOME_MUTATION_TYPES.END_MEDICATION_BY_DOG,
       familyId,
       { dogId, _sync: syncMeta },
-      ['medication_tasks'],
+      ['medication_tasks', 'tasks'],
       syncMeta,
     )
     return {
       data: {
         cancelledMedicationTaskIds: rows.map(row => row._id),
       },
-      syncMeta,
+      ...buildLocalAck(syncMeta, [
+        ...rows.map(row => ({ collection: 'medication_tasks' as BusinessCollectionName, id: row._id, version: Number(row.version || 0), updatedAt: now })),
+        ...pendingDailyTasks.map(row => ({ collection: 'tasks' as BusinessCollectionName, id: row._id, version: Number(row.version || 0), updatedAt: now })),
+      ]),
     }
   }
 }

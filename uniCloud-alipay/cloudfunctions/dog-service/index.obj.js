@@ -701,7 +701,7 @@ module.exports = {
       const litterIds = activeLitters.map(item => item._id).filter(Boolean)
       if (litterIds.length > 0) {
         const { data: puppies } = await db.collection('dogs')
-          .where({ origin_litter_id: dbCmd.in(litterIds), deleted_at: null })
+          .where({ origin_litter_id: dbCmd.in(litterIds), family_id: familyId, deleted_at: null })
           .get()
         for (const puppy of (puppies || [])) {
           if (!puppyMap[puppy.origin_litter_id]) puppyMap[puppy.origin_litter_id] = []
@@ -995,16 +995,16 @@ module.exports = {
 
     // 批量更新冗余字段（顺序写入，审计兜底）
     const updates = [
-      db.collection('tasks').where({ dog_id: dogId }).update({ dog_name: trimmedName }),
-      db.collection('breeding_cycles').where({ dam_id: dogId }).update({ dam_name: trimmedName }),
-      db.collection('breeding_cycles').where({ sire_id: dogId }).update({ sire_name: trimmedName }),
-      db.collection('litters').where({ dam_id: dogId }).update({ dam_name: trimmedName }),
-      db.collection('litters').where({ sire_id: dogId }).update({ sire_name: trimmedName }),
-      db.collection('health_records').where({ dog_id: dogId }).update({ dog_name: trimmedName }),
-      db.collection('medication_tasks').where({ dog_id: dogId }).update({ dog_name: trimmedName }),
-      db.collection('breeding_records').where({ dog_id: dogId }).update({ dog_name: trimmedName }),
-      db.collection('incomes').where({ dog_id: dogId }).update({ dog_name: trimmedName }),
-      db.collection('sale_records').where({ dog_id: dogId }).update({ dog_name: trimmedName }),
+      db.collection('tasks').where({ dog_id: dogId, family_id: this.familyId }).update({ dog_name: trimmedName, ...buildVersionUpdate(dbCmd, now) }),
+      db.collection('breeding_cycles').where({ dam_id: dogId, family_id: this.familyId }).update({ dam_name: trimmedName, ...buildVersionUpdate(dbCmd, now) }),
+      db.collection('breeding_cycles').where({ sire_id: dogId, family_id: this.familyId }).update({ sire_name: trimmedName, ...buildVersionUpdate(dbCmd, now) }),
+      db.collection('litters').where({ dam_id: dogId, family_id: this.familyId }).update({ dam_name: trimmedName, ...buildVersionUpdate(dbCmd, now) }),
+      db.collection('litters').where({ sire_id: dogId, family_id: this.familyId }).update({ sire_name: trimmedName, ...buildVersionUpdate(dbCmd, now) }),
+      db.collection('health_records').where({ dog_id: dogId, family_id: this.familyId }).update({ dog_name: trimmedName, ...buildVersionUpdate(dbCmd, now) }),
+      db.collection('medication_tasks').where({ dog_id: dogId, family_id: this.familyId }).update({ dog_name: trimmedName, ...buildVersionUpdate(dbCmd, now) }),
+      db.collection('breeding_records').where({ dog_id: dogId, family_id: this.familyId }).update({ dog_name: trimmedName, ...buildVersionUpdate(dbCmd, now) }),
+      db.collection('incomes').where({ dog_id: dogId, family_id: this.familyId }).update({ dog_name: trimmedName, ...buildVersionUpdate(dbCmd, now) }),
+      db.collection('sale_records').where({ dog_id: dogId, family_id: this.familyId }).update({ dog_name: trimmedName, ...buildVersionUpdate(dbCmd, now) }),
     ]
 
     // 不用 Promise.all —— 顺序执行更安全，任一失败有审计兜底
@@ -1024,7 +1024,7 @@ module.exports = {
         await db.collection('expenses').doc(expense._id).update({
           dog_names: dogNames.filter(Boolean),
           dam_name: expense.dam_name === previousName ? trimmedName : expense.dam_name,
-          updated_at: now,
+          ...buildVersionUpdate(dbCmd, now),
         })
       }
     } catch { /* 审计兜底 */ }
@@ -1038,15 +1038,50 @@ module.exports = {
       summary: `将犬只 ${dog.name || dogId} 改名为 ${trimmedName}`,
     })
 
-    const { data: updatedDogs } = await db.collection('dogs')
-      .where({ _id: dogId, family_id: this.familyId })
-      .limit(1)
-      .get()
+    const [
+      updatedDogs,
+      updatedTasks,
+      damCycles,
+      sireCycles,
+      damLitters,
+      sireLitters,
+      updatedHealthRecords,
+      updatedMedicationTasks,
+      updatedBreedingRecords,
+      updatedExpenses,
+      updatedIncomes,
+      updatedSales,
+    ] = await Promise.all([
+      db.collection('dogs').where({ _id: dogId, family_id: this.familyId }).limit(1).get(),
+      db.collection('tasks').where({ dog_id: dogId, family_id: this.familyId }).get(),
+      db.collection('breeding_cycles').where({ dam_id: dogId, family_id: this.familyId }).get(),
+      db.collection('breeding_cycles').where({ sire_id: dogId, family_id: this.familyId }).get(),
+      db.collection('litters').where({ dam_id: dogId, family_id: this.familyId }).get(),
+      db.collection('litters').where({ sire_id: dogId, family_id: this.familyId }).get(),
+      db.collection('health_records').where({ dog_id: dogId, family_id: this.familyId }).get(),
+      db.collection('medication_tasks').where({ dog_id: dogId, family_id: this.familyId }).get(),
+      db.collection('breeding_records').where({ dog_id: dogId, family_id: this.familyId }).get(),
+      db.collection('expenses').where({ family_id: this.familyId, linked_dog_ids: dogId, deleted_at: null }).get(),
+      db.collection('incomes').where({ dog_id: dogId, family_id: this.familyId }).get(),
+      db.collection('sale_records').where({ dog_id: dogId, family_id: this.familyId }).get(),
+    ])
+    const uniqueRows = (rows = []) => Array.from(new Map((rows || []).map(row => [row._id, row])).values())
     const response = {
       message: '名称已更新',
       ...buildSyncAck(syncMeta, {
         ack: 'accepted',
-        touchedEntities: updatedDogs?.[0] ? [buildTouchedEntity('dogs', updatedDogs[0])] : [],
+        touchedEntities: [
+          ...(updatedDogs?.data?.[0] ? [buildTouchedEntity('dogs', updatedDogs.data[0])] : []),
+          ...((updatedTasks?.data || []).map(row => buildTouchedEntity('tasks', row))),
+          ...uniqueRows([...(damCycles?.data || []), ...(sireCycles?.data || [])]).map(row => buildTouchedEntity('breeding_cycles', row)),
+          ...uniqueRows([...(damLitters?.data || []), ...(sireLitters?.data || [])]).map(row => buildTouchedEntity('litters', row)),
+          ...((updatedHealthRecords?.data || []).map(row => buildTouchedEntity('health_records', row))),
+          ...((updatedMedicationTasks?.data || []).map(row => buildTouchedEntity('medication_tasks', row))),
+          ...((updatedBreedingRecords?.data || []).map(row => buildTouchedEntity('breeding_records', row))),
+          ...((updatedExpenses?.data || []).map(row => buildTouchedEntity('expenses', row))),
+          ...((updatedIncomes?.data || []).map(row => buildTouchedEntity('incomes', row))),
+          ...((updatedSales?.data || []).map(row => buildTouchedEntity('sale_records', row))),
+        ],
         resyncScopes: ['dogs', 'tasks', 'breeding_cycles', 'litters', 'health_records', 'medication_tasks', 'breeding_records', 'expenses', 'incomes', 'sale_records'],
       }),
     }
@@ -1084,7 +1119,7 @@ module.exports = {
 
     // 检查进行中的繁育周期
     const { data: activeCycles } = await db.collection('breeding_cycles')
-      .where({ dam_id: dogId, status: dbCmd.in(['发情中', '怀孕中']) })
+      .where({ dam_id: dogId, family_id: this.familyId, status: dbCmd.in(['发情中', '怀孕中']) })
       .get()
     for (const cycle of activeCycles || []) {
       const conflict = getEntityConflict(syncMeta, 'breeding_cycles', cycle)
@@ -1113,6 +1148,7 @@ module.exports = {
           // 取消该周期的所有待办任务
           const { data: cycleTasks } = await db.collection('tasks').where({
             cycle_id: c._id,
+            family_id: this.familyId,
             status: 'pending',
           }).get()
           for (const task of cycleTasks || []) {
@@ -1121,28 +1157,34 @@ module.exports = {
           }
           await db.collection('tasks').where({
             cycle_id: c._id,
+            family_id: this.familyId,
             status: 'pending',
-          }).update({ status: 'cancelled', updated_at: Date.now() })
+          }).update({ status: 'cancelled', ...buildVersionUpdate(dbCmd, Date.now()) })
         }
       }
 
-      if (newDisposition === '已退休' && cycle.status === '发情中') {
-        const { data: cycleTasks } = await db.collection('tasks').where({
-          cycle_id: cycle._id,
-          status: 'pending',
-        }).get()
-        for (const task of cycleTasks || []) {
-          const conflict = getEntityConflict(syncMeta, 'tasks', task)
-          if (conflict) return conflict
+      if (newDisposition === '已退休') {
+        const estrusCycles = activeCycles.filter(c => c.status === '发情中')
+        for (const c of estrusCycles) {
+          const { data: cycleTasks } = await db.collection('tasks').where({
+            cycle_id: c._id,
+            family_id: this.familyId,
+            status: 'pending',
+          }).get()
+          for (const task of cycleTasks || []) {
+            const conflict = getEntityConflict(syncMeta, 'tasks', task)
+            if (conflict) return conflict
+          }
+          await db.collection('breeding_cycles').doc(c._id).update({
+            status: '放弃',
+            ...buildVersionUpdate(dbCmd, Date.now()),
+          })
+          await db.collection('tasks').where({
+            cycle_id: c._id,
+            family_id: this.familyId,
+            status: 'pending',
+          }).update({ status: 'cancelled', ...buildVersionUpdate(dbCmd, Date.now()) })
         }
-        await db.collection('breeding_cycles').doc(cycle._id).update({
-          status: '放弃',
-          ...buildVersionUpdate(dbCmd, Date.now()),
-        })
-        await db.collection('tasks').where({
-          cycle_id: cycle._id,
-          status: 'pending',
-        }).update({ status: 'cancelled', updated_at: Date.now() })
       }
     }
 
@@ -1150,6 +1192,7 @@ module.exports = {
     if (newDisposition === '已故') {
       const { data: dogTasks } = await db.collection('tasks').where({
         dog_id: dogId,
+        family_id: this.familyId,
         status: 'pending',
       }).get()
       for (const task of dogTasks || []) {
@@ -1158,8 +1201,9 @@ module.exports = {
       }
       await db.collection('tasks').where({
         dog_id: dogId,
+        family_id: this.familyId,
         status: 'pending',
-      }).update({ status: 'cancelled', updated_at: Date.now() })
+      }).update({ status: 'cancelled', ...buildVersionUpdate(dbCmd, Date.now()) })
     }
 
     // 更新犬只
@@ -1225,8 +1269,8 @@ module.exports = {
 
     const [updatedDogRes, updatedCyclesRes, updatedTasksRes] = await Promise.all([
       db.collection('dogs').where({ _id: dogId, family_id: this.familyId }).limit(1).get(),
-      db.collection('breeding_cycles').where({ dam_id: dogId, status: dbCmd.in(['发情中', '怀孕中', '失败', '放弃']) }).get(),
-      db.collection('tasks').where({ dog_id: dogId }).get(),
+      db.collection('breeding_cycles').where({ dam_id: dogId, family_id: this.familyId, status: dbCmd.in(['发情中', '怀孕中', '失败', '放弃']) }).get(),
+      db.collection('tasks').where({ dog_id: dogId, family_id: this.familyId }).get(),
     ])
     const response = {
       message: '去向已更新',
