@@ -26,3 +26,17 @@ export function isCloudConnectTimeout(error: any): boolean {
   return message.includes('ConnectTimeoutError') || message.includes('Connect Timeout Error')
 }
 
+export function isAuthTokenError(error: any): boolean {
+  const code = getCloudErrorCode(error)
+  const message = String(error?.message || error?.errMsg || error || '')
+  return code === 'TOKEN_INVALID'
+    || code === 'TOKEN_MISSING'
+    || code === 'uni-id-token-expired'
+    || code === 'uni-id-check-token-failed'
+    || code === 30203
+    || code === 30202
+    || message.includes('登录状态失效')
+    || message.includes('token已过期')
+    || message.includes('登录已过期')
+    || message.includes('请先登录')
+}

@@ -1512,7 +1512,24 @@ module.exports = {
     const { data: tasks } = await db.collection('tasks')
       .where({ _id: normalizedTaskId, family_id: familyId })
       .get()
-    if (!tasks || tasks.length === 0) throw new Error('任务不存在')
+    if (!tasks || tasks.length === 0) {
+      if (syncMeta?.clientMutationId) {
+        const response = {
+          message: '已处理',
+          data: {
+            completedTaskIds: [],
+            autoRecordedHealthRecordIds: [],
+          },
+          ...buildSyncAck(syncMeta, {
+            ack: 'duplicate',
+            resyncScopes: ['tasks'],
+          }),
+        }
+        await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+        return response
+      }
+      throw new Error('任务不存在')
+    }
     const conflict = getTaskConflict(syncMeta, tasks[0])
     if (conflict) return conflict
     // 幂等

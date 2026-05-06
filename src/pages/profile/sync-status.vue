@@ -45,7 +45,7 @@
       </button>
       <button class="sync-actions__secondary" :disabled="retryingIssues || !canRetryIssues" @click="retryIssues">
         <text class="material-icons-round sync-actions__icon">restart_alt</text>
-        <text>{{ retryingIssues ? '正在重试' : '重试失败/冲突' }}</text>
+        <text>{{ retryingIssues ? '正在重试' : (hasAuthExpiredIssue ? '重新登录' : '重试失败/冲突') }}</text>
       </button>
     </view>
 
@@ -77,6 +77,7 @@ import { onShow } from '@dcloudio/uni-app'
 import { useAuth } from '@/composables/useAuth'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import { localSyncRuntime } from '@/localdb/runtime'
+import { isAuthTokenError } from '@/utils/cloudError'
 
 interface SyncIssue {
   _id: string
@@ -85,7 +86,7 @@ interface SyncIssue {
   lastError: string
 }
 
-const { currentFamily } = useAuth()
+const { currentFamily, navigateToLogin } = useAuth()
 const loading = ref(false)
 const retryingIssues = ref(false)
 const syncingScope = ref(false)
@@ -119,6 +120,7 @@ const scopeTtlText = computed(() => scopeStatus.ttlMs > 0 ? `${Math.round(scopeS
 const scopeCollectionsText = computed(() => scopeStatus.collections.length ? scopeStatus.collections.join(' / ') : '暂无')
 const canRetryIssues = computed(() => syncStatus.failed > 0 || syncStatus.conflict > 0)
 const issueMetaText = computed(() => issues.value.length ? `${issues.value.length} 项` : '正常')
+const hasAuthExpiredIssue = computed(() => issues.value.some(issue => isAuthTokenError(issue.lastError)))
 
 function hasRemainingSyncWork() {
   return syncStatus.pending > 0
@@ -136,6 +138,21 @@ function getRemainingSyncToast() {
     return { title: '仍有待处理项', icon: 'none' as const }
   }
   return { title: '仍有数据待同步', icon: 'none' as const }
+}
+
+function isCurrentLoginExpired() {
+  try {
+    const info = uniCloud.getCurrentUserInfo()
+    const expiredAt = Number((info as any)?.tokenExpired ?? (info as any)?.token_expired ?? uni.getStorageSync('uni_id_token_expired') ?? 0)
+    return !info?.uid || (expiredAt > 0 && expiredAt <= Date.now())
+  } catch {
+    return false
+  }
+}
+
+function promptLoginExpired() {
+  uni.showToast({ title: '登录已过期，请重新登录', icon: 'none' })
+  navigateToLogin()
 }
 
 function formatTime(ts: number) {
@@ -197,6 +214,10 @@ async function loadStatus() {
 
 async function retryIssues() {
   if (retryingIssues.value) return
+  if (hasAuthExpiredIssue.value || isCurrentLoginExpired()) {
+    promptLoginExpired()
+    return
+  }
   const familyId = currentFamily.value?._id || ''
   if (!familyId) {
     uni.showToast({ title: '缺少家庭信息', icon: 'none' })
@@ -209,6 +230,10 @@ async function retryIssues() {
     uni.showToast(getRemainingSyncToast())
   } catch (error) {
     await loadStatus()
+    if (isAuthTokenError(error)) {
+      promptLoginExpired()
+      return
+    }
     uni.showToast({ title: error instanceof Error ? error.message : '重试失败', icon: 'none' })
   } finally {
     retryingIssues.value = false
@@ -224,6 +249,10 @@ async function forceSyncActiveScope() {
     uni.showToast({ title: '已同步当前 Scope', icon: 'success' })
   } catch (error) {
     await loadStatus()
+    if (isAuthTokenError(error)) {
+      promptLoginExpired()
+      return
+    }
     uni.showToast({ title: error instanceof Error ? error.message : '同步失败', icon: 'none' })
   } finally {
     syncingScope.value = false

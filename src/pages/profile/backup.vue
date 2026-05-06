@@ -48,7 +48,7 @@
       <view class="sync-warning-card__actions">
         <button class="sync-warning-card__retry" :disabled="retryingSync" @click="retrySyncNow">
           <text class="material-icons-round sync-warning-card__retry-icon">sync</text>
-          <text>{{ retryingSync ? '正在重试' : '立即重试同步' }}</text>
+          <text>{{ retryButtonText }}</text>
         </button>
         <button class="sync-warning-card__detail" @click="goToSyncStatus">
           <text>同步状态</text>
@@ -114,6 +114,7 @@ import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BModal from '@/components/layout/BModal.vue'
 import { localSyncRuntime } from '@/localdb/runtime'
+import { isAuthTokenError } from '@/utils/cloudError'
 
 const exporting = ref(false)
 const retryingSync = ref(false)
@@ -137,7 +138,7 @@ const syncStatus = ref({
   pendingUpload: 0,
 })
 
-const { currentFamily } = useAuth()
+const { currentFamily, navigateToLogin } = useAuth()
 const { run: getBackupInfo } = useCloudCall<{ data: { last_backup?: number; auto_backup?: boolean } }>('family-service', 'getBackupInfo')
 const { run: exportData } = useCloudCall<{ data: { url: string } }>('family-service', 'exportData', {
   showLoading: false,
@@ -178,6 +179,11 @@ const syncWarningCount = computed(() => {
     + current.conflict
     + current.pendingUpload
 })
+const hasAuthExpiredIssue = computed(() => syncIssues.value.some(issue => isAuthTokenError(issue.lastError)))
+const retryButtonText = computed(() => {
+  if (retryingSync.value) return '正在重试'
+  return hasAuthExpiredIssue.value ? '重新登录' : '立即重试同步'
+})
 
 function getRemainingSyncToast() {
   if (!hasUnsyncedData.value) {
@@ -187,6 +193,21 @@ function getRemainingSyncToast() {
     return { title: '仍有数据未同步成功', icon: 'none' as const }
   }
   return { title: '仍有数据待同步', icon: 'none' as const }
+}
+
+function isCurrentLoginExpired() {
+  try {
+    const info = uniCloud.getCurrentUserInfo()
+    const expiredAt = Number((info as any)?.tokenExpired ?? (info as any)?.token_expired ?? uni.getStorageSync('uni_id_token_expired') ?? 0)
+    return !info?.uid || (expiredAt > 0 && expiredAt <= Date.now())
+  } catch {
+    return false
+  }
+}
+
+function promptLoginExpired() {
+  uni.showToast({ title: '登录已过期，请重新登录', icon: 'none' })
+  navigateToLogin()
 }
 
 function formatDate(ts: number): string {
@@ -251,6 +272,10 @@ async function ensureBackupReady() {
 
 async function retrySyncNow() {
   if (retryingSync.value) return
+  if (hasAuthExpiredIssue.value || isCurrentLoginExpired()) {
+    promptLoginExpired()
+    return
+  }
   const familyId = currentFamily.value?._id || ''
   if (!familyId) {
     uni.showToast({ title: '缺少家庭信息，无法同步', icon: 'none' })
@@ -264,6 +289,10 @@ async function retrySyncNow() {
     uni.showToast(getRemainingSyncToast())
   } catch (error) {
     await loadInfo()
+    if (isAuthTokenError(error)) {
+      promptLoginExpired()
+      return
+    }
     uni.showToast({
       title: error instanceof Error ? error.message : '重试同步失败',
       icon: 'none',

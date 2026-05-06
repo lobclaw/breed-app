@@ -523,6 +523,43 @@ describe('task-service', () => {
       expect(tasks[0].version).toBe(4)
     })
 
+    it('completeTask 的 local-first 重放遇到任务已不存在应返回 duplicate ack', async () => {
+      const now = Date.now()
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      const result = await taskService.completeTask.call(ctx, {
+        taskId: 'task_missing_after_local_complete',
+        autoRecord: false,
+        _sync: {
+          clientMutationId: 'mutation_task_missing_after_local_complete',
+          deviceId: 'device_a',
+          baseVersions: { task_missing_after_local_complete: 1 },
+          clientTimestamp: now,
+        },
+      })
+
+      expect(result).toMatchObject({
+        ack: 'duplicate',
+        clientMutationId: 'mutation_task_missing_after_local_complete',
+        data: {
+          completedTaskIds: [],
+          autoRecordedHealthRecordIds: [],
+        },
+        resyncScopes: ['tasks'],
+      })
+
+      const replay = await taskService.completeTask.call(ctx, {
+        taskId: 'task_missing_after_local_complete',
+        autoRecord: false,
+        _sync: {
+          clientMutationId: 'mutation_task_missing_after_local_complete',
+          deviceId: 'device_a',
+          baseVersions: { task_missing_after_local_complete: 1 },
+          clientTimestamp: now,
+        },
+      })
+      expect(replay).toEqual(result)
+    })
+
     it('completeTask 自动建疫苗记录且带费用时应创建 expense', async () => {
       const now = Date.now()
       const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
