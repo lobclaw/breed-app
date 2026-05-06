@@ -255,6 +255,71 @@ describe('local domain repository', () => {
     })
   })
 
+  it('编辑犬只购入价后应同步更新本地财务账单，清空时应移除账单', async () => {
+    const now = new Date('2026-05-06T10:00:00+08:00').getTime()
+    const nextDate = new Date('2026-05-08T09:00:00+08:00').getTime()
+
+    await localDb.replaceTable('dogs', [{
+      _id: 'dog_purchase_edit_1',
+      family_id: 'fam_finance_2b',
+      name: '豆豆',
+      gender: '公',
+      role: '种狗',
+      disposition: '在养',
+      purchase_date: now,
+      purchase_price: 3200,
+      version: 0,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('expenses', [{
+      _id: 'expense_purchase_edit_1',
+      family_id: 'fam_finance_2b',
+      total_amount: 3200,
+      category: '购入',
+      date: now,
+      linked_dog_ids: ['dog_purchase_edit_1'],
+      dog_names: ['豆豆'],
+      source_type: 'auto',
+      source_record_id: 'dog_purchase_edit_1',
+      version: 0,
+      created_at: now,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('outbox_mutations', [])
+    await localDb.replaceTable('local_operation_logs', [])
+
+    await localSyncRuntime.updateDogLocally('fam_finance_2b', 'dog_purchase_edit_1', {
+      purchase_price: 4500,
+      purchase_date: nextDate,
+    })
+
+    let txList = await getLocalTransactionList('fam_finance_2b', {
+      year: 2026,
+      month: 5,
+      type: 'expense',
+    })
+
+    expect(txList).toHaveLength(1)
+    expect(txList[0]).toMatchObject({
+      _txType: 'expense',
+      _id: 'expense_purchase_edit_1',
+      total_amount: 4500,
+      date: nextDate,
+    })
+
+    await localSyncRuntime.updateDogLocally('fam_finance_2b', 'dog_purchase_edit_1', {
+      purchase_price: null,
+    })
+
+    txList = await getLocalTransactionList('fam_finance_2b', {
+      year: 2026,
+      month: 5,
+      type: 'expense',
+    })
+
+    expect(txList).toHaveLength(0)
+  })
+
   it('录入带费用的健康记录后应立即出现在本地财务列表', async () => {
     const now = new Date('2026-05-06T10:00:00+08:00').getTime()
 

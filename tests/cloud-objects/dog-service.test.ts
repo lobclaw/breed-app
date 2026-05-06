@@ -548,6 +548,78 @@ describe('dog-service', () => {
     })
   })
 
+  it('updateDog 修改购入价时应同步更新购入账单，清空时应移除账单', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+    const nextDate = new Date('2024-02-12T10:00:00+08:00').getTime()
+    seedCollection('expenses', [{
+      _id: 'expense_purchase_update_1',
+      family_id: familyId,
+      total_amount: 3200,
+      category: '购入',
+      date: mockNow,
+      linked_dog_ids: ['dog_1'],
+      dog_names: ['奶糖'],
+      source_type: 'auto',
+      source_record_id: 'dog_1',
+      deleted_at: null,
+      version: 0,
+      created_at: mockNow,
+      updated_at: mockNow,
+    }])
+
+    const updateResult = await dogService.updateDog.call(ctx, 'dog_1', {
+      purchase_price: 4500,
+      purchase_date: nextDate,
+      _sync: {
+        clientMutationId: 'dog-update-purchase-sync-1',
+        deviceId: 'device_1',
+        clientTimestamp: mockNow,
+        baseVersions: {
+          dog_1: 0,
+          expense_purchase_update_1: 0,
+        },
+      },
+    })
+
+    expect(updateResult.ack).toBe('accepted')
+    expect(updateResult.touchedEntities).toEqual(expect.arrayContaining([
+      expect.objectContaining({ collection: 'dogs', id: 'dog_1' }),
+      expect.objectContaining({ collection: 'expenses', id: 'expense_purchase_update_1' }),
+    ]))
+
+    const { data: updatedExpenses } = await db.collection('expenses')
+      .where({ _id: 'expense_purchase_update_1', family_id: familyId })
+      .get()
+    expect(updatedExpenses).toHaveLength(1)
+    expect(updatedExpenses[0]).toMatchObject({
+      total_amount: 4500,
+      date: nextDate,
+    })
+
+    const removeResult = await dogService.updateDog.call(ctx, 'dog_1', {
+      purchase_price: null,
+      _sync: {
+        clientMutationId: 'dog-update-purchase-sync-2',
+        deviceId: 'device_1',
+        clientTimestamp: mockNow,
+        baseVersions: {
+          dog_1: 1,
+          expense_purchase_update_1: 1,
+        },
+      },
+    })
+
+    expect(removeResult.ack).toBe('accepted')
+    expect(removeResult.touchedEntities).toEqual(expect.arrayContaining([
+      expect.objectContaining({ collection: 'expenses', id: 'expense_purchase_update_1', deletedAt: expect.any(Number) }),
+    ]))
+
+    const { data: removedExpenses } = await db.collection('expenses')
+      .where({ _id: 'expense_purchase_update_1', family_id: familyId })
+      .get()
+    expect(removedExpenses).toHaveLength(0)
+  })
+
   it('createDog 应支持 _sync 稳定 ID 与幂等重放', async () => {
     const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
     const payload = {

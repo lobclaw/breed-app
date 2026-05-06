@@ -162,6 +162,91 @@ async function createAdoptionIncome({ familyId, uid, dog, amount, date, notes, i
   }
 }
 
+async function findLinkedPurchaseExpenses(familyId, dogId) {
+  if (!dogId) return []
+  const { data: expenses } = await db.collection('expenses')
+    .where({
+      family_id: familyId,
+      category: '购入',
+      source_record_id: dogId,
+      deleted_at: null,
+    })
+    .get()
+
+  return expenses || []
+}
+
+function buildDogPurchaseExpensePayload({ familyId, uid, dog, amount, date, expenseId = null }) {
+  const now = Date.now()
+  const dogName = dog.name || ''
+  return buildVersionedCreate({
+    ...(expenseId ? { _id: expenseId } : {}),
+    family_id: familyId,
+    total_amount: amount,
+    category: '购入',
+    date: Number(date || now),
+    linked_cycle_id: null,
+    linked_litter_id: null,
+    linked_dog_ids: [dog._id],
+    source_type: 'auto',
+    source_record_id: dog._id,
+    images: [],
+    dam_name: dogName || null,
+    dog_names: [dogName],
+    litter_number: null,
+    notes: `购入${dog.role === '外部种公' ? '外部种公' : '种犬'}：${dogName}`,
+    created_by: uid,
+    deleted_at: null,
+  }, now)
+}
+
+async function syncDogPurchaseExpense({ familyId, uid, dog, amount, date, linkedExpenses, clientExpenseId = null }) {
+  if (!(amount > 0)) {
+    const removed = []
+    for (const expense of linkedExpenses || []) {
+      await db.collection('expenses').doc(expense._id).remove()
+      removed.push({
+        collection: 'expenses',
+        id: expense._id,
+        version: getServerVersion(expense),
+        updatedAt: Date.now(),
+        deletedAt: Date.now(),
+      })
+    }
+    return removed
+  }
+
+  if ((linkedExpenses || []).length > 0) {
+    const updateNow = Date.now()
+    for (const expense of linkedExpenses) {
+      await db.collection('expenses').doc(expense._id).update({
+        total_amount: amount,
+        date: Number(date || updateNow),
+        linked_dog_ids: [dog._id],
+        dog_names: [dog.name || ''],
+        dam_name: dog.name || null,
+        notes: `购入${dog.role === '外部种公' ? '外部种公' : '种犬'}：${dog.name || ''}`,
+        ...buildVersionUpdate(dbCmd, updateNow),
+      })
+    }
+    const { data: updatedExpenses } = await db.collection('expenses')
+      .where({ _id: dbCmd.in(linkedExpenses.map(expense => expense._id)), family_id: familyId })
+      .get()
+    return (updatedExpenses || []).map(expense => buildTouchedEntity('expenses', expense))
+  }
+
+  const expenseData = buildDogPurchaseExpensePayload({
+    familyId,
+    uid,
+    dog,
+    amount,
+    date,
+    expenseId: clientExpenseId,
+  })
+  const { id } = await db.collection('expenses').add(expenseData)
+  return [buildTouchedEntity('expenses', { ...expenseData, _id: clientExpenseId || id })]
+}
+
 function sortListStatuses(statuses = []) {
   return [...statuses].sort((a, b) => {
     const aPriority = LIST_STATUS_PRIORITY[a.type] ?? 99
@@ -727,22 +812,17 @@ module.exports = {
     const dogId = clientDogId || id
 
     // 如有购入价格，自动创建费用记录
-    if (data.purchase_price && data.purchase_price > 0) {
-      await db.collection('expenses').add(buildVersionedCreate({
-        ...(clientExpenseId ? { _id: clientExpenseId } : {}),
-        total_amount: data.purchase_price,
-        category: '购入',
-        date: data.purchase_date || now,
-        notes: `购入${data.role === '外部种公' ? '外部种公' : '种犬'}：${data.name || ''}`,
-        linked_dog_ids: [dogId],
-        dog_names: [data.name || ''],
-        source_type: 'auto',
-        source_record_id: dogId,
-        family_id: this.familyId,
-        created_by: this.uid,
-        deleted_at: null,
-      }, now))
-    }
+    const createdExpenseTouchedEntities = data.purchase_price && data.purchase_price > 0
+      ? await syncDogPurchaseExpense({
+          familyId: this.familyId,
+          uid: this.uid,
+          dog: { ...dogData, _id: dogId },
+          amount: Number(data.purchase_price),
+          date: data.purchase_date || now,
+          linkedExpenses: [],
+          clientExpenseId,
+        })
+      : []
 
     await logDogOperation({
       familyId: this.familyId,
@@ -762,7 +842,10 @@ module.exports = {
       data: { _id: dogId },
       ...buildSyncAck(syncMeta, {
         ack: 'accepted',
-        touchedEntities: [buildTouchedEntity('dogs', savedDog)],
+        touchedEntities: [
+          buildTouchedEntity('dogs', savedDog),
+          ...createdExpenseTouchedEntities,
+        ],
         resyncScopes: ['dogs', 'expenses'],
       }),
     }
@@ -779,6 +862,7 @@ module.exports = {
     const dogId = typeof input === 'object' ? (input.dogId || input.dog_id || input.id) : input
     data = typeof input === 'object' ? (input.data || input.patch || input) : data
     if (!dogId) throw new Error('缺少犬只 ID')
+    const now = Date.now()
     const syncMeta = getSyncMeta(data)
     const appliedMutation = await findAppliedMutation(db, this.familyId, syncMeta?.clientMutationId)
     if (appliedMutation?.response) return appliedMutation.response
@@ -790,6 +874,7 @@ module.exports = {
     if (!dogs || dogs.length === 0) throw new Error('犬只不存在')
 
     const currentDog = dogs[0]
+    const linkedPurchaseExpenses = await findLinkedPurchaseExpenses(this.familyId, dogId)
     const baseVersion = getBaseVersion(syncMeta, dogId)
     if (baseVersion !== null && baseVersion < getServerVersion(currentDog)) {
       return buildConflictAck(syncMeta, {
@@ -798,6 +883,10 @@ module.exports = {
         baseVersion,
         serverVersion: getServerVersion(currentDog),
       })
+    }
+    for (const expense of linkedPurchaseExpenses) {
+      const expenseConflict = getEntityConflict(syncMeta, 'expenses', expense)
+      if (expenseConflict) return expenseConflict
     }
 
     if (Object.prototype.hasOwnProperty.call(data, 'role') && data.role !== currentDog.role) {
@@ -811,6 +900,29 @@ module.exports = {
     await db.collection('dogs')
       .where({ _id: dogId, family_id: this.familyId })
       .update(updateFields)
+
+    const nextPurchasePrice = Object.prototype.hasOwnProperty.call(data, 'purchase_price')
+      ? Number(data.purchase_price || 0)
+      : Number(currentDog.purchase_price || 0)
+    const nextPurchaseDate = Object.prototype.hasOwnProperty.call(data, 'purchase_date')
+      ? data.purchase_date
+      : currentDog.purchase_date
+    const clientExpenseId = typeof syncMeta?.clientEntityIds?.expenses === 'string'
+      ? syncMeta.clientEntityIds.expenses
+      : null
+    const expenseTouchedEntities = await syncDogPurchaseExpense({
+      familyId: this.familyId,
+      uid: this.uid,
+      dog: {
+        ...currentDog,
+        ...updateFields,
+        _id: dogId,
+      },
+      amount: nextPurchasePrice,
+      date: nextPurchaseDate || now,
+      linkedExpenses: linkedPurchaseExpenses,
+      clientExpenseId,
+    })
 
     await logDogOperation({
       familyId: this.familyId,
@@ -829,8 +941,11 @@ module.exports = {
       message: '已更新',
       ...buildSyncAck(syncMeta, {
         ack: 'accepted',
-        touchedEntities: updatedDogs?.[0] ? [buildTouchedEntity('dogs', updatedDogs[0])] : [],
-        resyncScopes: ['dogs'],
+        touchedEntities: [
+          ...(updatedDogs?.[0] ? [buildTouchedEntity('dogs', updatedDogs[0])] : []),
+          ...expenseTouchedEntities,
+        ],
+        resyncScopes: ['dogs', 'expenses'],
       }),
     }
     if (syncMeta?.clientMutationId) {

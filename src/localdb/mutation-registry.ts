@@ -117,7 +117,7 @@ export const LOCAL_MUTATION_REGISTRY: Record<LocalMutationType, LocalMutationDef
   [LOCAL_MUTATION_TYPES.REMOVE_MEDICATION_PROTOCOL]: { service: 'health-service', method: 'removeMedicationProtocol', defaultScopes: ['medication_protocols'] },
   [LOCAL_MUTATION_TYPES.BATCH_CREATE_TASKS]: { service: 'task-service', method: 'batchCreateManualTasks', defaultScopes: ['tasks'] },
   [LOCAL_MUTATION_TYPES.CREATE_DOG]: { service: 'dog-service', method: 'createDog', defaultScopes: ['dogs', 'expenses'] },
-  [LOCAL_MUTATION_TYPES.UPDATE_DOG]: { service: 'dog-service', method: 'updateDog', defaultScopes: ['dogs'] },
+  [LOCAL_MUTATION_TYPES.UPDATE_DOG]: { service: 'dog-service', method: 'updateDog', defaultScopes: ['dogs', 'expenses'] },
   [LOCAL_MUTATION_TYPES.UPDATE_DOG_NAME]: { service: 'dog-service', method: 'updateDogName', defaultScopes: ['dogs', 'tasks', 'breeding_cycles', 'litters'] },
   [LOCAL_MUTATION_TYPES.CHANGE_DOG_DISPOSITION]: { service: 'dog-service', method: 'changeDisposition', defaultScopes: ['dogs', 'breeding_cycles', 'tasks', 'incomes'] },
   [LOCAL_MUTATION_TYPES.UPGRADE_PUPPY_TO_BREEDER]: { service: 'dog-service', method: 'upgradePuppyToBreeder', defaultScopes: ['dogs'] },

@@ -558,6 +558,46 @@ function buildLocalDogPurchaseExpense(
   }
 }
 
+function buildLocalDogPurchaseExpenseSnapshot(
+  familyId: string,
+  dog: Record<string, any>,
+  amount: number,
+  purchaseDate: number | null,
+  expenseId: string,
+  now: number,
+  options: {
+    version?: number
+    createdAt?: number
+  } = {},
+) {
+  const dogName = normalizeDogName(dog)
+  return {
+    _id: expenseId,
+    family_id: familyId,
+    total_amount: amount,
+    category: '购入',
+    date: Number(purchaseDate || now),
+    linked_cycle_id: null,
+    linked_litter_id: null,
+    linked_dog_ids: [dog._id],
+    source_type: 'auto',
+    source_record_id: dog._id,
+    images: [],
+    dam_name: dogName || null,
+    dog_names: [dogName],
+    litter_number: null,
+    notes: `购入${dog.role === '外部种公' ? '外部种公' : '种犬'}：${dogName}`,
+    created_by: null,
+    deleted_at: null,
+    version: Number(options.version || 0),
+    created_at: Number(options.createdAt || now),
+    updated_at: now,
+    _local_pending: true,
+    _pending_upload: false,
+    pending_upload: false,
+  }
+}
+
 function buildLocalHealthExpense(
   familyId: string,
   dog: Record<string, any>,
@@ -1272,9 +1312,31 @@ class LocalSyncRuntime {
     const familyId = getFamilyId(familyIdInput)
     const dog = await findLocalRow<any>('dogs', dogId)
     if (!dog) throw new Error('犬只未同步到本地，请联网刷新一次')
+    const linkedPurchaseExpenses = await localDb.query<any>('expenses', row =>
+      row.family_id === familyId
+      && !row.deleted_at
+      && row.category === '购入'
+      && row.source_record_id === dogId,
+    )
     const now = getNow()
-    const syncMeta = buildSyncMeta({ [dogId]: Number(dog.version || 0) }, {
+    const nextPurchasePrice = Object.prototype.hasOwnProperty.call(data, 'purchase_price')
+      ? Number(data.purchase_price || 0)
+      : Number(dog.purchase_price || 0)
+    const nextPurchaseDate = Object.prototype.hasOwnProperty.call(data, 'purchase_date')
+      ? data.purchase_date
+      : dog.purchase_date
+    const createdExpenseId = nextPurchasePrice > 0 && linkedPurchaseExpenses.length === 0
+      ? createStableEntityId('expense')
+      : ''
+    const syncMeta = buildSyncMeta({
+      [dogId]: Number(dog.version || 0),
+      ...linkedPurchaseExpenses.reduce<Record<string, number>>((acc, row) => {
+        acc[row._id] = Number(row.version || 0)
+        return acc
+      }, {}),
+    }, {
       clientMutationId: createClientMutationId(HOME_MUTATION_TYPES.UPDATE_DOG),
+      clientEntityIds: createdExpenseId ? { expenses: createdExpenseId } : undefined,
     })
     const nextDog = {
       ...dog,
@@ -1287,18 +1349,67 @@ class LocalSyncRuntime {
       updated_at: now,
       _local_pending: true,
     }
+    const nextExpenseRows = nextPurchasePrice > 0
+      ? (linkedPurchaseExpenses.length > 0
+          ? linkedPurchaseExpenses.map(row => buildLocalDogPurchaseExpenseSnapshot(
+              familyId,
+              nextDog,
+              nextPurchasePrice,
+              nextPurchaseDate,
+              row._id,
+              now,
+              {
+                version: Number(row.version || 0),
+                createdAt: Number(row.created_at || now),
+              },
+            ))
+          : [buildLocalDogPurchaseExpenseSnapshot(
+              familyId,
+              nextDog,
+              nextPurchasePrice,
+              nextPurchaseDate,
+              createdExpenseId,
+              now,
+            )])
+      : []
 
-    await upsertLocalRows('dogs', [nextDog])
+    await localDb.transact(['dogs', 'expenses'], (tables) => {
+      tables.dogs = (tables.dogs as any[]).map(row => row._id === dogId ? nextDog : row)
+      if (linkedPurchaseExpenses.length === 0 && nextExpenseRows.length === 0) return
+      const linkedExpenseIds = new Set(linkedPurchaseExpenses.map(row => row._id))
+      tables.expenses = (tables.expenses as any[])
+        .filter(row => !linkedExpenseIds.has(row._id))
+      if (nextExpenseRows.length > 0) {
+        tables.expenses = [...(tables.expenses as any[]), ...nextExpenseRows]
+      }
+    })
     await this.enqueueMutation(
       HOME_MUTATION_TYPES.UPDATE_DOG,
       familyId,
       { id: dogId, patch: data, _sync: syncMeta },
-      ['dogs'],
+      ['dogs', 'expenses'],
       syncMeta,
     )
     return {
       message: '已更新',
-      ...buildLocalAck(syncMeta, [{ collection: 'dogs', id: dogId, version: Number(dog.version || 0), updatedAt: now }]),
+      ...buildLocalAck(syncMeta, [
+        { collection: 'dogs', id: dogId, version: Number(dog.version || 0), updatedAt: now },
+        ...nextExpenseRows.map(row => ({
+          collection: 'expenses' as BusinessCollectionName,
+          id: row._id,
+          version: Number(linkedPurchaseExpenses.find(expense => expense._id === row._id)?.version || 0),
+          updatedAt: now,
+        })),
+        ...linkedPurchaseExpenses
+          .filter(row => !nextExpenseRows.some(expense => expense._id === row._id))
+          .map(row => ({
+            collection: 'expenses' as BusinessCollectionName,
+            id: row._id,
+            version: Number(row.version || 0),
+            updatedAt: now,
+            deletedAt: now,
+          })),
+      ]),
     }
   }
 
