@@ -64,7 +64,7 @@
       </view>
 
       <!-- 价格详情 -->
-      <view class="detail-section">
+      <view v-if="hasPriceDetails" class="detail-section">
         <view class="detail-card">
           <view class="detail-row" v-if="sale.floor_price">
             <text class="detail-label">底价</text>
@@ -155,23 +155,23 @@
       </view>
 
       <!-- 操作按钮 -->
-      <view class="action-area" v-if="sale.status === '待售'">
+      <view class="sale-action-area" v-if="sale.status === '待售'">
         <button class="action-btn action-btn--ghost" @click="showDepositModal = true">收定金</button>
         <button class="action-btn action-btn--filled-green" @click="showCompleteModal = true">直接成交</button>
       </view>
 
-      <view class="action-area" v-if="sale.status === '已预定'">
+      <view class="sale-action-area" v-if="sale.status === '已预定'">
         <button class="action-btn action-btn--filled-green" @click="showCompleteModal = true">完成交易</button>
         <button class="action-btn action-btn--ghost-red" @click="openCancelSheet">取消预定</button>
       </view>
 
-      <view class="action-area" v-if="sale.status === '已成交'">
+      <view class="sale-action-area" v-if="sale.status === '已成交' && (sale.settlement_status !== '已结算' || canRefund)">
         <button
           v-if="sale.settlement_status !== '已结算'"
           class="action-btn action-btn--filled-green"
           @click="openSettleModal"
         >补录结算</button>
-        <button class="action-btn action-btn--ghost-red" @click="openRefundSheet">退款</button>
+        <button v-if="canRefund" class="action-btn action-btn--ghost-red" @click="openRefundSheet">退款</button>
       </view>
     </template>
 
@@ -531,6 +531,7 @@ const cancelSheetForm = reactive({
 })
 
 function openRefundSheet() {
+  if (!canRefund.value) return
   refundSheetForm.type = 'full'
   refundSheetForm.refund_amount = String(sale.value?.received_amount || '')
   refundSheetForm.refund_reason = ''
@@ -583,6 +584,22 @@ const settleForm = reactive({
 
 const deliveryDateText = computed(() => formatDateInputValue(completeForm.delivery_date))
 const refundDateText = computed(() => formatDateInputValue(refundSheetForm.refund_date))
+
+const hasPriceDetails = computed(() => {
+  const detail = sale.value
+  if (!detail) return false
+  return Boolean(
+    detail.floor_price
+    || detail.deposit_amount
+    || detail.agreed_price
+    || detail.received_amount != null
+    || detail.refund_amount
+    || detail.refund_date
+    || (detail.deposit_kept_amount != null && detail.status === '定金取消')
+  )
+})
+
+const canRefund = computed(() => Number(sale.value?.received_amount || 0) > 0)
 
 function onDeliveryDateConfirm(value: number | string) {
   if (typeof value !== 'number') return
@@ -754,6 +771,11 @@ async function doSettle() {
 async function doRefundSheet() {
   const amount = parseFloat(refundSheetForm.refund_amount)
   if (!amount || amount <= 0) return
+  const receivedAmount = Number(sale.value?.received_amount || 0)
+  if (!receivedAmount || amount > receivedAmount) {
+    uni.showToast({ title: '退款金额不能超过到手价', icon: 'none' })
+    return
+  }
   const familyId = currentFamily.value?._id || ''
   localSyncRuntime.setCurrentFamilyId(familyId)
   const res = await localSyncRuntime.cancelSaleLocally(familyId, saleId.value, {
@@ -769,8 +791,13 @@ async function doRefundSheet() {
 
 /* S-7 定金取消提交 */
 async function doCancelSheet() {
+  const depositAmount = Number(sale.value?.deposit_amount || 0)
   const refundAmt = cancelSheetForm.refund_amount ? parseFloat(cancelSheetForm.refund_amount) : 0
-  const kept = (sale.value?.deposit_amount || 0) - refundAmt
+  if (!Number.isFinite(refundAmt) || refundAmt < 0 || refundAmt > depositAmount) {
+    uni.showToast({ title: '退还定金不能超过定金总额', icon: 'none' })
+    return
+  }
+  const kept = depositAmount - refundAmt
   const familyId = currentFamily.value?._id || ''
   localSyncRuntime.setCurrentFamilyId(familyId)
   const res = await localSyncRuntime.cancelSaleLocally(familyId, saleId.value, {
@@ -1037,39 +1064,53 @@ onShow(() => {
 }
 
 /* ==================== ACTION BUTTONS ==================== */
-.action-area {
-  padding: 12px 16px 24px;
+.sale-action-area {
+  padding: 2px 16px 24px;
   display: flex;
-  gap: 10px;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 12px;
 }
 
 .action-btn {
   flex: 1;
+  min-width: 0;
+  width: auto;
   height: 48px;
-  border-radius: var(--radius-btn);
+  margin: 0;
+  border-radius: 16px;
   font-family: var(--font-display);
   font-size: 15px;
   font-weight: 700;
   border: none;
+  box-sizing: border-box;
   transition: all 0.12s ease;
-  line-height: 48px;
   padding: 0;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   &:active { transform: scale(0.97); opacity: 0.9; }
+
+  &::after {
+    border: none;
+  }
 
   &--filled-green {
     background: var(--green);
     color: #fff;
+    box-shadow: 0 8px 18px rgba(61, 174, 111, 0.2);
   }
 
   &--ghost {
-    background: transparent;
-    border: 1.5px solid var(--text-4);
+    background: var(--card);
+    border: 1.5px solid rgba(184, 160, 140, 0.38);
     color: var(--text-2);
   }
 
   &--ghost-red {
-    background: transparent;
-    border: 1.5px solid var(--red);
+    background: var(--card);
+    border: 1.5px solid rgba(224, 82, 82, 0.28);
     color: var(--red);
   }
 }

@@ -962,7 +962,7 @@ export async function listLocalSales(
   } = {},
 ): Promise<SaleRecord[]> {
   if (!familyId) return []
-  return localDb.query<SaleRecord>('sale_records', row => {
+  const sales = await localDb.query<SaleRecord>('sale_records', row => {
     if (row.family_id !== familyId) return false
     if (row.deleted_at) return false
     if (filters.status && row.status !== filters.status) return false
@@ -971,6 +971,41 @@ export async function listLocalSales(
   }, {
     sort: sortByRecent,
   })
+  const dogIds = [...new Set(sales.map(row => row.dog_id).filter(Boolean))]
+  const agentIds = [...new Set(sales.map(row => row.seller_agent_id).filter(Boolean))]
+  const [dogs, agents] = await Promise.all([
+    dogIds.length
+      ? localDb.query<any>('dogs', row => row.family_id === familyId && dogIds.includes(row._id))
+      : Promise.resolve([]),
+    agentIds.length
+      ? localDb.query<any>('agents', row => row.family_id === familyId && agentIds.includes(row._id) && !row.deleted_at)
+      : Promise.resolve([]),
+  ])
+  const dogById = new Map(dogs.map(row => [row._id, row]))
+  const agentById = new Map(agents.map(row => [row._id, row]))
+  return sales.map(sale => normalizeSaleRecordProjection(
+    sale as SaleRecord & Record<string, any>,
+    dogById.get(sale.dog_id),
+    sale.seller_agent_id ? agentById.get(sale.seller_agent_id) : null,
+  ))
+}
+
+export async function listLocalSaleCandidateDogs(familyId: string): Promise<DogWithStatus[]> {
+  if (!familyId) return []
+  const [dogs, activeSales] = await Promise.all([
+    listLocalDogsWithStatus(familyId),
+    localDb.query<any>('sale_records', row =>
+      row.family_id === familyId
+      && !row.deleted_at
+      && ['待售', '已预定'].includes(String(row.status || '')),
+    ),
+  ])
+  const activeSaleDogIds = new Set(activeSales.map(row => row.dog_id).filter(Boolean))
+  return dogs.filter(dog =>
+    dog.role === '幼崽'
+    && ['在养', '自留'].includes(String(dog.disposition || ''))
+    && !activeSaleDogIds.has(dog._id),
+  )
 }
 
 export async function listLocalDogHealthHistory(familyId: string, dogId: string, type?: string) {
@@ -1316,12 +1351,12 @@ function formatDogAgeText(birthTs?: number | null) {
   return months > 0 ? `${years}岁${months}月` : `${years}岁`
 }
 
-function normalizeSaleMode(mode?: string | null) {
+function normalizeSaleMode(mode?: string | null): SaleRecord['sale_mode'] {
   const normalized = String(mode || '').trim()
-  return normalized ? normalized : '自售'
+  return normalized === '代理' || normalized === '代卖' || normalized === '自售' ? normalized : '自售'
 }
 
-function deriveSaleSettlementStatus(sale: Partial<SaleRecord> & Record<string, any>) {
+function deriveSaleSettlementStatus(sale: Partial<SaleRecord> & Record<string, any>): SaleRecord['settlement_status'] {
   const normalized = String(sale.settlement_status || '').trim()
   if (normalized === '未结算' || normalized === '部分结算' || normalized === '已结算') return normalized
   if (sale.status === '已成交') {

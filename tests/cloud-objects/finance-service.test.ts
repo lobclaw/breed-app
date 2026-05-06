@@ -1127,6 +1127,73 @@ describe('finance-service', () => {
     expect(dogs[0].disposition).toBe('待售')
   })
 
+  it('cancelSale 应校验退款金额不超过已结算到手价', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+    seedCollection('dogs', [{
+      _id: 'puppy_refund_1',
+      name: '奶油',
+      role: '幼崽',
+      disposition: '已售',
+      family_id: familyId,
+      deleted_at: null,
+    }])
+    seedCollection('sale_records', [{
+      _id: 'sale_refund_unsettled',
+      family_id: familyId,
+      dog_id: 'puppy_refund_1',
+      dog_name: '奶油',
+      status: '已成交',
+      received_amount: null,
+      deleted_at: null,
+      version: 0,
+    }, {
+      _id: 'sale_refund_settled',
+      family_id: familyId,
+      dog_id: 'puppy_refund_1',
+      dog_name: '奶油',
+      status: '已成交',
+      received_amount: 1000,
+      deleted_at: null,
+      version: 0,
+    }])
+
+    await expect(financeService.cancelSale.call(ctx, {
+      saleId: 'sale_refund_unsettled',
+      refund_amount: 100,
+    })).rejects.toThrow('未结算成交请先补录结算')
+    await expect(financeService.cancelSale.call(ctx, {
+      saleId: 'sale_refund_settled',
+      refund_amount: 1200,
+    })).rejects.toThrow('退款金额不能超过到手价')
+  })
+
+  it('cancelSale 应校验保留定金不能超过原定金', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+    seedCollection('dogs', [{
+      _id: 'puppy_deposit_cancel_1',
+      name: '奶油',
+      role: '幼崽',
+      disposition: '已预定',
+      family_id: familyId,
+      deleted_at: null,
+    }])
+    seedCollection('sale_records', [{
+      _id: 'sale_deposit_cancel_1',
+      family_id: familyId,
+      dog_id: 'puppy_deposit_cancel_1',
+      dog_name: '奶油',
+      status: '已预定',
+      deposit_amount: 500,
+      deleted_at: null,
+      version: 0,
+    }])
+
+    await expect(financeService.cancelSale.call(ctx, {
+      saleId: 'sale_deposit_cancel_1',
+      deposit_kept_amount: 600,
+    })).rejects.toThrow('保留定金不能超过定金总额')
+  })
+
   it('addAgent 与 removeAgent 应支持 _sync 幂等重放', async () => {
     const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
 

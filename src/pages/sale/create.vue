@@ -7,9 +7,9 @@
         v-model="selectedDog"
         title="选择犬只"
         :readonly="dogLocked"
-        :candidate-dogs="lockedDogCandidates"
+        :candidate-dogs="dogPickerCandidates"
         :empty-title="dogLocked ? '犬只信息缺失' : '暂无犬只'"
-        :empty-description="dogLocked ? '请返回来源页重新进入' : '没有符合条件的犬只'"
+        :empty-description="dogLocked ? '请返回来源页重新进入' : '没有可开始销售的幼崽'"
       />
     </view>
 
@@ -74,10 +74,11 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useAuth } from '@/composables/useAuth'
 import { usePageSync } from '@/composables/usePageSync'
 import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
+import { listLocalSaleCandidateDogs } from '@/localdb/domain-repository'
 import { localSyncRuntime } from '@/localdb/runtime'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
@@ -95,6 +96,7 @@ type SelectedDog = {
 const saleModeOptions: SaleMode[] = ['自售', '代理', '代卖']
 
 const selectedDog = ref<SelectedDog | null>(null)
+const saleCandidateDogs = ref<SelectedDog[]>([])
 const dogLocked = ref(false)
 const submitState = ref<'idle' | 'submitting' | 'success'>('idle')
 const floorPriceInput = ref('')
@@ -111,6 +113,8 @@ const lockedDogCandidates = computed(() => {
   if (!dogLocked.value || !selectedDog.value) return undefined
   return [selectedDog.value]
 })
+
+const dogPickerCandidates = computed(() => lockedDogCandidates.value ?? saleCandidateDogs.value)
 
 const submitButtonText = computed(() => {
   if (submitState.value === 'submitting') return '提交中...'
@@ -146,16 +150,27 @@ async function submit() {
       await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)
       uni.navigateBack()
     }
-  } catch {
+  } catch (error: any) {
+    uni.showToast({ title: error?.message || '开始销售失败', icon: 'none' })
     submitState.value = 'idle'
   } finally {
     if (submitState.value !== 'success') submitState.value = 'idle'
   }
 }
 
+async function loadSaleCandidateDogs() {
+  if (dogLocked.value) return
+  const familyId = currentFamily.value?._id || ''
+  localSyncRuntime.setCurrentFamilyId(familyId)
+  saleCandidateDogs.value = await listLocalSaleCandidateDogs(familyId)
+}
+
 onLoad((options?: Record<string, any>) => {
   const dogId = options?.dogId || ''
-  if (!dogId) return
+  if (!dogId) {
+    void loadSaleCandidateDogs()
+    return
+  }
   selectedDog.value = {
     _id: dogId,
     name: decodeQueryText(options?.dogName),
@@ -163,6 +178,10 @@ onLoad((options?: Record<string, any>) => {
     gender: '',
   }
   dogLocked.value = true
+})
+
+onShow(() => {
+  void loadSaleCandidateDogs()
 })
 </script>
 

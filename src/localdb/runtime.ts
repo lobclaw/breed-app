@@ -3815,9 +3815,16 @@ class LocalSyncRuntime {
 
     await runLocalMutation(['sale_records', 'dogs', 'incomes'], (tables) => {
       if (sale.status === '已成交') {
-        const refundAmount = Number(data.refund_amount || sale.received_amount || 0)
+        const receivedAmount = Number(sale.received_amount)
+        if (!Number.isFinite(receivedAmount) || receivedAmount <= 0) throw new Error('未结算成交请先补录结算')
+        const refundAmount = data.refund_amount !== '' && data.refund_amount != null
+          ? Number(data.refund_amount)
+          : receivedAmount
+        if (!Number.isFinite(refundAmount) || refundAmount <= 0 || refundAmount > receivedAmount) {
+          throw new Error('退款金额不能超过到手价')
+        }
         const refundDate = Number.isFinite(Number(data.refund_date)) ? Number(data.refund_date) : now
-        const isFullRefund = refundAmount >= Number(sale.received_amount || 0)
+        const isFullRefund = refundAmount >= receivedAmount
         tables.sale_records = (tables.sale_records as any[]).map(row => row._id === saleId
           ? {
               ...row,
@@ -3859,7 +3866,14 @@ class LocalSyncRuntime {
             : row)
         }
       } else if (sale.status === '已预定') {
-        const keptAmount = Number(data.deposit_kept_amount || 0)
+        const depositAmount = Number(sale.deposit_amount)
+        if (!Number.isFinite(depositAmount) || depositAmount <= 0) throw new Error('定金金额异常，请刷新后重试')
+        const keptAmount = data.deposit_kept_amount !== '' && data.deposit_kept_amount != null
+          ? Number(data.deposit_kept_amount)
+          : 0
+        if (!Number.isFinite(keptAmount) || keptAmount < 0 || keptAmount > depositAmount) {
+          throw new Error('保留定金不能超过定金总额')
+        }
         const refundDate = Number.isFinite(Number(data.refund_date)) ? Number(data.refund_date) : now
         tables.sale_records = (tables.sale_records as any[]).map(row => row._id === saleId
           ? {
