@@ -908,6 +908,39 @@ describe('breeding-service', () => {
       expect(extraTasks.every(task => task.details?.kind === 'contact_doctor')).toBe(true)
     })
 
+    it('batchAddBreedingRecords 应支持 _sync 幂等并返回 touchedEntities', async () => {
+      const now = Date.now()
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      const payload = {
+        type: 'heat',
+        dog_ids: ['dam_1', 'dam_2'],
+        date: now,
+        notes: '批量发情同步',
+        details: { start_date: now },
+        _sync: {
+          clientMutationId: 'breeding-batch-sync-1',
+          deviceId: 'device_1',
+          clientTimestamp: now,
+        },
+      }
+
+      const first = await breedingService.batchAddBreedingRecords.call(ctx, payload)
+      const replay = await breedingService.batchAddBreedingRecords.call(ctx, payload)
+
+      expect(first.ack).toBe('accepted')
+      expect(replay).toEqual(first)
+      expect(first.touchedEntities).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'breeding_records' }),
+        expect.objectContaining({ collection: 'breeding_cycles' }),
+        expect.objectContaining({ collection: 'tasks' }),
+      ]))
+
+      const { data: records } = await db.collection('breeding_records')
+        .where({ family_id: familyId, type: 'heat' })
+        .get()
+      expect(records).toHaveLength(2)
+    })
+
     it('已有进行中周期时应跳过该犬并继续保存其他犬', async () => {
       const now = Date.now()
       seedCollection('breeding_cycles', [{

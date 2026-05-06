@@ -1033,7 +1033,7 @@ export async function getLocalIncomeDetail(familyId: string, incomeId: string) {
     type_label: typeLabel,
     linked_dog_name: income.dog_name || '',
     sale_id: (income as any).source_sale_id || '',
-    source: (income as any).source_sale_id ? 'auto' : 'manual',
+    source: (income as any).source_sale_id || (income as any).source_type === 'auto' ? 'auto' : 'manual',
   }
 }
 

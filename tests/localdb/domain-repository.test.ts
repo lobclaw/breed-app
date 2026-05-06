@@ -320,6 +320,65 @@ describe('local domain repository', () => {
     expect(txList).toHaveLength(0)
   })
 
+  it('犬只改名后应同步更新财务、销售与记录冗余犬名', async () => {
+    const now = new Date('2026-05-06T10:00:00+08:00').getTime()
+
+    await localDb.replaceTable('dogs', [{
+      _id: 'dog_rename_finance_1',
+      family_id: 'fam_rename_1',
+      name: '旧名',
+      gender: '母',
+      role: '种狗',
+      disposition: '在养',
+      version: 0,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('tasks', [{ _id: 'task_rename_1', family_id: 'fam_rename_1', dog_id: 'dog_rename_finance_1', dog_name: '旧名' }])
+    await localDb.replaceTable('health_records', [{ _id: 'health_rename_1', family_id: 'fam_rename_1', dog_id: 'dog_rename_finance_1', dog_name: '旧名' }])
+    await localDb.replaceTable('medication_tasks', [{ _id: 'med_rename_1', family_id: 'fam_rename_1', dog_id: 'dog_rename_finance_1', dog_name: '旧名' }])
+    await localDb.replaceTable('breeding_records', [{ _id: 'breed_rename_1', family_id: 'fam_rename_1', dog_id: 'dog_rename_finance_1', dog_name: '旧名' }])
+    await localDb.replaceTable('breeding_cycles', [{ _id: 'cycle_rename_1', family_id: 'fam_rename_1', dam_id: 'dog_rename_finance_1', dam_name: '旧名' }])
+    await localDb.replaceTable('litters', [{ _id: 'litter_rename_1', family_id: 'fam_rename_1', dam_id: 'dog_rename_finance_1', dam_name: '旧名' }])
+    await localDb.replaceTable('expenses', [{
+      _id: 'expense_rename_1',
+      family_id: 'fam_rename_1',
+      total_amount: 100,
+      category: '医疗',
+      linked_dog_ids: ['dog_rename_finance_1'],
+      dog_names: ['旧名'],
+      dam_name: '旧名',
+      deleted_at: null,
+    }])
+    await localDb.replaceTable('incomes', [{
+      _id: 'income_rename_1',
+      family_id: 'fam_rename_1',
+      dog_id: 'dog_rename_finance_1',
+      dog_name: '旧名',
+      amount: 200,
+      deleted_at: null,
+    }])
+    await localDb.replaceTable('sale_records', [{
+      _id: 'sale_rename_1',
+      family_id: 'fam_rename_1',
+      dog_id: 'dog_rename_finance_1',
+      dog_name: '旧名',
+    }])
+    await localDb.replaceTable('outbox_mutations', [])
+    await localDb.replaceTable('local_operation_logs', [])
+
+    await localSyncRuntime.updateDogNameLocally('fam_rename_1', 'dog_rename_finance_1', '新名')
+
+    await expect(localDb.findById<any>('expenses', 'expense_rename_1')).resolves.toMatchObject({ dog_names: ['新名'], dam_name: '新名' })
+    await expect(localDb.findById<any>('incomes', 'income_rename_1')).resolves.toMatchObject({ dog_name: '新名' })
+    await expect(localDb.findById<any>('sale_records', 'sale_rename_1')).resolves.toMatchObject({ dog_name: '新名' })
+    await expect(localDb.findById<any>('health_records', 'health_rename_1')).resolves.toMatchObject({ dog_name: '新名' })
+    await expect(localDb.findById<any>('medication_tasks', 'med_rename_1')).resolves.toMatchObject({ dog_name: '新名' })
+    await expect(localDb.findById<any>('breeding_records', 'breed_rename_1')).resolves.toMatchObject({ dog_name: '新名' })
+
+    const outbox = await localDb.getTable<any>('outbox_mutations')
+    expect(outbox[0].collection_scope).toEqual(expect.arrayContaining(['expenses', 'incomes', 'sale_records', 'health_records', 'medication_tasks', 'breeding_records']))
+  })
+
   it('录入带费用的健康记录后应立即出现在本地财务列表', async () => {
     const now = new Date('2026-05-06T10:00:00+08:00').getTime()
 
@@ -448,8 +507,18 @@ describe('local domain repository', () => {
       type: '领养',
       amount: 888,
       dog_id: 'dog_adoption_finance_1',
+      source_type: 'auto',
+      source_record_id: 'dog_adoption_finance_1',
       notes: '熟人家庭；领养费用：¥888',
     })
+    const detail = await getLocalIncomeDetail('fam_finance_5', txList[0]._id)
+    expect(detail?.source).toBe('auto')
+    await expect(localSyncRuntime.updateIncomeLocally('fam_finance_5', {
+      id: txList[0]._id,
+      amount: 999,
+      type: '领养',
+    })).rejects.toThrow('自动生成的收入不可编辑')
+    await expect(localSyncRuntime.deleteIncomeLocally('fam_finance_5', txList[0]._id)).rejects.toThrow('自动生成的收入不可删除')
   })
 
   it('编辑健康记录费用后应立即同步本地财务账单', async () => {
@@ -1283,6 +1352,70 @@ describe('local domain repository', () => {
       task_id: 'med_50',
       task_name: '头孢',
       status: 'active',
+    })
+  })
+
+  it('本地重复疾病清理应写入 outbox，避免下次同步复活重复记录', async () => {
+    const now = new Date('2026-04-28T10:00:00+08:00').getTime()
+    await localDb.replaceTable('health_records', [{
+      _id: 'ill_keep_1',
+      family_id: 'fam_cleanup_1',
+      dog_id: 'dog_cleanup_1',
+      dog_name: '奶黄',
+      type: 'illness',
+      date: now,
+      created_at: now,
+      updated_at: now + 1000,
+      version: 2,
+      details: {
+        primary_condition: '皮肤炎',
+        treatment_status: '治疗中',
+      },
+    }, {
+      _id: 'ill_dup_1',
+      family_id: 'fam_cleanup_1',
+      dog_id: 'dog_cleanup_1',
+      dog_name: '奶黄',
+      type: 'illness',
+      date: now,
+      created_at: now,
+      updated_at: now,
+      version: 1,
+      details: {
+        primary_condition: '皮肤炎',
+        treatment_status: '观察中',
+      },
+    }])
+    await localDb.replaceTable('tasks', [{
+      _id: 'task_dup_1',
+      family_id: 'fam_cleanup_1',
+      dog_id: 'dog_cleanup_1',
+      type: 'illness',
+      source_record_id: 'ill_dup_1',
+      status: 'pending',
+      version: 3,
+    }])
+    await localDb.replaceTable('outbox_mutations', [])
+    await localDb.replaceTable('local_operation_logs', [])
+
+    const result = await localSyncRuntime.cleanupDuplicateIllnessesLocally('fam_cleanup_1', 'dog_cleanup_1')
+
+    expect(result.data).toMatchObject({ cleanedGroups: 1, cleanedRecords: 1 })
+    await expect(localDb.findById<any>('health_records', 'ill_dup_1')).resolves.toMatchObject({
+      details: expect.objectContaining({
+        treatment_status: '已康复',
+        merged_into_record_id: 'ill_keep_1',
+      }),
+      _local_pending: true,
+    })
+    await expect(localDb.findById<any>('tasks', 'task_dup_1')).resolves.toMatchObject({
+      source_record_id: 'ill_keep_1',
+      _local_pending: true,
+    })
+    const outbox = await localDb.getTable<any>('outbox_mutations')
+    expect(outbox[0]).toMatchObject({
+      type: 'health.cleanupDuplicateIllnesses',
+      collection_scope: expect.arrayContaining(['health_records', 'tasks']),
     })
   })
 })

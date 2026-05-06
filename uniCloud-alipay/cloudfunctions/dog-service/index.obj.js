@@ -148,6 +148,8 @@ async function createAdoptionIncome({ familyId, uid, dog, amount, date, notes, i
     amount,
     date,
     source_sale_id: null,
+    source_type: 'auto',
+    source_record_id: dog._id,
     notes: notes || null,
     created_by: uid,
     deleted_at: null,
@@ -975,6 +977,7 @@ module.exports = {
       .get()
     const dog = dogs?.[0]
     if (!dog) throw new Error('犬只不存在')
+    const previousName = dog.name || ''
     const baseVersion = getBaseVersion(syncMeta, dogId)
     if (baseVersion !== null && baseVersion < getServerVersion(dog)) {
       return buildConflictAck(syncMeta, {
@@ -997,12 +1000,34 @@ module.exports = {
       db.collection('breeding_cycles').where({ sire_id: dogId }).update({ sire_name: trimmedName }),
       db.collection('litters').where({ dam_id: dogId }).update({ dam_name: trimmedName }),
       db.collection('litters').where({ sire_id: dogId }).update({ sire_name: trimmedName }),
+      db.collection('health_records').where({ dog_id: dogId }).update({ dog_name: trimmedName }),
+      db.collection('medication_tasks').where({ dog_id: dogId }).update({ dog_name: trimmedName }),
+      db.collection('breeding_records').where({ dog_id: dogId }).update({ dog_name: trimmedName }),
+      db.collection('incomes').where({ dog_id: dogId }).update({ dog_name: trimmedName }),
+      db.collection('sale_records').where({ dog_id: dogId }).update({ dog_name: trimmedName }),
     ]
 
     // 不用 Promise.all —— 顺序执行更安全，任一失败有审计兜底
     for (const update of updates) {
       try { await update } catch { /* 审计兜底 */ }
     }
+
+    try {
+      const { data: linkedExpenses } = await db.collection('expenses')
+        .where({ family_id: this.familyId, linked_dog_ids: dogId, deleted_at: null })
+        .get()
+      for (const expense of linkedExpenses || []) {
+        const dogNames = Array.isArray(expense.dog_names) ? [...expense.dog_names] : []
+        ;(expense.linked_dog_ids || []).forEach((linkedDogId, index) => {
+          if (linkedDogId === dogId) dogNames[index] = trimmedName
+        })
+        await db.collection('expenses').doc(expense._id).update({
+          dog_names: dogNames.filter(Boolean),
+          dam_name: expense.dam_name === previousName ? trimmedName : expense.dam_name,
+          updated_at: now,
+        })
+      }
+    } catch { /* 审计兜底 */ }
 
     await logDogOperation({
       familyId: this.familyId,
@@ -1022,7 +1047,7 @@ module.exports = {
       ...buildSyncAck(syncMeta, {
         ack: 'accepted',
         touchedEntities: updatedDogs?.[0] ? [buildTouchedEntity('dogs', updatedDogs[0])] : [],
-        resyncScopes: ['dogs', 'tasks', 'breeding_cycles', 'litters'],
+        resyncScopes: ['dogs', 'tasks', 'breeding_cycles', 'litters', 'health_records', 'medication_tasks', 'breeding_records', 'expenses', 'incomes', 'sale_records'],
       }),
     }
     if (syncMeta?.clientMutationId) {

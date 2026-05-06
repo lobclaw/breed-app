@@ -61,6 +61,7 @@ export const LOCAL_MUTATION_TYPES = {
   END_MEDICATION: 'health.endMedication',
   RECOVER_ILLNESSES: 'health.recoverIllnesses',
   UPDATE_ILLNESS_STATUS: 'health.batchUpdateIllnessStatus',
+  CLEANUP_DUPLICATE_ILLNESSES: 'health.cleanupDuplicateIllnesses',
   END_MEDICATION_BY_DOG: 'health.endMedicationByDog',
   ADD_DOG_WEIGHT: 'health.addWeightRecord',
 } as const
@@ -118,7 +119,11 @@ export const LOCAL_MUTATION_REGISTRY: Record<LocalMutationType, LocalMutationDef
   [LOCAL_MUTATION_TYPES.BATCH_CREATE_TASKS]: { service: 'task-service', method: 'batchCreateManualTasks', defaultScopes: ['tasks'] },
   [LOCAL_MUTATION_TYPES.CREATE_DOG]: { service: 'dog-service', method: 'createDog', defaultScopes: ['dogs', 'expenses'] },
   [LOCAL_MUTATION_TYPES.UPDATE_DOG]: { service: 'dog-service', method: 'updateDog', defaultScopes: ['dogs', 'expenses'] },
-  [LOCAL_MUTATION_TYPES.UPDATE_DOG_NAME]: { service: 'dog-service', method: 'updateDogName', defaultScopes: ['dogs', 'tasks', 'breeding_cycles', 'litters'] },
+  [LOCAL_MUTATION_TYPES.UPDATE_DOG_NAME]: {
+    service: 'dog-service',
+    method: 'updateDogName',
+    defaultScopes: ['dogs', 'tasks', 'breeding_cycles', 'litters', 'health_records', 'medication_tasks', 'breeding_records', 'expenses', 'incomes', 'sale_records'],
+  },
   [LOCAL_MUTATION_TYPES.CHANGE_DOG_DISPOSITION]: { service: 'dog-service', method: 'changeDisposition', defaultScopes: ['dogs', 'breeding_cycles', 'tasks', 'incomes'] },
   [LOCAL_MUTATION_TYPES.UPGRADE_PUPPY_TO_BREEDER]: { service: 'dog-service', method: 'upgradePuppyToBreeder', defaultScopes: ['dogs'] },
   [LOCAL_MUTATION_TYPES.SOFT_DELETE_DOG]: { service: 'dog-service', method: 'softDeleteDog', defaultScopes: ['dogs'] },
@@ -134,6 +139,7 @@ export const LOCAL_MUTATION_REGISTRY: Record<LocalMutationType, LocalMutationDef
   [LOCAL_MUTATION_TYPES.END_MEDICATION]: { service: 'health-service', method: 'endMedication', defaultScopes: ['medication_tasks', 'health_records', 'tasks'] },
   [LOCAL_MUTATION_TYPES.RECOVER_ILLNESSES]: { service: 'health-service', method: 'recoverIllnesses', defaultScopes: ['health_records', 'medication_tasks'] },
   [LOCAL_MUTATION_TYPES.UPDATE_ILLNESS_STATUS]: { service: 'health-service', method: 'batchUpdateIllnessStatus', defaultScopes: ['health_records'] },
+  [LOCAL_MUTATION_TYPES.CLEANUP_DUPLICATE_ILLNESSES]: { service: 'health-service', method: 'cleanupDuplicateIllnesses', defaultScopes: ['health_records', 'tasks'] },
   [LOCAL_MUTATION_TYPES.END_MEDICATION_BY_DOG]: { service: 'health-service', method: 'endMedicationByDog', defaultScopes: ['medication_tasks'] },
   [LOCAL_MUTATION_TYPES.ADD_DOG_WEIGHT]: { service: 'health-service', method: 'addWeightRecord', defaultScopes: ['dog_weights', 'dogs'] },
 }

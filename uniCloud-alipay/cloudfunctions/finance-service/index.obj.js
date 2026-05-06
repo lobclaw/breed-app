@@ -680,7 +680,9 @@ module.exports = {
       type: normalizedType,
       amount: data.amount,
       date: data.date || now,
-      source_sale_id: data.source_sale_id || null,
+      source_sale_id: null,
+      source_type: 'manual',
+      source_record_id: null,
       notes: data.notes || null,
       created_by: this.uid,
       deleted_at: null,
@@ -907,7 +909,7 @@ module.exports = {
         type_label: normalizeIncomeType(income.type),
         linked_dog_name: income.dog_name || '',
         sale_id: income.source_sale_id || '',
-        source: income.source_sale_id ? 'auto' : 'manual',
+        source: income.source_sale_id || income.source_type === 'auto' ? 'auto' : 'manual',
       },
     }
   },
@@ -978,7 +980,7 @@ module.exports = {
       .where({ _id: incomeId, family_id: this.familyId })
       .get()
     if (!incomes || incomes.length === 0) throw new Error('记录不存在')
-    if (incomes[0].source_sale_id) throw new Error('自动生成的收入不可删除，请在销售记录中操作')
+    if (incomes[0].source_sale_id || incomes[0].source_type === 'auto') throw new Error('自动生成的收入不可删除，请在来源记录中操作')
     const conflict = getEntityConflict(syncMeta, 'incomes', incomes[0])
     if (conflict) return conflict
     const now = Date.now()
@@ -1335,7 +1337,7 @@ module.exports = {
       .where({ _id: incomeId, family_id: this.familyId, deleted_at: null })
       .get()
     if (!incomes || incomes.length === 0) throw new Error('记录不存在')
-    if (incomes[0].source_sale_id) throw new Error('自动生成的收入不可编辑，请在销售记录中操作')
+    if (incomes[0].source_sale_id || incomes[0].source_type === 'auto') throw new Error('自动生成的收入不可编辑，请在来源记录中操作')
     const conflict = getEntityConflict(syncMeta, 'incomes', incomes[0])
     if (conflict) return conflict
     const now = Date.now()
@@ -1530,6 +1532,8 @@ module.exports = {
       await db.collection('incomes').doc(incomes[0]._id).update({
         amount,
         date,
+        source_type: 'auto',
+        source_record_id: saleId,
         ...buildVersionUpdate(dbCmd, now),
       })
       return incomes[0]._id
@@ -1543,6 +1547,8 @@ module.exports = {
       amount,
       date,
       source_sale_id: saleId,
+      source_type: 'auto',
+      source_record_id: saleId,
       notes: null,
       family_id: familyId,
       created_by: this.uid,
@@ -1999,6 +2005,8 @@ module.exports = {
         amount: -refundAmount,
         date: refundDate,
         source_sale_id: saleId,
+        source_type: 'auto',
+        source_record_id: saleId,
         notes: data.refund_reason || null,
         family_id: familyId,
         created_by: this.uid,
@@ -2038,6 +2046,8 @@ module.exports = {
           amount: keptAmount,
           date: refundDate,
           source_sale_id: saleId,
+          source_type: 'auto',
+          source_record_id: saleId,
           notes: data.refund_reason || null,
           family_id: familyId,
           created_by: this.uid,
@@ -2629,11 +2639,21 @@ module.exports = {
 
     const { data: updatedFamilies } = await db.collection('families').doc(this.familyId).get()
     const updatedFamily = updatedFamilies?.[0] || updatedFamilies
+    const { data: updatedExpenses } = newName !== oldName
+      ? await db.collection('expenses').where({
+        family_id: this.familyId,
+        category: newName,
+        deleted_at: null,
+      }).get()
+      : { data: [] }
     const response = {
       message: '已更新',
       ...buildSyncAck(syncMeta, {
         ack: 'accepted',
-        touchedEntities: updatedFamily ? [buildTouchedEntity('families', updatedFamily)] : [],
+        touchedEntities: [
+          ...(updatedFamily ? [buildTouchedEntity('families', updatedFamily)] : []),
+          ...(updatedExpenses || []).map(expense => buildTouchedEntity('expenses', expense)),
+        ],
         resyncScopes: ['families', 'expenses'],
       }),
     }

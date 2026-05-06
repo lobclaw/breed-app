@@ -165,6 +165,9 @@ describe('health-service', () => {
       })
 
       expect(result.ack).toBe('accepted')
+      expect(result.touchedEntities).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'expenses', id: 'health_expense_local_1' }),
+      ]))
       const { data: expenses } = await db.collection('expenses')
         .where({ _id: 'health_expense_local_1', family_id: familyId })
         .get()
@@ -345,6 +348,81 @@ describe('health-service', () => {
     })
   })
 
+  it('cleanupDuplicateIllnesses 应支持 _sync 幂等并返回被更新记录', async () => {
+    const now = new Date('2026-04-16T10:00:00+08:00').getTime()
+    vi.spyOn(Date, 'now').mockReturnValue(now)
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+    seedCollection('health_records', [{
+      _id: 'ill_keep_sync_1',
+      family_id: familyId,
+      dog_id: 'dog_1',
+      dog_name: '花花',
+      type: 'illness',
+      deleted_at: null,
+      date: now,
+      created_at: now,
+      updated_at: now + 1000,
+      version: 2,
+      details: {
+        primary_condition: '皮肤炎',
+        treatment_status: '治疗中',
+      },
+    }, {
+      _id: 'ill_dup_sync_1',
+      family_id: familyId,
+      dog_id: 'dog_1',
+      dog_name: '花花',
+      type: 'illness',
+      deleted_at: null,
+      date: now,
+      created_at: now,
+      updated_at: now,
+      version: 1,
+      details: {
+        primary_condition: '皮肤炎',
+        treatment_status: '观察中',
+      },
+    }])
+    seedCollection('tasks', [{
+      _id: 'task_dup_sync_1',
+      family_id: familyId,
+      dog_id: 'dog_1',
+      type: 'illness',
+      source_record_id: 'ill_dup_sync_1',
+      status: 'pending',
+      version: 3,
+    }])
+
+    const payload = {
+      dog_id: 'dog_1',
+      _sync: {
+        clientMutationId: 'health-cleanup-duplicates-1',
+        deviceId: 'device_a',
+        clientTimestamp: now,
+      },
+    }
+    const first = await healthService.cleanupDuplicateIllnesses.call(ctx, payload)
+    const second = await healthService.cleanupDuplicateIllnesses.call(ctx, payload)
+
+    expect(first.ack).toBe('accepted')
+    expect(second).toEqual(first)
+    expect(first.data).toMatchObject({ cleanedGroups: 1, cleanedRecords: 1 })
+    expect(first.touchedEntities).toEqual(expect.arrayContaining([
+      expect.objectContaining({ collection: 'health_records', id: 'ill_dup_sync_1', version: 2 }),
+      expect.objectContaining({ collection: 'tasks', id: 'task_dup_sync_1', version: 4 }),
+    ]))
+
+    const { data: records } = await db.collection('health_records').doc('ill_dup_sync_1').get()
+    expect(records[0].details).toMatchObject({
+      treatment_status: '已康复',
+      merged_into_record_id: 'ill_keep_sync_1',
+    })
+    expect(records[0].version).toBe(2)
+    const { data: tasks } = await db.collection('tasks').doc('task_dup_sync_1').get()
+    expect(tasks[0]).toMatchObject({ source_record_id: 'ill_keep_sync_1', version: 4 })
+  })
+
   describe('用药任务', () => {
     it('超期未全量完成的旧疗程不应再算重复，并自动收口为已完成', async () => {
       const now = new Date('2026-04-15T10:00:00+08:00').getTime()
@@ -511,6 +589,9 @@ describe('health-service', () => {
       })
 
       expect(result.ack).toBe('accepted')
+      expect(result.touchedEntities).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'expenses', id: 'med_expense_local_1' }),
+      ]))
       const { data: expenses } = await db.collection('expenses')
         .where({ _id: 'med_expense_local_1', family_id: familyId })
         .get()

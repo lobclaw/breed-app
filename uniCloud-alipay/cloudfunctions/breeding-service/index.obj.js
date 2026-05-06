@@ -1092,6 +1092,9 @@ module.exports = {
     }
 
     const familyId = this.familyId
+    const syncMeta = getSyncMeta(data)
+    const appliedMutation = await findAppliedMutation(db, familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
     const dogIds = [...new Set(data.dog_ids.filter(Boolean))]
     const { data: dogs } = await db.collection('dogs')
       .where({ _id: dbCmd.in(dogIds), family_id: familyId, deleted_at: null })
@@ -1148,13 +1151,42 @@ module.exports = {
       meta: { count: records.length, failed: failed.length },
     })
 
-    return {
+    const recordIds = records.map(record => record.recordId).filter(Boolean)
+    const cycleIds = records.map(record => record.cycleId).filter(Boolean)
+    const [recordRes, cycleRes, taskRes] = recordIds.length > 0
+      ? await Promise.all([
+        db.collection('breeding_records')
+          .where({ _id: dbCmd.in(recordIds), family_id: familyId })
+          .get(),
+        db.collection('breeding_cycles')
+          .where({ _id: dbCmd.in(cycleIds), family_id: familyId })
+          .get(),
+        db.collection('tasks')
+          .where({ source_record_id: dbCmd.in(recordIds), family_id: familyId })
+          .get(),
+      ])
+      : [{ data: [] }, { data: [] }, { data: [] }]
+
+    const response = {
       data: {
         count: records.length,
         records,
         failed,
       },
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: [
+          ...(recordRes.data || []).map(record => buildTouchedEntity('breeding_records', record)),
+          ...(cycleRes.data || []).map(cycle => buildTouchedEntity('breeding_cycles', cycle)),
+          ...(taskRes.data || []).map(task => buildTouchedEntity('tasks', task)),
+        ],
+        resyncScopes: ['breeding_records', 'breeding_cycles', 'tasks'],
+      }),
     }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   /**

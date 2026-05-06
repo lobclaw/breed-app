@@ -378,6 +378,8 @@
 - `amount`
 - `date`
 - `source_sale_id`
+- `source_type`
+- `source_record_id`
 - `notes`
 - `family_id`
 - `version`
@@ -387,6 +389,7 @@
 
 - 手动收入类型固定为 `销售 / 定金保留 / 领养 / 其他`
 - 自动收入当前固定包含 `退款`
+- 自动收入统一写 `source_type=auto`，并通过 `source_sale_id` 或 `source_record_id` 关联来源；财务编辑/删除入口不得直接修改自动收入
 - 读取历史数据时兼容旧值：
 - `定金` 统一按 `定金保留` 消费
 - `领养费` 统一按 `领养` 消费

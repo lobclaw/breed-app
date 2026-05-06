@@ -34,6 +34,20 @@
       "foreignKey": "sale_records._id",
       "description": "关联销售记录ID"
     },
+    "source_sale_id": {
+      "bsonType": ["string", "null"],
+      "foreignKey": "sale_records._id",
+      "description": "自动销售收入来源销售记录ID"
+    },
+    "source_type": {
+      "bsonType": ["string", "null"],
+      "enum": ["manual", "auto", null],
+      "description": "来源类型：手动录入/自动生成"
+    },
+    "source_record_id": {
+      "bsonType": ["string", "null"],
+      "description": "自动收入来源业务记录ID"
+    },
     "dog_id": {
       "bsonType": "string",
       "foreignKey": "dogs._id",

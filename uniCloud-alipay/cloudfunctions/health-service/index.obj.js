@@ -450,6 +450,8 @@ async function cleanupDuplicateIllnessesForFamily(familyId, { dogId } = {}) {
 
   let cleanedRecords = 0
   let cleanedGroups = 0
+  const affectedRecordIds = []
+  const affectedTaskIds = []
   const now = Date.now()
 
   for (const groupRecords of groups.values()) {
@@ -460,27 +462,31 @@ async function cleanupDuplicateIllnessesForFamily(familyId, { dogId } = {}) {
     const duplicates = sorted.slice(1)
 
     for (const duplicate of duplicates) {
-      await db.collection('tasks').where({
+      const taskWhere = {
         family_id: familyId,
         type: 'illness',
         source_record_id: duplicate._id,
-      }).update({
+      }
+      const { data: linkedTasks } = await db.collection('tasks').where(taskWhere).get()
+      affectedTaskIds.push(...(linkedTasks || []).map(task => task._id))
+      await db.collection('tasks').where(taskWhere).update({
         source_record_id: keeper._id,
-        updated_at: now,
+        ...buildVersionUpdate(dbCmd, now),
       })
 
       await db.collection('health_records').doc(duplicate._id).update({
         'details.treatment_status': '已康复',
         'details.merged_into_record_id': keeper._id,
         'details.merge_reason': 'duplicate_active_condition',
-        updated_at: now,
+        ...buildVersionUpdate(dbCmd, now),
       })
 
+      affectedRecordIds.push(duplicate._id)
       cleanedRecords += 1
     }
   }
 
-  return { cleanedGroups, cleanedRecords }
+  return { cleanedGroups, cleanedRecords, affectedRecordIds, affectedTaskIds }
 }
 
 async function getFamilySettings(familyId) {
@@ -1149,11 +1155,39 @@ module.exports = {
     }
   },
 
-  async cleanupDuplicateIllnesses({ dog_id } = {}) {
+  async cleanupDuplicateIllnesses(input = {}) {
+    const syncMeta = getSyncMeta(input)
+    const appliedMutation = await findAppliedMutation(db, this.familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
     const result = await cleanupDuplicateIllnessesForFamily(this.familyId, {
-      dogId: dog_id || null,
+      dogId: input.dog_id || null,
     })
-    return { data: result }
+    const [recordsRes, tasksRes] = await Promise.all([
+      result.affectedRecordIds.length
+        ? db.collection('health_records').where({ _id: dbCmd.in(result.affectedRecordIds), family_id: this.familyId }).get()
+        : Promise.resolve({ data: [] }),
+      result.affectedTaskIds.length
+        ? db.collection('tasks').where({ _id: dbCmd.in(result.affectedTaskIds), family_id: this.familyId }).get()
+        : Promise.resolve({ data: [] }),
+    ])
+    const response = {
+      data: {
+        cleanedGroups: result.cleanedGroups,
+        cleanedRecords: result.cleanedRecords,
+      },
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: [
+          ...(recordsRes.data || []).map(record => buildTouchedEntity('health_records', record)),
+          ...(tasksRes.data || []).map(task => buildTouchedEntity('tasks', task)),
+        ],
+        resyncScopes: ['health_records', 'tasks'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
   },
 
   async addHealthRecord(data) {
@@ -1339,6 +1373,12 @@ module.exports = {
     })
 
     const touchedTasks = results.flatMap(r => r.completedTasks || [])
+    const touchedExpenseIds = results.map(r => r.expenseId).filter(Boolean)
+    const { data: touchedExpenses } = touchedExpenseIds.length > 0
+      ? await db.collection('expenses')
+        .where({ _id: dbCmd.in(touchedExpenseIds), family_id: familyId })
+        .get()
+      : { data: [] }
     const response = {
       data: {
         count: results.length,
@@ -1350,6 +1390,7 @@ module.exports = {
         touchedEntities: [
           ...results.map(r => buildTouchedEntity('health_records', r.record)),
           ...touchedTasks.map(task => buildTouchedEntity('tasks', task)),
+          ...(touchedExpenses || []).map(expense => buildTouchedEntity('expenses', expense)),
         ],
         resyncScopes: ['health_records', 'tasks', 'expenses'],
       }),
@@ -1570,9 +1611,11 @@ module.exports = {
       const resolvedMedicationId = clientMedicationIds[index] || medicationId
 
       // 创建费用
+      let expenseId = null
       if (perDogCost && perDogCost > 0) {
-        await db.collection('expenses').add(buildVersionedCreate({
-          ...(clientExpenseIds[index] ? { _id: clientExpenseIds[index] } : {}),
+        const clientExpenseId = clientExpenseIds[index] || null
+        const { id } = await db.collection('expenses').add(buildVersionedCreate({
+          ...(clientExpenseId ? { _id: clientExpenseId } : {}),
           total_amount: perDogCost,
           category: '医疗',
           date: startDate,
@@ -1585,6 +1628,7 @@ module.exports = {
           created_by: uid,
           deleted_at: null,
         }, now))
+        expenseId = clientExpenseId || id
       }
 
       // 疾病升级：观察中 → 治疗中
@@ -1615,7 +1659,7 @@ module.exports = {
         }
       }
 
-      return { medicationId: resolvedMedicationId, dog_id: dog._id, medication: { ...medicationData, _id: resolvedMedicationId } }
+      return { medicationId: resolvedMedicationId, dog_id: dog._id, expenseId, medication: { ...medicationData, _id: resolvedMedicationId } }
     }))
 
     await logHealthOperation({
@@ -1630,11 +1674,21 @@ module.exports = {
       meta: { count: results.length, drugName: data.drug_name },
     })
 
+    const touchedExpenseIds = results.map(r => r.expenseId).filter(Boolean)
+    const { data: touchedExpenses } = touchedExpenseIds.length > 0
+      ? await db.collection('expenses')
+        .where({ _id: dbCmd.in(touchedExpenseIds), family_id: familyId })
+        .get()
+      : { data: [] }
+
     const response = {
       data: { count: results.length, medications: results.map(({ medicationId, dog_id }) => ({ medicationId, dog_id })) },
       ...buildSyncAck(syncMeta, {
         ack: 'accepted',
-        touchedEntities: results.map(result => buildTouchedEntity('medication_tasks', result.medication)),
+        touchedEntities: [
+          ...results.map(result => buildTouchedEntity('medication_tasks', result.medication)),
+          ...(touchedExpenses || []).map(expense => buildTouchedEntity('expenses', expense)),
+        ],
         resyncScopes: ['medication_tasks', 'health_records', 'expenses'],
       }),
     }

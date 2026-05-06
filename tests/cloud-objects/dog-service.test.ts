@@ -620,6 +620,58 @@ describe('dog-service', () => {
     expect(removedExpenses).toHaveLength(0)
   })
 
+  it('updateDogName 应同步更新财务、销售与记录冗余犬名', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+    seedCollection('tasks', [{ _id: 'task_rename_1', family_id: familyId, dog_id: 'dog_1', dog_name: '肉肉' }])
+    seedCollection('health_records', [{ _id: 'health_rename_1', family_id: familyId, dog_id: 'dog_1', dog_name: '肉肉' }])
+    seedCollection('medication_tasks', [{ _id: 'med_rename_1', family_id: familyId, dog_id: 'dog_1', dog_name: '肉肉' }])
+    seedCollection('breeding_records', [{ _id: 'breed_rename_1', family_id: familyId, dog_id: 'dog_1', dog_name: '肉肉' }])
+    seedCollection('breeding_cycles', [{ _id: 'cycle_rename_1', family_id: familyId, dam_id: 'dog_1', dam_name: '肉肉' }])
+    seedCollection('litters', [{ _id: 'litter_rename_1', family_id: familyId, dam_id: 'dog_1', dam_name: '肉肉' }])
+    seedCollection('expenses', [{
+      _id: 'expense_rename_1',
+      family_id: familyId,
+      total_amount: 100,
+      category: '医疗',
+      linked_dog_ids: ['dog_1'],
+      dog_names: ['肉肉'],
+      dam_name: '肉肉',
+      deleted_at: null,
+    }])
+    seedCollection('incomes', [{ _id: 'income_rename_1', family_id: familyId, dog_id: 'dog_1', dog_name: '肉肉', amount: 200 }])
+    seedCollection('sale_records', [{ _id: 'sale_rename_1', family_id: familyId, dog_id: 'dog_1', dog_name: '肉肉' }])
+
+    const result = await dogService.updateDogName.call(ctx, { id: 'dog_1', name: '奶糖' })
+
+    expect(result.ack).toBe('accepted')
+    expect(result.resyncScopes).toEqual(expect.arrayContaining([
+      'expenses',
+      'incomes',
+      'sale_records',
+      'health_records',
+      'medication_tasks',
+      'breeding_records',
+    ]))
+    await expect(db.collection('expenses').doc('expense_rename_1').get()).resolves.toMatchObject({
+      data: [expect.objectContaining({ dog_names: ['奶糖'], dam_name: '奶糖' })],
+    })
+    await expect(db.collection('incomes').doc('income_rename_1').get()).resolves.toMatchObject({
+      data: [expect.objectContaining({ dog_name: '奶糖' })],
+    })
+    await expect(db.collection('sale_records').doc('sale_rename_1').get()).resolves.toMatchObject({
+      data: [expect.objectContaining({ dog_name: '奶糖' })],
+    })
+    await expect(db.collection('health_records').doc('health_rename_1').get()).resolves.toMatchObject({
+      data: [expect.objectContaining({ dog_name: '奶糖' })],
+    })
+    await expect(db.collection('medication_tasks').doc('med_rename_1').get()).resolves.toMatchObject({
+      data: [expect.objectContaining({ dog_name: '奶糖' })],
+    })
+    await expect(db.collection('breeding_records').doc('breed_rename_1').get()).resolves.toMatchObject({
+      data: [expect.objectContaining({ dog_name: '奶糖' })],
+    })
+  })
+
   it('createDog 应支持 _sync 稳定 ID 与幂等重放', async () => {
     const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
     const payload = {
@@ -734,6 +786,8 @@ describe('dog-service', () => {
     expect(incomesAfterAdoption[0]).toMatchObject({
       amount: 888,
       date: mockNow,
+      source_type: 'auto',
+      source_record_id: 'dog_1',
       notes: '熟人安置；领养费用：¥888',
     })
 

@@ -294,6 +294,10 @@ describe('finance-service', () => {
 
     expect(first.ack).toBe('accepted')
     expect(second).toEqual(first)
+    expect(first.touchedEntities).toEqual(expect.arrayContaining([
+      expect.objectContaining({ collection: 'families', id: familyId }),
+      expect.objectContaining({ collection: 'expenses', id: 'exp_beauty' }),
+    ]))
 
     const { data: familyRows } = await db.collection('families').doc(familyId).get()
     expect(familyRows[0].settings.custom_expense_categories).toEqual([
@@ -436,6 +440,34 @@ describe('finance-service', () => {
       notes: '改为领养款',
       version: 2,
     })
+  })
+
+  it('自动收入不可从财务入口编辑或删除', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+    seedCollection('incomes', [{
+      _id: 'income_auto_guard_1',
+      family_id: familyId,
+      dog_id: 'dog_1',
+      dog_name: '花花',
+      type: '领养',
+      amount: 800,
+      date: aprilTs,
+      source_sale_id: null,
+      source_type: 'auto',
+      source_record_id: 'dog_1',
+      deleted_at: null,
+      version: 1,
+    }])
+
+    await expect(financeService.updateIncome.call(ctx, {
+      id: 'income_auto_guard_1',
+      amount: 900,
+      type: '领养',
+      date: aprilTs,
+    })).rejects.toThrow('自动生成的收入不可编辑')
+    await expect(financeService.deleteIncome.call(ctx, {
+      id: 'income_auto_guard_1',
+    })).rejects.toThrow('自动生成的收入不可删除')
   })
 
   it('deleteExpense 应支持 _sync 幂等重放', async () => {

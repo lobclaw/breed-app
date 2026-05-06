@@ -718,6 +718,8 @@ function buildLocalAdoptionIncome(
     amount,
     date,
     source_sale_id: null,
+    source_type: 'auto',
+    source_record_id: dog._id,
     notes: notes || null,
     images: [],
     deleted_at: null,
@@ -1420,10 +1422,36 @@ class LocalSyncRuntime {
     const trimmedName = String(name || '').trim()
     if (!trimmedName && dog.role !== '幼崽') throw new Error('请输入新名称')
     const now = getNow()
+    const previousName = String(dog.name || '')
     const syncMeta = buildSyncMeta({ [dogId]: Number(dog.version || 0) }, {
       clientMutationId: createClientMutationId(HOME_MUTATION_TYPES.UPDATE_DOG_NAME),
     })
-    await runLocalMutation(['dogs', 'tasks', 'breeding_cycles', 'litters'], (tables) => {
+    const renameScopes: BusinessCollectionName[] = [
+      'dogs',
+      'tasks',
+      'breeding_cycles',
+      'litters',
+      'health_records',
+      'medication_tasks',
+      'breeding_records',
+      'expenses',
+      'incomes',
+      'sale_records',
+    ]
+    const renameDogNames = (row: any) => {
+      if (!Array.isArray(row.linked_dog_ids) || !row.linked_dog_ids.includes(dogId)) return row
+      const dogNames = Array.isArray(row.dog_names) ? [...row.dog_names] : []
+      row.linked_dog_ids.forEach((linkedDogId: string, index: number) => {
+        if (linkedDogId === dogId) dogNames[index] = trimmedName
+      })
+      return {
+        ...row,
+        dog_names: dogNames.filter(Boolean),
+        dam_name: row.dam_name === previousName ? trimmedName : row.dam_name,
+        updated_at: now,
+      }
+    }
+    await runLocalMutation(renameScopes, (tables) => {
       tables.dogs = (tables.dogs as any[]).map(row => row._id === dogId ? { ...row, name: trimmedName, updated_at: now, _local_pending: true } : row)
       tables.tasks = (tables.tasks as any[]).map(row => row.dog_id === dogId ? { ...row, dog_name: trimmedName, updated_at: now } : row)
       tables.breeding_cycles = (tables.breeding_cycles as any[]).map(row => ({
@@ -1438,12 +1466,18 @@ class LocalSyncRuntime {
         sire_name: row.sire_id === dogId ? trimmedName : row.sire_name,
         updated_at: row.dam_id === dogId || row.sire_id === dogId ? now : row.updated_at,
       }))
+      tables.health_records = (tables.health_records as any[]).map(row => row.dog_id === dogId ? { ...row, dog_name: trimmedName, updated_at: now } : row)
+      tables.medication_tasks = (tables.medication_tasks as any[]).map(row => row.dog_id === dogId ? { ...row, dog_name: trimmedName, updated_at: now } : row)
+      tables.breeding_records = (tables.breeding_records as any[]).map(row => row.dog_id === dogId ? { ...row, dog_name: trimmedName, updated_at: now } : row)
+      tables.expenses = (tables.expenses as any[]).map(renameDogNames)
+      tables.incomes = (tables.incomes as any[]).map(row => row.dog_id === dogId ? { ...row, dog_name: trimmedName, updated_at: now } : row)
+      tables.sale_records = (tables.sale_records as any[]).map(row => row.dog_id === dogId ? { ...row, dog_name: trimmedName, updated_at: now } : row)
     })
     await this.enqueueMutation(
       HOME_MUTATION_TYPES.UPDATE_DOG_NAME,
       familyId,
       { id: dogId, name: trimmedName, _sync: syncMeta },
-      ['dogs', 'tasks', 'breeding_cycles', 'litters'],
+      renameScopes,
       syncMeta,
     )
     return {
@@ -2952,6 +2986,8 @@ class LocalSyncRuntime {
       amount: data.amount,
       date: data.date || now,
       source_sale_id: data.source_sale_id || null,
+      source_type: data.source_type || 'manual',
+      source_record_id: data.source_record_id || null,
       notes: data.notes || null,
       images: data.images || [],
       deleted_at: null,
@@ -3022,7 +3058,7 @@ class LocalSyncRuntime {
     if (!incomeId) throw new Error('缺少记录 ID')
     const income = await findLocalRow<any>('incomes', incomeId)
     if (!income || income.family_id !== familyId || income.deleted_at) throw new Error('记录不存在')
-    if (income.source_sale_id) throw new Error('自动生成的收入不可编辑，请在销售记录中操作')
+    if (income.source_sale_id || income.source_type === 'auto') throw new Error('自动生成的收入不可编辑，请在来源记录中操作')
 
     const now = getNow()
     const pendingUpload = hasPendingUploadImages(data.images)
@@ -3094,7 +3130,7 @@ class LocalSyncRuntime {
     if (!incomeId) throw new Error('缺少记录 ID')
     const income = await findLocalRow<any>('incomes', incomeId)
     if (!income || income.family_id !== familyId || income.deleted_at) throw new Error('记录不存在')
-    if (income.source_sale_id) throw new Error('自动生成的收入不可删除，请在销售记录中操作')
+    if (income.source_sale_id || income.source_type === 'auto') throw new Error('自动生成的收入不可删除，请在来源记录中操作')
 
     const now = getNow()
     const syncMeta = buildSyncMeta({ [incomeId]: Number(income.version || 0) }, {
@@ -3320,6 +3356,8 @@ class LocalSyncRuntime {
               ...existingIncome,
               amount: receivedAmount,
               date: settledDate,
+              source_type: 'auto',
+              source_record_id: saleId,
               updated_at: now,
             }
           : {
@@ -3331,6 +3369,8 @@ class LocalSyncRuntime {
               amount: receivedAmount,
               date: settledDate,
               source_sale_id: saleId,
+              source_type: 'auto',
+              source_record_id: saleId,
               notes: null,
               deleted_at: null,
               version: 0,
@@ -3415,6 +3455,8 @@ class LocalSyncRuntime {
             ...existingIncome,
             amount: receivedAmount,
             date: settlementDate,
+            source_type: 'auto',
+            source_record_id: saleId,
             updated_at: now,
           }
         : {
@@ -3426,6 +3468,8 @@ class LocalSyncRuntime {
             amount: receivedAmount,
             date: settlementDate,
             source_sale_id: saleId,
+            source_type: 'auto',
+            source_record_id: saleId,
             notes: null,
             deleted_at: null,
             version: 0,
@@ -3496,6 +3540,8 @@ class LocalSyncRuntime {
           amount: -refundAmount,
           date: refundDate,
           source_sale_id: saleId,
+          source_type: 'auto',
+          source_record_id: saleId,
           notes: data.refund_reason || null,
           family_id: familyId,
           created_by: '',
@@ -3538,6 +3584,8 @@ class LocalSyncRuntime {
             amount: keptAmount,
             date: refundDate,
             source_sale_id: saleId,
+            source_type: 'auto',
+            source_record_id: saleId,
             notes: data.refund_reason || null,
             family_id: familyId,
             created_by: '',
@@ -3971,6 +4019,13 @@ class LocalSyncRuntime {
     const nextCategories = customCategories.map((item: any) => item.name === oldName
       ? { ...item, name: newName, parent_group: parentGroup }
       : item)
+    const affectedExpenses = oldName !== newName
+      ? await localDb.query<any>('expenses', expense =>
+        expense.family_id === familyId
+        && !expense.deleted_at
+        && expense.category === oldName,
+      )
+      : []
     const now = getNow()
     const syncMeta = buildSyncMeta({ [familyId]: Number(family.version || 0) }, {
       clientMutationId: createClientMutationId(LOCAL_MUTATION_TYPES.UPDATE_EXPENSE_CATEGORY),
@@ -4009,7 +4064,15 @@ class LocalSyncRuntime {
     )
     return {
       message: '已更新',
-      ...buildLocalAck(syncMeta, [{ collection: 'families', id: familyId, version: Number(family.version || 0), updatedAt: now }]),
+      ...buildLocalAck(syncMeta, [
+        { collection: 'families', id: familyId, version: Number(family.version || 0), updatedAt: now },
+        ...affectedExpenses.map(expense => ({
+          collection: 'expenses' as BusinessCollectionName,
+          id: expense._id,
+          version: Number(expense.version || 0),
+          updatedAt: now,
+        })),
+      ]),
     }
   }
 
@@ -4958,11 +5021,15 @@ class LocalSyncRuntime {
       return { data: { cleanedGroups: 0, cleanedRecords: 0 } }
     }
 
+    const affectedTasks = await localDb.query<any>('tasks', row =>
+      row.family_id === familyId
+      && duplicateIds.has(row.source_record_id),
+    )
     await localDb.transact(['health_records', 'tasks'], (tables) => {
       tables.tasks = (tables.tasks as any[]).map((row) => {
         const keeperId = duplicateToKeeper.get(row.source_record_id)
         return keeperId
-          ? { ...row, source_record_id: keeperId, updated_at: now }
+          ? { ...row, source_record_id: keeperId, updated_at: now, _local_pending: true }
           : row
       })
       tables.health_records = (tables.health_records as any[]).map((row) => duplicateIds.has(row._id)
@@ -4975,11 +5042,41 @@ class LocalSyncRuntime {
               merge_reason: 'duplicate_active_condition',
             },
             updated_at: now,
+            _local_pending: true,
           }
         : row)
     })
 
-    return { data: { cleanedGroups, cleanedRecords } }
+    const baseVersions = {
+      ...activeRows.reduce<Record<string, number>>((acc, row) => {
+        if (duplicateIds.has(row._id)) acc[row._id] = Number(row.version || 0)
+        return acc
+      }, {}),
+      ...affectedTasks.reduce<Record<string, number>>((acc, row) => {
+        acc[row._id] = Number(row.version || 0)
+        return acc
+      }, {}),
+    }
+    const syncMeta = buildSyncMeta(baseVersions, {
+      clientMutationId: createClientMutationId(LOCAL_MUTATION_TYPES.CLEANUP_DUPLICATE_ILLNESSES),
+    })
+    await this.enqueueMutation(
+      LOCAL_MUTATION_TYPES.CLEANUP_DUPLICATE_ILLNESSES,
+      familyId,
+      { dog_id: dogId || null, _sync: syncMeta },
+      ['health_records', 'tasks'],
+      syncMeta,
+    )
+
+    return {
+      data: { cleanedGroups, cleanedRecords },
+      ...buildLocalAck(syncMeta, [
+        ...activeRows
+          .filter(row => duplicateIds.has(row._id))
+          .map(row => ({ collection: 'health_records' as BusinessCollectionName, id: row._id, version: Number(row.version || 0), updatedAt: now })),
+        ...affectedTasks.map(row => ({ collection: 'tasks' as BusinessCollectionName, id: row._id, version: Number(row.version || 0), updatedAt: now })),
+      ]),
+    }
   }
 
   async endMedicationByDogLocally(familyId: string, dogId: string) {

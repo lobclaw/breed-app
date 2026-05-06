@@ -47,6 +47,7 @@
 - `health.endMedication` → `health-service.endMedication`
 - `health.recoverIllnesses` → `health-service.recoverIllnesses`
 - `health.batchUpdateIllnessStatus` → `health-service.batchUpdateIllnessStatus`
+- `health.cleanupDuplicateIllnesses` → `health-service.cleanupDuplicateIllnesses`
 - `health.endMedicationByDog` → `health-service.endMedicationByDog`
 - `health.addWeightRecord` → `health-service.addWeightRecord`
 - `health.addMedicationProtocol` → `health-service.addMedicationProtocol`
