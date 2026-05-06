@@ -321,6 +321,7 @@ import BSheet from '@/components/layout/BSheet.vue'
 import BModal from '@/components/layout/BModal.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 import { buildMedicationDetailUrl } from '@/utils/dogDetailNavigation'
+import { getBeijingDayStart } from '@/utils/date'
 
 const record = ref<any>(null)
 const loading = ref(true)
@@ -499,7 +500,7 @@ function formatDateTime(ts: number | undefined): string {
 
 function getIllnessCourseDay(ts: number | undefined): number | null {
   if (!ts) return null
-  return Math.max(1, Math.floor((Date.now() - ts) / 86400000) + 1)
+  return Math.max(1, Math.floor((getBeijingDayStart(Date.now()) - getBeijingDayStart(ts)) / 86400000) + 1)
 }
 
 function formatAmount(n: number): string {

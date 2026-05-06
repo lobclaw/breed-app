@@ -67,6 +67,11 @@ function getIllnessDayCount(startTs: number, nowTs = Date.now()) {
   return Math.max(1, Math.floor((startOfDay(nowTs) - startOfDay(startTs)) / 86400000) + 1)
 }
 
+function getBeijingElapsedDays(startTs: number, nowTs = Date.now()) {
+  if (!startTs) return 0
+  return Math.max(0, Math.floor((startOfDay(nowTs) - startOfDay(startTs)) / 86400000))
+}
+
 function buildIllnessRelationType(illnessId: string, activeMedicationTasks: any[]) {
   if (activeMedicationTasks.some(task => task?.source_record_id === illnessId)) return 'linked'
   if (activeMedicationTasks.some(task => !task?.source_record_id)) return 'fallback'
@@ -417,11 +422,11 @@ function getCycleStatusOrder(status?: string) {
 
 function buildCycleProjection(row: Record<string, any>) {
   const referenceTs = Number(row.mated_at || row.start_date || row.updated_at || row.created_at || 0)
-  const daysPassed = referenceTs ? Math.max(1, Math.floor((Date.now() - referenceTs) / 86400000) + (row.status === '怀孕中' ? 0 : 1)) : 0
+  const daysPassed = referenceTs ? Math.max(1, getBeijingElapsedDays(referenceTs) + (row.status === '怀孕中' ? 0 : 1)) : 0
   let detail = row.start_date ? formatDate(row.start_date) : `${Number(row.record_count || 0)}条记录`
 
   if (row.status === '发情中' && row.start_date) {
-    detail = `发情第${Math.max(1, Math.floor((Date.now() - Number(row.start_date)) / 86400000) + 1)}天`
+    detail = `发情第${Math.max(1, getBeijingElapsedDays(Number(row.start_date)) + 1)}天`
   } else if (row.status === '怀孕中' && referenceTs) {
     detail = `怀孕第${daysPassed}天`
   } else if (row.status === '已生产' && row.birth_date) {

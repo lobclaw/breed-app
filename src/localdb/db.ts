@@ -26,6 +26,7 @@ function sortRowsByUpdatedAt<T extends { updated_at?: number; created_at?: numbe
 export class LocalDb {
   private cache = new Map<LocalCollectionName, any[]>()
   private listeners = new Set<LocalDbListener>()
+  private transactionQueue: Promise<unknown> = Promise.resolve()
 
   subscribe(listener: LocalDbListener) {
     this.listeners.add(listener)
@@ -65,25 +66,31 @@ export class LocalDb {
     collections: LocalCollectionName[],
     mutator: (tables: TransactionTables) => T | Promise<T>,
   ): Promise<T> {
-    const uniqueCollections = [...new Set(collections)] as LocalCollectionName[]
-    const tables = {} as TransactionTables
+    const runTransaction = async () => {
+      const uniqueCollections = [...new Set(collections)] as LocalCollectionName[]
+      const tables = {} as TransactionTables
 
-    for (const collection of uniqueCollections) {
-      tables[collection] = await this.getTable(collection)
+      for (const collection of uniqueCollections) {
+        tables[collection] = await this.getTable(collection)
+      }
+
+      const workingCopy = Object.fromEntries(
+        uniqueCollections.map(collection => [collection, cloneRows(tables[collection])]),
+      ) as TransactionTables
+
+      const result = await mutator(workingCopy)
+
+      for (const collection of uniqueCollections) {
+        await this.writeTable(collection, workingCopy[collection] || [])
+      }
+
+      this.emit(uniqueCollections)
+      return result
     }
 
-    const workingCopy = Object.fromEntries(
-      uniqueCollections.map(collection => [collection, cloneRows(tables[collection])]),
-    ) as TransactionTables
-
-    const result = await mutator(workingCopy)
-
-    for (const collection of uniqueCollections) {
-      await this.writeTable(collection, workingCopy[collection] || [])
-    }
-
-    this.emit(uniqueCollections)
-    return result
+    const transaction = this.transactionQueue.then(runTransaction, runTransaction)
+    this.transactionQueue = transaction.then(() => undefined, () => undefined)
+    return transaction
   }
 
   async query<T>(

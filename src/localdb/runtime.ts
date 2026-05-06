@@ -793,8 +793,10 @@ async function upsertOutboxMutation(mutation: OutboxMutation) {
 
 async function updateOutboxStatus(mutationId: string, status: MutationStatus, extra: Partial<OutboxMutation> = {}) {
   await localDb.transact(['outbox_mutations', 'local_operation_logs', 'sync_conflicts'], (tables) => {
+    let clientMutationId = mutationId.replace(/^outbox_/, '')
     tables.outbox_mutations = (tables.outbox_mutations as OutboxMutation[]).map((mutation) => {
       if (mutation._id !== mutationId) return mutation
+      clientMutationId = mutation.client_mutation_id || clientMutationId
       const nextLastError = extra.last_error ?? (status === 'failed' ? mutation.last_error ?? null : null)
       return {
         ...mutation,
@@ -804,12 +806,11 @@ async function updateOutboxStatus(mutationId: string, status: MutationStatus, ex
         ...extra,
       }
     })
-    const logId = mutationId.replace(/^outbox_/, 'local_operation_')
+    const logId = `local_operation_${clientMutationId}`
     if (status === 'synced') {
       tables.local_operation_logs = (tables.local_operation_logs as LocalOperationLogRow[]).filter(log => log._id !== logId)
-      const clientMutationId = mutationId.replace(/^outbox_/, '')
       tables.sync_conflicts = (tables.sync_conflicts as any[]).map((conflict) => {
-        if (String(conflict.client_mutation_id || '') !== clientMutationId || conflict.status !== 'open') return conflict
+        if (String(conflict.client_mutation_id || '') !== clientMutationId || conflict.status === 'resolved') return conflict
         return {
           ...conflict,
           status: 'resolved',
@@ -932,7 +933,7 @@ class LocalSyncRuntime {
 
   private logScope(scope: string, payload: Record<string, any>) {
     const devFlag = typeof globalThis !== 'undefined' ? (globalThis as any).__DEV__ : undefined
-    if (typeof devFlag === 'boolean' && !devFlag) return
+    if (devFlag !== true) return
     console.info('[local-sync]', scope, payload)
   }
 
@@ -1026,7 +1027,7 @@ class LocalSyncRuntime {
       } satisfies SyncScopeResult
     }
 
-    if (!options.force && this.scopeSyncPromises.has(scope.key)) {
+    if (this.scopeSyncPromises.has(scope.key)) {
       this.logScope(scope.key, { skip: 'in-flight-dedupe' })
       return this.scopeSyncPromises.get(scope.key) || null
     }
@@ -1198,12 +1199,13 @@ class LocalSyncRuntime {
     return upsertLocalRows(collection, rows)
   }
 
-  async getSyncStatus() {
-    return getSyncStatus()
+  async getSyncStatus(options: { familyId?: string } = {}) {
+    return getSyncStatus({ familyId: options.familyId || this.currentFamilyId })
   }
 
-  async getOutboxIssues(options: { limit?: number } = {}) {
+  async getOutboxIssues(options: { limit?: number; familyId?: string } = {}) {
     const limit = options.limit ?? 5
+    const familyId = options.familyId || this.currentFamilyId
     const [outbox, conflicts] = await Promise.all([
       localDb.getOutbox(),
       localDb.getTable<any>('sync_conflicts'),
@@ -1214,6 +1216,7 @@ class LocalSyncRuntime {
         .map(conflict => [String(conflict.client_mutation_id || ''), conflict]),
     )
     return outbox
+      .filter(mutation => !familyId || mutation.family_id === familyId)
       .filter(mutation => mutation.status === 'failed' || mutation.status === 'conflict')
       .sort((left, right) => Number(right.updated_at || 0) - Number(left.updated_at || 0))
       .slice(0, limit)
@@ -1851,6 +1854,8 @@ class LocalSyncRuntime {
       const outbox = await localDb.getOutbox()
       const now = getNow()
       const pendingMutations = outbox.filter(mutation =>
+        mutation.family_id === familyId
+        &&
         (mutation.status === 'pending' || mutation.status === 'failed')
         && mutation.next_retry_at <= now,
       )

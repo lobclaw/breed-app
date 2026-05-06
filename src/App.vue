@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onLaunch, onShow, onHide } from "@dcloudio/uni-app";
+import { onLaunch, onShow } from "@dcloudio/uni-app";
 // @ts-ignore
 import uniIdPageInit from '@/uni_modules/uni-id-pages/init.js';
 import { useAuth } from '@/composables/useAuth';
@@ -18,15 +18,11 @@ onLaunch(async () => {
   await localSyncRuntime.init();
 });
 onShow(() => {
-  console.log("App Show");
   const { currentFamily } = useAuth();
   const familyId = currentFamily.value?._id || '';
   if (familyId) {
     void localSyncRuntime.resume(familyId);
   }
-});
-onHide(() => {
-  console.log("App Hide");
 });
 </script>
 <style lang="scss">

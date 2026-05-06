@@ -71,7 +71,9 @@ const FOCUS_RATIO = 0.38
 const AUTO_TOLERANCE_PX = 12
 const FORCE_MIN_DELTA_PX = 8
 let focusTimer: ReturnType<typeof setTimeout> | null = null
+let retryFocusTimer: ReturnType<typeof setTimeout> | null = null
 let pendingFocusMode: FocusMode = 'auto'
+let isUnmounted = false
 
 function isActive(value: ChipValue) {
   return props.modelValue === value
@@ -94,9 +96,14 @@ function handleSelect(value: ChipValue) {
 
 function scheduleFocusActiveChip(mode: FocusMode = 'auto') {
   if (!instance) return
-  if (focusTimer) clearTimeout(focusTimer)
+  if (focusTimer) {
+    clearTimeout(focusTimer)
+    focusTimer = null
+  }
   nextTick(() => {
+    if (isUnmounted) return
     focusTimer = setTimeout(() => {
+      focusTimer = null
       focusActiveChip(mode)
     }, 20)
   })
@@ -154,7 +161,11 @@ function focusActiveChip(mode: FocusMode = 'auto', retryCount = 1) {
   measureStripLayout((metrics) => {
     if (!metrics) {
       if (retryCount > 0) {
-        setTimeout(() => focusActiveChip(mode, retryCount - 1), 16)
+        if (retryFocusTimer) clearTimeout(retryFocusTimer)
+        retryFocusTimer = setTimeout(() => {
+          retryFocusTimer = null
+          focusActiveChip(mode, retryCount - 1)
+        }, 16)
       }
       return
     }
@@ -182,7 +193,15 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  if (focusTimer) clearTimeout(focusTimer)
+  isUnmounted = true
+  if (focusTimer) {
+    clearTimeout(focusTimer)
+    focusTimer = null
+  }
+  if (retryFocusTimer) {
+    clearTimeout(retryFocusTimer)
+    retryFocusTimer = null
+  }
 })
 </script>
 

@@ -1199,7 +1199,7 @@ import {
   getBreedingTimelineExpectedDueDate,
   formatRelativeDayLabel as formatDueRelativeDayLabel,
 } from '@/utils/breedingTimeline'
-import { buildTimestampFromDayOffset, formatDateInputValue } from '@/utils/date'
+import { buildTimestampFromDayOffset, formatDateInputValue, getBeijingDayStart } from '@/utils/date'
 import { formatFinanceAmount, getFinanceAmountParts, type FinanceAmountParts } from '@/utils/financeDisplay'
 
 const { currentFamily } = useAuth()
@@ -2077,7 +2077,7 @@ function getIllnessStartTs() {
 
 function getElapsedDaysFromTs(startTs?: number | null) {
   if (typeof startTs !== 'number') return null
-  return Math.max(1, Math.floor((Date.now() - startTs) / 86400000) + 1)
+  return Math.max(1, Math.floor((getBeijingDayStart(Date.now()) - getBeijingDayStart(startTs)) / 86400000) + 1)
 }
 
 function statusTitle(s: DeriveStatus): string {

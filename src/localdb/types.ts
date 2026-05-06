@@ -100,7 +100,7 @@ export interface SyncConflictRow {
   entity_id: string
   base_version: number
   server_version: number
-  status: 'open' | 'resolved'
+  status: 'open' | 'retrying' | 'resolved'
   detail?: Record<string, unknown> | null
   created_at: number
   updated_at: number

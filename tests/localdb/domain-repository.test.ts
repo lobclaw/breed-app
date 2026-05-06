@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { localDb } from '../../src/localdb/db'
 import { localSyncRuntime } from '../../src/localdb/runtime'
 import {
@@ -29,6 +29,10 @@ import {
 } from '../../src/localdb/domain-repository'
 
 describe('local domain repository', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('应从本地集合投影出犬只状态', async () => {
     const now = Date.now()
     await localDb.replaceTable('dogs', [{
@@ -1391,6 +1395,24 @@ describe('local domain repository', () => {
     })
     expect(detail?.records).toHaveLength(1)
     expect(detail?.expenses).toHaveLength(1)
+  })
+
+  it('周期第 N 天应按北京时间日边界计算', async () => {
+    vi.setSystemTime(new Date('2026-04-25T00:30:00+08:00'))
+    await localDb.replaceTable('breeding_cycles', [{
+      _id: 'cycle_beijing_day',
+      family_id: 'fam_beijing_day',
+      dam_id: 'dog_beijing_day',
+      dam_name: '雪球',
+      status: '发情中',
+      cycle_number: 1,
+      start_date: new Date('2026-04-24T23:30:00+08:00').getTime(),
+      updated_at: Date.now(),
+    }])
+
+    const cycles = await listLocalBreedingCycles('fam_beijing_day', { includeClosed: true })
+
+    expect(cycles[0].detail).toBe('发情第2天')
   })
 
   it('应从本地集合归一化销售与财务详情字段', async () => {

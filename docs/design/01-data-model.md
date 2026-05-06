@@ -495,6 +495,7 @@
 
 - 记录服务端返回的版本冲突，供客户端后续提示与人工处理
 - 关键字段：`_id`、`client_mutation_id`、`collection`、`entity_id`、`base_version`、`server_version`、`status`、`detail`、`created_at`
+- `status` 取值：`open`、`retrying`、`resolved`
 
 #### `local_meta`
 

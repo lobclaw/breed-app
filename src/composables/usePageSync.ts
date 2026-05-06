@@ -1,6 +1,7 @@
 import { onLoad, onPullDownRefresh, onShow } from '@dcloudio/uni-app'
 import { useAuth } from '@/composables/useAuth'
 import { localSyncRuntime } from '@/localdb/runtime'
+import { resolveSyncScopeForRoute } from '@/localdb/scope-registry'
 
 interface UsePageSyncOptions {
   routePath?: string
@@ -20,8 +21,10 @@ export function usePageSync(options: UsePageSyncOptions) {
     }
 
     if (!options.routePath) return ''
-    const resolved = await localSyncRuntime.setActiveScopeFromRoute(options.routePath, query)
+    const resolved = resolveSyncScopeForRoute(options.routePath, query)
     scopeKey = resolved?.key || ''
+    if (!scopeKey) return ''
+    await localSyncRuntime.setActiveScope(scopeKey)
     return scopeKey
   }
 

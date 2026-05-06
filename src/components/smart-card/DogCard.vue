@@ -54,7 +54,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import { getHealthTypeTone, isIllnessTaskType } from '@/utils/themeSemantics'
 
@@ -90,6 +90,13 @@ watch(() => props.card?.tasks?.length, () => {
     actingTimer = null
   }
   acting.value = false
+})
+
+onBeforeUnmount(() => {
+  if (actingTimer) {
+    clearTimeout(actingTimer)
+    actingTimer = null
+  }
 })
 
 const allTasks = computed(() => props.card.tasks || [])

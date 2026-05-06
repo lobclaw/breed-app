@@ -12,6 +12,9 @@ describe('local-first source contract', () => {
     const source = readWorkspaceFile('src/composables/usePageSync.ts')
     expect(source).not.toContain('localSyncRuntime.resume(')
     expect(source).toContain('localSyncRuntime.setCurrentFamilyId(familyId)')
+    expect(source).toContain('resolveSyncScopeForRoute(options.routePath, query)')
+    const routeBranch = source.slice(source.indexOf('const resolved = resolveSyncScopeForRoute'))
+    expect(routeBranch.indexOf('scopeKey = resolved?.key ||')).toBeLessThan(routeBranch.indexOf('await localSyncRuntime.setActiveScope(scopeKey)'))
   })
 
   it('应确保纯选择组件不再直接读取云端', () => {
