@@ -89,7 +89,7 @@
           </view>
           <view class="create-item__copy">
             <text class="create-item__title">新建分组</text>
-            <text class="create-item__desc">先创建一级支出分组，再往下挂分类</text>
+            <text class="create-item__desc">用于收纳支出分类</text>
           </view>
           <text class="material-icons-round create-item__arrow">chevron_right</text>
         </view>
@@ -100,7 +100,7 @@
           </view>
           <view class="create-item__copy">
             <text class="create-item__title">新建分类</text>
-            <text class="create-item__desc">创建实际记账使用的二级分类</text>
+            <text class="create-item__desc">用于实际记账</text>
           </view>
           <text class="material-icons-round create-item__arrow">chevron_right</text>
         </view>
@@ -108,66 +108,70 @@
     </BSheet>
 
     <BSheet v-model:visible="showGroupSheet" :title="editingGroupKey ? '编辑分组' : '新建分组'" height="auto">
-      <view class="sheet-form">
-        <view class="field-group">
-          <text class="field-label">分组名称</text>
+      <view class="form-sheet">
+        <view class="form-sheet__field">
+          <text class="form-sheet__label">分组名称</text>
           <input
             v-model="groupFormLabel"
-            class="form-input"
+            class="form-sheet__input"
             placeholder="如：美容护理"
             :focus="showGroupSheet"
           />
         </view>
-
-        <view class="sheet-actions">
-          <BSubmitButton
+      </view>
+      <template #footer>
+        <view class="form-sheet__footer">
+          <button
+            class="form-sheet__submit"
             :disabled="!groupFormLabel.trim() || groupSubmitting"
             :loading="groupSubmitting"
             @click="saveGroup"
           >
             {{ editingGroupKey ? '保存修改' : '新建分组' }}
-          </BSubmitButton>
+          </button>
         </view>
-      </view>
+      </template>
     </BSheet>
 
     <BSheet v-model:visible="showCategorySheet" :title="editingCategoryName ? '编辑分类' : '新建分类'" height="auto">
-      <view class="sheet-form">
-        <view class="field-group">
-          <text class="field-label">分类名称</text>
+      <view class="form-sheet">
+        <view class="form-sheet__field">
+          <text class="form-sheet__label">分类名称</text>
           <input
             v-model="categoryFormName"
-            class="form-input"
+            class="form-sheet__input"
             placeholder="如：玩具、美容"
             :focus="showCategorySheet"
           />
         </view>
 
-        <view class="field-group">
-          <text class="field-label">所属分组</text>
-          <view class="group-pills">
+        <view class="form-sheet__field">
+          <text class="form-sheet__label">所属分组</text>
+          <view class="form-sheet__pills">
             <view
               v-for="group in groups"
               :key="group.key"
-              class="group-pill"
-              :class="{ 'group-pill--active': categoryFormParentGroup === group.key }"
+              class="form-sheet__pill"
+              :class="{ 'form-sheet__pill--active': categoryFormParentGroup === group.key }"
               @click="categoryFormParentGroup = group.key"
             >
               <text>{{ group.label }}</text>
             </view>
           </view>
         </view>
-
-        <view class="sheet-actions">
-          <BSubmitButton
+      </view>
+      <template #footer>
+        <view class="form-sheet__footer">
+          <button
+            class="form-sheet__submit"
             :disabled="!categoryFormName.trim() || !categoryFormParentGroup || categorySubmitting"
             :loading="categorySubmitting"
             @click="saveCategory"
           >
             {{ editingCategoryName ? '保存修改' : '新建分类' }}
-          </BSubmitButton>
+          </button>
         </view>
-      </view>
+      </template>
     </BSheet>
 
     <BDeleteConfirm
@@ -189,7 +193,6 @@ import {
   getLocalExpenseCategoryGroups,
 } from '@/localdb/domain-repository'
 import { localSyncRuntime } from '@/localdb/runtime'
-import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import BDeleteConfirm from '@/components/layout/BDeleteConfirm.vue'

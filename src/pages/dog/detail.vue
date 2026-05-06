@@ -924,8 +924,8 @@
 
     <!-- ==================== D-7: 退休表单 Sheet ==================== -->
     <BSheet v-model:visible="showRetireSheet" title="标记退休">
-      <view class="sheet-form">
-        <view class="status-sheet__dog-info">
+      <view class="form-sheet">
+        <view class="status-sheet__dog-info form-sheet__header-card">
           <view class="status-sheet__dog-avatar" :class="heroAvatarClass">
             <BEntityIcon :role="dog?.role" :size="18" color="#fff" />
           </view>
@@ -934,32 +934,29 @@
             <text class="status-sheet__dog-sub">{{ dispositionActionSummary }}</text>
           </view>
         </view>
-        <view class="sheet-form__group">
-          <text class="sheet-form__label">退休日期 *</text>
-          <view class="sheet-form__input" @click="openDatePicker('retire')">
-            <text class="sheet-form__input-text">{{ retireDateText }}</text>
-            <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
+        <view class="form-sheet__field">
+          <text class="form-sheet__label">退休日期</text>
+          <view class="form-sheet__select" @click="openDatePicker('retire')">
+            <text class="form-sheet__select-text">{{ retireDateText }}</text>
+            <text class="material-icons-round form-sheet__select-icon">calendar_today</text>
           </view>
         </view>
-        <view class="sheet-form__group">
-          <text class="sheet-form__label">退休原因（选填）</text>
-          <input v-model="retireReason" class="sheet-form__text-input" placeholder="如：年龄过大/健康问题..." />
-        </view>
-        <view class="sheet-form__actions">
-          <view class="sheet-form__btn sheet-form__btn--cancel" @click="showRetireSheet = false">
-            <text class="sheet-form__btn-text" style="color: var(--text-2);">取消</text>
-          </view>
-          <view class="sheet-form__btn sheet-form__btn--primary" @click="doRetire">
-            <text class="sheet-form__btn-text" style="color: #fff;">确认退休</text>
-          </view>
+        <view class="form-sheet__field">
+          <text class="form-sheet__label">退休原因（选填）</text>
+          <input v-model="retireReason" class="form-sheet__input" placeholder="如：年龄过大/健康问题..." />
         </view>
       </view>
+      <template #footer>
+        <view class="form-sheet__footer">
+          <button class="form-sheet__submit" @click="doRetire">确认退休</button>
+        </view>
+      </template>
     </BSheet>
 
     <!-- ==================== D-8: 已故表单 Sheet ==================== -->
     <BSheet v-model:visible="showDeceasedSheet" title="标记已故">
-      <view class="sheet-form">
-        <view class="status-sheet__dog-info">
+      <view class="form-sheet">
+        <view class="status-sheet__dog-info form-sheet__header-card">
           <view class="status-sheet__dog-avatar" :class="heroAvatarClass">
             <BEntityIcon :role="dog?.role" :size="18" color="#fff" />
           </view>
@@ -968,88 +965,79 @@
             <text class="status-sheet__dog-sub">{{ dispositionActionSummary }}</text>
           </view>
         </view>
-        <view class="sheet-form__danger-note">
-          <text class="material-icons-round sheet-form__danger-icon">warning</text>
-          <text class="sheet-form__danger-text">此操作将取消所有未完成的提醒任务。</text>
+        <view class="form-sheet__danger-note">
+          <text class="material-icons-round form-sheet__danger-icon">warning</text>
+          <text class="form-sheet__danger-text">此操作将取消所有未完成的提醒任务。</text>
         </view>
-        <view class="sheet-form__group">
-          <text class="sheet-form__label">日期 *</text>
-          <view class="sheet-form__input" @click="openDatePicker('deceased')">
-            <text class="sheet-form__input-text">{{ deceasedDateText }}</text>
-            <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
+        <view class="form-sheet__field">
+          <text class="form-sheet__label">日期</text>
+          <view class="form-sheet__select" @click="openDatePicker('deceased')">
+            <text class="form-sheet__select-text">{{ deceasedDateText }}</text>
+            <text class="material-icons-round form-sheet__select-icon">calendar_today</text>
           </view>
         </view>
-        <view class="sheet-form__group">
-          <text class="sheet-form__label">备注（可选）</text>
-          <input v-model="deceasedCause" class="sheet-form__text-input" placeholder="死因等信息" />
-        </view>
-        <view class="sheet-form__actions">
-          <view class="sheet-form__btn sheet-form__btn--cancel" @click="showDeceasedSheet = false">
-            <text class="sheet-form__btn-text" style="color: var(--text-2);">取消</text>
-          </view>
-          <view class="sheet-form__btn sheet-form__btn--danger" @click="doDeceased">
-            <text class="sheet-form__btn-text" style="color: #fff;">确认标记已故</text>
-          </view>
+        <view class="form-sheet__field">
+          <text class="form-sheet__label">备注（选填）</text>
+          <input v-model="deceasedCause" class="form-sheet__input" placeholder="死因等信息" />
         </view>
       </view>
+      <template #footer>
+        <view class="form-sheet__footer">
+          <button class="form-sheet__submit form-sheet__submit--danger" @click="doDeceased">确认标记已故</button>
+        </view>
+      </template>
     </BSheet>
 
     <!-- ==================== D-9: 领养表单 Sheet ==================== -->
     <BSheet v-model:visible="showAdoptionSheet" title="标记领养">
-      <view class="sheet-form">
-        <view class="sheet-form__group">
-          <text class="sheet-form__label">领养日期 *</text>
-          <view class="sheet-form__input" @click="openDatePicker('adoption')">
-            <text class="sheet-form__input-text">{{ adoptionDateText }}</text>
-            <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
+      <view class="form-sheet">
+        <view class="form-sheet__field">
+          <text class="form-sheet__label">领养日期</text>
+          <view class="form-sheet__select" @click="openDatePicker('adoption')">
+            <text class="form-sheet__select-text">{{ adoptionDateText }}</text>
+            <text class="material-icons-round form-sheet__select-icon">calendar_today</text>
           </view>
         </view>
-        <view class="sheet-form__group">
-          <text class="sheet-form__label">领养说明（选填）</text>
-          <input v-model="adoptionNotes" class="sheet-form__text-input" placeholder="备注信息..." />
+        <view class="form-sheet__field">
+          <text class="form-sheet__label">领养说明（选填）</text>
+          <input v-model="adoptionNotes" class="form-sheet__input" placeholder="备注信息..." />
         </view>
-        <view class="sheet-form__group">
-          <text class="sheet-form__label">领养费（选填）</text>
-          <view class="sheet-form__price-input">
-            <text class="sheet-form__price-symbol">¥</text>
-            <input v-model="adoptionFee" class="sheet-form__price-value" type="digit" placeholder="0" />
+        <view class="form-sheet__field">
+          <text class="form-sheet__label">领养费（选填）</text>
+          <view class="form-sheet__amount">
+            <text class="form-sheet__amount-symbol">¥</text>
+            <input v-model="adoptionFee" class="form-sheet__amount-input" type="digit" placeholder="0" />
           </view>
-          <text class="sheet-form__helper">有领养费将自动录入一笔收入</text>
-        </view>
-        <view class="sheet-form__actions">
-          <view class="sheet-form__btn sheet-form__btn--cancel" @click="showAdoptionSheet = false">
-            <text class="sheet-form__btn-text" style="color: var(--text-2);">取消</text>
-          </view>
-          <view class="sheet-form__btn sheet-form__btn--primary" @click="doAdoption">
-            <text class="sheet-form__btn-text" style="color: #fff;">确认领养</text>
-          </view>
+          <text class="form-sheet__helper">有领养费将自动录入一笔收入</text>
         </view>
       </view>
+      <template #footer>
+        <view class="form-sheet__footer">
+          <button class="form-sheet__submit" @click="doAdoption">确认领养</button>
+        </view>
+      </template>
     </BSheet>
 
     <!-- ==================== D-10: 赠送表单 Sheet ==================== -->
     <BSheet v-model:visible="showGiftSheet" title="标记赠送">
-      <view class="sheet-form">
-        <view class="sheet-form__group">
-          <text class="sheet-form__label">赠送日期 *</text>
-          <view class="sheet-form__input" @click="openDatePicker('gift')">
-            <text class="sheet-form__input-text">{{ giftDateText }}</text>
-            <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
+      <view class="form-sheet">
+        <view class="form-sheet__field">
+          <text class="form-sheet__label">赠送日期</text>
+          <view class="form-sheet__select" @click="openDatePicker('gift')">
+            <text class="form-sheet__select-text">{{ giftDateText }}</text>
+            <text class="material-icons-round form-sheet__select-icon">calendar_today</text>
           </view>
         </view>
-        <view class="sheet-form__group">
-          <text class="sheet-form__label">受赠人信息（选填）</text>
-          <input v-model="giftRecipient" class="sheet-form__text-input" placeholder="受赠人姓名或联系方式..." />
-        </view>
-        <view class="sheet-form__actions">
-          <view class="sheet-form__btn sheet-form__btn--cancel" @click="showGiftSheet = false">
-            <text class="sheet-form__btn-text" style="color: var(--text-2);">取消</text>
-          </view>
-          <view class="sheet-form__btn sheet-form__btn--primary" @click="doGift">
-            <text class="sheet-form__btn-text" style="color: #fff;">确认赠送</text>
-          </view>
+        <view class="form-sheet__field">
+          <text class="form-sheet__label">受赠人信息（选填）</text>
+          <input v-model="giftRecipient" class="form-sheet__input" placeholder="受赠人姓名或联系方式..." />
         </view>
       </view>
+      <template #footer>
+        <view class="form-sheet__footer">
+          <button class="form-sheet__submit" @click="doGift">确认赠送</button>
+        </view>
+      </template>
     </BSheet>
 
     <!-- ==================== D-11: 取消退休确认 Modal ==================== -->
@@ -1072,8 +1060,8 @@
 
     <!-- ==================== D-13: 康复表单 Sheet ==================== -->
     <BSheet v-model:visible="showRecoverySheet" title="标记康复">
-      <view class="sheet-form">
-        <view class="status-sheet__dog-info">
+      <view class="form-sheet">
+        <view class="status-sheet__dog-info form-sheet__header-card">
           <view class="status-sheet__dog-avatar" :class="heroAvatarClass">
             <BEntityIcon :role="dog?.role" :size="18" color="#fff" />
           </view>
@@ -1082,22 +1070,19 @@
             <text class="status-sheet__dog-sub">{{ healthActionSummary }}</text>
           </view>
         </view>
-        <view class="sheet-form__group">
-          <text class="sheet-form__label">康复日期</text>
-          <view class="sheet-form__input" @click="openDatePicker('recovery')">
-            <text class="sheet-form__input-text">{{ recoveryDateText }}</text>
-            <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
-          </view>
-        </view>
-        <view class="sheet-form__actions">
-          <view class="sheet-form__btn sheet-form__btn--cancel" @click="showRecoverySheet = false">
-            <text class="sheet-form__btn-text" style="color: var(--text-2);">取消</text>
-          </view>
-          <view class="sheet-form__btn sheet-form__btn--primary" @click="doRecovery">
-            <text class="sheet-form__btn-text" style="color: #fff;">确认康复</text>
+        <view class="form-sheet__field">
+          <text class="form-sheet__label">康复日期</text>
+          <view class="form-sheet__select" @click="openDatePicker('recovery')">
+            <text class="form-sheet__select-text">{{ recoveryDateText }}</text>
+            <text class="material-icons-round form-sheet__select-icon">calendar_today</text>
           </view>
         </view>
       </view>
+      <template #footer>
+        <view class="form-sheet__footer">
+          <button class="form-sheet__submit" @click="doRecovery">确认康复</button>
+        </view>
+      </template>
     </BSheet>
 
     <!-- ==================== D-14: 删除犬只确认 Modal ==================== -->
@@ -1110,7 +1095,7 @@
 
     <!-- ==================== D-20: 单犬体重录入 Sheet ==================== -->
     <BSheet v-model:visible="showWeightEntry" title="记录体重">
-      <view class="weight-entry">
+      <view class="form-sheet weight-entry">
         <view class="weight-entry__dog-row">
           <view class="weight-entry__dog-avatar">
             <BEntityIcon :role="dog?.role" :size="16" color="#fff" />
@@ -1124,8 +1109,8 @@
         </view>
 
         <view class="weight-entry__form">
-          <view class="weight-entry__field">
-            <text class="weight-entry__label">体重 (kg)</text>
+          <view class="form-sheet__field">
+            <text class="form-sheet__label">体重</text>
             <view class="weight-entry__input-wrap">
               <input
                 v-model="weightInput"
@@ -1137,25 +1122,26 @@
             </view>
           </view>
 
-          <view class="weight-entry__field">
-            <text class="weight-entry__label">日期</text>
-            <view class="weight-entry__date-picker" @click="openDatePicker('weight')">
-              <text class="weight-entry__date-text">{{ weightDateText }}</text>
-              <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
+          <view class="form-sheet__field">
+            <text class="form-sheet__label">日期</text>
+            <view class="form-sheet__select" @click="openDatePicker('weight')">
+              <text class="form-sheet__select-text">{{ weightDateText }}</text>
+              <text class="material-icons-round form-sheet__select-icon">calendar_today</text>
             </view>
           </view>
 
-          <view class="weight-entry__field">
-            <text class="weight-entry__label">备注（选填）</text>
+          <view class="form-sheet__field">
+            <text class="form-sheet__label">备注（选填）</text>
             <input
               v-model="weightNotes"
-              class="weight-entry__notes-input"
+              class="form-sheet__input"
               placeholder="如：饭前/饭后..."
             />
           </view>
         </view>
-
-        <view class="weight-entry__actions">
+      </view>
+      <template #footer>
+        <view class="form-sheet__footer">
           <BSubmitButton
             class="weight-entry__save-btn"
             :loading="weightSubmitState === 'submitting'"
@@ -1166,7 +1152,7 @@
             {{ weightSaveButtonText }}
           </BSubmitButton>
         </view>
-      </view>
+      </template>
     </BSheet>
 
     <!-- ==================== D-21: 体重趋势详情 Sheet ==================== -->

@@ -325,8 +325,8 @@ onShow(() => load())
 .platform-badge {
   padding: 2px 8px;
   border-radius: 999px;
-  background: rgba(91, 141, 239, 0.12);
-  color: var(--blue);
+  background: var(--amber-soft);
+  color: var(--amber);
   font-size: 11px;
   font-weight: 600;
   line-height: 1.4;

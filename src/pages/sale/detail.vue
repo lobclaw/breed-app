@@ -29,33 +29,33 @@
         <view class="timeline-card">
           <view class="stepper">
             <view class="stepper-line">
-              <view class="stepper-line__fill" :style="{ width: stepperFillWidth }" />
+              <view class="stepper-line__fill" :style="stepperFillStyle" />
             </view>
             <!-- 待售 -->
             <view class="stepper-step">
-              <view class="stepper-dot" :class="{ 'stepper-dot--done': stepIndex >= 0 }">
+              <view class="stepper-dot" :class="getStepperDotClass(0)">
                 <text v-if="stepIndex >= 0" class="material-icons-round" style="font-size: 16px; color: #fff;">check</text>
                 <text v-else>1</text>
               </view>
-              <text class="stepper-label" :class="{ 'stepper-label--done': stepIndex >= 0 }">待售</text>
+              <text class="stepper-label" :class="getStepperLabelClass(0)">待售</text>
               <text v-if="sale.floor_price" class="stepper-amount">¥{{ sale.floor_price?.toLocaleString() }}</text>
             </view>
             <!-- 已预定 -->
             <view class="stepper-step">
-              <view class="stepper-dot" :class="{ 'stepper-dot--done': stepIndex >= 1 }">
+              <view class="stepper-dot" :class="getStepperDotClass(1)">
                 <text v-if="stepIndex >= 1" class="material-icons-round" style="font-size: 16px; color: #fff;">check</text>
                 <text v-else>2</text>
               </view>
-              <text class="stepper-label" :class="{ 'stepper-label--done': stepIndex >= 1 }">已预定</text>
+              <text class="stepper-label" :class="getStepperLabelClass(1)">已预定</text>
               <text v-if="sale.deposit_amount" class="stepper-amount" style="color: var(--red);">定金 ¥{{ sale.deposit_amount?.toLocaleString() }}</text>
             </view>
             <!-- 已成交 -->
             <view class="stepper-step">
-              <view class="stepper-dot" :class="{ 'stepper-dot--done': stepIndex >= 2, 'stepper-dot--fail': sale.status === '已退款' }">
+              <view class="stepper-dot" :class="getStepperDotClass(2)">
                 <text v-if="stepIndex >= 2" class="material-icons-round" style="font-size: 16px; color: #fff;">check</text>
                 <text v-else>3</text>
               </view>
-              <text class="stepper-label" :class="{ 'stepper-label--done': stepIndex >= 2 }">已成交</text>
+              <text class="stepper-label" :class="getStepperLabelClass(2)">已成交</text>
               <text v-if="sale.received_amount != null" class="stepper-amount" style="color: var(--red);">到手 ¥{{ sale.received_amount?.toLocaleString() }}</text>
               <text v-else-if="sale.status === '已成交' && sale.settlement_status" class="stepper-amount" style="color: var(--amber);">{{ sale.settlement_status }}</text>
             </view>
@@ -157,239 +157,265 @@
       <!-- 操作按钮 -->
       <view class="sale-action-area" v-if="sale.status === '待售'">
         <button class="action-btn action-btn--ghost" @click="showDepositModal = true">收定金</button>
-        <button class="action-btn action-btn--filled-green" @click="showCompleteModal = true">直接成交</button>
+        <button class="action-btn action-btn--primary" @click="showCompleteModal = true">直接成交</button>
       </view>
 
       <view class="sale-action-area" v-if="sale.status === '已预定'">
-        <button class="action-btn action-btn--filled-green" @click="showCompleteModal = true">完成交易</button>
+        <button class="action-btn action-btn--primary" @click="showCompleteModal = true">完成交易</button>
         <button class="action-btn action-btn--ghost-red" @click="openCancelSheet">取消预定</button>
       </view>
 
       <view class="sale-action-area" v-if="sale.status === '已成交' && (sale.settlement_status !== '已结算' || canRefund)">
         <button
           v-if="sale.settlement_status !== '已结算'"
-          class="action-btn action-btn--filled-green"
+          class="action-btn action-btn--primary"
           @click="openSettleModal"
         >补录结算</button>
         <button v-if="canRefund" class="action-btn action-btn--ghost-red" @click="openRefundSheet">退款</button>
       </view>
     </template>
 
-    <!-- 收定金弹窗 -->
-    <view class="modal-mask" v-if="showDepositModal" @click.self="showDepositModal = false" @touchmove.prevent>
-      <view class="modal-content">
-        <text class="modal-title">收定金</text>
-        <view class="modal-field">
-          <text class="modal-label">定金金额(¥) *</text>
-          <input v-model="depositForm.deposit_amount" type="digit" placeholder="必填" class="modal-input" />
+    <!-- 收定金 Sheet -->
+    <BSheet :visible="showDepositModal" title="收定金" @update:visible="showDepositModal = $event">
+      <view class="sale-flow-form">
+        <view class="sale-flow-field">
+          <text class="sale-flow-label">定金金额</text>
+          <view class="sheet-amount-input">
+            <text class="sheet-amount-input__symbol">¥</text>
+            <input v-model="depositForm.deposit_amount" type="digit" placeholder="请输入金额" class="sheet-amount-input__control" />
+          </view>
         </view>
-        <view class="modal-field">
-          <text class="modal-label">约定价(¥)</text>
-          <input v-model="depositForm.agreed_price" type="digit" placeholder="选填" class="modal-input" />
+        <view class="sale-flow-field">
+          <text class="sale-flow-label">约定价（选填）</text>
+          <view class="sheet-amount-input">
+            <text class="sheet-amount-input__symbol">¥</text>
+            <input v-model="depositForm.agreed_price" type="digit" placeholder="请输入金额" class="sheet-amount-input__control" />
+          </view>
         </view>
-        <view class="modal-field">
-          <text class="modal-label">买家信息</text>
-          <input v-model="depositForm.buyer_info" placeholder="选填" class="modal-input" />
+        <view class="sale-flow-field">
+          <text class="sale-flow-label">买家信息（选填）</text>
+          <input v-model="depositForm.buyer_info" placeholder="填写姓名、微信或备注" class="sale-flow-input" />
         </view>
-        <view class="modal-field">
-          <text class="modal-label">平台</text>
-          <view class="modal-pills">
+        <view class="sale-flow-field">
+          <text class="sale-flow-label">平台（选填）</text>
+          <view class="sale-flow-pills">
             <view
               v-for="p in platformLabels"
               :key="p"
-              class="modal-pill"
-              :class="{ 'modal-pill--active': depositForm.platform === p }"
+              class="sale-flow-pill"
+              :class="{ 'sale-flow-pill--active': depositForm.platform === p }"
               @click="depositForm.platform = depositForm.platform === p ? '' : p"
             >
               <text>{{ p }}</text>
             </view>
           </view>
         </view>
-        <view class="modal-field">
-          <text class="modal-label">选择代理人</text>
-          <view class="sheet-select" @click="openAgentSheet(depositForm.agent_id, (agent) => { depositForm.agent_id = agent._id; depositForm.agent_name = agent.name })">
-            <text :style="{ color: depositForm.agent_name ? 'var(--text-1)' : 'var(--text-3)' }">
+        <view class="sale-flow-field">
+          <text class="sale-flow-label">选择代理人（选填）</text>
+          <view class="sale-flow-select" @click="openAgentSheet(depositForm.agent_id, (agent) => { depositForm.agent_id = agent._id; depositForm.agent_name = agent.name })">
+            <text class="sale-flow-select__text" :class="{ 'sale-flow-select__text--placeholder': !depositForm.agent_name }">
               {{ depositForm.agent_name || '选择代理人' }}
             </text>
-            <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">chevron_right</text>
+            <text class="material-icons-round sale-flow-select__icon">chevron_right</text>
           </view>
         </view>
-        <view class="modal-actions">
-          <button class="modal-btn" @click="showDepositModal = false">取消</button>
-          <button class="modal-btn modal-btn--primary" :disabled="!depositForm.deposit_amount" @click="doDeposit">确认</button>
-        </view>
       </view>
-    </view>
+      <template #footer>
+        <view class="sale-flow-footer">
+          <button class="sale-flow-submit sale-flow-submit--primary" :disabled="!depositForm.deposit_amount" @click="doDeposit">确认收定金</button>
+        </view>
+      </template>
+    </BSheet>
 
-    <!-- 完成交易弹窗 -->
-    <view class="modal-mask" v-if="showCompleteModal" @click.self="showCompleteModal = false" @touchmove.prevent>
-      <view class="modal-content">
-        <text class="modal-title">完成交易</text>
-        <view class="modal-field">
-          <text class="modal-label">到手价(¥)</text>
-          <input v-model="completeForm.received_amount" type="digit" placeholder="选填，结算后再补" class="modal-input" />
+    <!-- 完成交易 Sheet -->
+    <BSheet :visible="showCompleteModal" title="完成交易" @update:visible="showCompleteModal = $event">
+      <view class="sale-flow-form">
+        <view class="sale-flow-field">
+          <text class="sale-flow-label">到手价（选填）</text>
+          <view class="sheet-amount-input">
+            <text class="sheet-amount-input__symbol">¥</text>
+            <input v-model="completeForm.received_amount" type="digit" placeholder="结算后再补可留空" class="sheet-amount-input__control" />
+          </view>
         </view>
-        <view class="modal-field">
-          <text class="modal-label">约定价(¥)</text>
-          <input v-model="completeForm.agreed_price" type="digit" placeholder="选填" class="modal-input" />
+        <view class="sale-flow-field">
+          <text class="sale-flow-label">约定价（选填）</text>
+          <view class="sheet-amount-input">
+            <text class="sheet-amount-input__symbol">¥</text>
+            <input v-model="completeForm.agreed_price" type="digit" placeholder="请输入金额" class="sheet-amount-input__control" />
+          </view>
         </view>
-        <view class="modal-field">
-          <text class="modal-label">买家信息</text>
-          <input v-model="completeForm.buyer_info" placeholder="选填" class="modal-input" />
+        <view class="sale-flow-field">
+          <text class="sale-flow-label">买家信息（选填）</text>
+          <input v-model="completeForm.buyer_info" placeholder="填写姓名、微信或备注" class="sale-flow-input" />
         </view>
-        <view class="modal-field">
-          <text class="modal-label">平台</text>
-          <view class="modal-pills">
+        <view class="sale-flow-field">
+          <text class="sale-flow-label">平台（选填）</text>
+          <view class="sale-flow-pills">
             <view
               v-for="p in platformLabels"
               :key="p"
-              class="modal-pill"
-              :class="{ 'modal-pill--active': completeForm.platform === p }"
+              class="sale-flow-pill"
+              :class="{ 'sale-flow-pill--active': completeForm.platform === p }"
               @click="completeForm.platform = completeForm.platform === p ? '' : p"
             >
               <text>{{ p }}</text>
             </view>
           </view>
         </view>
-        <view class="modal-field">
-          <text class="modal-label">交付日期</text>
-          <view
-            class="modal-date-control"
-            :class="{ 'modal-date-control--empty': !deliveryDateText }"
-            @click="showDeliveryDatePicker = true"
-          >
-            <text class="modal-date-control__text">{{ deliveryDateText || '选填' }}</text>
-            <text class="material-icons-round modal-date-control__icon">event</text>
+        <view class="sale-flow-field">
+          <text class="sale-flow-label">交付日期（选填）</text>
+          <view class="sale-flow-select" @click="showDeliveryDatePicker = true">
+            <text class="sale-flow-select__text" :class="{ 'sale-flow-select__text--placeholder': !deliveryDateText }">
+              {{ deliveryDateText || '选择日期' }}
+            </text>
+            <text class="material-icons-round sale-flow-select__icon">calendar_today</text>
           </view>
         </view>
-        <view class="modal-actions">
-          <button class="modal-btn" @click="showCompleteModal = false">取消</button>
-          <button class="modal-btn modal-btn--primary" @click="doComplete">确认</button>
-        </view>
       </view>
-    </view>
+      <template #footer>
+        <view class="sale-flow-footer">
+          <button class="sale-flow-submit sale-flow-submit--primary" @click="doComplete">确认成交</button>
+        </view>
+      </template>
+    </BSheet>
 
-    <view class="modal-mask" v-if="showSettleModal" @click.self="showSettleModal = false" @touchmove.prevent>
-      <view class="modal-content">
-        <text class="modal-title">补录结算</text>
-        <view class="modal-field">
-          <text class="modal-label">到手价(¥) *</text>
-          <input v-model="settleForm.received_amount" type="digit" placeholder="必填" class="modal-input" />
+    <!-- 补录结算 Sheet -->
+    <BSheet :visible="showSettleModal" title="补录结算" @update:visible="showSettleModal = $event">
+      <view class="sale-flow-form">
+        <view class="sale-flow-field">
+          <text class="sale-flow-label">到手价</text>
+          <view class="sheet-amount-input">
+            <text class="sheet-amount-input__symbol">¥</text>
+            <input v-model="settleForm.received_amount" type="digit" placeholder="请输入金额" class="sheet-amount-input__control" />
+          </view>
         </view>
-        <view class="modal-field">
-          <text class="modal-label">约定价(¥)</text>
-          <input v-model="settleForm.agreed_price" type="digit" placeholder="选填" class="modal-input" />
+        <view class="sale-flow-field">
+          <text class="sale-flow-label">约定价（选填）</text>
+          <view class="sheet-amount-input">
+            <text class="sheet-amount-input__symbol">¥</text>
+            <input v-model="settleForm.agreed_price" type="digit" placeholder="请输入金额" class="sheet-amount-input__control" />
+          </view>
         </view>
-        <view class="modal-field">
-          <text class="modal-label">结算状态</text>
-          <view class="modal-pills">
+        <view class="sale-flow-field">
+          <text class="sale-flow-label">结算状态</text>
+          <view class="sale-flow-pills sale-flow-pills--segmented">
             <view
               v-for="option in settlementStatusOptions"
               :key="option"
-              class="modal-pill"
-              :class="{ 'modal-pill--active': settleForm.settlement_status === option }"
+              class="sale-flow-pill"
+              :class="{ 'sale-flow-pill--active': settleForm.settlement_status === option }"
               @click="settleForm.settlement_status = option"
             >
               <text>{{ option }}</text>
             </view>
           </view>
         </view>
-        <view class="modal-actions">
-          <button class="modal-btn" @click="showSettleModal = false">取消</button>
-          <button class="modal-btn modal-btn--primary" :disabled="!settleForm.received_amount" @click="doSettle">确认</button>
-        </view>
       </view>
-    </view>
+      <template #footer>
+        <view class="sale-flow-footer">
+          <button class="sale-flow-submit sale-flow-submit--primary" :disabled="!settleForm.received_amount" @click="doSettle">确认结算</button>
+        </view>
+      </template>
+    </BSheet>
 
     <!-- 取消预定弹窗已迁移到 S-7 BSheet -->
 
     <!-- S-6: 退款表单 BSheet -->
     <BSheet :visible="showRefundSheet" title="退款" @update:visible="showRefundSheet = $event">
-      <view class="sheet-form">
-        <!-- 全额/部分退款 -->
-        <view class="sheet-toggle">
+      <view class="sale-flow-form">
+        <view class="sale-flow-toggle">
           <view
-            class="sheet-toggle__item"
-            :class="{ 'sheet-toggle__item--active': refundSheetForm.type === 'full' }"
+            class="sale-flow-toggle__item"
+            :class="{ 'sale-flow-toggle__item--active': refundSheetForm.type === 'full' }"
             @click="refundSheetForm.type = 'full'; refundSheetForm.refund_amount = String(sale?.received_amount || '')"
           >
             <text>全额退款</text>
           </view>
           <view
-            class="sheet-toggle__item"
-            :class="{ 'sheet-toggle__item--active': refundSheetForm.type === 'partial' }"
+            class="sale-flow-toggle__item"
+            :class="{ 'sale-flow-toggle__item--active': refundSheetForm.type === 'partial' }"
             @click="refundSheetForm.type = 'partial'; refundSheetForm.refund_amount = ''"
           >
             <text>部分退款</text>
           </view>
         </view>
-        <!-- 退款金额 -->
-        <view class="sheet-field">
-          <text class="sheet-label">退款金额(¥) *</text>
-          <input
-            v-model="refundSheetForm.refund_amount"
-            type="digit"
-            :placeholder="`最多 ${sale?.received_amount || ''}`"
-            class="sheet-input"
-            :disabled="refundSheetForm.type === 'full'"
-          />
+        <view class="sale-flow-field">
+          <text class="sale-flow-label">退款金额</text>
+          <view class="sheet-amount-input" :class="{ 'sheet-amount-input--disabled': refundSheetForm.type === 'full' }">
+            <text class="sheet-amount-input__symbol">¥</text>
+            <input
+              v-model="refundSheetForm.refund_amount"
+              type="digit"
+              :placeholder="`最多 ${sale?.received_amount || ''}`"
+              class="sheet-amount-input__control"
+              :disabled="refundSheetForm.type === 'full'"
+            />
+          </view>
         </view>
-        <!-- 退款原因 -->
-        <view class="sheet-field">
-          <text class="sheet-label">退款原因</text>
-          <view class="sheet-options">
+        <view class="sale-flow-field">
+          <text class="sale-flow-label">退款原因（选填）</text>
+          <view class="sale-flow-pills">
             <view
               v-for="r in refundReasons"
               :key="r"
-              class="sheet-option"
-              :class="{ 'sheet-option--active': refundSheetForm.refund_reason === r }"
+              class="sale-flow-pill"
+              :class="{ 'sale-flow-pill--active': refundSheetForm.refund_reason === r }"
               @click="refundSheetForm.refund_reason = r"
             >
               <text>{{ r }}</text>
             </view>
           </view>
         </view>
-        <!-- 退款日期 -->
-        <view class="sheet-field">
-          <text class="sheet-label">退款日期</text>
-          <view class="sheet-select" @click="showRefundDatePicker = true">
-            <text :style="{ color: refundDateText ? 'var(--text-1)' : 'var(--text-3)' }">
+        <view class="sale-flow-field">
+          <text class="sale-flow-label">退款日期（选填）</text>
+          <view class="sale-flow-select" @click="showRefundDatePicker = true">
+            <text class="sale-flow-select__text" :class="{ 'sale-flow-select__text--placeholder': !refundDateText }">
               {{ refundDateText || '选择日期' }}
             </text>
-            <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
+            <text class="material-icons-round sale-flow-select__icon">calendar_today</text>
           </view>
         </view>
-        <!-- 确认退款 -->
-        <button
-          class="sheet-btn sheet-btn--red"
-          :disabled="!refundSheetForm.refund_amount"
-          @click="doRefundSheet"
-        >确认退款</button>
       </view>
+      <template #footer>
+        <view class="sale-flow-footer">
+          <button
+            class="sale-flow-submit sale-flow-submit--red"
+            :disabled="!refundSheetForm.refund_amount"
+            @click="doRefundSheet"
+          >确认退款</button>
+        </view>
+      </template>
     </BSheet>
 
     <!-- S-7: 定金取消 BSheet -->
     <BSheet :visible="showCancelSheet" title="取消预定" @update:visible="showCancelSheet = $event">
-      <view class="sheet-form">
-        <view class="sheet-field">
-          <text class="sheet-label">取消原因</text>
-          <input v-model="cancelSheetForm.reason" class="sheet-input" placeholder="输入取消原因" />
+      <view class="sale-flow-form">
+        <view class="sale-flow-field">
+          <text class="sale-flow-label">取消原因（选填）</text>
+          <input v-model="cancelSheetForm.reason" class="sale-flow-input" placeholder="输入取消原因" />
         </view>
-        <view class="sheet-field">
-          <text class="sheet-label">退还定金(¥)</text>
-          <input
-            v-model="cancelSheetForm.refund_amount"
-            type="digit"
-            :placeholder="`定金总额 ${sale?.deposit_amount || 0}`"
-            class="sheet-input"
-          />
-          <text class="sheet-helper">留空或输入 0 表示不退还定金</text>
+        <view class="sale-flow-field">
+          <text class="sale-flow-label">退还定金（选填）</text>
+          <view class="sheet-amount-input">
+            <text class="sheet-amount-input__symbol">¥</text>
+            <input
+              v-model="cancelSheetForm.refund_amount"
+              type="digit"
+              :placeholder="`定金总额 ${sale?.deposit_amount || 0}`"
+              class="sheet-amount-input__control"
+            />
+          </view>
+          <text class="sale-flow-helper">留空或输入 0 表示不退还定金</text>
         </view>
-        <button
-          class="sheet-btn sheet-btn--red"
-          @click="doCancelSheet"
-        >确认取消预定</button>
       </view>
+      <template #footer>
+        <view class="sale-flow-footer">
+          <button
+            class="sale-flow-submit sale-flow-submit--red"
+            @click="doCancelSheet"
+          >确认取消预定</button>
+        </view>
+      </template>
     </BSheet>
 
     <!-- S-8: 平台选择器已移除（定金/成交弹窗使用内联 pills） -->
@@ -599,6 +625,8 @@ const hasPriceDetails = computed(() => {
 
 const canRefund = computed(() => Number(sale.value?.received_amount || 0) > 0)
 
+type SaleStatusTone = 'amber' | 'blue' | 'green' | 'red'
+
 function onDeliveryDateConfirm(value: number | string) {
   if (typeof value !== 'number') return
   completeForm.delivery_date = value
@@ -628,6 +656,45 @@ const stepperFillWidth = computed(() => {
   if (stepIndex.value >= 1) return '50%'
   return '0%'
 })
+
+const stepperFillStyle = computed(() => ({
+  width: stepperFillWidth.value,
+  background: `var(--${getSaleStatusTone(sale.value?.status)})`,
+}))
+
+function getSaleStatusTone(status?: string): SaleStatusTone {
+  const map: Record<string, SaleStatusTone> = {
+    '待售': 'amber',
+    '已预定': 'blue',
+    '已成交': 'green',
+    '已退款': 'red',
+    '定金取消': 'amber',
+  }
+  return map[status || ''] || 'amber'
+}
+
+function getStepperTone(step: number): SaleStatusTone {
+  if (sale.value?.status === '已退款' && step === 2) return 'red'
+  if (step === 0) return 'amber'
+  if (step === 1) return sale.value?.status === '定金取消' ? 'amber' : 'blue'
+  return 'green'
+}
+
+function getStepperDotClass(step: number) {
+  const active = stepIndex.value >= step
+  const tone = getStepperTone(step)
+  return {
+    [`stepper-dot--${tone}`]: active,
+  }
+}
+
+function getStepperLabelClass(step: number) {
+  const active = stepIndex.value >= step
+  const tone = getStepperTone(step)
+  return {
+    [`stepper-label--${tone}`]: active,
+  }
+}
 
 function getStatusTagColor(status: string): 'red' | 'amber' | 'green' | 'blue' | 'plum' | 'rose' | 'teal' | 'primary' {
   const map: Record<string, any> = {
@@ -954,7 +1021,6 @@ onShow(() => {
   &__fill {
     height: 100%;
     border-radius: var(--radius-progress);
-    background: var(--green);
     transition: width 0.4s ease;
   }
 }
@@ -980,15 +1046,10 @@ onShow(() => {
   background: var(--card-dim);
   color: var(--text-3);
 
-  &--done {
-    background: var(--green);
-    color: #fff;
-  }
-
-  &--fail {
-    background: var(--red);
-    color: #fff;
-  }
+  &--amber { background: var(--amber); color: #fff; }
+  &--blue { background: var(--blue); color: #fff; }
+  &--green { background: var(--green); color: #fff; }
+  &--red { background: var(--red); color: #fff; }
 }
 
 .stepper-label {
@@ -998,7 +1059,10 @@ onShow(() => {
   text-align: center;
   line-height: 1.3;
 
-  &--done { color: var(--green); }
+  &--amber { color: var(--amber); }
+  &--blue { color: var(--blue); }
+  &--green { color: var(--green); }
+  &--red { color: var(--red); }
 }
 
 .stepper-amount {
@@ -1094,10 +1158,10 @@ onShow(() => {
     border: none;
   }
 
-  &--filled-green {
-    background: var(--green);
+  &--primary {
+    background: var(--primary);
     color: #fff;
-    box-shadow: 0 8px 18px rgba(61, 174, 111, 0.2);
+    box-shadow: 0 8px 18px rgba(234, 62, 119, 0.2);
   }
 
   &--ghost {
@@ -1113,225 +1177,182 @@ onShow(() => {
   }
 }
 
-/* ==================== MODALS ==================== */
-.modal-mask {
-  position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: var(--mask);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
+/* ==================== SALE FLOW SHEETS ==================== */
+.sale-flow-form {
+  padding-bottom: 12px;
 }
 
-.modal-content {
-  background: var(--card);
-  border-radius: var(--radius-card);
-  padding: 20px;
-  width: 85%;
-  max-width: 320px;
-  box-shadow: var(--shadow-lg);
-}
-
-.modal-title {
-  font-family: var(--font-display);
-  font-size: 17px;
-  font-weight: 700;
-  color: var(--text-1);
-  display: block;
+.sale-flow-field {
   margin-bottom: 16px;
-  text-align: center;
 }
 
-.modal-field {
-  margin-bottom: 12px;
-}
-
-.modal-label {
+.sale-flow-label {
   font-size: 13px;
+  font-weight: 700;
   color: var(--text-2);
-  margin-bottom: 6px;
+  margin-bottom: 8px;
   display: block;
 }
 
-.modal-input {
+.sheet-amount-input {
   width: 100%;
-  height: 44px;
+  height: 56px;
+  box-sizing: border-box;
   border: 1.5px solid var(--text-4);
   border-radius: var(--radius-date);
-  padding: 0 14px;
-  font-size: 14px;
-  color: var(--text-1);
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   background: var(--bg);
+  transition: border-color 0.16s ease, background 0.16s ease;
+
+  &:focus-within {
+    border-color: rgba(234, 62, 119, 0.42);
+    background: var(--card);
+  }
+
+  &--disabled {
+    background: var(--card-dim);
+  }
 }
 
-.modal-date-control {
+.sheet-amount-input__symbol {
+  flex: 0 0 auto;
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--text-3);
+}
+
+.sheet-amount-input__control {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: none;
+  background: transparent;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-1);
+  line-height: 1;
+  padding: 0;
+}
+
+.sale-flow-input,
+.sale-flow-select {
   width: 100%;
-  height: 44px;
+  height: 48px;
   box-sizing: border-box;
   border: 1.5px solid var(--text-4);
   border-radius: var(--radius-date);
   padding: 0 14px;
+  background: var(--bg);
+  font-size: 14px;
+  color: var(--text-1);
+  transition: border-color 0.16s ease, background 0.16s ease, transform 0.12s ease;
+}
+
+.sale-flow-input:focus {
+  border-color: rgba(234, 62, 119, 0.42);
+  background: var(--card);
+}
+
+.sale-flow-select {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  background: var(--bg);
-  color: var(--text-1);
-  transition: border-color 0.12s ease, background 0.12s ease, transform 0.12s ease;
 
   &:active {
     transform: scale(0.99);
     border-color: rgba(234, 62, 119, 0.36);
     background: var(--card);
   }
+}
 
-  &--empty {
+.sale-flow-select__text {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  color: var(--text-1);
+
+  &--placeholder {
     color: var(--text-3);
   }
 }
 
-.modal-date-control__text {
-  flex: 1;
-  min-width: 0;
-  font-size: 14px;
-  line-height: 1.2;
-}
-
-.modal-date-control__icon {
+.sale-flow-select__icon {
   flex: 0 0 auto;
   font-size: 18px;
   line-height: 1;
   color: var(--text-3);
 }
 
-.modal-pills {
+.sale-flow-pills {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
+
+  &--segmented {
+    flex-wrap: nowrap;
+  }
+
+  &--segmented .sale-flow-pill {
+    flex: 1;
+    justify-content: center;
+  }
 }
 
-.modal-pill {
-  padding: 6px 14px;
+.sale-flow-pill {
+  min-height: 34px;
+  box-sizing: border-box;
+  padding: 7px 16px;
   border-radius: var(--radius-pill);
   background: var(--card-dim);
-  font-size: 12px;
+  border: 1px solid transparent;
+  display: flex;
+  align-items: center;
   color: var(--text-2);
-  transition: transform 0.12s ease;
-  &:active { transform: scale(0.94); }
+  font-size: 13px;
+  font-weight: 600;
+  transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+
+  &:active {
+    transform: scale(0.94);
+  }
 
   &--active {
     background: var(--primary);
+    border-color: var(--primary);
     color: #fff;
   }
 }
 
-.modal-actions {
+.sale-flow-toggle {
   display: flex;
-  gap: 8px;
-  margin-top: 16px;
+  gap: 12px;
+  margin-bottom: 18px;
 }
 
-.modal-btn {
+.sale-flow-toggle__item {
   flex: 1;
   min-width: 0;
-  margin: 0;
-  height: 40px;
-  box-sizing: border-box;
+  height: 48px;
   border-radius: var(--radius-btn);
-  border: 1px solid rgba(45, 27, 20, 0.08);
-  font-size: 14px;
-  font-weight: 600;
-  background: var(--card);
+  background: var(--card-dim);
   color: var(--text-2);
-  line-height: 1;
-  padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.86);
-  transition: transform 0.12s ease;
-  &:active { transform: scale(0.94); }
-
-  &::after {
-    border: none;
-  }
-
-  &--primary {
-    background: var(--primary);
-    border-color: var(--primary);
-    box-shadow: none;
-    color: #fff;
-  }
-
-  &--warn {
-    background: var(--red);
-    border-color: var(--red);
-    box-shadow: none;
-    color: #fff;
-  }
-
-  &[disabled] { opacity: 0.5; }
-}
-
-/* ==================== SHEET FORM (S-6, S-7) ==================== */
-.sheet-form {
-  padding-bottom: 20px;
-}
-
-.sheet-field {
-  margin-bottom: 16px;
-}
-
-.sheet-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-2);
-  margin-bottom: 8px;
-  display: block;
-}
-
-.sheet-input {
-  width: 100%;
-  height: 44px;
-  border: 1.5px solid var(--text-4);
-  border-radius: var(--radius-date);
-  padding: 0 14px;
-  font-size: 15px;
-  color: var(--text-1);
-  background: var(--bg);
-  transition: border-color 0.2s;
-  &:focus { border-color: var(--primary); }
-  &[disabled] { opacity: 0.6; background: var(--card-dim); }
-}
-
-.sheet-select {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 44px;
-  border: 1.5px solid var(--text-4);
-  border-radius: var(--radius-date);
-  padding: 0 14px;
-  background: var(--bg);
   font-size: 14px;
-}
+  font-weight: 700;
+  transition: transform 0.12s ease, background 0.12s ease, color 0.12s ease;
 
-.sheet-options {
-  margin-top: 8px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.sheet-option {
-  padding: 6px 14px;
-  border-radius: var(--radius-pill);
-  background: var(--card-dim);
-  font-size: 12px;
-  color: var(--text-2);
-  transition: transform 0.12s ease;
-  &:active { transform: scale(0.94); }
+  &:active {
+    transform: scale(0.96);
+  }
 
   &--active {
     background: var(--primary);
@@ -1339,104 +1360,55 @@ onShow(() => {
   }
 }
 
-.sheet-helper {
+.sale-flow-helper {
   font-size: 12px;
   color: var(--text-3);
   margin-top: 6px;
   display: block;
 }
 
-.sheet-toggle {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 16px;
-
-  &__item {
-    flex: 1;
-    height: 40px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--radius-btn);
-    font-size: 13px;
-    font-weight: 600;
-    background: var(--card-dim);
-    color: var(--text-2);
-    transition: all 0.15s ease;
-    &:active { transform: scale(0.94); }
-
-    &--active {
-      background: var(--primary);
-      color: #fff;
-    }
-  }
+.sale-flow-footer {
+  padding: 10px var(--space-page) calc(env(safe-area-inset-bottom, 0px) + 12px);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0), var(--card) 22%);
 }
 
-.sheet-btn {
+.sale-flow-submit {
   width: 100%;
-  height: 48px;
+  height: 52px;
   box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  border: none;
   border-radius: var(--radius-btn);
   font-family: var(--font-display);
-  font-size: 15px;
-  font-weight: 700;
-  border: none;
-  color: #fff;
-  margin-top: 20px;
-  margin-left: 0;
-  margin-right: 0;
-  padding: 0;
+  font-size: 16px;
+  font-weight: 800;
   line-height: 1;
+  color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.12s ease;
-  &:active { transform: scale(0.97); opacity: 0.9; }
-  &[disabled] { opacity: 0.5; }
+  transition: transform 0.12s ease, opacity 0.12s ease;
+
+  &:active {
+    transform: scale(0.97);
+    opacity: 0.9;
+  }
 
   &::after {
     border: none;
   }
 
-  &--red { background: var(--red); }
-  &--primary { background: var(--primary); }
-}
-
-/* ==================== PLATFORM GRID (S-8) ==================== */
-.platform-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  padding-bottom: 20px;
-
-  &__item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-    padding: 16px 8px;
-    border-radius: var(--radius-card);
-    background: var(--bg);
-    transition: all 0.15s ease;
-    &:active { transform: scale(0.94); }
-
-    &--active {
-      background: var(--primary-soft);
-      border: 1.5px solid var(--primary);
-    }
+  &[disabled] {
+    opacity: 0.5;
   }
 
-  &__icon {
-    font-family: 'Material Icons Round';
-    font-size: 28px;
-    color: var(--text-2);
-    .platform-grid__item--active & { color: var(--primary); }
+  &--primary {
+    background: var(--primary);
   }
 
-  &__label {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-1);
+  &--red {
+    background: var(--red);
   }
 }
 

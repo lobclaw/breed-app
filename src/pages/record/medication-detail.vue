@@ -257,7 +257,7 @@
     />
 
     <BSheet v-model:visible="showCancelDispositionSheet" title="">
-      <view class="medication-stop-sheet">
+      <view class="form-sheet medication-stop-sheet">
         <view class="medication-stop-sheet__icon-wrap">
           <text class="material-icons-round medication-stop-sheet__icon">medication_liquid</text>
         </view>
@@ -278,15 +278,12 @@
             <view class="medication-stop-sheet__radio" :class="{ 'medication-stop-sheet__radio--active': selectedIllnessDisposition === option.value }" />
           </view>
         </view>
-        <view class="medication-stop-sheet__actions">
-          <view class="medication-stop-sheet__btn medication-stop-sheet__btn--cancel" @click="showCancelDispositionSheet = false">
-            <text>继续用药</text>
-          </view>
-          <view class="medication-stop-sheet__btn medication-stop-sheet__btn--danger" @click="confirmCancelWithDisposition">
-            <text style="color: #fff;">确认停止</text>
-          </view>
-        </view>
       </view>
+      <template #footer>
+        <view class="form-sheet__footer">
+          <button class="form-sheet__submit form-sheet__submit--danger" @click="confirmCancelWithDisposition">确认停止</button>
+        </view>
+      </template>
     </BSheet>
 
     <BModal

@@ -61,27 +61,29 @@
 
     <!-- 新建 BSheet -->
     <BSheet v-model:visible="showSheet" title="新建方案" height="auto">
-      <view class="sheet-form">
-        <view class="field-group">
-          <text class="field-label">方案名称</text>
-          <input v-model="form.name" class="form-input" placeholder="如：黄体酮保胎" :focus="showSheet" />
+      <view class="form-sheet">
+        <view class="form-sheet__field">
+          <text class="form-sheet__label">方案名称</text>
+          <input v-model="form.name" class="form-sheet__input" placeholder="如：黄体酮保胎" :focus="showSheet" />
         </view>
-        <view class="field-group">
-          <text class="field-label">药品名称</text>
-          <input v-model="form.drug_name" class="form-input" placeholder="药品名称" />
+        <view class="form-sheet__field">
+          <text class="form-sheet__label">药品名称</text>
+          <input v-model="form.drug_name" class="form-sheet__input" placeholder="药品名称" />
         </view>
-        <view class="field-group">
-          <text class="field-label">疗程天数 <text class="field-optional">（选填）</text></text>
-          <input v-model="form.duration_days" class="form-input" type="number" placeholder="天数" />
+        <view class="form-sheet__field">
+          <text class="form-sheet__label">疗程天数（选填）</text>
+          <input v-model="form.duration_days" class="form-sheet__input" type="number" placeholder="天数" />
         </view>
-        <view class="field-group">
-          <text class="field-label">备注 <text class="field-optional">（选填）</text></text>
-          <input v-model="form.notes" class="form-input" placeholder="用法用量等" />
-        </view>
-        <view class="sheet-actions">
-          <BSubmitButton :disabled="!canSave" @click="saveProtocol">保存方案</BSubmitButton>
+        <view class="form-sheet__field">
+          <text class="form-sheet__label">备注（选填）</text>
+          <input v-model="form.notes" class="form-sheet__input" placeholder="用法用量等" />
         </view>
       </view>
+      <template #footer>
+        <view class="form-sheet__footer">
+          <button class="form-sheet__submit" :disabled="!canSave" @click="saveProtocol">保存方案</button>
+        </view>
+      </template>
     </BSheet>
 
     <!-- 删除确认 -->
@@ -99,7 +101,6 @@ import { ref, reactive, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useAuth } from '@/composables/useAuth'
 import { usePageSync } from '@/composables/usePageSync'
-import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import BDeleteConfirm from '@/components/layout/BDeleteConfirm.vue'

@@ -214,7 +214,7 @@
 
     <!-- H-3: 快速完成任务 Sheet -->
     <BSheet v-model:visible="showQuickComplete" title="完成任务">
-      <view class="task-sheet">
+      <view class="form-sheet task-sheet">
         <view v-if="quickCompleteTask" class="task-sheet__info">
           <BIconBox icon="check_circle" color="green" :size="36" />
           <view class="task-sheet__info-text">
@@ -222,31 +222,28 @@
             <text class="task-sheet__dog-name">{{ quickCompleteTask.dog_name || '' }}</text>
           </view>
         </view>
-        <view class="task-sheet__field">
-          <text class="task-sheet__label">备注（选填）</text>
-          <input v-model="quickCompleteNotes" class="task-sheet__input" placeholder="添加备注..." />
+        <view class="form-sheet__field">
+          <text class="form-sheet__label">备注（选填）</text>
+          <input v-model="quickCompleteNotes" class="form-sheet__input" placeholder="添加备注..." />
         </view>
-        <view class="task-sheet__field">
-          <text class="task-sheet__label">完成日期</text>
-          <view class="task-sheet__picker" @click="showQuickCompleteDatePicker = true">
-            <text>{{ quickCompleteDateStr }}</text>
-            <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
-          </view>
-        </view>
-        <view class="task-sheet__actions">
-          <view class="task-sheet__btn task-sheet__btn--cancel" @click="showQuickComplete = false">
-            <text style="color: var(--text-2); font-size: 14px; font-weight: 600;">取消</text>
-          </view>
-          <view class="task-sheet__btn task-sheet__btn--confirm" @click="confirmQuickComplete">
-            <text style="color: #fff; font-size: 14px; font-weight: 600;">确认完成</text>
+        <view class="form-sheet__field">
+          <text class="form-sheet__label">完成日期</text>
+          <view class="form-sheet__select" @click="showQuickCompleteDatePicker = true">
+            <text class="form-sheet__select-text">{{ quickCompleteDateStr }}</text>
+            <text class="material-icons-round form-sheet__select-icon">calendar_today</text>
           </view>
         </view>
       </view>
+      <template #footer>
+        <view class="form-sheet__footer">
+          <button class="form-sheet__submit" @click="confirmQuickComplete">确认完成</button>
+        </view>
+      </template>
     </BSheet>
 
     <!-- H-4: 推迟任务 Sheet -->
     <BSheet v-model:visible="showPostponeModal" title="推迟任务">
-      <view class="task-sheet">
+      <view class="form-sheet task-sheet">
         <!-- 犬只信息 -->
         <view v-if="postponeTaskInfo" class="postpone-info">
           <text class="postpone-info__text">{{ postponeTaskInfo.title ? postponeTaskInfo.dogName + ' · ' + postponeTaskInfo.title : postponeTaskInfo.dogName }}</text>
@@ -255,11 +252,11 @@
           </view>
         </view>
 
-        <view class="task-sheet__field">
-          <text class="task-sheet__label">推迟到</text>
-          <view class="form-input form-input--picker" @click="showPostponeDatePicker = true">
-            <text>{{ postponeDateStr }}</text>
-            <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
+        <view class="form-sheet__field">
+          <text class="form-sheet__label">推迟到</text>
+          <view class="form-sheet__select" @click="showPostponeDatePicker = true">
+            <text class="form-sheet__select-text">{{ postponeDateStr }}</text>
+            <text class="material-icons-round form-sheet__select-icon">calendar_today</text>
           </view>
           <view class="task-sheet__quick-dates">
             <view class="task-sheet__quick-date" :class="{ active: postponeQuick === 'tomorrow' }" @click="setPostponeQuick('tomorrow')">
@@ -273,15 +270,12 @@
             </view>
           </view>
         </view>
-        <view class="task-sheet__actions">
-          <view class="task-sheet__btn task-sheet__btn--cancel" @click="showPostponeModal = false">
-            <text style="color: var(--text-2); font-size: 14px; font-weight: 600;">取消</text>
-          </view>
-          <view class="task-sheet__btn task-sheet__btn--confirm" @click="doPostpone">
-            <text style="color: #fff; font-size: 14px; font-weight: 600;">确认推迟</text>
-          </view>
-        </view>
       </view>
+      <template #footer>
+        <view class="form-sheet__footer">
+          <button class="form-sheet__submit" @click="doPostpone">确认推迟</button>
+        </view>
+      </template>
     </BSheet>
 
     <!-- H-5: 批量完成任务 Sheet -->

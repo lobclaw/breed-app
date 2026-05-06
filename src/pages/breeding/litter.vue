@@ -231,50 +231,46 @@
     </BSheet>
 
     <BSheet v-model:visible="showEditFormSheet" :title="editFormTitle" height="auto">
-      <view class="edit-form-sheet">
+      <view class="form-sheet">
         <text v-if="editFormHint" class="edit-form-sheet__hint">{{ editFormHint }}</text>
 
-        <view v-if="editMode === 'birth_date'" class="edit-form-sheet__group">
-          <text class="edit-form-sheet__label">生产日期</text>
-          <view class="edit-form-sheet__picker" @click="showBirthDatePicker = true">
-            <text class="edit-form-sheet__picker-text">{{ editBirthDateDisplayText || '请选择生产日期' }}</text>
-            <text class="material-icons-round edit-form-sheet__picker-icon">calendar_today</text>
+        <view v-if="editMode === 'birth_date'" class="form-sheet__field">
+          <text class="form-sheet__label">生产日期</text>
+          <view class="form-sheet__select" @click="showBirthDatePicker = true">
+            <text class="form-sheet__select-text">{{ editBirthDateDisplayText || '请选择生产日期' }}</text>
+            <text class="material-icons-round form-sheet__select-icon">calendar_today</text>
           </view>
         </view>
 
-        <view v-else-if="editMode === 'notes'" class="edit-form-sheet__group">
-          <text class="edit-form-sheet__label">备注（选填）</text>
+        <view v-else-if="editMode === 'notes'" class="form-sheet__field">
+          <text class="form-sheet__label">备注（选填）</text>
           <textarea
             v-model="editNotesValue"
-            class="edit-form-sheet__textarea"
+            class="form-sheet__textarea"
             :maxlength="300"
             :auto-height="true"
             placeholder="记录这窝的生产备注、经验心得或补充说明"
           />
         </view>
 
-        <view v-else-if="editMode === 'puppy_name'" class="edit-form-sheet__group">
-          <text class="edit-form-sheet__label">幼崽名称（选填）</text>
+        <view v-else-if="editMode === 'puppy_name'" class="form-sheet__field">
+          <text class="form-sheet__label">幼崽名称（选填）</text>
           <input
             v-model="editSingleLineValue"
-            class="edit-form-sheet__input"
+            class="form-sheet__input"
             placeholder="未填写时将按默认口径创建"
           />
         </view>
-
-        <view class="edit-form-sheet__actions">
-          <view class="edit-form-sheet__btn edit-form-sheet__btn--cancel" @click="closeEditFormSheet">
-            <text class="edit-form-sheet__btn-text" style="color: var(--text-2);">取消</text>
-          </view>
-          <view
-            class="edit-form-sheet__btn edit-form-sheet__btn--primary"
-            :class="{ 'edit-form-sheet__btn--disabled': promptSubmitting }"
-            @click="handlePromptConfirm"
-          >
-            <text class="edit-form-sheet__btn-text" style="color: #fff;">保存</text>
-          </view>
-        </view>
       </view>
+      <template #footer>
+        <view class="form-sheet__footer">
+          <button
+            class="form-sheet__submit"
+            :disabled="promptSubmitting"
+            @click="handlePromptConfirm"
+          >保存</button>
+        </view>
+      </template>
     </BSheet>
 
     <BDateTimePicker

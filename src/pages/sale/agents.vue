@@ -50,21 +50,23 @@
 
     <!-- 新建/编辑 BSheet -->
     <BSheet v-model:visible="showSheet" :title="editingId ? '编辑代理人' : '新建代理人'" height="auto">
-      <view class="sheet-form">
-        <view class="field-group">
-          <text class="field-label">代理人姓名</text>
-          <input v-model="form.name" class="form-input" placeholder="输入姓名" :focus="showSheet" />
+      <view class="form-sheet">
+        <view class="form-sheet__field">
+          <text class="form-sheet__label">代理人姓名</text>
+          <input v-model="form.name" class="form-sheet__input" placeholder="输入姓名" :focus="showSheet" />
         </view>
-        <view class="field-group">
-          <text class="field-label">联系方式 <text class="field-optional">（选填）</text></text>
-          <input v-model="form.contact_info" class="form-input" placeholder="手机号/微信" />
-        </view>
-        <view class="sheet-actions">
-          <BSubmitButton :disabled="!form.name.trim()" @click="save">
-            {{ editingId ? '保存修改' : '新建代理人' }}
-          </BSubmitButton>
+        <view class="form-sheet__field">
+          <text class="form-sheet__label">联系方式（选填）</text>
+          <input v-model="form.contact_info" class="form-sheet__input" placeholder="手机号/微信" />
         </view>
       </view>
+      <template #footer>
+        <view class="form-sheet__footer">
+          <button class="form-sheet__submit" :disabled="!form.name.trim()" @click="save">
+            {{ editingId ? '保存修改' : '新建代理人' }}
+          </button>
+        </view>
+      </template>
     </BSheet>
 
     <!-- 删除确认 -->
@@ -84,7 +86,6 @@ import { useAuth } from '@/composables/useAuth'
 import { usePageSync } from '@/composables/usePageSync'
 import { listLocalAgents } from '@/localdb/domain-repository'
 import { localSyncRuntime } from '@/localdb/runtime'
-import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import BDeleteConfirm from '@/components/layout/BDeleteConfirm.vue'

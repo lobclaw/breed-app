@@ -434,6 +434,279 @@
   &:active { transform: scale(0.94); }
 }
 
+/* ==================== 表单型 Sheet ==================== */
+.form-sheet {
+  padding-bottom: 12px;
+}
+
+.form-sheet__header-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-row);
+  background: var(--card-dim);
+  margin-bottom: 16px;
+}
+
+.form-sheet__field {
+  margin-bottom: 16px;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.form-sheet__label {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-2);
+  margin-bottom: 8px;
+}
+
+.form-sheet__input,
+.form-sheet__select,
+.form-sheet__textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1.5px solid var(--text-4);
+  border-radius: var(--radius-date);
+  background: var(--bg);
+  color: var(--text-1);
+  font-size: 14px;
+  font-family: var(--font-body);
+  transition: border-color 0.16s ease, background 0.16s ease, transform 0.12s ease;
+}
+
+.form-sheet__input {
+  height: 48px;
+  padding: 0 14px;
+}
+
+.form-sheet__input:focus,
+.form-sheet__textarea:focus {
+  border-color: rgba(234, 62, 119, 0.42);
+  background: var(--card);
+}
+
+.form-sheet__select {
+  min-height: 48px;
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+
+  &:active {
+    transform: scale(0.99);
+    border-color: rgba(234, 62, 119, 0.36);
+    background: var(--card);
+  }
+}
+
+.form-sheet__select-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  color: var(--text-1);
+}
+
+.form-sheet__select-text--placeholder {
+  color: var(--text-3);
+}
+
+.form-sheet__select-icon {
+  flex: 0 0 auto;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--text-3);
+}
+
+.form-sheet__textarea {
+  min-height: 96px;
+  padding: 12px 14px;
+  line-height: 1.5;
+}
+
+.form-sheet__amount {
+  width: 100%;
+  height: 56px;
+  box-sizing: border-box;
+  border: 1.5px solid var(--text-4);
+  border-radius: var(--radius-date);
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg);
+  transition: border-color 0.16s ease, background 0.16s ease;
+
+  &:focus-within {
+    border-color: rgba(234, 62, 119, 0.42);
+    background: var(--card);
+  }
+}
+
+.form-sheet__amount-symbol {
+  flex: 0 0 auto;
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--text-3);
+}
+
+.form-sheet__amount-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: none;
+  background: transparent;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-1);
+  line-height: 1;
+  padding: 0;
+}
+
+.form-sheet__helper {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.4;
+}
+
+.form-sheet__pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.form-sheet__pill {
+  min-height: 34px;
+  box-sizing: border-box;
+  padding: 7px 16px;
+  border-radius: var(--radius-pill);
+  background: var(--card-dim);
+  border: 1px solid transparent;
+  display: flex;
+  align-items: center;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 600;
+  transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+
+  &:active {
+    transform: scale(0.94);
+  }
+
+  &--active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
+  }
+}
+
+.form-sheet__toggle {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.form-sheet__toggle-item {
+  flex: 1;
+  min-width: 0;
+  height: 48px;
+  border-radius: var(--radius-btn);
+  background: var(--card-dim);
+  color: var(--text-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  transition: transform 0.12s ease, background 0.12s ease, color 0.12s ease;
+
+  &:active {
+    transform: scale(0.96);
+  }
+
+  &--active {
+    background: var(--primary);
+    color: #fff;
+  }
+}
+
+.form-sheet__footer {
+  padding: 10px var(--space-page) calc(env(safe-area-inset-bottom, 0px) + 12px);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0), var(--card) 22%);
+}
+
+.form-sheet__submit {
+  width: 100%;
+  height: 52px;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-btn);
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1;
+  color: #fff;
+  background: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.12s ease, opacity 0.12s ease;
+
+  &:active {
+    transform: scale(0.97);
+    opacity: 0.9;
+  }
+
+  &::after {
+    border: none;
+  }
+
+  &[disabled] {
+    opacity: 0.5;
+  }
+
+  &--danger {
+    background: var(--red);
+  }
+}
+
+.form-sheet__danger-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-row);
+  background: rgba(224, 82, 82, 0.08);
+  margin-bottom: 16px;
+}
+
+.form-sheet__danger-icon {
+  font-family: 'Material Icons Round';
+  font-size: 18px;
+  color: var(--red);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.form-sheet__danger-text {
+  flex: 1;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--red);
+}
+
 
 /* ==================== 行内字段（如卵泡左右侧） ==================== */
 .inline-fields {

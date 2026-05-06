@@ -58,59 +58,61 @@
       @confirm="confirmDelete"
     />
 
-    <!-- 新建规则弹窗 -->
-    <BModal
-      v-model:visible="showModal"
-      title="新建护理规则"
-      :manualClose="true"
-      @confirm="onConfirm"
-    >
-      <view class="modal-form">
-        <!-- 触发条件 pill-select -->
-        <text class="modal-form__label">触发条件</text>
-        <view class="pill-select">
-          <text
-            v-for="opt in triggerOptions"
-            :key="opt"
-            class="pill-select__item"
-            :class="{ 'pill-select__item--active': form.status_trigger === opt }"
-            @click="selectTrigger(opt)"
-          >{{ opt }}</text>
-          <text
-            class="pill-select__item"
-            :class="{ 'pill-select__item--active': isCustomTrigger }"
-            @click="selectTrigger('自定义')"
-          >自定义</text>
+    <!-- 新建规则 Sheet -->
+    <BSheet v-model:visible="showModal" title="新建护理规则" height="auto">
+      <view class="form-sheet">
+        <view class="form-sheet__field">
+          <text class="form-sheet__label">触发条件</text>
+          <view class="form-sheet__pills">
+            <text
+              v-for="opt in triggerOptions"
+              :key="opt"
+              class="form-sheet__pill"
+              :class="{ 'form-sheet__pill--active': form.status_trigger === opt }"
+              @click="selectTrigger(opt)"
+            >{{ opt }}</text>
+            <text
+              class="form-sheet__pill"
+              :class="{ 'form-sheet__pill--active': isCustomTrigger }"
+              @click="selectTrigger('自定义')"
+            >自定义</text>
+          </view>
+          <input
+            v-if="isCustomTrigger"
+            v-model="form.customTrigger"
+            class="form-sheet__input care-rule-custom-input"
+            placeholder="请输入触发条件"
+          />
         </view>
-        <input
-          v-if="isCustomTrigger"
-          v-model="form.customTrigger"
-          class="modal-form__input"
-          placeholder="请输入触发条件"
-          style="margin-top: 8px;"
-        />
 
-        <!-- 任务描述 -->
-        <text class="modal-form__label" style="margin-top: 16px;">任务描述</text>
-        <input
-          v-model="form.task_description"
-          class="modal-form__input"
-          placeholder="如：每日喂钙铁"
-        />
+        <view class="form-sheet__field">
+          <text class="form-sheet__label">任务描述</text>
+          <input
+            v-model="form.task_description"
+            class="form-sheet__input"
+            placeholder="如：每日喂钙铁"
+          />
+        </view>
 
-        <!-- 频率 -->
-        <text class="modal-form__label" style="margin-top: 16px;">频率</text>
-        <view class="pill-select">
-          <text
-            v-for="freq in frequencyOptions"
-            :key="freq"
-            class="pill-select__item"
-            :class="{ 'pill-select__item--active': form.frequency === freq }"
-            @click="form.frequency = freq"
-          >{{ freq }}</text>
+        <view class="form-sheet__field">
+          <text class="form-sheet__label">频率</text>
+          <view class="form-sheet__pills">
+            <text
+              v-for="freq in frequencyOptions"
+              :key="freq"
+              class="form-sheet__pill"
+              :class="{ 'form-sheet__pill--active': form.frequency === freq }"
+              @click="form.frequency = freq"
+            >{{ freq }}</text>
+          </view>
         </view>
       </view>
-    </BModal>
+      <template #footer>
+        <view class="form-sheet__footer">
+          <button class="form-sheet__submit" @click="onConfirm">保存规则</button>
+        </view>
+      </template>
+    </BSheet>
   </view>
 </template>
 
@@ -123,7 +125,7 @@ import { listLocalCareRules } from '@/localdb/domain-repository'
 import { localSyncRuntime } from '@/localdb/runtime'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
-import BModal from '@/components/layout/BModal.vue'
+import BSheet from '@/components/layout/BSheet.vue'
 import BDeleteConfirm from '@/components/layout/BDeleteConfirm.vue'
 
 const { currentFamily } = useAuth()
@@ -387,29 +389,7 @@ onShow(() => {
   }
 }
 
-/* ==================== MODAL FORM ==================== */
-.modal-form {
+.care-rule-custom-input {
   margin-top: 8px;
-
-  &__label {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-2);
-    display: block;
-    margin-bottom: 8px;
-  }
-
-  &__input {
-    width: 100%;
-    height: 40px;
-    border: 1.5px solid var(--text-4);
-    border-radius: var(--radius-date);
-    padding: 0 12px;
-    font-size: 14px;
-    color: var(--text-1);
-    background: var(--bg);
-    transition: border-color 0.2s;
-    &:focus { border-color: var(--primary); }
-  }
 }
 </style>
