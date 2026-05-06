@@ -139,6 +139,42 @@ describe('health-service', () => {
       expect(records[0].details.condition).toBe('感冒')
       expect(records[0].details.symptom_tags).toEqual(['咳嗽', '流鼻涕'])
     })
+
+    it('batchAddHealthRecords 应支持复用客户端 expense ID', async () => {
+      const now = Date.now()
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+      const result = await healthService.batchAddHealthRecords.call(ctx, {
+        dog_ids: ['dog_1'],
+        type: 'vaccination',
+        date: now,
+        cost: 200,
+        notes: '六联疫苗',
+        details: {
+          vaccine_type: '六联',
+        },
+        _sync: {
+          clientMutationId: 'health-expense-sync-1',
+          deviceId: 'device_1',
+          clientTimestamp: now,
+          clientEntityIds: {
+            health_records: ['health_record_local_1'],
+            expenses: ['health_expense_local_1'],
+          },
+        },
+      })
+
+      expect(result.ack).toBe('accepted')
+      const { data: expenses } = await db.collection('expenses')
+        .where({ _id: 'health_expense_local_1', family_id: familyId })
+        .get()
+      expect(expenses).toHaveLength(1)
+      expect(expenses[0]).toMatchObject({
+        total_amount: 200,
+        category: '疫苗驱虫',
+        notes: '疫苗 · 六联疫苗',
+      })
+    })
   })
 
   describe('健康记录查询', () => {
@@ -447,6 +483,43 @@ describe('health-service', () => {
       expect(meds).toHaveLength(2)
       const statuses = meds.map(item => item.status).sort()
       expect(statuses).toEqual(['已完成', '进行中'])
+    })
+
+    it('batchStartMedication 应支持复用客户端 expense ID', async () => {
+      const now = Date.now()
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+      const result = await healthService.batchStartMedication.call(ctx, {
+        dog_ids: ['dog_1'],
+        drug_name: '阿莫西林',
+        dosage: '1',
+        dosage_unit: 'tablet',
+        method: '口服',
+        frequency: 1,
+        duration_days: 5,
+        actual_start_date: now,
+        cost: 300,
+        _sync: {
+          clientMutationId: 'med-expense-sync-1',
+          deviceId: 'device_1',
+          clientTimestamp: now,
+          clientEntityIds: {
+            medication_tasks: ['med_local_1'],
+            expenses: ['med_expense_local_1'],
+          },
+        },
+      })
+
+      expect(result.ack).toBe('accepted')
+      const { data: expenses } = await db.collection('expenses')
+        .where({ _id: 'med_expense_local_1', family_id: familyId })
+        .get()
+      expect(expenses).toHaveLength(1)
+      expect(expenses[0]).toMatchObject({
+        total_amount: 300,
+        category: '医疗',
+        notes: '阿莫西林 5天',
+      })
     })
 
     it('从疾病发起用药时，应写入 source_record_id 且仅升级对应疾病', async () => {

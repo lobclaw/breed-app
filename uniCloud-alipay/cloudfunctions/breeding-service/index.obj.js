@@ -591,7 +591,7 @@ async function generateTasks(familyId, type, data, cycleId, dog, recordId) {
 /**
  * 创建关联费用
  */
-async function createExpense(familyId, uid, data, dog, cycleId, sourceRecordId) {
+async function createExpense(familyId, uid, data, dog, cycleId, sourceRecordId, expenseId = null) {
   const now = Date.now()
   const sourceLabels = {
     heat: '发情', heat_observation: '发情观察', follicle_check: '卵泡检查', mating: '配种',
@@ -611,7 +611,8 @@ async function createExpense(familyId, uid, data, dog, cycleId, sourceRecordId) 
   const category = categoryMap[data.type] || '其他'
   const noteText = typeof data.notes === 'string' ? data.notes.trim() : ''
 
-  await db.collection('expenses').add({
+  const expenseData = buildVersionedCreate({
+    ...(expenseId ? { _id: expenseId } : {}),
     total_amount: data.cost,
     category,
     date: data.date,
@@ -627,9 +628,9 @@ async function createExpense(familyId, uid, data, dog, cycleId, sourceRecordId) 
     family_id: familyId,
     created_by: uid,
     deleted_at: null,
-    created_at: now,
-    updated_at: now,
-  })
+  }, now)
+  const { id } = await db.collection('expenses').add(expenseData)
+  return expenseId || id
 }
 
 /**
@@ -752,6 +753,9 @@ async function addBreedingRecordCore({
     : null
   const clientCycleId = typeof syncMeta?.clientEntityIds?.breeding_cycles === 'string'
     ? syncMeta.clientEntityIds.breeding_cycles
+    : null
+  const clientExpenseId = typeof syncMeta?.clientEntityIds?.expenses === 'string'
+    ? syncMeta.clientEntityIds.expenses
     : null
   const strictCycleRule = STRICT_CYCLE_STATUS_RULES[data.type] || null
   const activeCycleStatuses = strictCycleRule?.allowedStatuses || ['发情中', '怀孕中']
@@ -877,15 +881,16 @@ async function addBreedingRecordCore({
     )
   }
 
+  let createdExpenseId = null
   if (data.type !== 'heat_observation' && data.cost && data.cost > 0) {
-    await createExpense(familyId, uid, data, dog, cycleId, resolvedRecordId)
+    createdExpenseId = await createExpense(familyId, uid, data, dog, cycleId, resolvedRecordId, clientExpenseId)
   }
 
   if (data.type !== 'heat_observation') {
     await postWriteVerify(resolvedRecordId, 'breeding_records')
   }
 
-  return { recordId: resolvedRecordId, cycleId, record: { ...recordData, _id: resolvedRecordId } }
+  return { recordId: resolvedRecordId, cycleId, expenseId: createdExpenseId, record: { ...recordData, _id: resolvedRecordId } }
 }
 
 module.exports = {
@@ -956,6 +961,12 @@ module.exports = {
         .where({ _id: result.cycleId, family_id: familyId })
         .get()
       if (cycles?.[0]) touchedEntities.push(buildTouchedEntity('breeding_cycles', cycles[0]))
+    }
+    if (result.expenseId) {
+      const { data: expenses } = await db.collection('expenses')
+        .where({ _id: result.expenseId, family_id: familyId })
+        .get()
+      if (expenses?.[0]) touchedEntities.push(buildTouchedEntity('expenses', expenses[0]))
     }
     const response = {
       data: { recordId: result.recordId, cycleId: result.cycleId },

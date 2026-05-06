@@ -127,6 +127,45 @@ describe('local home projection', () => {
     expect(result.counts.today).toBeGreaterThan(0)
   })
 
+  it('应为缺少里程碑任务的已同步发情周期补首页繁育卡片', () => {
+    const now = new Date('2026-05-06T10:00:00+08:00').getTime()
+    const heatDate = new Date('2026-05-01T10:00:00+08:00').getTime()
+
+    const result = buildLocalHomeCards({
+      dogs: [{ _id: 'dog_1', name: '肉肉' }],
+      tasks: [],
+      health_records: [],
+      medication_tasks: [],
+      breeding_cycles: [{
+        _id: 'cycle_1',
+        family_id: 'family_1',
+        dam_id: 'dog_1',
+        dam_name: '肉肉',
+        status: '发情中',
+        start_date: heatDate,
+        created_at: heatDate,
+        updated_at: now,
+      }],
+      breeding_records: [{
+        _id: 'record_1',
+        family_id: 'family_1',
+        cycle_id: 'cycle_1',
+        dog_id: 'dog_1',
+        dog_name: '肉肉',
+        type: 'heat',
+        date: heatDate,
+        details: {},
+        created_at: heatDate,
+        updated_at: now,
+      }],
+    }, now)
+
+    const breedingCard = result.cards.find(card => card.cardType === 'dog' && card.tasks?.[0]?.type === 'breeding_milestone')
+    expect(breedingCard).toBeTruthy()
+    expect(breedingCard?.tasks?.[0]?.details?.step_type).toBe('follicle_check')
+    expect(breedingCard?.tasks?.[0]?.dog_name).toBe('肉肉')
+  })
+
   it('应在同步确认后清除本地 pending 标记', () => {
     const rows = applyTouchedEntityVersions(
       [{

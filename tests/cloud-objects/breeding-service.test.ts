@@ -312,6 +312,68 @@ describe('breeding-service', () => {
       expect(nextMilestone?.status).toBe('pending')
     })
 
+    it('录入带费用的卵泡检查时应复用客户端 expense ID', async () => {
+      const now = Date.now()
+      seedCollection('breeding_cycles', [{
+        _id: 'cycle_follicle_cost',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        status: '发情中',
+        created_at: now - 5 * 86400000,
+        updated_at: now,
+      }])
+      seedCollection('breeding_records', [{
+        _id: 'record_heat_cost',
+        type: 'heat',
+        cycle_id: 'cycle_follicle_cost',
+        dog_id: 'dam_1',
+        family_id: familyId,
+        date: now - 5 * 86400000,
+        created_at: now - 5 * 86400000,
+        updated_at: now - 5 * 86400000,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      const res = await breedingService.addBreedingRecord.call(ctx, {
+        type: 'follicle_check',
+        dog_id: 'dam_1',
+        cycle_id: 'cycle_follicle_cost',
+        date: now,
+        cost: 188,
+        notes: 'B超',
+        details: {
+          left_count: 2,
+          right_count: 1,
+          result: '发育中',
+        },
+        _sync: {
+          clientMutationId: 'breeding-follicle-cost-sync-1',
+          deviceId: 'device_1',
+          clientTimestamp: now,
+          baseVersions: { cycle_follicle_cost: 0 },
+          clientEntityIds: {
+            breeding_records: 'record_follicle_cost_local',
+            expenses: 'expense_follicle_cost_local',
+          },
+        },
+      })
+
+      expect(res.ack).toBe('accepted')
+
+      const { data: expenses } = await db.collection('expenses')
+        .where({ _id: 'expense_follicle_cost_local', family_id: familyId })
+        .get()
+
+      expect(expenses).toHaveLength(1)
+      expect(expenses[0]).toMatchObject({
+        total_amount: 188,
+        category: '检查化验',
+        source_type: 'auto',
+        notes: '卵泡检查 · B超',
+      })
+    })
+
     it('录入未成熟卵泡检查后应继续停留在建议卵泡检查', async () => {
       const now = Date.now()
       seedCollection('breeding_cycles', [{

@@ -554,11 +554,12 @@ describe('dog-service', () => {
       name: '豆豆',
       gender: '公',
       role: '种狗',
+      purchase_price: 5200,
       _sync: {
         clientMutationId: 'dog-create-1',
         deviceId: 'device_1',
         clientTimestamp: mockNow,
-        clientEntityIds: { dogs: 'dog_client_1' },
+        clientEntityIds: { dogs: 'dog_client_1', expenses: 'expense_client_1' },
       },
     }
 
@@ -574,6 +575,12 @@ describe('dog-service', () => {
       .get()
     expect(dogs).toHaveLength(1)
     expect(dogs[0].version).toBe(1)
+
+    const { data: expenses } = await db.collection('expenses')
+      .where({ _id: 'expense_client_1', family_id: familyId })
+      .get()
+    expect(expenses).toHaveLength(1)
+    expect(expenses[0].total_amount).toBe(5200)
   })
 
   it('updateDog 在 baseVersion 过期时应返回 conflict 且不覆盖', async () => {

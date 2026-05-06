@@ -649,6 +649,7 @@ module.exports = {
     const appliedMutation = await findAppliedMutation(db, this.familyId, syncMeta?.clientMutationId)
     if (appliedMutation?.response) return appliedMutation.response
     const clientDogId = typeof syncMeta?.clientEntityIds?.dogs === 'string' ? syncMeta.clientEntityIds.dogs : null
+    const clientExpenseId = typeof syncMeta?.clientEntityIds?.expenses === 'string' ? syncMeta.clientEntityIds.expenses : null
     const dogData = buildVersionedCreate({
       ...(clientDogId ? { _id: clientDogId } : {}),
       name: data.name || '',
@@ -675,6 +676,7 @@ module.exports = {
     // 如有购入价格，自动创建费用记录
     if (data.purchase_price && data.purchase_price > 0) {
       await db.collection('expenses').add(buildVersionedCreate({
+        ...(clientExpenseId ? { _id: clientExpenseId } : {}),
         total_amount: data.purchase_price,
         category: '购入',
         date: data.purchase_date || now,

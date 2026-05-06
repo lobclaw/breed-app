@@ -461,6 +461,193 @@ function buildLocalBreedingExtraTask(
   }
 }
 
+function buildLocalBreedingExpense(
+  familyId: string,
+  dog: Record<string, any>,
+  data: Record<string, any>,
+  cycleId: string,
+  recordId: string,
+  expenseId: string,
+  now: number,
+) {
+  const sourceLabels: Record<string, string> = {
+    heat: '发情',
+    heat_observation: '发情观察',
+    follicle_check: '卵泡检查',
+    mating: '配种',
+    pregnancy_check: '孕检',
+    prenatal_check: '产检',
+    pre_labor: '临产监测',
+    birth: '生产',
+    abnormal_termination: '异常终止',
+  }
+  const categoryMap: Record<string, string> = {
+    follicle_check: '检查化验',
+    mating: '配种费',
+    pregnancy_check: '孕检产检',
+    prenatal_check: '孕检产检',
+    pre_labor: '孕检产检',
+    birth: '生产育幼',
+    abnormal_termination: '生产育幼',
+  }
+  const sourceLabel = sourceLabels[data.type] || '繁育'
+  const category = categoryMap[data.type] || '其他'
+  const noteText = typeof data.notes === 'string' ? data.notes.trim() : ''
+
+  return {
+    _id: expenseId,
+    family_id: familyId,
+    total_amount: Number(data.cost),
+    category,
+    date: Number(data.date || now),
+    linked_cycle_id: cycleId,
+    linked_litter_id: null,
+    linked_dog_ids: [dog._id],
+    source_type: 'auto',
+    source_record_id: recordId,
+    images: [],
+    dam_name: normalizeDogName(dog),
+    dog_names: [normalizeDogName(dog)],
+    litter_number: null,
+    notes: noteText
+      ? (sourceLabel !== category ? `${sourceLabel} · ${noteText}` : noteText)
+      : (sourceLabel !== category ? sourceLabel : null),
+    created_by: null,
+    deleted_at: null,
+    version: 0,
+    created_at: now,
+    updated_at: now,
+    _local_pending: true,
+    _pending_upload: false,
+    pending_upload: false,
+  }
+}
+
+function buildLocalDogPurchaseExpense(
+  familyId: string,
+  data: Record<string, any>,
+  dogId: string,
+  expenseId: string,
+  now: number,
+) {
+  const dogName = String(data.name || '').trim()
+  return {
+    _id: expenseId,
+    family_id: familyId,
+    total_amount: Number(data.purchase_price),
+    category: '购入',
+    date: Number(data.purchase_date || now),
+    linked_cycle_id: null,
+    linked_litter_id: null,
+    linked_dog_ids: [dogId],
+    source_type: 'auto',
+    source_record_id: dogId,
+    images: [],
+    dam_name: dogName || null,
+    dog_names: [dogName],
+    litter_number: null,
+    notes: `购入${data.role === '外部种公' ? '外部种公' : '种犬'}：${dogName}`,
+    created_by: null,
+    deleted_at: null,
+    version: 0,
+    created_at: now,
+    updated_at: now,
+    _local_pending: true,
+    _pending_upload: false,
+    pending_upload: false,
+  }
+}
+
+function buildLocalHealthExpense(
+  familyId: string,
+  dog: Record<string, any>,
+  data: Record<string, any>,
+  recordId: string,
+  amount: number,
+  expenseId: string,
+  now: number,
+) {
+  const sourceLabels: Record<string, string> = {
+    vaccination: '疫苗',
+    deworming: '驱虫',
+    illness: '治疗',
+  }
+  const categoryMap: Record<string, string> = {
+    vaccination: '疫苗驱虫',
+    deworming: '疫苗驱虫',
+    illness: '医疗',
+  }
+  const sourceLabel = sourceLabels[data.type] || '健康'
+  const category = categoryMap[data.type] || '其他'
+  const noteText = typeof data.notes === 'string' ? data.notes.trim() : ''
+
+  return {
+    _id: expenseId,
+    family_id: familyId,
+    total_amount: amount,
+    category,
+    date: Number(data.date || now),
+    linked_cycle_id: null,
+    linked_litter_id: null,
+    linked_dog_ids: [dog._id],
+    source_type: 'auto',
+    source_record_id: recordId,
+    images: [],
+    dam_name: normalizeDogName(dog),
+    dog_names: [normalizeDogName(dog)],
+    litter_number: null,
+    notes: noteText
+      ? (sourceLabel !== category ? `${sourceLabel} · ${noteText}` : noteText)
+      : (sourceLabel !== category ? sourceLabel : null),
+    created_by: null,
+    deleted_at: null,
+    version: 0,
+    created_at: now,
+    updated_at: now,
+    _local_pending: true,
+    _pending_upload: false,
+    pending_upload: false,
+  }
+}
+
+function buildLocalMedicationExpense(
+  familyId: string,
+  dog: Record<string, any>,
+  data: Record<string, any>,
+  medicationTaskId: string,
+  amount: number,
+  durationDays: number,
+  startDate: number,
+  expenseId: string,
+  now: number,
+) {
+  return {
+    _id: expenseId,
+    family_id: familyId,
+    total_amount: amount,
+    category: '医疗',
+    date: startDate,
+    linked_cycle_id: null,
+    linked_litter_id: null,
+    linked_dog_ids: [dog._id],
+    source_type: 'auto',
+    source_record_id: medicationTaskId,
+    images: [],
+    dam_name: normalizeDogName(dog),
+    dog_names: [normalizeDogName(dog)],
+    litter_number: null,
+    notes: `${data.drug_name} ${durationDays}天`,
+    created_by: null,
+    deleted_at: null,
+    version: 0,
+    created_at: now,
+    updated_at: now,
+    _local_pending: true,
+    _pending_upload: false,
+    pending_upload: false,
+  }
+}
+
 function buildLocalDog(familyId: string, data: Record<string, any>, dogId: string, now: number) {
   return {
     _id: dogId,
@@ -1013,16 +1200,29 @@ class LocalSyncRuntime {
     const now = getNow()
     const dogId = createStableEntityId('dog')
     const dog = buildLocalDog(familyId, data, dogId, now)
+    const expenseId = Number(data.purchase_price || 0) > 0 ? createStableEntityId('expense') : ''
+    const expenseRow = expenseId ? buildLocalDogPurchaseExpense(familyId, data, dogId, expenseId, now) : null
     const syncMeta = buildSyncMeta({}, {
       clientMutationId: createClientMutationId(HOME_MUTATION_TYPES.CREATE_DOG),
-      clientEntityIds: { dogs: dogId },
+      clientEntityIds: {
+        dogs: dogId,
+        ...(expenseId ? { expenses: expenseId } : {}),
+      },
     })
 
-    await upsertLocalRows('dogs', [dog])
+    await localDb.transact(['dogs', 'expenses'], (tables) => {
+      tables.dogs = [...(tables.dogs as any[]), dog]
+      if (expenseRow) {
+        tables.expenses = [...(tables.expenses as any[]), expenseRow]
+      }
+    })
     await this.enqueueMutation(HOME_MUTATION_TYPES.CREATE_DOG, familyId, { ...data, _sync: syncMeta }, ['dogs', 'expenses'], syncMeta)
     return {
       data: { _id: dogId },
-      ...buildLocalAck(syncMeta, [{ collection: 'dogs', id: dogId, version: 0, updatedAt: now }]),
+      ...buildLocalAck(syncMeta, [
+        { collection: 'dogs', id: dogId, version: 0, updatedAt: now },
+        ...(expenseRow ? [{ collection: 'expenses' as BusinessCollectionName, id: expenseRow._id, version: 0, updatedAt: now }] : []),
+      ]),
     }
   }
 
@@ -1508,6 +1708,17 @@ class LocalSyncRuntime {
       now,
       perDogCost && perDogCost > 0 ? perDogCost : null,
     ))
+    const expenseRows = perDogCost && perDogCost > 0
+      ? dogs.map((dog, index) => buildLocalHealthExpense(
+        familyId,
+        dog,
+        data,
+        records[index]._id,
+        Number(perDogCost),
+        createStableEntityId('expense'),
+        now,
+      ))
+      : []
     const sourceTaskIds = Array.isArray(data.source_task_ids)
       ? data.source_task_ids.filter(Boolean)
       : Array.isArray(data.sourceTaskIds)
@@ -1529,12 +1740,18 @@ class LocalSyncRuntime {
       }, {}),
       {
         clientMutationId: createClientMutationId(HOME_MUTATION_TYPES.CREATE_HEALTH_RECORDS),
-        clientEntityIds: { health_records: records.map(record => record._id) },
+        clientEntityIds: {
+          health_records: records.map(record => record._id),
+          ...(expenseRows.length ? { expenses: expenseRows.map(row => row._id) } : {}),
+        },
       },
     )
 
-    await localDb.transact(['health_records', 'tasks'], (tables) => {
+    await localDb.transact(['health_records', 'tasks', 'expenses'], (tables) => {
       tables.health_records = [...(tables.health_records as any[]), ...records]
+      if (expenseRows.length > 0) {
+        tables.expenses = [...(tables.expenses as any[]), ...expenseRows]
+      }
       if (completedTaskIds.length > 0) {
         const taskIdSet = new Set(completedTaskIds)
         tables.tasks = (tables.tasks as any[]).map(task => taskIdSet.has(task._id)
@@ -1559,6 +1776,7 @@ class LocalSyncRuntime {
       ...buildLocalAck(syncMeta, [
         ...records.map(record => ({ collection: 'health_records' as BusinessCollectionName, id: record._id, version: 0, updatedAt: record.updated_at })),
         ...pendingTasks.map(task => ({ collection: 'tasks' as BusinessCollectionName, id: task._id, version: Number(task.version || 0), updatedAt: now })),
+        ...expenseRows.map(row => ({ collection: 'expenses' as BusinessCollectionName, id: row._id, version: 0, updatedAt: row.updated_at })),
       ]),
     }
   }
@@ -1598,14 +1816,36 @@ class LocalSyncRuntime {
       updated_at: now,
       _local_pending: true,
     }))
+    const perDogCost = data.cost && Number(data.cost) > 0
+      ? (dogs.length > 1 ? Math.round((Number(data.cost) / dogs.length) * 100) / 100 : Number(data.cost))
+      : 0
+    const expenseRows = perDogCost > 0
+      ? dogs.map((dog, index) => buildLocalMedicationExpense(
+        familyId,
+        dog,
+        data,
+        medicationTasks[index]._id,
+        perDogCost,
+        durationDays,
+        startDate,
+        createStableEntityId('expense'),
+        now,
+      ))
+      : []
     const linkedIllnessIds = medicationTasks.map(task => task.source_record_id).filter(Boolean)
     const syncMeta = buildSyncMeta({}, {
       clientMutationId: createClientMutationId(HOME_MUTATION_TYPES.CREATE_MEDICATION_TASKS),
-      clientEntityIds: { medication_tasks: medicationTasks.map(task => task._id) },
+      clientEntityIds: {
+        medication_tasks: medicationTasks.map(task => task._id),
+        ...(expenseRows.length ? { expenses: expenseRows.map(row => row._id) } : {}),
+      },
     })
 
-    await localDb.transact(['medication_tasks', 'health_records'], (tables) => {
+    await localDb.transact(['medication_tasks', 'health_records', 'expenses'], (tables) => {
       tables.medication_tasks = [...(tables.medication_tasks as any[]), ...medicationTasks]
+      if (expenseRows.length > 0) {
+        tables.expenses = [...(tables.expenses as any[]), ...expenseRows]
+      }
       if (linkedIllnessIds.length > 0) {
         const illnessIdSet = new Set(linkedIllnessIds)
         tables.health_records = (tables.health_records as any[]).map(record => illnessIdSet.has(record._id)
@@ -1626,12 +1866,20 @@ class LocalSyncRuntime {
         count: medicationTasks.length,
         medications: medicationTasks.map(task => ({ medicationId: task._id, dog_id: task.dog_id })),
       },
-      ...buildLocalAck(syncMeta, medicationTasks.map(task => ({
-        collection: 'medication_tasks' as BusinessCollectionName,
-        id: task._id,
-        version: 0,
-        updatedAt: task.updated_at,
-      }))),
+      ...buildLocalAck(syncMeta, [
+        ...medicationTasks.map(task => ({
+          collection: 'medication_tasks' as BusinessCollectionName,
+          id: task._id,
+          version: 0,
+          updatedAt: task.updated_at,
+        })),
+        ...expenseRows.map(row => ({
+          collection: 'expenses' as BusinessCollectionName,
+          id: row._id,
+          version: 0,
+          updatedAt: row.updated_at,
+        })),
+      ]),
     }
   }
 
@@ -1662,6 +1910,12 @@ class LocalSyncRuntime {
     const extraArrangementTask = data.extra_arrangement?.kind && data.extra_arrangement?.due_date
       ? buildLocalBreedingExtraTask(familyId, dog, cycleId, recordId, data.extra_arrangement, createStableEntityId('task'), now)
       : null
+    const expenseId = data.type !== 'heat_observation' && Number(data.cost || 0) > 0
+      ? createStableEntityId('expense')
+      : ''
+    const expenseRow = expenseId
+      ? buildLocalBreedingExpense(familyId, dog, data, cycleId, recordId, expenseId, now)
+      : null
     const cycle = existingCycle
       ? { ...existingCycle, status: nextStatus, updated_at: now }
       : {
@@ -1681,17 +1935,24 @@ class LocalSyncRuntime {
       existingCycle ? { [cycleId]: Number(existingCycle.version || 0) } : {},
       {
         clientMutationId: createClientMutationId(HOME_MUTATION_TYPES.CREATE_BREEDING_RECORD),
-        clientEntityIds: { breeding_records: recordId, breeding_cycles: cycleId },
+        clientEntityIds: {
+          breeding_records: recordId,
+          breeding_cycles: cycleId,
+          ...(expenseId ? { expenses: expenseId } : {}),
+        },
       },
     )
 
-    await localDb.transact(['breeding_records', 'breeding_cycles', 'tasks'], (tables) => {
+    await localDb.transact(['breeding_records', 'breeding_cycles', 'tasks', 'expenses'], (tables) => {
       tables.breeding_records = [...(tables.breeding_records as any[]), record]
       const cycleMap = new Map((tables.breeding_cycles as any[]).map(row => [row._id, row]))
       cycleMap.set(cycleId, { ...(cycleMap.get(cycleId) || {}), ...cycle })
       tables.breeding_cycles = Array.from(cycleMap.values())
       if (extraArrangementTask) {
         tables.tasks = [...(tables.tasks as any[]), extraArrangementTask]
+      }
+      if (expenseRow) {
+        tables.expenses = [...(tables.expenses as any[]), expenseRow]
       }
     })
     await this.enqueueMutation(
@@ -1707,6 +1968,7 @@ class LocalSyncRuntime {
       ...buildLocalAck(syncMeta, [
         { collection: 'breeding_records' as BusinessCollectionName, id: recordId, version: 0, updatedAt: now },
         { collection: 'breeding_cycles' as BusinessCollectionName, id: cycleId, version: Number(cycle.version || 0), updatedAt: now },
+        ...(expenseRow ? [{ collection: 'expenses' as BusinessCollectionName, id: expenseRow._id, version: 0, updatedAt: now }] : []),
       ]),
     }
   }

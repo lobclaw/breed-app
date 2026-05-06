@@ -731,7 +731,7 @@ async function generateReminders(familyId, type, data, dog, recordId, preloadedS
   }
 }
 
-async function createExpense(familyId, uid, data, dog, sourceRecordId) {
+async function createExpense(familyId, uid, data, dog, sourceRecordId, expenseId = null) {
   const now = Date.now()
   const sourceLabels = {
     vaccination: '疫苗',
@@ -747,7 +747,8 @@ async function createExpense(familyId, uid, data, dog, sourceRecordId) {
   const category = categoryMap[data.type] || '其他'
   const noteText = typeof data.notes === 'string' ? data.notes.trim() : ''
 
-  await db.collection('expenses').add({
+  const expenseData = buildVersionedCreate({
+    ...(expenseId ? { _id: expenseId } : {}),
     total_amount: data.cost,
     category,
     date: data.date,
@@ -761,9 +762,9 @@ async function createExpense(familyId, uid, data, dog, sourceRecordId) {
     family_id: familyId,
     created_by: uid,
     deleted_at: null,
-    created_at: now,
-    updated_at: now,
-  })
+  }, now)
+  const { id } = await db.collection('expenses').add(expenseData)
+  return expenseId || id
 }
 
 module.exports = {
@@ -1154,6 +1155,9 @@ module.exports = {
     const clientRecordIds = Array.isArray(syncMeta?.clientEntityIds?.health_records)
       ? syncMeta.clientEntityIds.health_records
       : []
+    const clientExpenseIds = Array.isArray(syncMeta?.clientEntityIds?.expenses)
+      ? syncMeta.clientEntityIds.expenses
+      : []
 
     const normalizedDetails = data.type === 'illness'
       ? normalizeIllnessDetails(data.details || {})
@@ -1213,14 +1217,15 @@ module.exports = {
       }
 
       // 创建费用
+      let expenseId = null
       if (perDogCost && perDogCost > 0) {
-        await createExpense(familyId, uid, {
+        expenseId = await createExpense(familyId, uid, {
           type: data.type, date: data.date, cost: perDogCost,
           dog_id: dog._id, notes: data.notes || null,
-        }, dog, resolvedRecordId)
+        }, dog, resolvedRecordId, clientExpenseIds[index] || null)
       }
 
-      return { recordId: resolvedRecordId, dog_id: dog._id, completedTasks, record: { ...recordData, _id: resolvedRecordId } }
+      return { recordId: resolvedRecordId, dog_id: dog._id, completedTasks, expenseId, record: { ...recordData, _id: resolvedRecordId } }
     }))
 
     await logHealthOperation({
@@ -1394,6 +1399,9 @@ module.exports = {
     const clientMedicationIds = Array.isArray(syncMeta?.clientEntityIds?.medication_tasks)
       ? syncMeta.clientEntityIds.medication_tasks
       : []
+    const clientExpenseIds = Array.isArray(syncMeta?.clientEntityIds?.expenses)
+      ? syncMeta.clientEntityIds.expenses
+      : []
     const startDate = Number.isFinite(Number(data.actual_start_date)) ? Number(data.actual_start_date) : now
     const endDate = startDate + ((durationDays - 1) * DAY_MS)
     const normalizedIllnessLinks = normalizeMedicationIllnessLinks(data.illness_links || data.illnessLinks)
@@ -1464,7 +1472,8 @@ module.exports = {
 
       // 创建费用
       if (perDogCost && perDogCost > 0) {
-        await db.collection('expenses').add({
+        await db.collection('expenses').add(buildVersionedCreate({
+          ...(clientExpenseIds[index] ? { _id: clientExpenseIds[index] } : {}),
           total_amount: perDogCost,
           category: '医疗',
           date: startDate,
@@ -1476,9 +1485,7 @@ module.exports = {
           family_id: familyId,
           created_by: uid,
           deleted_at: null,
-          created_at: now,
-          updated_at: now,
-        })
+        }, now))
       }
 
       // 疾病升级：观察中 → 治疗中

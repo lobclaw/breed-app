@@ -240,11 +240,6 @@ function isPregnancyConfirmed(details: Record<string, any> = {}) {
   return details.confirmed === '是' || details.confirmed === true
 }
 
-function hasPendingBreedingMutation(cycle: GenericRow, records: GenericRow[]) {
-  if (cycle?._local_pending) return true
-  return records.some(record => record?._local_pending && record.type !== 'heat_observation')
-}
-
 function buildSyntheticBreedingMilestoneTask(
   cycle: GenericRow,
   familyId: string,
@@ -281,7 +276,13 @@ function buildSyntheticBreedingMilestoneTask(
 function buildPendingBreedingMilestones(entities: HomeProjectionEntities) {
   const cycles = (entities.breeding_cycles || []).filter(cycle => !cycle.deleted_at)
   const records = (entities.breeding_records || []).filter(record => !record.deleted_at)
-  if (!cycles.length || !records.length) return []
+  if (!cycles.length) return []
+
+  const cyclesWithPendingTask = new Set(
+    (entities.tasks || [])
+      .filter(task => !task.deleted_at && task.type === 'breeding_milestone' && task.status === 'pending' && task.cycle_id)
+      .map(task => String(task.cycle_id)),
+  )
 
   const recordsByCycleId = new Map<string, GenericRow[]>()
   for (const record of records) {
@@ -294,8 +295,9 @@ function buildPendingBreedingMilestones(entities: HomeProjectionEntities) {
 
   const syntheticTasks: GenericRow[] = []
   for (const cycle of cycles) {
+    if (!cycle?._id || cyclesWithPendingTask.has(String(cycle._id))) continue
+
     const cycleRecords = recordsByCycleId.get(cycle._id) || []
-    if (!hasPendingBreedingMutation(cycle, cycleRecords)) continue
 
     if (cycle.status === '发情中') {
       const latestMatingRecord = getLatestBreedingRecord(cycleRecords, 'mating')
