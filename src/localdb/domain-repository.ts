@@ -698,7 +698,24 @@ export async function listLocalLitters(
   }, {
     sort: sortByRecent,
   })
-  return rows.map(row => formatLitterProjection(row)) as Array<Litter & ReturnType<typeof formatLitterProjection>>
+  let normalizedRows = rows
+  if (rows.some(row => !Number(row.litter_number))) {
+    const damIds = Array.from(new Set(rows.map(row => row.dam_id).filter(Boolean)))
+    const siblings = await localDb.query<any>('litters', row =>
+      row.family_id === familyId
+      && !row.deleted_at
+      && damIds.includes(row.dam_id),
+    )
+    const numberedMap = new Map(
+      attachLitterNumbers(siblings.map(item => ({ ...item }))).map(item => [item._id, item]),
+    )
+    normalizedRows = rows.map((row) => {
+      if (Number(row.litter_number) > 0) return row
+      const computedNumber = Number(numberedMap.get(row._id)?.litter_number)
+      return computedNumber > 0 ? { ...row, litter_number: computedNumber } : row
+    })
+  }
+  return normalizedRows.map(row => formatLitterProjection(row)) as Array<Litter & ReturnType<typeof formatLitterProjection>>
 }
 
 export async function listLocalBreedingCycles(
@@ -903,11 +920,26 @@ export async function listLocalLittersByDam(familyId: string, damId: string) {
   if (!litters.length) return []
 
   const litterIds = litters.map(item => item._id)
-  const puppies = await localDb.query<any>('dogs', row =>
-    row.family_id === familyId
-    && !row.deleted_at
-    && litterIds.includes(row.origin_litter_id),
-  )
+  const cycleIds = Array.from(new Set(litters.map(item => item.cycle_id).filter(Boolean)))
+  const [puppies, cycles, matingRecords] = await Promise.all([
+    localDb.query<any>('dogs', row =>
+      row.family_id === familyId
+      && !row.deleted_at
+      && litterIds.includes(row.origin_litter_id),
+    ),
+    localDb.query<any>('breeding_cycles', row =>
+      row.family_id === familyId
+      && !row.deleted_at
+      && cycleIds.includes(row._id),
+    ),
+    localDb.query<any>('breeding_records', row =>
+      row.family_id === familyId
+      && row.type === 'mating'
+      && !row.deleted_at
+      && cycleIds.includes(row.cycle_id),
+    ),
+  ])
+  const cycleMap = new Map(cycles.map(item => [item._id, item]))
   const puppyMap = new Map<string, Array<Record<string, any>>>()
   puppies.forEach((puppy) => {
     const litterId = typeof puppy.origin_litter_id === 'string' ? puppy.origin_litter_id : ''
@@ -919,6 +951,10 @@ export async function listLocalLittersByDam(familyId: string, damId: string) {
 
   return litters.map(litter => ({
     ...litter,
+    sire_name: String(litter.sire_name || '').trim()
+      || String(cycleMap.get(litter.cycle_id)?.sire_name || '').trim()
+      || getMatingSireName(getLatestMatingRecord(litter.cycle_id, matingRecords))
+      || null,
     pupStats: buildLitterPupStats(puppyMap.get(litter._id) || []),
   }))
 }
@@ -2087,16 +2123,25 @@ export async function getLocalMedicationTaskDetail(familyId: string, taskId: str
 
 export async function getLocalLitterDetail(familyId: string, litterId: string) {
   if (!familyId || !litterId) return null
-  const [litter, puppies, weights, expenses, incomes] = await Promise.all([
+  const [litter, puppies, weights, expenses, incomes, allLitters, cycles, breedingRecords] = await Promise.all([
     localDb.findById<Litter>('litters', litterId),
     localDb.query<any>('dogs', row => row.family_id === familyId && row.origin_litter_id === litterId && !row.deleted_at),
     localDb.query<any>('dog_weights', row => row.family_id === familyId && !!row.dog_id),
     localDb.query<any>('expenses', row => row.family_id === familyId && !row.deleted_at),
     localDb.query<any>('incomes', row => row.family_id === familyId && !row.deleted_at),
+    localDb.query<any>('litters', row => row.family_id === familyId && !row.deleted_at),
+    localDb.query<any>('breeding_cycles', row => row.family_id === familyId && !row.deleted_at),
+    localDb.query<any>('breeding_records', row => row.family_id === familyId && row.type === 'mating' && !row.deleted_at),
   ])
   if (!litter || litter.family_id !== familyId) return null
 
-  const numberedLitters = attachLitterNumbers([litter])
+  const numberedLitters = attachLitterNumbers(allLitters)
+  const numberedLitter = numberedLitters.find(item => item._id === litterId) || litter
+  const linkedCycle = cycles.find(item => item._id === litter.cycle_id) || null
+  const latestMating = getLatestMatingRecord(litter.cycle_id, breedingRecords)
+  const sireName = String(litter.sire_name || '').trim()
+    || String(linkedCycle?.sire_name || '').trim()
+    || getMatingSireName(latestMating)
   const puppyIds = puppies.map(item => item._id)
   const weightMap = new Map<string, Array<Record<string, any>>>()
   weights
@@ -2132,7 +2177,8 @@ export async function getLocalLitterDetail(familyId: string, litterId: string) {
 
   return {
     litter: {
-      ...numberedLitters[0],
+      ...numberedLitter,
+      sire_name: sireName || numberedLitter.sire_name || null,
       expense: expenseTotal,
       income: incomeTotal,
     },

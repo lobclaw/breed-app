@@ -11,6 +11,7 @@ import {
   getLocalFinancialSummary,
   getLocalIncomeDetail,
   getLocalKennelDashboardStats,
+  getLocalLitterDetail,
   getLocalLitterProfit,
   getLocalProjectionParams,
   getLocalSaleDetail,
@@ -1654,6 +1655,81 @@ describe('local domain repository', () => {
     })
     expect(detail?.records).toHaveLength(1)
     expect(detail?.expenses).toHaveLength(1)
+  })
+
+  it('窝详情应按母犬历史窝记录计算窝号并从配种记录回填种公名', async () => {
+    const now = new Date('2026-05-06T10:00:00+08:00').getTime()
+    await localDb.replaceTable('litters', [{
+      _id: 'litter_history_1',
+      family_id: 'fam_litter_detail',
+      cycle_id: 'cycle_history_1',
+      dam_id: 'dam_litter_detail',
+      dam_name: '肉肉',
+      birth_date: new Date('2026-01-01T10:00:00+08:00').getTime(),
+      total_born: 2,
+      born_alive: 2,
+      created_at: new Date('2026-01-01T10:00:00+08:00').getTime(),
+      updated_at: now - 1000,
+    }, {
+      _id: 'litter_history_2',
+      family_id: 'fam_litter_detail',
+      cycle_id: 'cycle_history_2',
+      dam_id: 'dam_litter_detail',
+      dam_name: '肉肉',
+      birth_date: new Date('2026-05-01T10:00:00+08:00').getTime(),
+      total_born: 3,
+      born_alive: 3,
+      created_at: new Date('2026-05-01T10:00:00+08:00').getTime(),
+      updated_at: now,
+    }])
+    await localDb.replaceTable('breeding_cycles', [{
+      _id: 'cycle_history_2',
+      family_id: 'fam_litter_detail',
+      dam_id: 'dam_litter_detail',
+      dam_name: '肉肉',
+      status: '已生产',
+      created_at: new Date('2026-04-01T10:00:00+08:00').getTime(),
+      updated_at: now,
+    }])
+    await localDb.replaceTable('breeding_records', [{
+      _id: 'mating_litter_detail',
+      family_id: 'fam_litter_detail',
+      cycle_id: 'cycle_history_2',
+      dog_id: 'dam_litter_detail',
+      type: 'mating',
+      date: new Date('2026-03-01T10:00:00+08:00').getTime(),
+      details: {
+        sire_name: '弟弟',
+        mating_number: 1,
+      },
+      created_at: new Date('2026-03-01T10:00:00+08:00').getTime(),
+      updated_at: now,
+    }])
+    await localDb.replaceTable('dogs', [])
+    await localDb.replaceTable('dog_weights', [])
+    await localDb.replaceTable('expenses', [])
+    await localDb.replaceTable('incomes', [])
+
+    const detail = await getLocalLitterDetail('fam_litter_detail', 'litter_history_2')
+
+    expect(detail?.litter).toMatchObject({
+      _id: 'litter_history_2',
+      litter_number: 2,
+      sire_name: '弟弟',
+    })
+
+    const activeLitters = await listLocalLitters('fam_litter_detail', { activeOnly: true })
+    expect(activeLitters[0]).toMatchObject({
+      _id: 'litter_history_2',
+      litter_number: 2,
+      litterNumber: 2,
+    })
+
+    const damLitters = await listLocalLittersByDam('fam_litter_detail', 'dam_litter_detail')
+    expect(damLitters[0]).toMatchObject({
+      _id: 'litter_history_2',
+      sire_name: '弟弟',
+    })
   })
 
   it('周期第 N 天应按北京时间日边界计算', async () => {
