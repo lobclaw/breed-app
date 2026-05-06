@@ -79,7 +79,10 @@
 - 同犬同药名只允许一个进行中用药任务；覆盖语义是“取消旧任务 + 创建新任务”
 - 收入统一入口为 `pages/finance/expense-add.vue?type=income`；`income-add.vue` 弃用；`sale_records` 当前不纳入回收站
 - 销售“开始销售”走 `finance-service.createSaleRecord`，创建 `sale_records.status=待售` 并把犬只 `disposition` 切到 `待售`
+- 开始销售候选必须先走本地投影过滤：仅 `幼崽` 且 `disposition in 在养/自留`，并排除已有 `待售/已预定` 销售记录的犬只；提交仍由本地事务与云对象兜底校验
 - 完成交易允许 `received_amount` 为空；为空时写 `已成交 + 未结算`，不自动生成销售收入；补结算走 `finance-service.settleSale`
+- 未结算成交不得退款；退款金额必须 `> 0` 且不超过 `received_amount`；定金取消的保留金额必须在 `0..deposit_amount` 内，前端、本地事务、云对象三层都要校验
+- 销售列表和详情必须使用同一归一化口径，稳定展示 `sale_mode`、`settlement_status`、`agent_name` 与犬只基础信息
 
 ## UI / 路由红线
 
@@ -96,6 +99,7 @@
 - 改首页：核对固定结构、红点口径、提交承接、防闪回、latest token、suppression
 - 改 local-first / 同步：核对 scope registry、TTL、active scope、collection cursor、scope freshness、outbox flush、Network 请求数量
 - 改繁育 / 健康 / 用药：核对任务生成条件、状态推进、唯一性约束、记录表单验收
+- 改销售：核对可售候选过滤、同犬只进行中唯一性、未结算退款拦截、退款/定金取消金额边界、销售列表/详情归一化
 - 改通知 / 晨间摘要 / 推送：核对 `families.settings` 与北京时间 `HH:MM` 分钟级命中
 - 改家庭协作 / 云对象 / 详情页刷新：核对 `operation_logs`、多集合写入边界、北京时间按天换算、重复请求与 latest token
 - 改完后：验证来源页承接、局部移除、scope TTL、in-flight 去重、outbox 重放、冲突/失败/待上传状态

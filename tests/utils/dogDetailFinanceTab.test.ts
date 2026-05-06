@@ -32,4 +32,13 @@ describe('dog detail finance tab contract', () => {
     expect(source).toContain("uni.navigateTo({ url: `/pages/finance/index?dogId=${dogId}&dogName=${dogName}` })")
     expect(source).toContain("return tx?._txType === 'income' ? `+${formattedAmount}` : formattedAmount")
   })
+
+  it('最近收支标题应使用业务类型，备注只追加到副标题', () => {
+    expect(source).toContain("return category ? normalizeExpenseCategoryName(category) : '支出记录'")
+    expect(source).toContain("return type ? normalizeIncomeType(type) : '收入记录'")
+    expect(source).toContain('const FINANCE_RECENT_NOTE_MAX_LENGTH = 14')
+    expect(source).toContain('return appendFinanceRecentNote(subtitle, tx)')
+    expect(source).not.toContain("return tx?.notes || tx?.category || '支出记录'")
+    expect(source).not.toContain("return tx?.notes || tx?.type || '收入记录'")
+  })
 })

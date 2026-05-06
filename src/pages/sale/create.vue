@@ -28,7 +28,7 @@
               <text>{{ mode }}</text>
             </view>
           </view>
-          <text class="form-helper">开始销售后会立即创建一条待售记录，后续再补定价或结算信息。</text>
+          <text class="form-helper">{{ saleModeDescription }}</text>
         </view>
       </view>
 
@@ -115,6 +115,15 @@ const lockedDogCandidates = computed(() => {
 })
 
 const dogPickerCandidates = computed(() => lockedDogCandidates.value ?? saleCandidateDogs.value)
+
+const saleModeDescription = computed(() => {
+  const map: Record<SaleMode, string> = {
+    自售: '自己对接买家，后续可直接收定金或完成交易。',
+    代理: '由代理人协助介绍买家，适合需要记录代理人或平台来源的销售。',
+    代卖: '交给合作方代为销售，成交后再按实际回款补录结算。',
+  }
+  return map[form.sale_mode]
+})
 
 const submitButtonText = computed(() => {
   if (submitState.value === 'submitting') return '提交中...'

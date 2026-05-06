@@ -325,6 +325,7 @@ import {
   type BreedingTimelineKind,
   type BreedingTimelineTone,
 } from '@/utils/breedingTimeline'
+import { normalizeExpenseCategoryName } from '@/constants/financeCategories'
 
 const cycle = ref<any>(null)
 const records = ref<any[]>([])
@@ -426,13 +427,18 @@ const resolvedSireName = computed(() => {
 
 const costItems = computed(() => {
   if (!expenses.value.length) return []
-  return expenses.value
+  const costByCategory = new Map<string, number>()
+  expenses.value
     .filter(item => Number(item.total_amount) > 0)
-    .map(item => ({
-      id: item._id,
-      label: item.notes || item.category || '支出',
-      amount: Number(item.total_amount) || 0,
-    }))
+    .forEach((item) => {
+      const label = item.category ? normalizeExpenseCategoryName(item.category) : '支出'
+      costByCategory.set(label, (costByCategory.get(label) || 0) + Number(item.total_amount || 0))
+    })
+  return Array.from(costByCategory.entries()).map(([label, amount]) => ({
+    id: label,
+    label,
+    amount,
+  }))
 })
 
 const totalCost = computed(() => costItems.value.reduce((s, i) => s + i.amount, 0))

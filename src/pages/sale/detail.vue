@@ -253,8 +253,13 @@
         </view>
         <view class="modal-field">
           <text class="modal-label">交付日期</text>
-          <view @click="showDeliveryDatePicker = true">
-            <input :value="deliveryDateText" placeholder="选填" class="modal-input" disabled />
+          <view
+            class="modal-date-control"
+            :class="{ 'modal-date-control--empty': !deliveryDateText }"
+            @click="showDeliveryDatePicker = true"
+          >
+            <text class="modal-date-control__text">{{ deliveryDateText || '选填' }}</text>
+            <text class="material-icons-round modal-date-control__icon">event</text>
           </view>
         </view>
         <view class="modal-actions">
@@ -332,19 +337,13 @@
         <!-- 退款原因 -->
         <view class="sheet-field">
           <text class="sheet-label">退款原因</text>
-          <view class="sheet-select" @click="showRefundReasonPicker = !showRefundReasonPicker">
-            <text :style="{ color: refundSheetForm.refund_reason ? 'var(--text-1)' : 'var(--text-3)' }">
-              {{ refundSheetForm.refund_reason || '选择原因' }}
-            </text>
-            <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">expand_more</text>
-          </view>
-          <view v-if="showRefundReasonPicker" class="sheet-options">
+          <view class="sheet-options">
             <view
               v-for="r in refundReasons"
               :key="r"
               class="sheet-option"
               :class="{ 'sheet-option--active': refundSheetForm.refund_reason === r }"
-              @click="refundSheetForm.refund_reason = r; showRefundReasonPicker = false"
+              @click="refundSheetForm.refund_reason = r"
             >
               <text>{{ r }}</text>
             </view>
@@ -514,7 +513,6 @@ const settlementStatusOptions: Array<'已结算' | '部分结算'> = ['已结算
 
 /* S-6: 退款表单 */
 const showRefundSheet = ref(false)
-const showRefundReasonPicker = ref(false)
 const refundReasons = ['质量问题', '买家反悔', '健康问题', '买卖双方协商', '其他']
 const refundSheetForm = reactive({
   type: 'full' as 'full' | 'partial',
@@ -1167,6 +1165,46 @@ onShow(() => {
   background: var(--bg);
 }
 
+.modal-date-control {
+  width: 100%;
+  height: 44px;
+  box-sizing: border-box;
+  border: 1.5px solid var(--text-4);
+  border-radius: var(--radius-date);
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--bg);
+  color: var(--text-1);
+  transition: border-color 0.12s ease, background 0.12s ease, transform 0.12s ease;
+
+  &:active {
+    transform: scale(0.99);
+    border-color: rgba(234, 62, 119, 0.36);
+    background: var(--card);
+  }
+
+  &--empty {
+    color: var(--text-3);
+  }
+}
+
+.modal-date-control__text {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.modal-date-control__icon {
+  flex: 0 0 auto;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--text-3);
+}
+
 .modal-pills {
   display: flex;
   flex-wrap: wrap;
@@ -1196,24 +1234,40 @@ onShow(() => {
 
 .modal-btn {
   flex: 1;
+  min-width: 0;
+  margin: 0;
   height: 40px;
+  box-sizing: border-box;
   border-radius: var(--radius-btn);
+  border: 1px solid rgba(45, 27, 20, 0.08);
   font-size: 14px;
   font-weight: 600;
-  background: var(--bg);
+  background: var(--card);
   color: var(--text-2);
-  line-height: 40px;
+  line-height: 1;
   padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.86);
   transition: transform 0.12s ease;
   &:active { transform: scale(0.94); }
 
+  &::after {
+    border: none;
+  }
+
   &--primary {
     background: var(--primary);
+    border-color: var(--primary);
+    box-shadow: none;
     color: #fff;
   }
 
   &--warn {
     background: var(--red);
+    border-color: var(--red);
+    box-shadow: none;
     color: #fff;
   }
 
@@ -1321,6 +1375,7 @@ onShow(() => {
 .sheet-btn {
   width: 100%;
   height: 48px;
+  box-sizing: border-box;
   border-radius: var(--radius-btn);
   font-family: var(--font-display);
   font-size: 15px;
@@ -1328,9 +1383,20 @@ onShow(() => {
   border: none;
   color: #fff;
   margin-top: 20px;
+  margin-left: 0;
+  margin-right: 0;
+  padding: 0;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: all 0.12s ease;
   &:active { transform: scale(0.97); opacity: 0.9; }
   &[disabled] { opacity: 0.5; }
+
+  &::after {
+    border: none;
+  }
 
   &--red { background: var(--red); }
   &--primary { background: var(--primary); }

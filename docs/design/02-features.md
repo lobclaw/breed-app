@@ -294,14 +294,18 @@ V1 保持三级角色：
 - `待售` 表示已手动纳入销售池，不要求先填写 `floor_price`；`floor_price` 仅表示内部参考底价，可为空
 - “开始销售”提交走 `finance-service.createSaleRecord`
 - 仅 `幼崽` 且 `disposition` 属于 `在养 / 自留` 可开始销售；同一犬只同一时刻只允许一条进行中的销售记录
+- 销售创建页的犬只候选必须来自本地投影过滤：`role=幼崽`、`disposition in 在养/自留`，并排除已有 `待售 / 已预定` 销售记录的犬只；锁定来源入口仍显示来源犬只，但提交必须由本地事务和云对象继续兜底校验
 - 开始销售必须同时创建 `sale_records.status=待售`，并将犬只 `disposition` 切到 `待售`
 - 销售创建页 `/pages/sale/create` 当前正式语义是“开始销售”，支持来源页透传 `dogId + dogName` 锁定犬只
 - 销售创建页字段固定为：犬只、`sale_mode`（默认 `自售`）、`floor_price`（选填）、`buyer_info`（选填）、`notes`（选填）
 - 销售列表与详情按新语义展示：`待售` 无底价时显示“未定价”；`已成交` 且无 `received_amount` 时显示“未结算”，不要渲染 `¥0`
 - 完成交易走 `finance-service.completeSale`，允许 `received_amount` 为空；为空时写入 `status=已成交`、`settlement_status=未结算`，且不自动生成销售收入
 - 成交后补结算统一走 `finance-service.settleSale`；补录 `received_amount` 后再创建或更新自动收入
-- 销售详情页需提供“补录结算”入口
+- 销售详情页需提供“补录结算”入口；未结算成交不得展示或提交退款
+- 退款只允许已结算成交，且 `refund_amount` 必须 `> 0` 且不超过 `received_amount`；全额退款后犬只回到 `待售`
+- 定金取消以 `deposit_kept_amount` 表达保留金额，必须在 `0..deposit_amount` 内；用户输入退还定金时需先换算为保留金额再提交
 - `finance-service.getSaleList/getSaleDetail` 返回值必须走销售归一化口径，稳定包含 `sale_mode`、`settlement_status`、`agent_name`
+- 本地 `listLocalSales/getLocalSaleDetail` 也必须走同一销售归一化口径，列表和详情不得出现代理人、结算状态、犬只性别/月龄不一致
 - `sale_records` 当前不纳入回收站；未定义自动收入与犬只去向回滚前不要顺手接入
 
 ## 8. 首页一致性规则

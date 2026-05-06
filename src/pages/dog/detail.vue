@@ -1318,6 +1318,7 @@ import {
 } from '@/utils/breedingTimeline'
 import { buildTimestampFromDayOffset, formatDateInputValue, getBeijingDayStart } from '@/utils/date'
 import { formatFinanceAmount, getFinanceAmountParts, type FinanceAmountParts } from '@/utils/financeDisplay'
+import { normalizeExpenseCategoryName, normalizeIncomeType } from '@/constants/financeCategories'
 
 const { currentFamily } = useAuth()
 usePageSync({ routePath: 'pages/dog/detail' })
@@ -2520,32 +2521,49 @@ function getFinanceRecentAmountClass(tx: any) {
   return tx?._txType === 'income' ? 'dog-detail__rec-amount--income' : 'dog-detail__rec-amount--expense'
 }
 
+const FINANCE_RECENT_NOTE_MAX_LENGTH = 14
+
 function getFinanceRecentTitle(tx: any) {
-  if (tx?._txType === 'expense') return tx?.notes || tx?.category || '支出记录'
-  return tx?.notes || tx?.type || '收入记录'
+  if (tx?._txType === 'expense') {
+    const category = String(tx?.category || '').trim()
+    return category ? normalizeExpenseCategoryName(category) : '支出记录'
+  }
+  const type = String(tx?.type_label || tx?.type || '').trim()
+  return type ? normalizeIncomeType(type) : '收入记录'
+}
+
+function formatFinanceRecentNote(notes?: string | null) {
+  const normalized = String(notes || '').replace(/\s+/g, ' ').trim()
+  if (!normalized) return ''
+  if (normalized.length <= FINANCE_RECENT_NOTE_MAX_LENGTH) return normalized
+  return `${normalized.slice(0, FINANCE_RECENT_NOTE_MAX_LENGTH)}...`
+}
+
+function appendFinanceRecentNote(subtitle: string, tx: any) {
+  const note = formatFinanceRecentNote(tx?.notes)
+  return note ? `${subtitle} · ${note}` : subtitle
 }
 
 function getFinanceRecentSubtitle(tx: any) {
   const dateText = formatDate(tx?.date || 0)
+  let subtitle = dateText
   if (tx?._txType === 'expense') {
     if (tx?.linked_litter_id) {
       const litterText = tx?.dam_name
         ? `${tx.dam_name}${tx?.litter_number ? ` · 第${tx.litter_number}窝` : ' · 关联窝'}`
         : '关联窝'
-      return `${dateText} · ${litterText}`
-    }
-    if (tx?.linked_cycle_id) {
-      return `${dateText} · ${tx?.dam_name ? `${tx.dam_name} · 繁育周期` : '繁育周期'}`
-    }
-    if (Array.isArray(tx?.dog_names) && tx.dog_names.length > 0) {
+      subtitle = `${dateText} · ${litterText}`
+    } else if (tx?.linked_cycle_id) {
+      subtitle = `${dateText} · ${tx?.dam_name ? `${tx.dam_name} · 繁育周期` : '繁育周期'}`
+    } else if (Array.isArray(tx?.dog_names) && tx.dog_names.length > 0) {
       const dogNames = tx.dog_names.slice(0, 2).join('、')
-      return `${dateText} · ${dogNames}${tx.dog_names.length > 2 ? ` +${tx.dog_names.length - 2}` : ''}`
+      subtitle = `${dateText} · ${dogNames}${tx.dog_names.length > 2 ? ` +${tx.dog_names.length - 2}` : ''}`
     }
-    return dateText
+    return appendFinanceRecentNote(subtitle, tx)
   }
 
-  if (tx?.dog_name) return `${dateText} · ${tx.dog_name}`
-  return dateText
+  if (tx?.dog_name) subtitle = `${dateText} · ${tx.dog_name}`
+  return appendFinanceRecentNote(subtitle, tx)
 }
 
 function goBack() {

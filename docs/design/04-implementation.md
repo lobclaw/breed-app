@@ -158,6 +158,7 @@ Local-First Foundation：
 
 - 犬只、繁育、健康、用药、财务、销售、代理人、回收站、配置页均已接入本地读路径
 - 核心写路径已收口到本地事务 + outbox，并由各域云对象处理 `_sync` 幂等 ack
+- 销售流程已补齐本地候选过滤、列表/详情归一化投影，以及退款/定金取消金额边界的前端、本地事务、云对象三层校验
 - 备份页已接入 pending outbox / pending upload 阻断提示
 - 同步状态页已接入 pending / failed / conflict / pending upload 统计、当前 active scope、最近同步时间与失败/冲突重试
 - 在线优先页已补断网联网提示
@@ -181,6 +182,7 @@ Local-First Foundation：
 
 - 首页本地投影与 `task-service` / `health-service` 同步边界
 - `src/localdb` 与 sync worker
+- 销售流程的 `listLocalSaleCandidateDogs`、`listLocalSales/getLocalSaleDetail` 归一化、`finance.cancelSale` 本地与云端金额边界
 - 用药详情与首页用药卡的一致性
 - 疾病记录编辑与唯一性校验
 - 批量健康完成后的本地事务与自动记录

@@ -199,12 +199,19 @@
 写入口：
 
 - 开始销售、预定、成交、补录结算、退款、定金取消
+- 开始销售候选由本地 `dogs + sale_records` 投影过滤，不直接使用未筛选犬只列表
+- 退款写入前必须确认 `received_amount > 0`，且 `refund_amount <= received_amount`
+- 定金取消写入的是 `deposit_kept_amount`，必须由退还金额换算并限制在 `0..deposit_amount`
 
 主要读取页面：
 
 - 销售列表
 - 销售详情
 - 财务关联上下文
+
+读取口径：
+
+- 销售列表与销售详情必须统一归一化 `sale_mode`、`settlement_status`、`agent_name`、犬只性别与月龄
 
 ## 3. 当前审计结论
 

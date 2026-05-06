@@ -431,6 +431,9 @@
 - `sale_mode` 当前使用 `自售 / 代理 / 代卖`
 - `settlement_status` 当前使用 `未结算 / 部分结算 / 已结算`
 - `status` 负责表达销售进度，`settlement_status` 负责表达成交后的结算进度
+- `refund_amount` 仅对已结算成交有效，必须大于 `0` 且不超过 `received_amount`；未结算成交不得进入退款
+- `deposit_kept_amount` 仅用于 `定金取消`，表示保留定金金额，必须在 `0..deposit_amount` 内；退还金额是表单输入语义，不作为 `sale_records` 字段存储
+- 同一犬只同一时刻只允许一条进行中销售记录，进行中状态固定为 `待售 / 已预定`
 
 ### 3.9 辅助集合
 

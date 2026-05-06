@@ -45,6 +45,14 @@ describe('breeding cycle page source contract', () => {
     expect(source).toContain('@click="goToLitter(litter._id)"')
   })
 
+  it('周期费用应优先显示归一化分类而不是备注', () => {
+    expect(source).toContain('const costByCategory = new Map<string, number>()')
+    expect(source).toContain("const label = item.category ? normalizeExpenseCategoryName(item.category) : '支出'")
+    expect(source).toContain('costByCategory.set(label, (costByCategory.get(label) || 0) + Number(item.total_amount || 0))')
+    expect(source).toContain('return Array.from(costByCategory.entries()).map(([label, amount]) => ({')
+    expect(source).not.toContain("label: item.notes || item.category || '支出'")
+  })
+
   it('应收敛未来节点和历史节点的颜色语义，并复用共享 tone helper', () => {
     expect(source).toContain('getBreedingTimelineRecordTone')
     expect(source).toContain('getBreedingTimelineCurrentStatusTone')

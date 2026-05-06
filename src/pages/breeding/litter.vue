@@ -300,7 +300,7 @@ import { ref, computed } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useAuth } from '@/composables/useAuth'
 import { usePageSync } from '@/composables/usePageSync'
-import { getLocalLitterDetail } from '@/localdb/domain-repository'
+import { getLocalLitterDetail, getLocalLitterProfit } from '@/localdb/domain-repository'
 import { localSyncRuntime } from '@/localdb/runtime'
 import { consumeSubmitFeedback, queueSubmitFeedback } from '@/composables/useSubmitFeedback'
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
@@ -479,8 +479,17 @@ async function loadData() {
     return
   }
   localSyncRuntime.setCurrentFamilyId(familyId)
-  const detail = await getLocalLitterDetail(familyId, litterId)
-  litter.value = detail?.litter || null
+  const [detail, profit] = await Promise.all([
+    getLocalLitterDetail(familyId, litterId),
+    getLocalLitterProfit(familyId, litterId),
+  ])
+  litter.value = detail?.litter
+    ? {
+        ...detail.litter,
+        income: profit?.totalIncome ?? detail.litter.income,
+        expense: profit?.totalCost ?? detail.litter.expense,
+      }
+    : null
   puppies.value = detail?.puppies || []
   loading.value = false
 }
