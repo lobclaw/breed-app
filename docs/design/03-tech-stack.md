@@ -122,6 +122,8 @@
 - 所有写接口统一支持可选 `_sync` 元数据：`clientMutationId`、`deviceId`、`baseVersions`、`clientTimestamp`
 - 所有写接口统一返回 `ack / clientMutationId / touchedEntities / resyncScopes / conflict`
 - 同一个 `clientMutationId` 重放时必须幂等
+- 云函数内禁止使用未定义常量
+- 毫秒常量直接写字面量 `86400000`，不要定义全局 `DAY_MS`
 
 ### 5.2 风险
 

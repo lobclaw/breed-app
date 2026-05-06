@@ -134,7 +134,7 @@ describe('local domain repository', () => {
 
     expect(await listLocalMedicationProtocols('fam_1')).toHaveLength(1)
 
-    const stats = await getLocalKennelDashboardStats('fam_1')
+    const stats = await getLocalKennelDashboardStats('fam_1', { now: monthTs })
     expect(stats.activeDogs).toHaveLength(1)
     expect(stats.soldDogs).toHaveLength(1)
     expect(stats.monthlyIncome).toBe(1000)

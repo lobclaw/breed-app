@@ -490,7 +490,7 @@ function getCurrentMonthRange(now = Date.now()) {
   return { start, end }
 }
 
-export async function getLocalKennelDashboardStats(familyId: string) {
+export async function getLocalKennelDashboardStats(familyId: string, options: { now?: number } = {}) {
   if (!familyId) {
     return {
       dogs: [] as DogWithStatus[],
@@ -509,7 +509,7 @@ export async function getLocalKennelDashboardStats(familyId: string) {
     localDb.query<any>('expenses', expense => expense.family_id === familyId && !expense.deleted_at),
     localDb.query<any>('incomes', income => income.family_id === familyId && !income.deleted_at),
   ])
-  const monthRange = getCurrentMonthRange()
+  const monthRange = getCurrentMonthRange(options.now)
   const monthlyIncome = incomes
     .filter(item => Number(item.date || item.created_at || 0) >= monthRange.start && Number(item.date || item.created_at || 0) <= monthRange.end)
     .reduce((sum, item) => sum + Number(item.amount || 0), 0)

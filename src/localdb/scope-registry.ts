@@ -241,7 +241,7 @@ export const SYNC_SCOPE_REGISTRY: SyncScopeDefinition[] = [
     mode: 'static',
     ttlMs: 0,
     collections: [],
-    routeMatchers: ['pages/profile/about'],
+    routeMatchers: ['pages/profile/about', 'pages/profile/sync-status'],
   },
 ]
 

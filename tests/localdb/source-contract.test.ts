@@ -8,6 +8,12 @@ function readWorkspaceFile(relativePath: string) {
 }
 
 describe('local-first source contract', () => {
+  it('usePageSync 不应在页面 onShow 中触发 core mirror', () => {
+    const source = readWorkspaceFile('src/composables/usePageSync.ts')
+    expect(source).not.toContain('localSyncRuntime.resume(')
+    expect(source).toContain('localSyncRuntime.setCurrentFamilyId(familyId)')
+  })
+
   it('应确保纯选择组件不再直接读取云端', () => {
     const selectorFiles = [
       'src/components/form/BDogPicker.vue',

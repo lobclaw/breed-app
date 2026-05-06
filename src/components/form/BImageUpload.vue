@@ -85,7 +85,8 @@ function chooseImage() {
           }
         } catch (e) {
           console.error('上传图片失败', e)
-          uni.showToast({ title: '上传失败', icon: 'none' })
+          newUrls.push(path)
+          uni.showToast({ title: '图片待上传', icon: 'none' })
         }
       }
       if (newUrls.length) {

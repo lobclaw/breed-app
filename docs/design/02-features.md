@@ -181,6 +181,7 @@ V1 保持三级角色：
 - 包含：`push_enabled`、`morning_summary_enabled`、`morning_summary_time`、`notification_types`
 - `notification_types` 当前固定为：`breeding / vaccination / medication / care_group / overdue`
 - `overdue` 不可关闭，后端兜底保持为开启
+- `care_group` 仅保留配置与数据结构，未接入自动任务链路，入口默认隐藏，不按已上线能力验收
 - 晨间摘要按家庭设置的北京时间 `HH:MM` 分钟级命中
 - 总开关或晨间摘要开关关闭时，不发送晨间摘要
 - 晨间摘要内容按通知类型过滤：繁育、疫苗/驱虫、今日用药、护理提醒、逾期
@@ -265,6 +266,38 @@ V1 保持三级角色：
 - 同狗同主疾病且未康复，不允许重复创建
 - 命中重复时应优先引导编辑原记录
 - 服务端必须兜底校验
+
+### 7.6 财务入口与统计
+
+- 统一记账入口为 `pages/finance/expense-add.vue?type=income`
+- `income-add.vue` 视为弃用，只做跳转承接，不再维护第二套收入写路径
+- 手动收入类型固定为 `销售 / 定金保留 / 领养 / 其他`
+- 财务首页筛选结构固定为“顶部 `全部 / 收入 / 支出` + 统一高级筛选入口”
+- 已生效筛选条件必须显式显示为 chips，并支持单个清除与一键清空
+- 同维度多选取并集，不同维度取交集
+- `仅看无关联` 与任意关联对象互斥
+- 收入关联只支持 `犬只 / 无关联`，支出关联支持 `犬只 / 窝 / 繁育周期 / 无关联`
+- 自定义支出分类必须带 `parent_group`
+- 财务统计页底部模块固定命名为 `专项报表`，不跟随上方时间维度切换
+- `未来预估` 禁止先展示硬编码默认值再异步覆盖；合法 `0` 值必须能覆盖默认值
+- `单窝利润` 中若同一笔 expense 同时关联 `linked_cycle_id` 与 `linked_litter_id`，只统计一次，并优先归入“窝级别费用”
+
+### 7.7 销售流程
+
+- 顶层销售状态保持 `待售 / 已预定 / 已成交 / 已退款 / 定金取消`
+- `已成交` 与 `settlement_status` 分离，后者当前使用 `未结算 / 部分结算 / 已结算`
+- `待售` 表示已手动纳入销售池，不要求先填写 `floor_price`；`floor_price` 仅表示内部参考底价，可为空
+- “开始销售”提交走 `finance-service.createSaleRecord`
+- 仅 `幼崽` 且 `disposition` 属于 `在养 / 自留` 可开始销售；同一犬只同一时刻只允许一条进行中的销售记录
+- 开始销售必须同时创建 `sale_records.status=待售`，并将犬只 `disposition` 切到 `待售`
+- 销售创建页 `/pages/sale/create` 当前正式语义是“开始销售”，支持来源页透传 `dogId + dogName` 锁定犬只
+- 销售创建页字段固定为：犬只、`sale_mode`（默认 `自售`）、`floor_price`（选填）、`buyer_info`（选填）、`notes`（选填）
+- 销售列表与详情按新语义展示：`待售` 无底价时显示“未定价”；`已成交` 且无 `received_amount` 时显示“未结算”，不要渲染 `¥0`
+- 完成交易走 `finance-service.completeSale`，允许 `received_amount` 为空；为空时写入 `status=已成交`、`settlement_status=未结算`，且不自动生成销售收入
+- 成交后补结算统一走 `finance-service.settleSale`；补录 `received_amount` 后再创建或更新自动收入
+- 销售详情页需提供“补录结算”入口
+- `finance-service.getSaleList/getSaleDetail` 返回值必须走销售归一化口径，稳定包含 `sale_mode`、`settlement_status`、`agent_name`
+- `sale_records` 当前不纳入回收站；未定义自动收入与犬只去向回滚前不要顺手接入
 
 ## 8. 首页一致性规则
 

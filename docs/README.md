@@ -4,9 +4,17 @@
 
 这套文档只保留三层：
 
-- `AGENTS.md`：唯一协作入口，包含协作约束、开发口径、当前阶段与任务执行 checklist
+- `AGENTS.md`：唯一协作入口，包含协作约束、关键红线、当前阶段与任务执行 checklist
 - `docs/design/`：产品与工程的长期事实源
 - `docs/ROADMAP.md`：当前路线、阶段目标与验收重点
+
+## 职责分层
+
+- `AGENTS.md` 保持压缩，只放高频协作规则、不可违反的工程/产品红线、scope 边界和改动 checklist
+- 详细业务规则不在 `AGENTS.md` 展开；首页、提醒、繁育、健康、财务、销售等规则以 `docs/design/02-features.md` 为准
+- 数据字段、状态、软删除、同步系统集合以 `docs/design/01-data-model.md` 为准
+- 技术选型、Local-First 运行时、前端/云对象边界以 `docs/design/03-tech-stack.md` 与 `docs/design/04-implementation.md` 为准
+- 字段归属与页面写入口以 `docs/design/05-field-page-mapping.md` 为准
 
 ## 当前高频口径
 
@@ -47,6 +55,7 @@
 ## 路线文档
 
 - `docs/ROADMAP.md`：当前里程碑路线、阶段目标、验收重点、非目标
+- `docs/sync-mutation-matrix.md`：本地 outbox 语义 mutation 与云对象方法覆盖矩阵
 
 ## 验收文档
 
@@ -61,7 +70,7 @@
 ## 维护规则
 
 - 数据模型变化先改 `01-data-model.md`
-- 产品口径变化先改 `02-features.md`
+- 产品口径变化先改 `02-features.md`，再把高频红线同步压缩进 `AGENTS.md`
 - 技术与架构边界变化先改 `03-tech-stack.md`
 - 实现阶段与测试口径变化先改 `04-implementation.md`
 - 页面或字段责任变化先改 `05-field-page-mapping.md`

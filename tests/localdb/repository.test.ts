@@ -15,6 +15,12 @@ describe('localdb repository public api', () => {
       name: '奶糖',
       family_id: 'fam_1',
       updated_at: 100,
+    }, {
+      _id: 'dog_local_pending_upload',
+      name: '待传图片',
+      family_id: 'fam_upload',
+      updated_at: 100,
+      _pending_upload: true,
     }])
     await mutateLocal(['dogs'], (tables) => {
       tables.dogs = tables.dogs.map((dog: any) => dog._id === 'dog_local_1'
@@ -53,6 +59,7 @@ describe('localdb repository public api', () => {
     expect(await getSyncStatus()).toMatchObject({
       pending: 1,
       failed: 0,
+      pendingUpload: 1,
       lastPulledAt: 200,
       activeScope: 'dog-list',
       recentSyncAt: 200,

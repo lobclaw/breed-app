@@ -36,6 +36,9 @@
         <text class="material-icons-round sync-warning-card__retry-icon">sync</text>
         <text>{{ retryingSync ? '正在重试' : '立即重试同步' }}</text>
       </button>
+      <button class="sync-warning-card__detail" @click="goToSyncStatus">
+        <text>查看同步状态</text>
+      </button>
     </view>
 
     <!-- 操作按钮 -->
@@ -305,6 +308,10 @@ function goToRecycleBin() {
   uni.navigateTo({ url: '/pages/profile/recycle' })
 }
 
+function goToSyncStatus() {
+  uni.navigateTo({ url: '/pages/profile/sync-status' })
+}
+
 onShow(() => loadInfo())
 </script>
 
@@ -397,6 +404,18 @@ onShow(() => loadInfo())
   &__retry-icon {
     font-size: 16px;
     color: #fff;
+  }
+
+  &__detail {
+    height: 34px;
+    border: 0;
+    border-radius: var(--radius-row);
+    background: rgba(214, 65, 65, 0.10);
+    color: var(--red);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 34px;
+    margin-top: 2px;
   }
 }
 

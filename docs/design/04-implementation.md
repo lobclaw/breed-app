@@ -43,6 +43,7 @@ Local-First Foundation：
 - 回收站恢复与永久删除路由
 - 在线优先的家庭协作与 `operation_logs`
 - 依赖 `_before` 注入 `familyId`
+- `operation_logs` schema 尚未部署时，操作日志页静默降级为空列表，不向前端抛 `not found collection`
 
 ### `dog-service`
 
@@ -158,6 +159,7 @@ Local-First Foundation：
 - 犬只、繁育、健康、用药、财务、销售、代理人、回收站、配置页均已接入本地读路径
 - 核心写路径已收口到本地事务 + outbox，并由各域云对象处理 `_sync` 幂等 ack
 - 备份页已接入 pending outbox / pending upload 阻断提示
+- 同步状态页已接入 pending / failed / conflict / pending upload 统计、当前 active scope、最近同步时间与失败/冲突重试
 - 在线优先页已补断网联网提示
 - 旧入口 `pages/record/health`、`pages/record/breeding`、`pages/finance/income-add` 已归类为 `redirect-deprecated`
 
@@ -231,6 +233,6 @@ pnpm test
 以 `docs/ROADMAP.md` 为准，当前固定顺序：
 
 1. 真实设备 Network 验收与断网/恢复网络回归
-2. 冲突、失败、待上传入口与页面承接 UX 补强
-3. 多端并发场景与 `_sync` 冲突测试继续补齐
+2. 多端并发场景与 `_sync` 冲突测试继续补齐
+3. 冲突详情处理与人工合并 UX 继续补强
 4. 在保持 current contract 的前提下，再评估多端同步升级能力

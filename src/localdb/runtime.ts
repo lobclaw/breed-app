@@ -222,6 +222,18 @@ function normalizePulledRows<T extends Record<string, any>>(rows: T[]): Array<T 
   })
 }
 
+function isUploadedImageRef(value: string) {
+  const text = String(value || '').trim()
+  return /^https?:\/\//.test(text)
+    || /^cloud:\/\//.test(text)
+    || /^unicloud:\/\//i.test(text)
+}
+
+function hasPendingUploadImages(images: any) {
+  return Array.isArray(images)
+    && images.some(item => typeof item === 'string' && item.trim() && !isUploadedImageRef(item))
+}
+
 function getCollectionFamilyWhere(collection: BusinessCollectionName, familyId: string, lastPulledAt: number, dbCmd: any, forceFull = false) {
   if (collection === 'families') {
     return forceFull
@@ -364,6 +376,7 @@ function buildLocalTaskFromManualPayload(familyId: string, dog: Record<string, a
 }
 
 function buildLocalHealthRecord(familyId: string, dog: Record<string, any>, data: Record<string, any>, recordId: string, now: number, cost: number | null = null) {
+  const pendingUpload = hasPendingUploadImages(data.details?.images || data.images)
   return {
     _id: recordId,
     type: data.type,
@@ -378,10 +391,13 @@ function buildLocalHealthRecord(familyId: string, dog: Record<string, any>, data
     created_at: now,
     updated_at: now,
     _local_pending: true,
+    _pending_upload: pendingUpload,
+    pending_upload: pendingUpload,
   }
 }
 
 function buildLocalBreedingRecord(familyId: string, dog: Record<string, any>, data: Record<string, any>, recordId: string, cycleId: string, now: number) {
+  const pendingUpload = hasPendingUploadImages(data.details?.images || data.images)
   return {
     _id: recordId,
     type: data.type,
@@ -398,6 +414,8 @@ function buildLocalBreedingRecord(familyId: string, dog: Record<string, any>, da
     created_at: now,
     updated_at: now,
     _local_pending: true,
+    _pending_upload: pendingUpload,
+    pending_upload: pendingUpload,
   }
 }
 
@@ -610,7 +628,6 @@ class LocalSyncRuntime {
     this.currentFamilyId = familyId
     await this.flushOutbox(familyId)
     await this.syncActiveScope()
-    this.scheduleCoreSync(familyId)
   }
 
   private logScope(scope: string, payload: Record<string, any>) {
@@ -2060,6 +2077,8 @@ class LocalSyncRuntime {
       details: nextDetails,
       updated_at: now,
       _local_pending: true,
+      _pending_upload: hasPendingUploadImages(nextDetails?.images),
+      pending_upload: hasPendingUploadImages(nextDetails?.images),
     }
 
     const existingExtraTask = await localDb.query<any>('tasks', row =>
@@ -2318,6 +2337,7 @@ class LocalSyncRuntime {
   async addExpenseLocally(familyIdInput: string, data: Record<string, any>) {
     const familyId = getFamilyId(familyIdInput)
     const now = getNow()
+    const pendingUpload = hasPendingUploadImages(data.images)
     const expense = {
       _id: createStableEntityId('expense'),
       family_id: familyId,
@@ -2339,6 +2359,8 @@ class LocalSyncRuntime {
       created_at: now,
       updated_at: now,
       _local_pending: true,
+      _pending_upload: pendingUpload,
+      pending_upload: pendingUpload,
     }
     const syncMeta = buildSyncMeta({}, {
       clientMutationId: createClientMutationId(HOME_MUTATION_TYPES.CREATE_EXPENSE),
@@ -2352,6 +2374,7 @@ class LocalSyncRuntime {
   async addIncomeLocally(familyIdInput: string, data: Record<string, any>) {
     const familyId = getFamilyId(familyIdInput)
     const now = getNow()
+    const pendingUpload = hasPendingUploadImages(data.images)
     const income = {
       _id: createStableEntityId('income'),
       family_id: familyId,
@@ -2362,11 +2385,14 @@ class LocalSyncRuntime {
       date: data.date || now,
       source_sale_id: data.source_sale_id || null,
       notes: data.notes || null,
+      images: data.images || [],
       deleted_at: null,
       version: 0,
       created_at: now,
       updated_at: now,
       _local_pending: true,
+      _pending_upload: pendingUpload,
+      pending_upload: pendingUpload,
     }
     const syncMeta = buildSyncMeta({}, {
       clientMutationId: createClientMutationId(HOME_MUTATION_TYPES.CREATE_INCOME),
@@ -2386,6 +2412,7 @@ class LocalSyncRuntime {
     if (expense.source_type === 'auto') throw new Error('自动生成的费用不可编辑，请在来源记录中操作')
 
     const now = getNow()
+    const pendingUpload = hasPendingUploadImages(data.images)
     const nextExpense = {
       ...expense,
       total_amount: data.total_amount,
@@ -2401,6 +2428,8 @@ class LocalSyncRuntime {
       images: data.images || [],
       updated_at: now,
       _local_pending: true,
+      _pending_upload: pendingUpload,
+      pending_upload: pendingUpload,
     }
     const syncMeta = buildSyncMeta({ [expenseId]: Number(expense.version || 0) }, {
       clientMutationId: createClientMutationId(LOCAL_MUTATION_TYPES.UPDATE_EXPENSE),
@@ -2428,6 +2457,7 @@ class LocalSyncRuntime {
     if (income.source_sale_id) throw new Error('自动生成的收入不可编辑，请在销售记录中操作')
 
     const now = getNow()
+    const pendingUpload = hasPendingUploadImages(data.images)
     const nextIncome = {
       ...income,
       amount: data.amount,
@@ -2436,8 +2466,11 @@ class LocalSyncRuntime {
       dog_name: data.dog_name || null,
       date: data.date || income.date,
       notes: data.notes || null,
+      images: data.images || [],
       updated_at: now,
       _local_pending: true,
+      _pending_upload: pendingUpload,
+      pending_upload: pendingUpload,
     }
     const syncMeta = buildSyncMeta({ [incomeId]: Number(income.version || 0) }, {
       clientMutationId: createClientMutationId(LOCAL_MUTATION_TYPES.UPDATE_INCOME),
@@ -3910,6 +3943,8 @@ class LocalSyncRuntime {
       ...(data.details !== undefined ? { details: data.details } : {}),
       updated_at: now,
       _local_pending: true,
+      _pending_upload: hasPendingUploadImages(data.details?.images || record.details?.images),
+      pending_upload: hasPendingUploadImages(data.details?.images || record.details?.images),
     }])
     await this.enqueueMutation(
       HOME_MUTATION_TYPES.UPDATE_HEALTH_RECORD,

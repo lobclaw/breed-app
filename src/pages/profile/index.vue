@@ -307,6 +307,7 @@ const drawerMenuGroups: DrawerMenuGroup[] = [
   {
     label: '数据',
     items: [
+      { label: '同步状态', icon: 'sync', url: '/pages/profile/sync-status' },
       { label: '数据备份/导出', icon: 'backup', url: '/pages/profile/backup' },
       { label: '回收站', icon: 'delete_outline', url: '/pages/profile/recycle' },
       { label: '操作日志', icon: 'history', url: '/pages/profile/operation-log' },

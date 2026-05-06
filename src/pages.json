@@ -378,6 +378,13 @@
 			}
 		},
 		{
+			"path": "pages/profile/sync-status",
+			"style": {
+				"navigationBarTitleText": "同步状态",
+				"navigationStyle": "custom"
+			}
+		},
+		{
 			"path": "pages/profile/recycle",
 			"style": {
 				"navigationBarTitleText": "回收站",

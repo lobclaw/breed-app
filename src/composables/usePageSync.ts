@@ -29,7 +29,7 @@ export function usePageSync(options: UsePageSyncOptions) {
     const { currentFamily } = useAuth()
     const familyId = currentFamily.value?._id || ''
     if (!familyId || !scopeKey) return null
-    await localSyncRuntime.resume(familyId)
+    localSyncRuntime.setCurrentFamilyId(familyId)
     return force
       ? localSyncRuntime.forceSyncScope(scopeKey)
       : localSyncRuntime.syncScope(scopeKey)
