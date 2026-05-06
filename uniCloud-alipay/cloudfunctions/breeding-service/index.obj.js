@@ -591,8 +591,7 @@ async function generateTasks(familyId, type, data, cycleId, dog, recordId) {
 /**
  * 创建关联费用
  */
-async function createExpense(familyId, uid, data, dog, cycleId, sourceRecordId, expenseId = null) {
-  const now = Date.now()
+function buildBreedingExpensePayload(familyId, uid, data, dog, cycleId, sourceRecordId) {
   const sourceLabels = {
     heat: '发情', heat_observation: '发情观察', follicle_check: '卵泡检查', mating: '配种',
     pregnancy_check: '孕检', prenatal_check: '产检',
@@ -611,8 +610,7 @@ async function createExpense(familyId, uid, data, dog, cycleId, sourceRecordId, 
   const category = categoryMap[data.type] || '其他'
   const noteText = typeof data.notes === 'string' ? data.notes.trim() : ''
 
-  const expenseData = buildVersionedCreate({
-    ...(expenseId ? { _id: expenseId } : {}),
+  return {
     total_amount: data.cost,
     category,
     date: data.date,
@@ -628,9 +626,112 @@ async function createExpense(familyId, uid, data, dog, cycleId, sourceRecordId, 
     family_id: familyId,
     created_by: uid,
     deleted_at: null,
+  }
+}
+
+async function createExpense(familyId, uid, data, dog, cycleId, sourceRecordId, expenseId = null) {
+  const now = Date.now()
+  const expenseData = buildVersionedCreate({
+    ...(expenseId ? { _id: expenseId } : {}),
+    ...buildBreedingExpensePayload(familyId, uid, data, dog, cycleId, sourceRecordId),
   }, now)
   const { id } = await db.collection('expenses').add(expenseData)
   return expenseId || id
+}
+
+async function syncBreedingRecordExpense({
+  familyId,
+  uid,
+  dog,
+  cycleId,
+  recordId,
+  recordType,
+  date,
+  cost,
+  notes,
+  clientExpenseId = null,
+}) {
+  const { data: expenses } = await db.collection('expenses')
+    .where({
+      family_id: familyId,
+      source_record_id: recordId,
+      source_type: 'auto',
+      deleted_at: null,
+    })
+    .get()
+
+  const linkedExpenses = expenses || []
+  const nextCost = Number(cost || 0)
+  const touchedEntities = []
+
+  if (!(nextCost > 0) || recordType === 'heat_observation') {
+    for (const expense of linkedExpenses) {
+      await db.collection('expenses').doc(expense._id).remove()
+      touchedEntities.push({
+        collection: 'expenses',
+        id: expense._id,
+        version: Number(expense.version || 0),
+        updatedAt: Date.now(),
+        deletedAt: Date.now(),
+      })
+    }
+    return { expenseId: null, touchedEntities }
+  }
+
+  const expensePayload = buildBreedingExpensePayload(
+    familyId,
+    uid,
+    {
+      type: recordType,
+      dog_id: dog._id,
+      date,
+      cost: nextCost,
+      notes: notes || null,
+    },
+    dog,
+    cycleId,
+    recordId,
+  )
+
+  if (linkedExpenses.length > 0) {
+    const now = Date.now()
+    for (const expense of linkedExpenses) {
+      await db.collection('expenses').doc(expense._id).update({
+        ...expensePayload,
+        ...buildVersionUpdate(dbCmd, now),
+      })
+    }
+    const { data: updatedExpenses } = await db.collection('expenses')
+      .where({
+        family_id: familyId,
+        source_record_id: recordId,
+        source_type: 'auto',
+        deleted_at: null,
+      })
+      .get()
+
+    return {
+      expenseId: linkedExpenses[0]._id,
+      touchedEntities: (updatedExpenses || []).map(item => buildTouchedEntity('expenses', item)),
+    }
+  }
+
+  const expenseId = await createExpense(familyId, uid, {
+    type: recordType,
+    dog_id: dog._id,
+    date,
+    cost: nextCost,
+    notes: notes || null,
+  }, dog, cycleId, recordId, clientExpenseId)
+  const { data: createdExpenses } = await db.collection('expenses')
+    .where({ _id: expenseId, family_id: familyId })
+    .limit(1)
+    .get()
+
+  return {
+    expenseId,
+    touchedEntities: createdExpenses?.[0] ? [buildTouchedEntity('expenses', createdExpenses[0])] : [],
+  }
 }
 
 /**
@@ -1802,6 +1903,16 @@ module.exports = {
       birth_date: newBirthDate,
       ...buildVersionUpdate(dbCmd, now),
     })
+    await db.collection('expenses').where({
+      family_id: this.familyId,
+      linked_litter_id: litterId,
+      source_record_id: litterId,
+      source_type: 'auto',
+      deleted_at: null,
+    }).update({
+      date: newBirthDate,
+      ...buildVersionUpdate(dbCmd, now),
+    })
 
     await logBreedingOperation({
       familyId: this.familyId,
@@ -1814,16 +1925,30 @@ module.exports = {
       meta: { birthDate: newBirthDate },
     })
 
-    const { data: updatedLitters } = await db.collection('litters')
-      .where({ _id: litterId, family_id: this.familyId })
-      .limit(1)
-      .get()
+    const [updatedLittersRes, updatedExpensesRes] = await Promise.all([
+      db.collection('litters')
+        .where({ _id: litterId, family_id: this.familyId })
+        .limit(1)
+        .get(),
+      db.collection('expenses')
+        .where({
+          family_id: this.familyId,
+          linked_litter_id: litterId,
+          source_record_id: litterId,
+          source_type: 'auto',
+          deleted_at: null,
+        })
+        .get(),
+    ])
     const response = {
       message: '生产日期已更新',
       ...buildSyncAck(syncMeta, {
         ack: 'accepted',
-        touchedEntities: updatedLitters?.[0] ? [buildTouchedEntity('litters', updatedLitters[0])] : [],
-        resyncScopes: ['litters', 'dogs'],
+        touchedEntities: [
+          ...(updatedLittersRes?.data?.[0] ? [buildTouchedEntity('litters', updatedLittersRes.data[0])] : []),
+          ...((updatedExpensesRes?.data || []).map(item => buildTouchedEntity('expenses', item))),
+        ],
+        resyncScopes: ['litters', 'dogs', 'expenses'],
       }),
     }
     if (syncMeta?.clientMutationId) {
@@ -1922,15 +2047,33 @@ module.exports = {
     }
 
     await db.collection('breeding_records').doc(id).update(updateData)
+    const nextCost = cost !== undefined ? cost : record.cost
+    const nextNotes = notes !== undefined ? notes : record.notes
+    const { data: dogs } = await db.collection('dogs')
+      .where({ _id: record.dog_id, family_id: this.familyId, deleted_at: null })
+      .limit(1)
+      .get()
+    const dog = dogs?.[0] || { _id: record.dog_id, name: record.dog_name || '' }
+    const clientExpenseId = typeof syncMeta?.clientEntityIds?.expenses === 'string'
+      ? syncMeta.clientEntityIds.expenses
+      : null
+    const expenseSyncResult = await syncBreedingRecordExpense({
+      familyId: this.familyId,
+      uid: this.uid,
+      dog,
+      cycleId: record.cycle_id,
+      recordId: id,
+      recordType: record.type,
+      date: nextDate,
+      cost: nextCost,
+      notes: nextNotes,
+      clientExpenseId,
+    })
 
     if (record.type === 'follicle_check') {
       const latestFollicleRecord = await getLatestFollicleCheckRecord(record.cycle_id, this.familyId)
       const isEditedLatestRecord = latestFollicleRecord?._id === id
       if (isEditedLatestRecord) {
-        const { data: dogs } = await db.collection('dogs')
-          .where({ _id: record.dog_id, family_id: this.familyId, deleted_at: null })
-          .limit(1)
-          .get()
         if (dogs && dogs.length > 0) {
           await syncEstrusCycleMilestone(this.familyId, record.cycle_id, dogs[0], id)
         }
@@ -1938,10 +2081,6 @@ module.exports = {
     }
 
     if (record.type !== 'heat_observation' && extra_arrangement !== undefined) {
-      const { data: dogs } = await db.collection('dogs')
-        .where({ _id: record.dog_id, family_id: this.familyId, deleted_at: null })
-        .limit(1)
-        .get()
       if (dogs && dogs.length > 0) {
         await syncExtraArrangementTask(
           this.familyId,
@@ -1972,8 +2111,11 @@ module.exports = {
       message: '已更新',
       ...buildSyncAck(syncMeta, {
         ack: 'accepted',
-        touchedEntities: updatedRecords?.[0] ? [buildTouchedEntity('breeding_records', updatedRecords[0])] : [],
-        resyncScopes: ['breeding_records', 'tasks'],
+        touchedEntities: [
+          ...(updatedRecords?.[0] ? [buildTouchedEntity('breeding_records', updatedRecords[0])] : []),
+          ...(expenseSyncResult.touchedEntities || []),
+        ],
+        resyncScopes: ['breeding_records', 'tasks', 'expenses'],
       }),
     }
     if (syncMeta?.clientMutationId) {

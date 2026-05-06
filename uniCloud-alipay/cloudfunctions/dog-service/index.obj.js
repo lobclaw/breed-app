@@ -109,6 +109,59 @@ async function logDogOperation({ familyId, actorUserId, actionType, targetId, ta
   })
 }
 
+function parseAdoptionFeeAmount(data = {}) {
+  const directAmount = Number(data.adoption_fee ?? data.adoptionFee)
+  if (Number.isFinite(directAmount) && directAmount > 0) return directAmount
+
+  const notesText = typeof data.disposition_notes === 'string' ? data.disposition_notes.trim() : ''
+  const matchedAmount = notesText.match(/领养费用：¥\s*([0-9]+(?:\.[0-9]+)?)/)
+  if (!matchedAmount?.[1]) return 0
+
+  const parsedAmount = Number(matchedAmount[1])
+  return Number.isFinite(parsedAmount) && parsedAmount > 0 ? parsedAmount : 0
+}
+
+async function findLinkedAdoptionIncomes(familyId, dogId, date, notes) {
+  if (!dogId || !date) return []
+  const { data: incomes } = await db.collection('incomes')
+    .where({
+      family_id: familyId,
+      dog_id: dogId,
+      type: '领养',
+      date,
+      notes: notes || null,
+      deleted_at: null,
+    })
+    .get()
+
+  return incomes || []
+}
+
+async function createAdoptionIncome({ familyId, uid, dog, amount, date, notes, incomeId = null }) {
+  const now = Date.now()
+  const incomeData = buildVersionedCreate({
+    ...(incomeId ? { _id: incomeId } : {}),
+    family_id: familyId,
+    dog_id: dog._id,
+    dog_name: dog.name || '',
+    type: '领养',
+    amount,
+    date,
+    source_sale_id: null,
+    notes: notes || null,
+    created_by: uid,
+    deleted_at: null,
+  }, now)
+  const { id } = await db.collection('incomes').add(incomeData)
+  return {
+    id: incomeId || id,
+    row: {
+      ...incomeData,
+      _id: incomeId || id,
+    },
+  }
+}
+
 function sortListStatuses(statuses = []) {
   return [...statuses].sort((a, b) => {
     const aPriority = LIST_STATUS_PRIORITY[a.type] ?? 99
@@ -971,14 +1024,34 @@ module.exports = {
 
     // 更新犬只
     const now = Date.now()
+    const dispositionDate = data.disposition_date || now
+    const dispositionNotes = data.disposition_notes || null
+    const adoptionFeeAmount = newDisposition === '已领养'
+      ? parseAdoptionFeeAmount({
+          ...data,
+          disposition_notes: dispositionNotes,
+        })
+      : 0
+    const rollbackAdoptionIncomes = dog.disposition === '已领养' && newDisposition !== '已领养'
+      ? await findLinkedAdoptionIncomes(this.familyId, dogId, dog.disposition_date, dog.disposition_notes || null)
+      : []
+    const clientIncomeId = typeof syncMeta?.clientEntityIds?.incomes === 'string'
+      ? syncMeta.clientEntityIds.incomes
+      : null
+    let createdAdoptionIncome = null
+
+    for (const income of rollbackAdoptionIncomes) {
+      await db.collection('incomes').doc(income._id).remove()
+    }
+
     const updateData = {
       disposition: newDisposition,
       updated_at: now,
     }
 
     if (['已故', '已领养', '已赠送', '已退休'].includes(newDisposition)) {
-      updateData.disposition_date = data.disposition_date || now
-      updateData.disposition_notes = data.disposition_notes || null
+      updateData.disposition_date = dispositionDate
+      updateData.disposition_notes = dispositionNotes
     }
 
     await db.collection('dogs')
@@ -987,6 +1060,18 @@ module.exports = {
         ...updateData,
         ...buildVersionUpdate(dbCmd, now),
       })
+
+    if (newDisposition === '已领养' && adoptionFeeAmount > 0) {
+      createdAdoptionIncome = await createAdoptionIncome({
+        familyId: this.familyId,
+        uid: this.uid,
+        dog,
+        amount: adoptionFeeAmount,
+        date: Number(dispositionDate || now),
+        notes: dispositionNotes,
+        incomeId: clientIncomeId,
+      })
+    }
 
     await logDogOperation({
       familyId: this.familyId,
@@ -1011,8 +1096,16 @@ module.exports = {
           ...(updatedDogRes?.data?.[0] ? [buildTouchedEntity('dogs', updatedDogRes.data[0])] : []),
           ...((updatedCyclesRes?.data || []).map(row => buildTouchedEntity('breeding_cycles', row))),
           ...((updatedTasksRes?.data || []).map(row => buildTouchedEntity('tasks', row))),
+          ...(createdAdoptionIncome?.row ? [buildTouchedEntity('incomes', createdAdoptionIncome.row)] : []),
+          ...rollbackAdoptionIncomes.map(row => ({
+            collection: 'incomes',
+            id: row._id,
+            version: Number(row.version || 0),
+            updatedAt: now,
+            deletedAt: now,
+          })),
         ],
-        resyncScopes: ['dogs', 'breeding_cycles', 'tasks'],
+        resyncScopes: ['dogs', 'breeding_cycles', 'tasks', 'incomes'],
       }),
     }
     if (syncMeta?.clientMutationId) {

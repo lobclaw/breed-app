@@ -638,6 +638,49 @@ describe('dog-service', () => {
     })
   })
 
+  it('changeDisposition 领养时应创建收入，改回在养时应回滚该收入', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+    const adoptPayload = {
+      id: 'dog_1',
+      disposition: '已领养',
+      disposition_date: mockNow,
+      disposition_notes: '熟人安置；领养费用：¥888',
+      adoption_fee: 888,
+    }
+
+    const adoptResult = await dogService.changeDisposition.call(ctx, adoptPayload)
+    expect(adoptResult.ack).toBe('accepted')
+    expect(adoptResult.touchedEntities).toEqual(expect.arrayContaining([
+      expect.objectContaining({ collection: 'dogs', id: 'dog_1' }),
+      expect.objectContaining({ collection: 'incomes' }),
+    ]))
+
+    const { data: incomesAfterAdoption } = await db.collection('incomes')
+      .where({ family_id: familyId, dog_id: 'dog_1', type: '领养' })
+      .get()
+    expect(incomesAfterAdoption).toHaveLength(1)
+    expect(incomesAfterAdoption[0]).toMatchObject({
+      amount: 888,
+      date: mockNow,
+      notes: '熟人安置；领养费用：¥888',
+    })
+
+    const rollbackResult = await dogService.changeDisposition.call(ctx, {
+      id: 'dog_1',
+      disposition: '在养',
+    })
+    expect(rollbackResult.ack).toBe('accepted')
+    expect(rollbackResult.touchedEntities).toEqual(expect.arrayContaining([
+      expect.objectContaining({ collection: 'dogs', id: 'dog_1' }),
+      expect.objectContaining({ collection: 'incomes', deletedAt: expect.any(Number) }),
+    ]))
+
+    const { data: incomesAfterRollback } = await db.collection('incomes')
+      .where({ family_id: familyId, dog_id: 'dog_1', type: '领养' })
+      .get()
+    expect(incomesAfterRollback).toHaveLength(0)
+  })
+
   it('upgradePuppyToBreeder 应支持 _sync 幂等重放', async () => {
     const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
     seedCollection('dogs', [{

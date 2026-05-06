@@ -1516,6 +1516,27 @@ describe('health-service', () => {
       updated_at: Date.now() - DAY_MS,
       version: 1,
     }])
+    seedCollection('dogs', [{
+      _id: 'dog_1',
+      name: '花花',
+      family_id: familyId,
+      deleted_at: null,
+    }])
+    seedCollection('expenses', [{
+      _id: 'expense_health_update_sync_1',
+      family_id: familyId,
+      total_amount: 50,
+      category: '疫苗驱虫',
+      date: Date.now() - DAY_MS,
+      linked_dog_ids: ['dog_1'],
+      dog_names: ['花花'],
+      source_type: 'auto',
+      source_record_id: 'health_update_sync_1',
+      deleted_at: null,
+      created_at: Date.now() - DAY_MS,
+      updated_at: Date.now() - DAY_MS,
+      version: 2,
+    }])
 
     const payload = {
       id: 'health_update_sync_1',
@@ -1536,6 +1557,10 @@ describe('health-service', () => {
 
     expect(first.ack).toBe('accepted')
     expect(second).toEqual(first)
+    expect(first.touchedEntities).toEqual(expect.arrayContaining([
+      expect.objectContaining({ collection: 'health_records', id: 'health_update_sync_1' }),
+      expect.objectContaining({ collection: 'expenses', id: 'expense_health_update_sync_1' }),
+    ]))
 
     const { data } = await db.collection('health_records').doc('health_update_sync_1').get()
     expect(data[0]).toMatchObject({
@@ -1543,6 +1568,13 @@ describe('health-service', () => {
       notes: '补充加强针',
       details: { vaccine_type: '四联' },
       version: 2,
+    })
+
+    const { data: expenses } = await db.collection('expenses').doc('expense_health_update_sync_1').get()
+    expect(expenses[0]).toMatchObject({
+      total_amount: 88,
+      date: payload.date,
+      notes: '疫苗 · 补充加强针',
     })
   })
 
@@ -1579,6 +1611,21 @@ describe('health-service', () => {
       updated_at: now - DAY_MS,
       version: 4,
     }])
+    seedCollection('expenses', [{
+      _id: 'expense_health_delete_sync_1',
+      family_id: familyId,
+      total_amount: 120,
+      category: '疫苗驱虫',
+      date: now - DAY_MS,
+      linked_dog_ids: ['dog_1'],
+      dog_names: ['花花'],
+      source_type: 'auto',
+      source_record_id: 'health_delete_sync_1',
+      deleted_at: null,
+      created_at: now - DAY_MS,
+      updated_at: now - DAY_MS,
+      version: 2,
+    }])
 
     const payload = {
       id: 'health_delete_sync_1',
@@ -1601,6 +1648,7 @@ describe('health-service', () => {
     expect(first.touchedEntities).toEqual(expect.arrayContaining([
       expect.objectContaining({ collection: 'health_records', id: 'health_delete_sync_1', deletedAt: expect.any(Number) }),
       expect.objectContaining({ collection: 'tasks', id: 'task_health_delete_sync_1', version: 5 }),
+      expect.objectContaining({ collection: 'expenses', id: 'expense_health_delete_sync_1', deletedAt: expect.any(Number) }),
     ]))
 
     const { data: records } = await db.collection('health_records').doc('health_delete_sync_1').get()
@@ -1610,6 +1658,9 @@ describe('health-service', () => {
     const { data: tasks } = await db.collection('tasks').doc('task_health_delete_sync_1').get()
     expect(tasks[0].status).toBe('cancelled')
     expect(tasks[0].version).toBe(5)
+
+    const { data: expenses } = await db.collection('expenses').doc('expense_health_delete_sync_1').get()
+    expect(expenses).toHaveLength(0)
   })
 
   describe('费用创建', () => {

@@ -62,6 +62,11 @@ function getIllnessPrimaryCondition(source: Record<string, any> = {}) {
   return normalizeIllnessLabel(source.primary_condition || source.condition || '生病中')
 }
 
+function getIllnessDayCount(startTs: number, nowTs = Date.now()) {
+  if (!startTs) return null
+  return Math.max(1, Math.floor((startOfDay(nowTs) - startOfDay(startTs)) / 86400000) + 1)
+}
+
 function buildIllnessRelationType(illnessId: string, activeMedicationTasks: any[]) {
   if (activeMedicationTasks.some(task => task?.source_record_id === illnessId)) return 'linked'
   if (activeMedicationTasks.some(task => !task?.source_record_id)) return 'fallback'
@@ -86,7 +91,7 @@ function buildListIllnessStatuses(illnesses: any[] = [], activeMedicationTasks: 
 
   const latest = sortedRecords[0]
   const illnessStartTs = latest?.details?.start_date || latest?.date || latest?.created_at || 0
-  const illnessDay = illnessStartTs ? Math.max(1, Math.floor((Date.now() - illnessStartTs) / 86400000) + 1) : null
+  const illnessDay = labels.length === 1 ? getIllnessDayCount(illnessStartTs) : null
   const relationType = buildIllnessRelationType(firstRecordId, activeMedicationTasks)
   const meta = [
     ...(relationType === 'standalone' ? [] : [{ icon: 'link', text: relationType === 'linked' ? '已关联用药' : '按当前治疗状态推断关联' }]),
@@ -107,6 +112,39 @@ function buildListIllnessStatuses(illnesses: any[] = [], activeMedicationTasks: 
     activityTs: latest?.updated_at || latest?.date || latest?.created_at || 0,
     meta,
   }]
+}
+
+function buildDetailIllnessStatuses(illnesses: any[] = [], activeMedicationTasks: any[] = []): DeriveStatus[] {
+  const sortedRecords = [...illnesses].sort((a, b) => (b.updated_at || b.date || b.created_at || 0) - (a.updated_at || a.date || a.created_at || 0))
+
+  return sortedRecords.map((illness) => {
+    const illnessStartTs = illness?.details?.start_date || illness?.date || illness?.created_at || 0
+    const illnessDay = getIllnessDayCount(illnessStartTs)
+    const symptomTags = Array.isArray(illness?.details?.symptom_tags)
+      ? illness.details.symptom_tags
+        .map((item: unknown) => typeof item === 'string' ? item.trim() : '')
+        .filter(Boolean)
+      : []
+    const symptomSummary = symptomTags.length <= 2
+      ? symptomTags.join(' / ')
+      : `${symptomTags.slice(0, 2).join(' / ')} 等${symptomTags.length}项`
+    const treatmentStatus = illness?.details?.treatment_status || '观察中'
+    const relationType = buildIllnessRelationType(illness._id, activeMedicationTasks)
+
+    return {
+      type: '生病中',
+      label: getIllnessPrimaryCondition(illness.details || {}),
+      count: 1,
+      recordId: illness._id,
+      relationType,
+      activityTs: illness?.updated_at || illness?.date || illness?.created_at || 0,
+      detail: symptomSummary || treatmentStatus,
+      meta: [
+        ...(relationType === 'standalone' ? [] : [{ icon: 'link', text: relationType === 'linked' ? '已关联用药' : '按当前治疗状态推断关联' }]),
+        ...(illnessDay ? [{ icon: 'schedule', text: `第${illnessDay}天` }] : []),
+      ],
+    } as DeriveStatus
+  })
 }
 
 function getMedicationTaskProgress(task: any, nowTs = Date.now()) {
@@ -232,11 +270,16 @@ function buildDogStatuses(
   illnessMap: Map<string, any[]>,
   medicationMap: Map<string, any[]>,
   now = Date.now(),
+  options: { aggregateIllnesses?: boolean } = {},
 ) {
+  const illnesses = illnessMap.get(dog._id) || []
+  const medicationTasks = medicationMap.get(dog._id) || []
   const statuses = sortListStatuses([
-    ...buildListIllnessStatuses(illnessMap.get(dog._id) || [], medicationMap.get(dog._id) || []),
+    ...(options.aggregateIllnesses === false
+      ? buildDetailIllnessStatuses(illnesses, medicationTasks)
+      : buildListIllnessStatuses(illnesses, medicationTasks)),
     ...(breedingStatusMap.get(dog._id) || []),
-    ...buildListMedicationStatus(medicationMap.get(dog._id) || [], now, illnessMap.get(dog._id) || []),
+    ...buildListMedicationStatus(medicationTasks, now, illnesses),
   ])
 
   return statuses.length > 0 ? statuses : [{ type: '正常' as const }]
@@ -324,7 +367,7 @@ export async function getLocalDogDetail(familyId: string, dogId: string): Promis
 
   return {
     ...dog,
-    statuses: buildDogStatuses(dog, breedingStatusMap, illnessMap, medicationMap, now),
+    statuses: buildDogStatuses(dog, breedingStatusMap, illnessMap, medicationMap, now, { aggregateIllnesses: false }),
   }
 }
 

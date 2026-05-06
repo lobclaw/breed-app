@@ -731,8 +731,7 @@ async function generateReminders(familyId, type, data, dog, recordId, preloadedS
   }
 }
 
-async function createExpense(familyId, uid, data, dog, sourceRecordId, expenseId = null) {
-  const now = Date.now()
+function buildHealthExpensePayload(familyId, uid, data, dog, sourceRecordId) {
   const sourceLabels = {
     vaccination: '疫苗',
     deworming: '驱虫',
@@ -747,8 +746,7 @@ async function createExpense(familyId, uid, data, dog, sourceRecordId, expenseId
   const category = categoryMap[data.type] || '其他'
   const noteText = typeof data.notes === 'string' ? data.notes.trim() : ''
 
-  const expenseData = buildVersionedCreate({
-    ...(expenseId ? { _id: expenseId } : {}),
+  return {
     total_amount: data.cost,
     category,
     date: data.date,
@@ -762,9 +760,110 @@ async function createExpense(familyId, uid, data, dog, sourceRecordId, expenseId
     family_id: familyId,
     created_by: uid,
     deleted_at: null,
+  }
+}
+
+async function createExpense(familyId, uid, data, dog, sourceRecordId, expenseId = null) {
+  const now = Date.now()
+  const expenseData = buildVersionedCreate({
+    ...(expenseId ? { _id: expenseId } : {}),
+    ...buildHealthExpensePayload(familyId, uid, data, dog, sourceRecordId),
   }, now)
   const { id } = await db.collection('expenses').add(expenseData)
   return expenseId || id
+}
+
+async function syncHealthRecordExpense({
+  familyId,
+  uid,
+  dog,
+  recordId,
+  recordType,
+  date,
+  cost,
+  notes,
+  clientExpenseId = null,
+}) {
+  const { data: expenses } = await db.collection('expenses')
+    .where({
+      family_id: familyId,
+      source_record_id: recordId,
+      source_type: 'auto',
+      deleted_at: null,
+    })
+    .get()
+
+  const linkedExpenses = expenses || []
+  const nextCost = Number(cost || 0)
+  const touchedEntities = []
+
+  if (!(nextCost > 0)) {
+    for (const expense of linkedExpenses) {
+      await db.collection('expenses').doc(expense._id).remove()
+      touchedEntities.push({
+        collection: 'expenses',
+        id: expense._id,
+        version: Number(expense.version || 0),
+        updatedAt: Date.now(),
+        deletedAt: Date.now(),
+      })
+    }
+    return { expenseId: null, touchedEntities }
+  }
+
+  const expensePayload = buildHealthExpensePayload(
+    familyId,
+    uid,
+    {
+      type: recordType,
+      dog_id: dog._id,
+      date,
+      cost: nextCost,
+      notes: notes || null,
+    },
+    dog,
+    recordId,
+  )
+
+  if (linkedExpenses.length > 0) {
+    const now = Date.now()
+    for (const expense of linkedExpenses) {
+      await db.collection('expenses').doc(expense._id).update({
+        ...expensePayload,
+        ...buildVersionUpdate(dbCmd, now),
+      })
+    }
+    const { data: updatedExpenses } = await db.collection('expenses')
+      .where({
+        family_id: familyId,
+        source_record_id: recordId,
+        source_type: 'auto',
+        deleted_at: null,
+      })
+      .get()
+
+    return {
+      expenseId: linkedExpenses[0]._id,
+      touchedEntities: (updatedExpenses || []).map(item => buildTouchedEntity('expenses', item)),
+    }
+  }
+
+  const expenseId = await createExpense(familyId, uid, {
+    type: recordType,
+    dog_id: dog._id,
+    date,
+    cost: nextCost,
+    notes: notes || null,
+  }, dog, recordId, clientExpenseId)
+  const { data: createdExpenses } = await db.collection('expenses')
+    .where({ _id: expenseId, family_id: familyId })
+    .limit(1)
+    .get()
+
+  return {
+    expenseId,
+    touchedEntities: createdExpenses?.[0] ? [buildTouchedEntity('expenses', createdExpenses[0])] : [],
+  }
 }
 
 module.exports = {
@@ -2386,6 +2485,28 @@ module.exports = {
     if (normalizedDetails !== undefined) updateData.details = normalizedDetails
 
     await db.collection('health_records').doc(id).update(updateData)
+    const nextDate = date !== undefined ? date : record.date
+    const nextCost = cost !== undefined ? cost : record.cost
+    const nextNotes = notes !== undefined ? notes : record.notes
+    const { data: dogs } = await db.collection('dogs')
+      .where({ _id: record.dog_id, family_id: this.familyId, deleted_at: null })
+      .limit(1)
+      .get()
+    const dog = dogs?.[0] || { _id: record.dog_id, name: record.dog_name || '' }
+    const clientExpenseId = typeof syncMeta?.clientEntityIds?.expenses === 'string'
+      ? syncMeta.clientEntityIds.expenses
+      : null
+    const expenseSyncResult = await syncHealthRecordExpense({
+      familyId: this.familyId,
+      uid: this.uid,
+      dog,
+      recordId: id,
+      recordType: record.type,
+      date: nextDate,
+      cost: nextCost,
+      notes: nextNotes,
+      clientExpenseId,
+    })
 
     await logHealthOperation({
       familyId: this.familyId,
@@ -2405,8 +2526,11 @@ module.exports = {
       message: '已更新',
       ...buildSyncAck(syncMeta, {
         ack: 'accepted',
-        touchedEntities: (updatedRecords || []).map(item => buildTouchedEntity('health_records', item)),
-        resyncScopes: ['health_records'],
+        touchedEntities: [
+          ...(updatedRecords || []).map(item => buildTouchedEntity('health_records', item)),
+          ...(expenseSyncResult.touchedEntities || []),
+        ],
+        resyncScopes: ['health_records', 'expenses'],
       }),
     }
     if (syncMeta?.clientMutationId) {
@@ -2443,6 +2567,14 @@ module.exports = {
         deleted_at: null,
       })
       .get()
+    const { data: linkedExpenses } = await db.collection('expenses')
+      .where({
+        family_id: this.familyId,
+        source_record_id: id,
+        source_type: 'auto',
+        deleted_at: null,
+      })
+      .get()
     if (syncMeta?.clientMutationId) {
       for (const task of (linkedReminderTasks || [])) {
         const taskConflict = getEntityConflict(syncMeta, 'tasks', task)
@@ -2464,6 +2596,9 @@ module.exports = {
         status: 'cancelled',
         ...buildVersionUpdate(dbCmd, now),
       })
+    }
+    for (const expense of (linkedExpenses || [])) {
+      await db.collection('expenses').doc(expense._id).remove()
     }
 
     await logHealthOperation({
@@ -2494,8 +2629,15 @@ module.exports = {
         touchedEntities: [
           ...(updatedRecordRes.data || []).map(item => buildTouchedEntity('health_records', item)),
           ...((updatedTasksRes.data || []).map(item => buildTouchedEntity('tasks', item))),
+          ...((linkedExpenses || []).map(item => ({
+            collection: 'expenses',
+            id: item._id,
+            version: Number(item.version || 0),
+            updatedAt: now,
+            deletedAt: now,
+          }))),
         ],
-        resyncScopes: ['health_records', 'tasks'],
+        resyncScopes: ['health_records', 'tasks', 'expenses'],
       }),
     }
     if (syncMeta?.clientMutationId) {

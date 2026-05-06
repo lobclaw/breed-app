@@ -2041,6 +2041,140 @@ describe('breeding-service', () => {
       expect(records[0].notes).toBe('新备注')
       expect(records[0].version).toBe(2)
     })
+
+    it('updateBreedingRecord 应同步更新关联自动费用', async () => {
+      const now = Date.now()
+      seedCollection('dogs', [{
+        _id: 'dam_1',
+        name: '花花',
+        family_id: familyId,
+        deleted_at: null,
+      }])
+      seedCollection('breeding_records', [{
+        _id: 'record_sync_expense_1',
+        type: 'follicle_check',
+        cycle_id: 'cycle_sync_expense_1',
+        dog_id: 'dam_1',
+        dog_name: '花花',
+        family_id: familyId,
+        date: now - 86400000,
+        cost: 120,
+        notes: '旧检查',
+        details: {
+          left_count: 1,
+          right_count: 1,
+          result: '发育中',
+        },
+        version: 1,
+        created_at: now - 86400000,
+        updated_at: now - 86400000,
+      }])
+      seedCollection('breeding_cycles', [{
+        _id: 'cycle_sync_expense_1',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        status: '发情中',
+        version: 1,
+        created_at: now - 2 * 86400000,
+        updated_at: now - 2 * 86400000,
+      }])
+      seedCollection('expenses', [{
+        _id: 'expense_sync_expense_1',
+        family_id: familyId,
+        total_amount: 120,
+        category: '检查化验',
+        date: now - 86400000,
+        linked_cycle_id: 'cycle_sync_expense_1',
+        linked_dog_ids: ['dam_1'],
+        dog_names: ['花花'],
+        dam_name: '花花',
+        source_type: 'auto',
+        source_record_id: 'record_sync_expense_1',
+        notes: '卵泡检查 · 旧检查',
+        deleted_at: null,
+        created_at: now - 86400000,
+        updated_at: now - 86400000,
+        version: 2,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      const result = await breedingService.updateBreedingRecord.call(ctx, {
+        id: 'record_sync_expense_1',
+        date: now,
+        cost: 288,
+        notes: '复查',
+        details: {
+          left_count: 2,
+          right_count: 1,
+          result: '已成熟',
+        },
+      })
+
+      expect(result.ack).toBe('accepted')
+      expect(result.touchedEntities).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'breeding_records', id: 'record_sync_expense_1' }),
+        expect.objectContaining({ collection: 'expenses', id: 'expense_sync_expense_1' }),
+      ]))
+
+      const { data: expenses } = await db.collection('expenses').doc('expense_sync_expense_1').get()
+      expect(expenses[0]).toMatchObject({
+        total_amount: 288,
+        date: now,
+        notes: '卵泡检查 · 复查',
+      })
+    })
+  })
+
+  describe('生产日期同步费用', () => {
+    it('updateBirthDate 应同步更新自动生产费用日期', async () => {
+      const now = Date.now()
+      seedCollection('litters', [{
+        _id: 'litter_birth_sync_1',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        birth_date: now - 86400000,
+        version: 1,
+      }])
+      seedCollection('expenses', [{
+        _id: 'expense_birth_sync_1',
+        family_id: familyId,
+        total_amount: 520,
+        category: '生产育幼',
+        date: now - 86400000,
+        linked_cycle_id: 'cycle_birth_sync_1',
+        linked_litter_id: 'litter_birth_sync_1',
+        linked_dog_ids: ['dam_1'],
+        source_type: 'auto',
+        source_record_id: 'litter_birth_sync_1',
+        deleted_at: null,
+        created_at: now - 86400000,
+        updated_at: now - 86400000,
+        version: 3,
+      }])
+      seedCollection('dogs', [{
+        _id: 'puppy_birth_sync_1',
+        family_id: familyId,
+        origin_litter_id: 'litter_birth_sync_1',
+        deleted_at: null,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      const result = await breedingService.updateBirthDate.call(ctx, {
+        litterId: 'litter_birth_sync_1',
+        newBirthDate: now,
+      })
+
+      expect(result.ack).toBe('accepted')
+      expect(result.touchedEntities).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'litters', id: 'litter_birth_sync_1' }),
+        expect.objectContaining({ collection: 'expenses', id: 'expense_birth_sync_1' }),
+      ]))
+
+      const { data: expenses } = await db.collection('expenses').doc('expense_birth_sync_1').get()
+      expect(expenses[0].date).toBe(now)
+    })
   })
 
   describe('同步', () => {

@@ -77,6 +77,81 @@ describe('local domain repository', () => {
     expect(dogs[0].statuses.map(status => status.type)).toEqual(['生病中', '用药中', '怀孕中'])
   })
 
+  it('犬只详情应逐条展示多个未康复疾病，列表仍保留摘要', async () => {
+    const now = Date.now()
+    await localDb.replaceTable('dogs', [{
+      _id: 'dog_multi_illness_1',
+      family_id: 'fam_multi_illness',
+      name: '肉肉',
+      gender: '母',
+      role: '种狗',
+      disposition: '在养',
+      updated_at: now,
+    }])
+    await localDb.replaceTable('breeding_cycles', [])
+    await localDb.replaceTable('medication_tasks', [])
+    await localDb.replaceTable('litters', [])
+    await localDb.replaceTable('health_records', [
+      {
+        _id: 'ill_multi_cold',
+        family_id: 'fam_multi_illness',
+        dog_id: 'dog_multi_illness_1',
+        type: 'illness',
+        date: now - 3 * 86400000,
+        updated_at: now - 3000,
+        details: {
+          treatment_status: '治疗中',
+          primary_condition: '感冒',
+          symptom_tags: ['食欲差', '呕吐', '精神差'],
+        },
+      },
+      {
+        _id: 'ill_multi_diarrhea',
+        family_id: 'fam_multi_illness',
+        dog_id: 'dog_multi_illness_1',
+        type: 'illness',
+        date: now - 2 * 86400000,
+        updated_at: now - 2000,
+        details: {
+          treatment_status: '治疗中',
+          primary_condition: '腹泻',
+        },
+      },
+      {
+        _id: 'ill_multi_skin',
+        family_id: 'fam_multi_illness',
+        dog_id: 'dog_multi_illness_1',
+        type: 'illness',
+        date: now - 86400000,
+        updated_at: now - 1000,
+        details: {
+          treatment_status: '观察中',
+          primary_condition: '皮肤病',
+        },
+      },
+    ])
+
+    const dogs = await listLocalDogsWithStatus('fam_multi_illness')
+    const listIllnessStatuses = dogs[0].statuses.filter(status => status.type === '生病中')
+    expect(listIllnessStatuses).toHaveLength(1)
+    expect(listIllnessStatuses[0]).toMatchObject({
+      label: '皮肤病/腹泻等3项',
+      count: 3,
+    })
+    expect(listIllnessStatuses[0].meta?.some(item => item.icon === 'schedule')).toBe(false)
+
+    const detail = await getLocalDogDetail('fam_multi_illness', 'dog_multi_illness_1')
+    const detailIllnessStatuses = detail?.statuses.filter(status => status.type === '生病中') || []
+    expect(detailIllnessStatuses).toHaveLength(3)
+    expect(detailIllnessStatuses.map(status => status.recordId)).toEqual([
+      'ill_multi_skin',
+      'ill_multi_diarrhea',
+      'ill_multi_cold',
+    ])
+    expect(detailIllnessStatuses.map(status => status.label)).toEqual(['皮肤病', '腹泻', '感冒'])
+    expect(detailIllnessStatuses[2].detail).toBe('食欲差 / 呕吐 等3项')
+  })
+
   it('录入带费用的卵泡检查后应立即出现在本地财务列表', async () => {
     const now = new Date('2026-05-06T10:00:00+08:00').getTime()
     const heatDate = now - 5 * 86400000
@@ -268,6 +343,242 @@ describe('local domain repository', () => {
       category: '医疗',
       total_amount: 300,
       notes: '阿莫西林 5天',
+    })
+  })
+
+  it('领养带费用时应立即出现在本地财务列表', async () => {
+    const now = new Date('2026-05-06T10:00:00+08:00').getTime()
+
+    await localDb.replaceTable('dogs', [{
+      _id: 'dog_adoption_finance_1',
+      family_id: 'fam_finance_5',
+      name: '奶糕',
+      gender: '母',
+      role: '幼崽',
+      disposition: '在养',
+      updated_at: now,
+      version: 0,
+    }])
+    await localDb.replaceTable('breeding_cycles', [])
+    await localDb.replaceTable('tasks', [])
+    await localDb.replaceTable('incomes', [])
+    await localDb.replaceTable('outbox_mutations', [])
+    await localDb.replaceTable('local_operation_logs', [])
+
+    await localSyncRuntime.changeDogDispositionLocally('fam_finance_5', 'dog_adoption_finance_1', '已领养', {
+      disposition_date: now,
+      disposition_notes: '熟人家庭；领养费用：¥888',
+      adoption_fee: 888,
+    })
+
+    const txList = await getLocalTransactionList('fam_finance_5', {
+      year: 2026,
+      month: 5,
+      type: 'income',
+    })
+
+    expect(txList).toHaveLength(1)
+    expect(txList[0]).toMatchObject({
+      _txType: 'income',
+      type: '领养',
+      amount: 888,
+      dog_id: 'dog_adoption_finance_1',
+      notes: '熟人家庭；领养费用：¥888',
+    })
+  })
+
+  it('编辑健康记录费用后应立即同步本地财务账单', async () => {
+    const now = new Date('2026-05-06T10:00:00+08:00').getTime()
+    const nextDate = now + 86400000
+
+    await localDb.replaceTable('dogs', [{
+      _id: 'dog_health_edit_1',
+      family_id: 'fam_finance_6',
+      name: '奶糖',
+      updated_at: now,
+    }])
+    await localDb.replaceTable('health_records', [{
+      _id: 'health_edit_1',
+      family_id: 'fam_finance_6',
+      dog_id: 'dog_health_edit_1',
+      dog_name: '奶糖',
+      type: 'vaccination',
+      date: now,
+      cost: 100,
+      notes: '旧疫苗',
+      details: { vaccine_type: '二联' },
+      updated_at: now,
+      version: 2,
+    }])
+    await localDb.replaceTable('expenses', [{
+      _id: 'expense_health_edit_1',
+      family_id: 'fam_finance_6',
+      total_amount: 100,
+      category: '疫苗驱虫',
+      date: now,
+      linked_dog_ids: ['dog_health_edit_1'],
+      source_type: 'auto',
+      source_record_id: 'health_edit_1',
+      dog_names: ['奶糖'],
+      notes: '疫苗 · 旧疫苗',
+      deleted_at: null,
+      updated_at: now,
+      created_at: now,
+      version: 1,
+    }])
+    await localDb.replaceTable('outbox_mutations', [])
+    await localDb.replaceTable('local_operation_logs', [])
+
+    await localSyncRuntime.updateHealthRecordLocally('fam_finance_6', {
+      id: 'health_edit_1',
+      date: nextDate,
+      cost: 188,
+      notes: '加强针',
+    })
+
+    const expenses = await localDb.getTable<any>('expenses')
+    expect(expenses).toHaveLength(1)
+    expect(expenses[0]).toMatchObject({
+      _id: 'expense_health_edit_1',
+      total_amount: 188,
+      date: nextDate,
+      notes: '疫苗 · 加强针',
+    })
+  })
+
+  it('删除健康记录时应立即移除本地自动费用账单', async () => {
+    const now = new Date('2026-05-06T10:00:00+08:00').getTime()
+
+    await localDb.replaceTable('health_records', [{
+      _id: 'health_delete_1',
+      family_id: 'fam_finance_7',
+      dog_id: 'dog_health_delete_1',
+      type: 'deworming',
+      date: now,
+      updated_at: now,
+      version: 3,
+    }])
+    await localDb.replaceTable('tasks', [])
+    await localDb.replaceTable('expenses', [{
+      _id: 'expense_health_delete_1',
+      family_id: 'fam_finance_7',
+      total_amount: 66,
+      category: '疫苗驱虫',
+      date: now,
+      linked_dog_ids: ['dog_health_delete_1'],
+      source_type: 'auto',
+      source_record_id: 'health_delete_1',
+      deleted_at: null,
+      updated_at: now,
+      created_at: now,
+      version: 1,
+    }])
+    await localDb.replaceTable('outbox_mutations', [])
+    await localDb.replaceTable('local_operation_logs', [])
+
+    await localSyncRuntime.deleteHealthRecordLocally('fam_finance_7', 'health_delete_1')
+
+    const expenses = await localDb.getTable<any>('expenses')
+    expect(expenses).toHaveLength(0)
+  })
+
+  it('编辑繁育记录和生产日期后应同步本地财务账单', async () => {
+    const now = new Date('2026-05-06T10:00:00+08:00').getTime()
+    const nextDate = now + 86400000
+
+    await localDb.replaceTable('dogs', [{
+      _id: 'dam_breeding_edit_1',
+      family_id: 'fam_finance_8',
+      name: '肉肉',
+      updated_at: now,
+    }])
+    await localDb.replaceTable('breeding_records', [{
+      _id: 'breeding_edit_1',
+      family_id: 'fam_finance_8',
+      dog_id: 'dam_breeding_edit_1',
+      dog_name: '肉肉',
+      cycle_id: 'cycle_breeding_edit_1',
+      type: 'follicle_check',
+      date: now,
+      cost: 120,
+      notes: '旧检查',
+      details: { result: '发育中' },
+      updated_at: now,
+      version: 4,
+    }])
+    await localDb.replaceTable('breeding_cycles', [{
+      _id: 'cycle_breeding_edit_1',
+      family_id: 'fam_finance_8',
+      dam_id: 'dam_breeding_edit_1',
+      status: '发情中',
+      updated_at: now,
+    }])
+    await localDb.replaceTable('tasks', [])
+    await localDb.replaceTable('litters', [{
+      _id: 'litter_breeding_edit_1',
+      family_id: 'fam_finance_8',
+      cycle_id: 'cycle_breeding_edit_1',
+      dam_id: 'dam_breeding_edit_1',
+      dam_name: '肉肉',
+      birth_date: now,
+      updated_at: now,
+      version: 1,
+    }])
+    await localDb.replaceTable('expenses', [{
+      _id: 'expense_breeding_edit_1',
+      family_id: 'fam_finance_8',
+      total_amount: 120,
+      category: '检查化验',
+      date: now,
+      linked_cycle_id: 'cycle_breeding_edit_1',
+      linked_dog_ids: ['dam_breeding_edit_1'],
+      source_type: 'auto',
+      source_record_id: 'breeding_edit_1',
+      dog_names: ['肉肉'],
+      dam_name: '肉肉',
+      notes: '卵泡检查 · 旧检查',
+      deleted_at: null,
+      updated_at: now,
+      created_at: now,
+      version: 2,
+    }, {
+      _id: 'expense_birth_edit_1',
+      family_id: 'fam_finance_8',
+      total_amount: 560,
+      category: '生产育幼',
+      date: now,
+      linked_cycle_id: 'cycle_breeding_edit_1',
+      linked_litter_id: 'litter_breeding_edit_1',
+      linked_dog_ids: ['dam_breeding_edit_1'],
+      source_type: 'auto',
+      source_record_id: 'litter_breeding_edit_1',
+      dog_names: ['肉肉'],
+      dam_name: '肉肉',
+      notes: '生产',
+      deleted_at: null,
+      updated_at: now,
+      created_at: now,
+      version: 3,
+    }])
+    await localDb.replaceTable('outbox_mutations', [])
+    await localDb.replaceTable('local_operation_logs', [])
+
+    await localSyncRuntime.updateBreedingRecordLocally('fam_finance_8', {
+      id: 'breeding_edit_1',
+      date: nextDate,
+      cost: 288,
+      notes: '复查',
+    })
+    await localSyncRuntime.updateLitterBirthDateLocally('fam_finance_8', 'litter_breeding_edit_1', nextDate)
+
+    const expenses = await localDb.getTable<any>('expenses')
+    expect(expenses.find(item => item._id === 'expense_breeding_edit_1')).toMatchObject({
+      total_amount: 288,
+      date: nextDate,
+      notes: '卵泡检查 · 复查',
+    })
+    expect(expenses.find(item => item._id === 'expense_birth_edit_1')).toMatchObject({
+      date: nextDate,
     })
   })
 

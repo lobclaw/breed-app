@@ -56,4 +56,13 @@ describe('home calendar picker contract', () => {
     expect(source).toContain('function jumpToToday() {')
     expect(source).toContain('void onDateSelect(startOfDay(Date.now()))')
   })
+
+  it('首页推迟任务后应刷新目标日期缓存，避免选中明天仍读旧缓存', () => {
+    expect(source).toContain('async function refreshDayCacheFromLocal(dayTs: number)')
+    expect(source).toContain('weekCache.value = {')
+    expect(source).toContain('[normalizedTs]: { cards: cardsForDay }')
+    expect(source).toContain("if (viewMode.value === 'date' && selectedDate.value === normalizedTs)")
+    expect(source).toContain('const targetDayTs = startOfDay(postponeDate.value)')
+    expect(source).toContain('await refreshDayCacheFromLocal(targetDayTs)')
+  })
 })

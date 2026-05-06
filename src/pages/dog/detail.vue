@@ -2102,7 +2102,7 @@ function statusSub(s: DeriveStatus): string {
   if (s.type === '生病中') {
     const treatmentStatus = latestActiveIllnessRecord.value?.details?.treatment_status
     const symptomSummary = illnessSymptomSummary(latestActiveIllnessRecord.value)
-    return symptomSummary || treatmentStatus || s.detail || latestActiveIllnessRecord.value?.notes || '查看症状与治疗状态'
+    return s.detail || symptomSummary || treatmentStatus || latestActiveIllnessRecord.value?.notes || '查看症状与治疗状态'
   }
   if (s.type === '发情中') {
     const startTs = activeCycle.value?.start_date || activeCycle.value?.created_at
@@ -2594,6 +2594,7 @@ async function doAdoption() {
   await localSyncRuntime.changeDogDispositionLocally(currentFamily.value?._id || '', dogId, '已领养', {
     disposition_date: adoptionDate.value,
     disposition_notes: extraNotes || null,
+    adoption_fee: adoptionFee.value ? Number(adoptionFee.value) : null,
   })
   showAdoptionSheet.value = false
   await loadData()

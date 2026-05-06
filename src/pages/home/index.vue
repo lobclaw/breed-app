@@ -1213,6 +1213,38 @@ async function onDateSelect(ts: number) {
   }
 }
 
+async function refreshDayCacheFromLocal(dayTs: number) {
+  const normalizedTs = startOfDay(dayTs)
+  const todayTs = startOfDay(Date.now())
+
+  if (normalizedTs === todayTs) {
+    await loadTodayCards()
+    return
+  }
+
+  const result = await fetchWeekCards(normalizedTs, normalizedTs + 86400000 - 1)
+  pruneSuppressedTasks()
+  const dayData = (result as any)?.[normalizedTs] || (result as any)?.[String(normalizedTs)]
+  const cardsForDay = filterSuppressedCards(dayData?.cards || [])
+  weekCache.value = {
+    ...weekCache.value,
+    [normalizedTs]: { cards: cardsForDay },
+  }
+
+  const nextCounts = { ...dayCounts.value }
+  if (cardsForDay.length > 0) {
+    nextCounts[normalizedTs] = cardsForDay.length
+  } else {
+    delete nextCounts[normalizedTs]
+  }
+  dayCounts.value = nextCounts
+
+  if (viewMode.value === 'date' && selectedDate.value === normalizedTs) {
+    dayCards.value = cardsForDay
+    loading.value = false
+  }
+}
+
 function toggleCalendar() {
   showHomeDatePicker.value = true
 }
@@ -1629,6 +1661,7 @@ async function doPostpone() {
   showPostponeModal.value = false
 
   const ids = Array.isArray(taskIds) ? taskIds : [taskIds]
+  const targetDayTs = startOfDay(postponeDate.value)
 
   if (ids.length > 1) {
     // 批量推迟：找到卡片直接整张移除
@@ -1656,13 +1689,19 @@ async function doPostpone() {
   }
 
   // 后台静默调接口
+  let result: any = null
   if (ids.length > 1) {
-    const result = await doBatchPostponeTask(ids, postponeDate.value)
-    if (!result) await loadTodayCards()
+    result = await doBatchPostponeTask(ids, postponeDate.value)
   } else if (ids[0]) {
-    const result = await doPostponeTask(ids[0], postponeDate.value)
-    if (!result) await loadTodayCards()
+    result = await doPostponeTask(ids[0], postponeDate.value)
   }
+
+  if (!result) {
+    await loadTodayCards()
+    return
+  }
+
+  await refreshDayCacheFromLocal(targetDayTs)
 }
 
 async function onBatchComplete(payload: any) {

@@ -648,6 +648,48 @@ function buildLocalMedicationExpense(
   }
 }
 
+function parseAdoptionFeeAmount(data: Record<string, any>) {
+  const directAmount = Number(data.adoption_fee ?? data.adoptionFee)
+  if (Number.isFinite(directAmount) && directAmount > 0) return directAmount
+
+  const notesText = String(data.disposition_notes || '').trim()
+  const matchedAmount = notesText.match(/领养费用：¥\s*([0-9]+(?:\.[0-9]+)?)/)
+  if (!matchedAmount?.[1]) return 0
+
+  const parsedAmount = Number(matchedAmount[1])
+  return Number.isFinite(parsedAmount) && parsedAmount > 0 ? parsedAmount : 0
+}
+
+function buildLocalAdoptionIncome(
+  familyId: string,
+  dog: Record<string, any>,
+  amount: number,
+  date: number,
+  notes: string | null,
+  incomeId: string,
+  now: number,
+) {
+  return {
+    _id: incomeId,
+    family_id: familyId,
+    dog_id: dog._id,
+    dog_name: normalizeDogName(dog),
+    type: '领养',
+    amount,
+    date,
+    source_sale_id: null,
+    notes: notes || null,
+    images: [],
+    deleted_at: null,
+    version: 0,
+    created_at: now,
+    updated_at: now,
+    _local_pending: true,
+    _pending_upload: false,
+    pending_upload: false,
+  }
+}
+
 function buildLocalDog(familyId: string, data: Record<string, any>, dogId: string, now: number) {
   return {
     _id: dogId,
@@ -1343,6 +1385,31 @@ class LocalSyncRuntime {
 
     const now = getNow()
     const touchedCycles = activeCycles.filter(cycle => cycleStatusMap.has(cycle._id))
+    const dispositionDate = data.disposition_date || data.date || null
+    const dispositionNotes = data.disposition_notes
+      || data.reason
+      || data.cause
+      || data.notes
+      || data.recipient
+      || null
+    const adoptionFeeAmount = newDisposition === '已领养' ? parseAdoptionFeeAmount({
+      ...data,
+      disposition_notes: dispositionNotes,
+    }) : 0
+    const adoptionIncomeDate = Number(dispositionDate || now)
+    const rollbackAdoptionIncomes = dog.disposition === '已领养' && newDisposition !== '已领养'
+      ? await localDb.query<any>('incomes', row =>
+        row.family_id === familyId
+        && !row.deleted_at
+        && row.type === '领养'
+        && row.dog_id === dogId
+        && Number(row.date || 0) === Number(dog.disposition_date || 0)
+        && String(row.notes || '') === String(dog.disposition_notes || ''),
+      )
+      : []
+    const createdAdoptionIncomeId = newDisposition === '已领养' && adoptionFeeAmount > 0
+      ? createStableEntityId('income')
+      : ''
     const baseVersions = {
       [dogId]: Number(dog.version || 0),
       ...touchedCycles.reduce<Record<string, number>>((acc, row) => {
@@ -1353,20 +1420,29 @@ class LocalSyncRuntime {
         acc[row._id] = Number(row.version || 0)
         return acc
       }, {}),
+      ...rollbackAdoptionIncomes.reduce<Record<string, number>>((acc, row) => {
+        acc[row._id] = Number(row.version || 0)
+        return acc
+      }, {}),
     }
     const syncMeta = buildSyncMeta(baseVersions, {
       clientMutationId: createClientMutationId(HOME_MUTATION_TYPES.CHANGE_DOG_DISPOSITION),
+      clientEntityIds: createdAdoptionIncomeId ? { incomes: createdAdoptionIncomeId } : undefined,
     })
+    const nextAdoptionIncome = createdAdoptionIncomeId
+      ? buildLocalAdoptionIncome(
+          familyId,
+          dog,
+          adoptionFeeAmount,
+          adoptionIncomeDate,
+          dispositionNotes,
+          createdAdoptionIncomeId,
+          now,
+        )
+      : null
+    const rollbackIncomeIds = new Set(rollbackAdoptionIncomes.map(row => row._id))
 
-    const dispositionDate = data.disposition_date || data.date || null
-    const dispositionNotes = data.disposition_notes
-      || data.reason
-      || data.cause
-      || data.notes
-      || data.recipient
-      || null
-
-    await runLocalMutation(['dogs', 'breeding_cycles', 'tasks'], (tables) => {
+    await runLocalMutation(['dogs', 'breeding_cycles', 'tasks', 'incomes'], (tables) => {
       tables.dogs = (tables.dogs as any[]).map((row) => row._id === dogId
         ? {
             ...row,
@@ -1391,6 +1467,12 @@ class LocalSyncRuntime {
             updated_at: now,
           }
         : row)
+      if (rollbackIncomeIds.size > 0) {
+        tables.incomes = (tables.incomes as any[]).filter((row) => !rollbackIncomeIds.has(row._id))
+      }
+      if (nextAdoptionIncome) {
+        tables.incomes = [...(tables.incomes as any[]), nextAdoptionIncome]
+      }
     })
 
     await this.enqueueMutation(
@@ -1401,9 +1483,10 @@ class LocalSyncRuntime {
         disposition: newDisposition,
         disposition_date: dispositionDate || undefined,
         disposition_notes: dispositionNotes,
+        adoption_fee: adoptionFeeAmount > 0 ? adoptionFeeAmount : undefined,
         _sync: syncMeta,
       },
-      ['dogs', 'breeding_cycles', 'tasks'],
+      ['dogs', 'breeding_cycles', 'tasks', 'incomes'],
       syncMeta,
     )
 
@@ -1413,6 +1496,14 @@ class LocalSyncRuntime {
         { collection: 'dogs', id: dogId, version: Number(dog.version || 0), updatedAt: now },
         ...touchedCycles.map(row => ({ collection: 'breeding_cycles' as BusinessCollectionName, id: row._id, version: Number(row.version || 0), updatedAt: now })),
         ...taskRows.map(row => ({ collection: 'tasks' as BusinessCollectionName, id: row._id, version: Number(row.version || 0), updatedAt: now })),
+        ...(nextAdoptionIncome ? [{ collection: 'incomes' as BusinessCollectionName, id: nextAdoptionIncome._id, version: 0, updatedAt: now }] : []),
+        ...rollbackAdoptionIncomes.map(row => ({
+          collection: 'incomes' as BusinessCollectionName,
+          id: row._id,
+          version: Number(row.version || 0),
+          updatedAt: now,
+          deletedAt: now,
+        })),
       ]),
     }
   }
@@ -2319,8 +2410,8 @@ class LocalSyncRuntime {
     if (!recordId) throw new Error('缺少记录 ID')
     const record = await findLocalRow<any>('breeding_records', recordId)
     if (!record || record.family_id !== familyId) throw new Error('记录不存在')
-    const dog = (await getDogsByIds([record.dog_id]))[0]
-    if (!dog) throw new Error('犬只未同步到本地，请联网刷新一次')
+    const dog = (await getDogsByIds([record.dog_id]))[0] || { _id: record.dog_id, name: record.dog_name || '' }
+    if (!dog?._id) throw new Error('犬只未同步到本地，请联网刷新一次')
 
     const now = getNow()
     const nextDetails = data.details !== undefined
@@ -2363,11 +2454,67 @@ class LocalSyncRuntime {
           now,
         )
       : null
-    const syncMeta = buildSyncMeta({ [recordId]: Number(record.version || 0) }, {
+    const linkedExpenses = await localDb.query<any>('expenses', row =>
+      row.family_id === familyId
+      && !row.deleted_at
+      && row.source_type === 'auto'
+      && row.source_record_id === recordId,
+    )
+    const nextCost = record.type !== 'heat_observation' ? Number(nextRecord.cost || 0) : 0
+    const createdExpenseId = linkedExpenses.length === 0 && nextCost > 0
+      ? createStableEntityId('expense')
+      : ''
+    const nextExpenseRows = nextCost > 0
+      ? (linkedExpenses.length > 0
+          ? linkedExpenses.map((expense) => ({
+              ...expense,
+              ...buildLocalBreedingExpense(
+                familyId,
+                dog,
+                {
+                  type: record.type,
+                  date: nextRecord.date,
+                  cost: nextCost,
+                  notes: nextRecord.notes,
+                },
+                record.cycle_id,
+                recordId,
+                expense._id,
+                now,
+              ),
+              version: Number(expense.version || 0),
+              created_at: expense.created_at,
+              updated_at: now,
+              _local_pending: true,
+            }))
+          : [buildLocalBreedingExpense(
+              familyId,
+              dog,
+              {
+                type: record.type,
+                date: nextRecord.date,
+                cost: nextCost,
+                notes: nextRecord.notes,
+              },
+              record.cycle_id,
+              recordId,
+              createdExpenseId,
+              now,
+            )])
+      : []
+    const linkedExpenseIds = new Set(linkedExpenses.map(expense => expense._id))
+    const syncMeta = buildSyncMeta({
+      [recordId]: Number(record.version || 0),
+      ...linkedExpenses.reduce<Record<string, number>>((acc, row) => {
+        acc[row._id] = Number(row.version || 0)
+        return acc
+      }, {}),
+    }, {
       clientMutationId: createClientMutationId(LOCAL_MUTATION_TYPES.UPDATE_BREEDING_RECORD),
+      clientEntityIds: createdExpenseId ? { expenses: createdExpenseId } : undefined,
     })
 
-    await localDb.transact(['breeding_records', 'tasks'], (tables) => {
+    await localDb.transact(['breeding_records', 'tasks', 'expenses'], (tables) => {
       tables.breeding_records = (tables.breeding_records as any[]).map(row => row._id === recordId ? nextRecord : row)
       tables.tasks = (tables.tasks as any[]).filter(row => {
         if (row.type !== 'breeding_extra_arrangement' || row.source_record_id !== recordId) return true
@@ -2384,18 +2531,41 @@ class LocalSyncRuntime {
           tables.tasks = [...(tables.tasks as any[]), nextExtraTask]
         }
       }
+      if (linkedExpenseIds.size > 0) {
+        tables.expenses = (tables.expenses as any[]).filter(row => !linkedExpenseIds.has(row._id))
+      }
+      if (nextExpenseRows.length > 0) {
+        tables.expenses = [...(tables.expenses as any[]), ...nextExpenseRows]
+      }
     })
 
     await this.enqueueMutation(
       LOCAL_MUTATION_TYPES.UPDATE_BREEDING_RECORD,
       familyId,
       { ...data, _sync: syncMeta },
-      ['breeding_records', 'tasks'],
+      ['breeding_records', 'tasks', 'expenses'],
       syncMeta,
     )
     return {
       message: '已更新',
-      ...buildLocalAck(syncMeta, [{ collection: 'breeding_records', id: recordId, version: Number(record.version || 0), updatedAt: now }]),
+      ...buildLocalAck(syncMeta, [
+        { collection: 'breeding_records', id: recordId, version: Number(record.version || 0), updatedAt: now },
+        ...nextExpenseRows.map(row => ({
+          collection: 'expenses' as BusinessCollectionName,
+          id: row._id,
+          version: Number(linkedExpenses.find(expense => expense._id === row._id)?.version || 0),
+          updatedAt: now,
+        })),
+        ...linkedExpenses
+          .filter(row => nextExpenseRows.every(nextRow => nextRow._id !== row._id))
+          .map(row => ({
+            collection: 'expenses' as BusinessCollectionName,
+            id: row._id,
+            version: Number(row.version || 0),
+            updatedAt: now,
+            deletedAt: now,
+          })),
+      ]),
     }
   }
 
@@ -2539,10 +2709,23 @@ class LocalSyncRuntime {
     const diffDays = Math.abs(Number(birthDate) - Number(litter.birth_date || 0)) / 86400000
     if (diffDays > 3) throw new Error('生产日期只能调整 ±3 天，超出范围会影响窝号和关联费用')
     const now = getNow()
-    const syncMeta = buildSyncMeta({ [litterId]: Number(litter.version || 0) }, {
+    const linkedExpenses = await localDb.query<any>('expenses', row =>
+      row.family_id === familyId
+      && !row.deleted_at
+      && row.source_type === 'auto'
+      && row.linked_litter_id === litterId
+      && row.source_record_id === litterId,
+    )
+    const syncMeta = buildSyncMeta({
+      [litterId]: Number(litter.version || 0),
+      ...linkedExpenses.reduce<Record<string, number>>((acc, row) => {
+        acc[row._id] = Number(row.version || 0)
+        return acc
+      }, {}),
+    }, {
       clientMutationId: createClientMutationId(LOCAL_MUTATION_TYPES.UPDATE_LITTER_BIRTH_DATE),
     })
-    await localDb.transact(['litters', 'dogs'], (tables) => {
+    await localDb.transact(['litters', 'dogs', 'expenses'], (tables) => {
       tables.litters = (tables.litters as any[]).map(row => row._id === litterId
         ? { ...row, birth_date: birthDate, updated_at: now, _local_pending: true }
         : row)
@@ -2550,17 +2733,29 @@ class LocalSyncRuntime {
         row.origin_litter_id === litterId && !row.deleted_at
           ? { ...row, birth_date: birthDate, updated_at: now, _local_pending: true }
           : row)
+      tables.expenses = (tables.expenses as any[]).map(row =>
+        linkedExpenses.some(expense => expense._id === row._id)
+          ? { ...row, date: birthDate, updated_at: now, _local_pending: true }
+          : row)
     })
     await this.enqueueMutation(
       LOCAL_MUTATION_TYPES.UPDATE_LITTER_BIRTH_DATE,
       familyId,
       { litterId, newBirthDate: birthDate, _sync: syncMeta },
-      ['litters', 'dogs'],
+      ['litters', 'dogs', 'expenses'],
       syncMeta,
     )
     return {
       message: '生产日期已更新',
-      ...buildLocalAck(syncMeta, [{ collection: 'litters', id: litterId, version: Number(litter.version || 0), updatedAt: now }]),
+      ...buildLocalAck(syncMeta, [
+        { collection: 'litters', id: litterId, version: Number(litter.version || 0), updatedAt: now },
+        ...linkedExpenses.map(row => ({
+          collection: 'expenses' as BusinessCollectionName,
+          id: row._id,
+          version: Number(row.version || 0),
+          updatedAt: now,
+        })),
+      ]),
     }
   }
 
@@ -4192,12 +4387,10 @@ class LocalSyncRuntime {
     if (!recordId) throw new Error('缺少记录 ID')
     const record = await findLocalRow<any>('health_records', recordId)
     if (!record || record.family_id !== familyId || record.deleted_at) throw new Error('记录不存在')
+    const dog = (await getDogsByIds([record.dog_id]))[0] || { _id: record.dog_id, name: record.dog_name || '' }
 
     const now = getNow()
-    const syncMeta = buildSyncMeta({ [recordId]: Number(record.version || 0) }, {
-      clientMutationId: createClientMutationId(HOME_MUTATION_TYPES.UPDATE_HEALTH_RECORD),
-    })
-    await upsertLocalRows('health_records', [{
+    const nextRecord = {
       ...record,
       ...(data.date !== undefined ? { date: data.date } : {}),
       ...(data.cost !== undefined ? { cost: data.cost } : {}),
@@ -4207,17 +4400,100 @@ class LocalSyncRuntime {
       _local_pending: true,
       _pending_upload: hasPendingUploadImages(data.details?.images || record.details?.images),
       pending_upload: hasPendingUploadImages(data.details?.images || record.details?.images),
-    }])
+    }
+    const linkedExpenses = await localDb.query<any>('expenses', row =>
+      row.family_id === familyId
+      && !row.deleted_at
+      && row.source_type === 'auto'
+      && row.source_record_id === recordId,
+    )
+    const nextCost = Number(nextRecord.cost || 0)
+    const createdExpenseId = linkedExpenses.length === 0 && nextCost > 0
+      ? createStableEntityId('expense')
+      : ''
+    const nextExpenseRows = nextCost > 0
+      ? (linkedExpenses.length > 0
+          ? linkedExpenses.map((expense) => ({
+              ...expense,
+              ...buildLocalHealthExpense(
+                familyId,
+                dog,
+                {
+                  type: record.type,
+                  date: nextRecord.date,
+                  notes: nextRecord.notes,
+                },
+                recordId,
+                nextCost,
+                expense._id,
+                now,
+              ),
+              version: Number(expense.version || 0),
+              created_at: expense.created_at,
+              updated_at: now,
+              _local_pending: true,
+            }))
+          : [buildLocalHealthExpense(
+              familyId,
+              dog,
+              {
+                type: record.type,
+                date: nextRecord.date,
+                notes: nextRecord.notes,
+              },
+              recordId,
+              nextCost,
+              createdExpenseId,
+              now,
+            )])
+      : []
+    const linkedExpenseIds = new Set(linkedExpenses.map(expense => expense._id))
+    const syncMeta = buildSyncMeta({
+      [recordId]: Number(record.version || 0),
+      ...linkedExpenses.reduce<Record<string, number>>((acc, row) => {
+        acc[row._id] = Number(row.version || 0)
+        return acc
+      }, {}),
+    }, {
+      clientMutationId: createClientMutationId(HOME_MUTATION_TYPES.UPDATE_HEALTH_RECORD),
+      clientEntityIds: createdExpenseId ? { expenses: createdExpenseId } : undefined,
+    })
+    await localDb.transact(['health_records', 'expenses'], (tables) => {
+      tables.health_records = (tables.health_records as any[]).map((row) => row._id === recordId ? nextRecord : row)
+      if (linkedExpenseIds.size > 0) {
+        tables.expenses = (tables.expenses as any[]).filter((row) => !linkedExpenseIds.has(row._id))
+      }
+      if (nextExpenseRows.length > 0) {
+        tables.expenses = [...(tables.expenses as any[]), ...nextExpenseRows]
+      }
+    })
     await this.enqueueMutation(
       HOME_MUTATION_TYPES.UPDATE_HEALTH_RECORD,
       familyId,
       { ...data, id: recordId, _sync: syncMeta },
-      ['health_records'],
+      ['health_records', 'expenses'],
       syncMeta,
     )
     return {
       message: '已更新',
-      ...buildLocalAck(syncMeta, [{ collection: 'health_records', id: recordId, version: Number(record.version || 0), updatedAt: now }]),
+      ...buildLocalAck(syncMeta, [
+        { collection: 'health_records', id: recordId, version: Number(record.version || 0), updatedAt: now },
+        ...nextExpenseRows.map(row => ({
+          collection: 'expenses' as BusinessCollectionName,
+          id: row._id,
+          version: Number(linkedExpenses.find(expense => expense._id === row._id)?.version || 0),
+          updatedAt: now,
+        })),
+        ...linkedExpenses
+          .filter(row => nextExpenseRows.every(nextRow => nextRow._id !== row._id))
+          .map(row => ({
+            collection: 'expenses' as BusinessCollectionName,
+            id: row._id,
+            version: Number(row.version || 0),
+            updatedAt: now,
+            deletedAt: now,
+          })),
+      ]),
     }
   }
 
@@ -4232,10 +4508,20 @@ class LocalSyncRuntime {
       && row.source_record_id === recordId
       && row.status === 'pending',
     )
+    const linkedExpenses = await localDb.query<any>('expenses', row =>
+      row.family_id === familyId
+      && !row.deleted_at
+      && row.source_type === 'auto'
+      && row.source_record_id === recordId,
+    )
     const now = getNow()
     const baseVersions = {
       [recordId]: Number(record.version || 0),
       ...linkedReminderTasks.reduce<Record<string, number>>((acc, row) => {
+        acc[row._id] = Number(row.version || 0)
+        return acc
+      }, {}),
+      ...linkedExpenses.reduce<Record<string, number>>((acc, row) => {
         acc[row._id] = Number(row.version || 0)
         return acc
       }, {}),
@@ -4245,7 +4531,8 @@ class LocalSyncRuntime {
     })
 
     const linkedTaskIdSet = new Set(linkedReminderTasks.map(row => row._id))
-    await localDb.transact(['health_records', 'tasks'], (tables) => {
+    const linkedExpenseIdSet = new Set(linkedExpenses.map(row => row._id))
+    await localDb.transact(['health_records', 'tasks', 'expenses'], (tables) => {
       tables.health_records = (tables.health_records as any[]).map((row) => row._id === recordId
         ? {
             ...row,
@@ -4262,13 +4549,16 @@ class LocalSyncRuntime {
             _local_pending: true,
           }
         : row)
+      if (linkedExpenseIdSet.size > 0) {
+        tables.expenses = (tables.expenses as any[]).filter((row) => !linkedExpenseIdSet.has(row._id))
+      }
     })
 
     await this.enqueueMutation(
       HOME_MUTATION_TYPES.DELETE_HEALTH_RECORD,
       familyId,
       { id: recordId, _sync: syncMeta },
-      ['health_records', 'tasks'],
+      ['health_records', 'tasks', 'expenses'],
       syncMeta,
     )
     return {
@@ -4276,6 +4566,13 @@ class LocalSyncRuntime {
       ...buildLocalAck(syncMeta, [
         { collection: 'health_records', id: recordId, version: Number(record.version || 0), updatedAt: now, deletedAt: now },
         ...linkedReminderTasks.map(row => ({ collection: 'tasks' as BusinessCollectionName, id: row._id, version: Number(row.version || 0), updatedAt: now })),
+        ...linkedExpenses.map(row => ({
+          collection: 'expenses' as BusinessCollectionName,
+          id: row._id,
+          version: Number(row.version || 0),
+          updatedAt: now,
+          deletedAt: now,
+        })),
       ]),
     }
   }
