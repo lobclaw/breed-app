@@ -660,14 +660,6 @@ async function load() {
 }
 
 async function refreshSale() {
-  const familyId = currentFamily.value?._id || ''
-  if (!familyId || !saleId.value) {
-    await load()
-    return
-  }
-  localSyncRuntime.setCurrentFamilyId(familyId)
-  await localSyncRuntime.resume(familyId)
-  await localSyncRuntime.forceSyncScope(`sale-detail:${saleId.value}`)
   await load()
 }
 
@@ -717,7 +709,7 @@ async function doComplete() {
       })
       if (res) {
         showCompleteModal.value = false
-        load()
+        await refreshSale()
       }
     })
     return

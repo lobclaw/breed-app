@@ -180,14 +180,6 @@ async function loadRecord() {
 }
 
 async function refreshRecord() {
-  const familyId = currentFamily.value?._id || ''
-  if (!familyId || !recordId) {
-    await loadRecord()
-    return
-  }
-  localSyncRuntime.setCurrentFamilyId(familyId)
-  await localSyncRuntime.resume(familyId)
-  await localSyncRuntime.forceSyncScope(`finance-detail:expense:${recordId}`)
   await loadRecord()
 }
 

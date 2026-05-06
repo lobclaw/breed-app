@@ -131,7 +131,7 @@ describe('local-first source contract', () => {
       },
       {
         file: 'src/pages/sale/detail.vue',
-        forbiddenReads: ['getSaleDetail', 'getAgentList', 'useCloudCall', 'cloudCall('],
+        forbiddenReads: ['getSaleDetail', 'getAgentList', 'useCloudCall', 'cloudCall(', 'forceSyncScope('],
       },
       {
         file: 'src/pages/profile/index.vue',
@@ -159,11 +159,11 @@ describe('local-first source contract', () => {
       },
       {
         file: 'src/pages/finance/expense-detail.vue',
-        forbiddenReads: ['getExpenseDetail', 'useCloudCall', 'cloudCall('],
+        forbiddenReads: ['getExpenseDetail', 'useCloudCall', 'cloudCall(', 'forceSyncScope('],
       },
       {
         file: 'src/pages/finance/income-detail.vue',
-        forbiddenReads: ['getIncomeDetail', 'useCloudCall', 'cloudCall('],
+        forbiddenReads: ['getIncomeDetail', 'useCloudCall', 'cloudCall(', 'forceSyncScope('],
       },
       {
         file: 'src/pages/finance/stats.vue',
