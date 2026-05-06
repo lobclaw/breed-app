@@ -253,7 +253,7 @@ async function batchComplete() {
     if (formData.drug_name) details.drug_name = formData.drug_name
   }
 
-  await localSyncRuntime.batchAddHealthRecordsLocally(currentFamily.value?._id || '', {
+  const result = await localSyncRuntime.batchAddHealthRecordsLocally(currentFamily.value?._id || '', {
     dog_ids: selectedItems.map(item => item.dogId),
     type: passedType,
     date: formDate.value,
@@ -263,15 +263,27 @@ async function batchComplete() {
     create_task: false,
     source_task_ids: ids,
   })
+  const completedTaskIds = new Set((result?.data?.completedTasks || []).map((task: any) => task._id).filter(Boolean))
+  const completedRecordCount = Number(result?.data?.count || 0)
+  const skippedCount = Number(result?.data?.skipped || 0)
+  if (completedRecordCount === 0 && skippedCount > 0) {
+    uni.showToast({ title: `今日已有相同记录，已跳过 ${skippedCount} 条`, icon: 'none' })
+    return
+  }
 
   // 更新 UI
   taskGroups.value.forEach(g => {
-    g.items = g.items.filter(item => !ids.includes(item.id))
+    g.items = g.items.filter(item => !completedTaskIds.has(item.id))
   })
   taskGroups.value = taskGroups.value.filter(g => g.items.length > 0)
-  ids.forEach(id => selected.delete(id))
+  Array.from(selected).forEach((id) => {
+    if (completedTaskIds.has(id)) selected.delete(id)
+  })
 
-  uni.showToast({ title: `已完成 ${selectedItems.length} 条记录`, icon: 'success' })
+  uni.showToast({
+    title: skippedCount > 0 ? `已完成 ${completedRecordCount} 条，跳过 ${skippedCount} 条` : `已完成 ${completedRecordCount} 条记录`,
+    icon: 'success',
+  })
   if (taskGroups.value.length === 0) {
     setTimeout(() => uni.navigateBack(), 1000)
   }

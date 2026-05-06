@@ -24,4 +24,12 @@ describe('home page sheet source contract', () => {
           </view>
           <view class="stop-confirm-btn stop-confirm-btn--danger" @click="confirmStopMedication">`)
   })
+
+  it('今日用药卡的康复菜单应透传 illnessIds 与 medicationTaskIds', () => {
+    expect(source).toContain("const illnessIds = [...new Set([")
+    expect(source).toContain("...(Array.isArray(dog.illnessIds) ? dog.illnessIds : [])")
+    expect(source).toContain("const medicationTaskIds = (dog.allMedTasks || [])")
+    expect(source).toContain("removeMedicationDogsLocally(payload.data?.dogId ? [payload.data.dogId] : [])")
+    expect(source).toContain("void recoverIllnesses({ illnessIds, medicationTaskIds })")
+  })
 })

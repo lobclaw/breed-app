@@ -68,11 +68,20 @@ export function consumeSubmitFeedback(currentRoute: string) {
 export function buildTaskFeedbackMessage(created: number, skipped: number) {
   if (created > 0 && skipped > 0) return `已创建 ${created} 条待办，跳过 ${skipped} 条`
   if (created > 0) return created === 1 ? '已创建待办' : `已创建 ${created} 条待办`
-  if (skipped > 0) return skipped === 1 ? '已有相同待办，已跳过' : `已有相同待办，已跳过 ${skipped} 条`
+  if (skipped > 0) return skipped === 1 ? '今天已有相同事项，已跳过' : `今天已有相同事项，已跳过 ${skipped} 条`
   return '已处理待办'
 }
 
-export function buildRecordFeedbackMessage(savedCount: number, completedTaskCount = 0) {
+export function buildRecordFeedbackMessage(savedCount: number, completedTaskCount = 0, skippedCount = 0) {
+  if (savedCount > 0 && skippedCount > 0 && completedTaskCount > 0) {
+    return `已保存 ${savedCount} 条记录，跳过 ${skippedCount} 条，并处理 ${completedTaskCount} 条待办`
+  }
+  if (savedCount > 0 && skippedCount > 0) {
+    return `已保存 ${savedCount} 条记录，跳过 ${skippedCount} 条`
+  }
+  if (savedCount === 0 && skippedCount > 0) {
+    return skippedCount === 1 ? '今日已有相同记录，已跳过' : `今日已有相同记录，已跳过 ${skippedCount} 条`
+  }
   if (savedCount > 1 && completedTaskCount > 0) {
     return `已保存 ${savedCount} 条记录，并处理 ${completedTaskCount} 条待办`
   }

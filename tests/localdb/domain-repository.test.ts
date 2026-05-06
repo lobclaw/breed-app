@@ -693,6 +693,162 @@ describe('local domain repository', () => {
     })
   })
 
+  it('本地录入同犬同日相同疫苗记录时应跳过重复犬只', async () => {
+    const now = new Date('2026-05-06T10:00:00+08:00').getTime()
+
+    await localDb.replaceTable('dogs', [{
+      _id: 'dog_health_dup_1',
+      family_id: 'fam_health_dup_1',
+      name: '奶糖',
+      gender: '母',
+      role: '种狗',
+      disposition: '在养',
+      updated_at: now,
+    }, {
+      _id: 'dog_health_dup_2',
+      family_id: 'fam_health_dup_1',
+      name: '奶盖',
+      gender: '母',
+      role: '种狗',
+      disposition: '在养',
+      updated_at: now,
+    }])
+    await localDb.replaceTable('health_records', [{
+      _id: 'health_dup_existing_1',
+      family_id: 'fam_health_dup_1',
+      dog_id: 'dog_health_dup_1',
+      dog_name: '奶糖',
+      type: 'vaccination',
+      date: now - 2 * 60 * 60 * 1000,
+      details: { vaccine_type: '卫佳8' },
+      created_at: now - 2 * 60 * 60 * 1000,
+      updated_at: now - 2 * 60 * 60 * 1000,
+    }])
+    await localDb.replaceTable('tasks', [{
+      _id: 'task_dup_skip_1',
+      family_id: 'fam_health_dup_1',
+      dog_id: 'dog_health_dup_1',
+      dog_name: '奶糖',
+      type: 'vaccination',
+      status: 'pending',
+      due_date: now,
+      details: { vaccine_type: '卫佳8' },
+      created_at: now,
+      updated_at: now,
+    }, {
+      _id: 'task_dup_skip_2',
+      family_id: 'fam_health_dup_1',
+      dog_id: 'dog_health_dup_2',
+      dog_name: '奶盖',
+      type: 'vaccination',
+      status: 'pending',
+      due_date: now,
+      details: { vaccine_type: '卫佳8' },
+      created_at: now,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('expenses', [])
+    await localDb.replaceTable('outbox_mutations', [])
+    await localDb.replaceTable('local_operation_logs', [])
+
+    const res = await localSyncRuntime.batchAddHealthRecordsLocally('fam_health_dup_1', {
+      dog_ids: ['dog_health_dup_1', 'dog_health_dup_2'],
+      type: 'vaccination',
+      date: now,
+      details: { vaccine_type: '卫佳8' },
+    })
+
+    const records = await localDb.getTable<any>('health_records')
+    const tasks = await localDb.getTable<any>('tasks')
+
+    expect(res.data.count).toBe(1)
+    expect(res.data.skipped).toBe(1)
+    expect(res.data.skippedDogs).toEqual([{ dog_id: 'dog_health_dup_1', dog_name: '奶糖' }])
+    expect(records.filter(record => record.family_id === 'fam_health_dup_1' && record.type === 'vaccination')).toHaveLength(2)
+    expect(tasks.find(task => task._id === 'task_dup_skip_1')?.status).toBe('pending')
+    expect(tasks.find(task => task._id === 'task_dup_skip_2')?.status).toBe('completed')
+  })
+
+  it('本地批量创建健康待办时应跳过已有相同待办的犬只', async () => {
+    const now = new Date('2026-05-06T10:00:00+08:00').getTime()
+
+    await localDb.replaceTable('tasks', [{
+      _id: 'task_manual_existing_1',
+      family_id: 'fam_task_dup_1',
+      dog_id: 'dog_task_dup_1',
+      dog_name: '肉肉',
+      type: 'vaccination',
+      status: 'pending',
+      due_date: now,
+      details: { vaccine_type: '卫佳8' },
+      created_at: now,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('outbox_mutations', [])
+    await localDb.replaceTable('local_operation_logs', [])
+
+    const res = await localSyncRuntime.batchCreateManualTasksLocally('fam_task_dup_1', {
+      dogs: [
+        { dog_id: 'dog_task_dup_1', dog_name: '肉肉' },
+        { dog_id: 'dog_task_dup_2', dog_name: '妮蔻' },
+      ],
+      type: 'vaccination',
+      due_date: now,
+      details: { vaccine_type: '卫佳8' },
+    })
+
+    const tasks = await localDb.getTable<any>('tasks')
+    const createdTasks = tasks.filter(task => task.family_id === 'fam_task_dup_1' && task.status === 'pending')
+
+    expect(res.data.created).toBe(1)
+    expect(res.data.skipped).toBe(1)
+    expect(res.data.skippedDogs).toEqual([{ dog_id: 'dog_task_dup_1', dog_name: '肉肉', reason: 'existing_task' }])
+    expect(createdTasks).toHaveLength(2)
+    expect(createdTasks.some(task => task.dog_id === 'dog_task_dup_2')).toBe(true)
+  })
+
+  it('本地批量创建健康待办时应跳过当天已存在相同真实记录的犬只', async () => {
+    const now = new Date('2026-05-06T10:00:00+08:00').getTime()
+
+    await localDb.replaceTable('tasks', [])
+    await localDb.replaceTable('health_records', [{
+      _id: 'health_task_existing_1',
+      family_id: 'fam_task_dup_2',
+      dog_id: 'dog_task_dup_3',
+      dog_name: '布丁',
+      type: 'vaccination',
+      date: now - 3600000,
+      details: { vaccine_type: '卫佳8' },
+      created_at: now - 3600000,
+      updated_at: now - 3600000,
+    }])
+    await localDb.replaceTable('outbox_mutations', [])
+    await localDb.replaceTable('local_operation_logs', [])
+
+    const res = await localSyncRuntime.batchCreateManualTasksLocally('fam_task_dup_2', {
+      dogs: [
+        { dog_id: 'dog_task_dup_3', dog_name: '布丁' },
+        { dog_id: 'dog_task_dup_4', dog_name: '奶芙' },
+      ],
+      type: 'vaccination',
+      due_date: now,
+      details: { vaccine_type: '卫佳8' },
+    })
+
+    const tasks = await localDb.getTable<any>('tasks')
+    const createdTasks = tasks.filter(task => task.family_id === 'fam_task_dup_2' && task.status === 'pending')
+
+    expect(res.data.created).toBe(1)
+    expect(res.data.skipped).toBe(1)
+    expect(res.data.skippedDogs).toEqual([{
+      dog_id: 'dog_task_dup_3',
+      dog_name: '布丁',
+      reason: 'existing_record',
+    }])
+    expect(createdTasks).toHaveLength(1)
+    expect(createdTasks[0].dog_id).toBe('dog_task_dup_4')
+  })
+
   it('开始带费用的用药后应立即出现在本地财务列表', async () => {
     const now = new Date('2026-05-06T10:00:00+08:00').getTime()
 

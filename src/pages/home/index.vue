@@ -588,6 +588,7 @@ import { buildHomeWorkbench } from '@/utils/homeWorkbench'
 import { buildTimestampFromDayOffset, formatDateInputValue, getBeijingDayStart } from '@/utils/date'
 import { buildMedicationDetailUrl } from '@/utils/dogDetailNavigation'
 import type { MedicationRouteIllnessLink } from '@/utils/recordFormRoutes'
+import { getBatchCardDogId } from '@/utils/batchCardProgress'
 
 const { hasFamily, currentFamily, loadFamily } = useAuth()
 const taskStore = useTaskStore()
@@ -612,6 +613,7 @@ const submitToastClosing = ref(false)
 let submitToastTimer: ReturnType<typeof setTimeout> | null = null
 let submitToastHideTimer: ReturnType<typeof setTimeout> | null = null
 const suppressedTaskMap = ref<Record<string, number>>({})
+const localBatchCardProgressMap = ref<Record<string, { dogs: any[]; completedDogIds: string[] }>>(taskStore.batchCardProgress || {})
 const pageInstance = getCurrentInstance()
 const HOME_SUBMIT_TOAST_DURATION_MS = 1800
 const focusedHomeCardId = ref('')
@@ -1011,6 +1013,7 @@ function scrollToAnchor(targetId: string) {
 
 function hydrateHomeFromTaskStore() {
   if (!taskStore.cards.length) return
+  localBatchCardProgressMap.value = { ...(taskStore.batchCardProgress || {}) }
   cards.value = taskStore.cards
   counts.today = taskStore.counts.today || 0
   counts.week = taskStore.counts.week || 0
@@ -1122,10 +1125,8 @@ async function loadTodayCards(loadToken = latestLoadToken) {
     counts.week = result.counts?.week || 0
     counts.month30 = result.counts?.month30 || 0
     counts.hasOverdue = result.counts?.hasOverdue || false
-    // 同步到 taskStore
-    taskStore.cards = cards.value
-    taskStore.counts = { today: counts.today, week: counts.week, month30: counts.month30, hasOverdue: counts.hasOverdue }
-    taskStore.loaded = true
+    pruneLocalBatchCardProgress(cards.value)
+    syncTaskStoreHomeCache()
     syncTodayDayCountFromVisibleCards()
   }
   loading.value = false
@@ -1404,11 +1405,283 @@ function isTaskSuppressed(taskId?: string) {
   return !!suppressedTaskMap.value[taskId]
 }
 
+function cloneBatchDog(dog: any) {
+  return dog && typeof dog === 'object' ? { ...dog } : dog
+}
+
+function isHealthBatchCard(card: any) {
+  return card?.cardType === 'batch' && card?.domain === 'health'
+}
+
+function normalizeIllnessCondition(condition: unknown) {
+  return typeof condition === 'string' ? condition.trim() : ''
+}
+
+function getIllnessPrimaryCondition(details: Record<string, any> = {}) {
+  return normalizeIllnessCondition(details.primary_condition || details.condition || '')
+}
+
+function getHealthTaskVariantKey(task: any) {
+  if (!task) return ''
+  if (task.type === 'vaccination') {
+    return `vaccination:${task.details?.vaccine_type || ''}`
+  }
+  if (task.type === 'deworming') {
+    return `deworming:${task.details?.deworming_type || ''}:${task.details?.drug_name || ''}`
+  }
+  if (task.type === 'illness') {
+    return `illness:${getIllnessPrimaryCondition(task.details || {})}`
+  }
+  return task.type || ''
+}
+
+function getHealthBatchCardId(task: any) {
+  const variantKey = getHealthTaskVariantKey(task)
+  if (!variantKey || !task?.due_date) return ''
+  return `batch-${variantKey}-${task.due_date}`
+}
+
+function restorePersistedHealthBatchCards(cardList: any[] = []) {
+  const nextCards = (cardList || []).map((card: any) => ({
+    ...card,
+    tasks: Array.isArray(card?.tasks) ? [...card.tasks] : card?.tasks,
+    dogs: Array.isArray(card?.dogs) ? card.dogs.map((dog: any) => cloneBatchDog(dog)) : card?.dogs,
+  }))
+
+  const existingBatchIds = new Set(
+    nextCards
+      .filter((card: any) => isHealthBatchCard(card))
+      .map((card: any) => card.id)
+      .filter(Boolean),
+  )
+
+  Object.entries(localBatchCardProgressMap.value).forEach(([cardId, progress]) => {
+    if (!progress?.dogs?.length || existingBatchIds.has(cardId)) return
+
+    const matchedTasks: any[] = []
+    const matchedMeta: Array<{ cardIdx: number; taskIds: string[] }> = []
+
+    nextCards.forEach((card: any, cardIdx: number) => {
+      if (card?.cardType !== 'dog' || card?.domain !== 'health') return
+      const matched = (card.tasks || []).filter((task: any) => getHealthBatchCardId(task) === cardId)
+      if (!matched.length) return
+      matchedTasks.push(...matched)
+      matchedMeta.push({ cardIdx, taskIds: matched.map((task: any) => task._id).filter(Boolean) })
+    })
+
+    if (!matchedTasks.length) return
+
+    matchedMeta.forEach(({ cardIdx, taskIds }) => {
+      const card = nextCards[cardIdx]
+      if (!card) return
+      const remainingTasks = (card.tasks || []).filter((task: any) => !taskIds.includes(task._id))
+      if (!remainingTasks.length) {
+        nextCards[cardIdx] = null
+        return
+      }
+      card.tasks = remainingTasks
+    })
+
+    const pendingTaskByDogId = new Map<string, any>()
+    matchedTasks.forEach((task: any) => {
+      const dogId = task.dog_id || task.dogId
+      if (dogId && !pendingTaskByDogId.has(dogId)) pendingTaskByDogId.set(dogId, task)
+    })
+
+    const mergedDogs = (progress.dogs || []).map((dog: any) => {
+      const dogId = getBatchCardDogId(dog)
+      const pendingTask = dogId ? pendingTaskByDogId.get(dogId) : null
+      return {
+        ...cloneBatchDog(dog),
+        taskId: pendingTask?._id || dog?.taskId || '',
+        completed: !pendingTask,
+      }
+    })
+
+    nextCards.push({
+      cardType: 'batch',
+      id: cardId,
+      domain: 'health',
+      sectionType: 'reminders',
+      priority: matchedTasks[0]?.priority || 'today',
+      groupTitle: matchedTasks[0]?.display_title || matchedTasks[0]?.title || '',
+      dogs: mergedDogs,
+      tasks: matchedTasks,
+      progress: {
+        done: mergedDogs.filter((dog: any) => dog?.completed).length,
+        total: mergedDogs.length,
+      },
+    })
+  })
+
+  return nextCards.filter(Boolean)
+}
+
+function syncTaskStoreHomeCache() {
+  taskStore.cards = cards.value
+  taskStore.counts = {
+    today: counts.today,
+    week: counts.week,
+    month30: counts.month30,
+    hasOverdue: counts.hasOverdue,
+  }
+  taskStore.batchCardProgress = { ...localBatchCardProgressMap.value }
+  taskStore.loaded = true
+}
+
+function pruneLocalBatchCardProgress(cardList: any[] = []) {
+  const activeCardIds = new Set(
+    (cardList || [])
+      .filter((card: any) => isHealthBatchCard(card))
+      .map((card: any) => card.id)
+      .filter(Boolean),
+  )
+
+  const next = Object.fromEntries(
+    Object.entries(localBatchCardProgressMap.value).filter(([cardId]) => activeCardIds.has(cardId)),
+  )
+
+  localBatchCardProgressMap.value = next
+  taskStore.batchCardProgress = { ...next }
+}
+
+function updateLocalBatchCardProgress(cardId: string, dogs: any[]) {
+  if (!cardId) return
+  const completedDogIds = (dogs || [])
+    .filter((dog: any) => dog?.completed)
+    .map((dog: any) => getBatchCardDogId(dog))
+    .filter(Boolean) as string[]
+
+  if (!completedDogIds.length) {
+    const next = { ...localBatchCardProgressMap.value }
+    delete next[cardId]
+    localBatchCardProgressMap.value = next
+    taskStore.batchCardProgress = { ...next }
+    return
+  }
+
+  localBatchCardProgressMap.value = {
+    ...localBatchCardProgressMap.value,
+    [cardId]: {
+      dogs: (dogs || []).map(cloneBatchDog),
+      completedDogIds,
+    },
+  }
+  taskStore.batchCardProgress = { ...localBatchCardProgressMap.value }
+}
+
+function clearLocalBatchCardProgress(cardId?: string) {
+  if (!cardId) return
+  if (!localBatchCardProgressMap.value[cardId]) return
+  const next = { ...localBatchCardProgressMap.value }
+  delete next[cardId]
+  localBatchCardProgressMap.value = next
+  taskStore.batchCardProgress = { ...next }
+}
+
+function applyLocalBatchCardProgress(card: any) {
+  if (!isHealthBatchCard(card)) return card
+  const progress = localBatchCardProgressMap.value[card.id]
+  if (!progress) return card
+
+  const completedDogIdSet = new Set(progress.completedDogIds)
+  const pendingDogMap = new Map<string, any>()
+  ;(card.dogs || []).forEach((dog: any) => {
+    const dogId = getBatchCardDogId(dog)
+    if (dogId) pendingDogMap.set(dogId, dog)
+  })
+
+  const mergedDogs: any[] = []
+  ;(progress.dogs || []).forEach((dog: any) => {
+    const dogId = getBatchCardDogId(dog)
+    if (!dogId) return
+
+    if (pendingDogMap.has(dogId)) {
+      mergedDogs.push({
+        ...cloneBatchDog(dog),
+        ...cloneBatchDog(pendingDogMap.get(dogId)),
+        completed: false,
+      })
+      pendingDogMap.delete(dogId)
+      return
+    }
+
+    if (completedDogIdSet.has(dogId)) {
+      mergedDogs.push({
+        ...cloneBatchDog(dog),
+        completed: true,
+      })
+    }
+  })
+
+  pendingDogMap.forEach((dog) => {
+    mergedDogs.push({
+      ...cloneBatchDog(dog),
+      completed: false,
+    })
+  })
+
+  card.dogs = mergedDogs
+  if (card.progress) {
+    card.progress = {
+      ...card.progress,
+      done: mergedDogs.filter((dog: any) => dog?.completed).length,
+      total: mergedDogs.length,
+    }
+  }
+  return card
+}
+
+function markBatchDogCompleted(card: any, taskId: string) {
+  if (!isHealthBatchCard(card) || !taskId) return
+  const targetTask = (card.tasks || []).find((task: any) => task?._id === taskId)
+  if (!targetTask) return
+
+  const targetDogId = targetTask.dog_id || targetTask.dogId
+  if (!targetDogId) return
+
+  const nextDogs = (card.dogs || []).map((dog: any) => {
+    const dogId = getBatchCardDogId(dog)
+    if (dogId !== targetDogId) return dog
+    return {
+      ...cloneBatchDog(dog),
+      completed: true,
+    }
+  })
+
+  card.dogs = nextDogs
+  updateLocalBatchCardProgress(card.id, nextDogs)
+}
+
 function syncCardMeta(card: any, remainingTasks: any[]) {
   if (!card) return null
   card.tasks = remainingTasks
 
-  if (card.cardType === 'batch' || card.cardType === 'care_group') {
+  if (isHealthBatchCard(card)) {
+    const dogIdSet = new Set(remainingTasks.map((task: any) => task.dog_id || task.dogId).filter(Boolean))
+    card.dogs = (card.dogs || [])
+      .map((dog: any) => {
+        const dogId = getBatchCardDogId(dog)
+        if (!dogId) return dog
+        return {
+          ...cloneBatchDog(dog),
+          completed: !dogIdSet.has(dogId),
+        }
+      })
+      .filter((dog: any) => {
+        const dogId = getBatchCardDogId(dog)
+        return !dogId || dog.completed || dogIdSet.has(dogId)
+      })
+
+    if (card.progress) {
+      card.progress = {
+        ...card.progress,
+        done: card.dogs.filter((dog: any) => dog?.completed).length,
+        total: card.dogs.length,
+      }
+    }
+    updateLocalBatchCardProgress(card.id, card.dogs || [])
+  } else if (card.cardType === 'batch' || card.cardType === 'care_group') {
     const dogIdSet = new Set(remainingTasks.map((t: any) => t.dog_id || t.dogId).filter(Boolean))
     card.dogs = (card.dogs || []).filter((dog: any) => dogIdSet.has(dog.dogId || dog.dog_id))
     if (card.progress) {
@@ -1420,12 +1693,13 @@ function syncCardMeta(card: any, remainingTasks: any[]) {
 }
 
 function filterSuppressedCards(cardList: any[]) {
-  return (cardList || []).map((card: any) => {
-    if (!card?.tasks?.length) return card
-    const remainingTasks = card.tasks.filter((task: any) => !isTaskSuppressed(task._id))
-    if (remainingTasks.length === card.tasks.length) return card
+  return restorePersistedHealthBatchCards(cardList).map((card: any) => {
+    const nextCard = applyLocalBatchCardProgress(card)
+    if (!nextCard?.tasks?.length) return nextCard
+    const remainingTasks = nextCard.tasks.filter((task: any) => !isTaskSuppressed(task._id))
+    if (remainingTasks.length === nextCard.tasks.length) return nextCard
     if (remainingTasks.length === 0) return null
-    return syncCardMeta({ ...card, dogs: Array.isArray(card.dogs) ? [...card.dogs] : card.dogs }, remainingTasks)
+    return syncCardMeta({ ...nextCard, dogs: Array.isArray(nextCard.dogs) ? [...nextCard.dogs] : nextCard.dogs }, remainingTasks)
   }).filter(Boolean)
 }
 
@@ -1477,8 +1751,10 @@ function removeCardLocally(taskId: string, forceRemoveCard = false, showSuccess 
     const idx = list.value.findIndex(c => c.tasks?.some((t: any) => t._id === taskId) || c.id === taskId)
     if (idx < 0) continue
     const card = list.value[idx]
+    const isBatchPartialComplete = isHealthBatchCard(card) && !forceRemoveCard
     const remainingTasks = card.tasks?.filter((t: any) => t._id !== taskId) || []
     if (remainingTasks.length === 0 || forceRemoveCard) {
+      clearLocalBatchCardProgress(card.id)
       if (showSuccess) {
         // 完成：极短确认后退场，优先保证首页操作流畅
         markCardCompleted(card.id)
@@ -1515,11 +1791,13 @@ function removeCardLocally(taskId: string, forceRemoveCard = false, showSuccess 
         }))
       }
     } else {
+      if (isBatchPartialComplete) markBatchDogCompleted(card, taskId)
       syncCardMeta(card, remainingTasks)
     }
     break
   }
   syncWeekCache(taskId)
+  syncTaskStoreHomeCache()
 }
 
 /** 从 weekCache 中移除指定 task */
@@ -1529,15 +1807,18 @@ function syncWeekCache(taskId: string) {
     const cardIdx = cachedCards.findIndex(c => c.tasks?.some((t: any) => t._id === taskId))
     if (cardIdx < 0) continue
     const card = cachedCards[cardIdx]
+    const isBatchPartialComplete = isHealthBatchCard(card)
     const remaining = card.tasks?.filter((t: any) => t._id !== taskId) || []
     if (remaining.length === 0) {
+      clearLocalBatchCardProgress(card.id)
       cachedCards.splice(cardIdx, 1)
     } else {
+      if (isBatchPartialComplete) markBatchDogCompleted(card, taskId)
       syncCardMeta(card, remaining)
     }
     // 更新 dayCounts
     const ts = Number(dayTs)
-    if (dayCounts.value[ts]) {
+    if (remaining.length === 0 && dayCounts.value[ts]) {
       dayCounts.value[ts] = Math.max(0, dayCounts.value[ts] - 1)
     }
     break
@@ -1686,7 +1967,14 @@ async function onComplete(taskId: string, mode?: boolean | string) {
     return
   }
   if (mode === 'batch-auto-partial') {
-    await completeAndRefresh(true)
+    const result = await doCompleteTask(taskId, true)
+    if (!result) {
+      await loadTodayCards()
+      return
+    }
+    removeCardLocally(taskId, false, false)
+    addSuppressedTasks(result?.data?.completedTaskIds || [taskId])
+    await refreshHomeAfterLocalMutation()
     return
   }
   // DogCard "完成" (mode='auto'): 一键完成 + 自动创建记录
@@ -1958,9 +2246,29 @@ function onAction(payload: { type: string; data: any }) {
     // 打开停止用药确认 BSheet
     stopConfirmData.value = payload.data
     showStopConfirm.value = true
-  } else if (payload.type === 'recover' && payload.data?.illnessId) {
-    removeSickDogLocally(payload.data.dogId, payload.data.illnessId)
-    void recoverIllnesses({ illnessIds: [payload.data.illnessId] }).then(async (result) => {
+  } else if (payload.type === 'recover') {
+    const rawIllnessIds: unknown[] = [
+      ...(Array.isArray(payload.data?.illnessIds) ? payload.data.illnessIds : []),
+      payload.data?.illnessId,
+    ]
+    const illnessIds: string[] = [...new Set(
+      rawIllnessIds.filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0),
+    )]
+    const rawMedicationTaskIds: unknown[] = Array.isArray(payload.data?.medicationTaskIds)
+      ? payload.data.medicationTaskIds
+      : []
+    const medicationTaskIds: string[] = [...new Set(
+      rawMedicationTaskIds.filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0),
+    )]
+    if (!illnessIds.length) return
+
+    if (medicationTaskIds.length > 0) {
+      removeMedicationDogsLocally(payload.data?.dogId ? [payload.data.dogId] : [])
+    } else {
+      removeSickDogLocally(payload.data?.dogId, illnessIds[0])
+    }
+
+    void recoverIllnesses({ illnessIds, medicationTaskIds }).then(async (result) => {
       if (!result) {
         await loadTodayCards()
         return
@@ -2087,7 +2395,26 @@ function onSickMenuSelect(item: any) {
   if (!dog) return
 
   if (item.action === 'recover') {
-    onAction({ type: 'recover', data: { dogId: dog.dogId, dogName: dog.dogName, illnessId: dog.illnessId } })
+    const rawIllnessIds: unknown[] = [
+      ...(Array.isArray(dog.illnessIds) ? dog.illnessIds : []),
+      dog.illnessId,
+    ]
+    const illnessIds: string[] = [...new Set(
+      rawIllnessIds.filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0),
+    )]
+    const medicationTaskIds = (dog.allMedTasks || [])
+      .map((task: any) => task?._id)
+      .filter(Boolean)
+    onAction({
+      type: 'recover',
+      data: {
+        dogId: dog.dogId,
+        dogName: dog.dogName,
+        illnessId: illnessIds[0] || '',
+        illnessIds,
+        medicationTaskIds,
+      },
+    })
   } else if (item.action === 'update_status') {
     onAction({ type: 'update_status', data: { dogId: dog.dogId, status: '治疗中', illnessId: dog.illnessId } })
   } else if (item.action === 'view_medication' && dog.linkedMedicationTaskId) {

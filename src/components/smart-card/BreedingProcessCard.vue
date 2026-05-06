@@ -5,7 +5,7 @@
     @click="onCardTap"
   >
     <view class="card-header">
-      <view class="card-icon card-icon--amber">
+      <view class="card-icon card-icon--amber card-icon--detail" @click.stop="onAvatarTap">
         <BEntityIcon :role="props.card?.role" color="var(--amber)" :size="20" />
       </view>
       <view class="card-title-area">
@@ -75,6 +75,11 @@ function onCardTap() {
   openHomeBreedingDetail(props.card)
 }
 
+function onAvatarTap() {
+  if (!props.card?.dogId) return
+  uni.navigateTo({ url: `/pages/dog/detail?id=${encodeURIComponent(props.card.dogId)}` })
+}
+
 function onPrimaryActionTap() {
   if (hasMultipleActions.value) {
     emit('action', { type: 'show_breeding_actions', data: { card: props.card } })
@@ -135,6 +140,14 @@ function openWeakAction(action: 'prenatal' | 'pre_labor') {
 }
 
 .card-icon--amber { background: var(--icon-amber); }
+.card-icon--detail {
+  transition: transform 0.12s ease, filter 0.12s ease;
+
+  &:active {
+    transform: scale(0.94);
+    filter: brightness(0.98);
+  }
+}
 
 .card-title-area { flex: 1; min-width: 0; }
 .card-name { display: block; font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--text-1); line-height: 1.3; }

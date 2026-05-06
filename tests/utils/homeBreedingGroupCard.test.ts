@@ -34,13 +34,23 @@ describe('home breeding group collapse', () => {
     expect(groupCardSource).not.toContain('getStorageSync')
   })
 
-  it('繁育分组卡保留整卡处理，并为头像与犬名提供犬详情次入口', () => {
+  it('繁育分组卡改为整行进繁育详情，处理按钮保留动作入口', () => {
     const groupCardSource = readFileSync(resolve(testDir, '../../src/components/smart-card/BreedingProcessGroupCard.vue'), 'utf8')
 
-    expect(groupCardSource).toContain('@click="goProcess(item.card)"')
+    expect(groupCardSource).toContain('@click="goDetail(item.card)"')
+    expect(groupCardSource).toContain('@click.stop="goProcess(item.card)"')
     expect(groupCardSource).toContain('@click.stop="goDogDetail(item.card)"')
-    expect(groupCardSource).toContain(":class=\"{ 'group-avatar--detail': !!item.card?.dogId }\"")
-    expect(groupCardSource).toContain(":class=\"{ 'group-name--detail': !!item.card?.dogId }\"")
+    expect(groupCardSource).toContain('openHomeBreedingDetail(card)')
     expect(groupCardSource).toContain("uni.navigateTo({ url: `/pages/dog/detail?id=${card.dogId}` })")
+    expect(groupCardSource).toContain('openHomeBreedingAction(card, \'process\')')
+  })
+
+  it('单犬繁育卡保留头像进犬详情，卡片主体进繁育详情', () => {
+    const singleCardSource = readFileSync(resolve(testDir, '../../src/components/smart-card/BreedingProcessCard.vue'), 'utf8')
+
+    expect(singleCardSource).toContain('@click="onCardTap"')
+    expect(singleCardSource).toContain('@click.stop="onAvatarTap"')
+    expect(singleCardSource).toContain('openHomeBreedingDetail(props.card)')
+    expect(singleCardSource).toContain("uni.navigateTo({ url: `/pages/dog/detail?id=${encodeURIComponent(props.card.dogId)}` })")
   })
 })

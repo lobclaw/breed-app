@@ -5,7 +5,7 @@
       :key="item.id"
       class="group-row"
       :class="{ 'group-row--passed': item.milestone.suggestionStatus === 'window_passed' }"
-      @click="goProcess(item.card)"
+      @click="goDetail(item.card)"
     >
       <view
         class="group-avatar"
@@ -17,13 +17,7 @@
       <view class="group-main">
         <view class="group-name-row">
           <view class="group-title-wrap">
-            <text
-              class="group-name"
-              :class="{ 'group-name--detail': !!item.card?.dogId }"
-              @click.stop="goDogDetail(item.card)"
-            >
-              {{ item.card.dogName }}
-            </text>
+            <text class="group-name">{{ item.card.dogName }}</text>
             <template v-if="item.primaryLabel">
               <text class="group-title-divider">·</text>
               <text class="group-title-meta">{{ item.primaryLabel }}</text>
@@ -91,6 +85,7 @@ import { buildBreedingMilestoneSummary } from '@/utils/breedingMilestoneSummary'
 import {
   hasMultipleHomeBreedingActions,
   openHomeBreedingAction,
+  openHomeBreedingDetail,
 } from '@/utils/homeBreedingActions'
 import { canOpenHomePreLabor, canOpenHomePrenatal } from '@/utils/homeHeatObservation'
 
@@ -135,6 +130,10 @@ const visibleItems = computed(() => {
 
 function toggleExpanded() {
   expanded.value = !expanded.value
+}
+
+function goDetail(card: any) {
+  openHomeBreedingDetail(card)
 }
 
 function goDogDetail(card: any) {
@@ -239,14 +238,6 @@ function openWeakAction(card: any, action: 'prenatal' | 'pre_labor') {
   color: var(--text-1);
   line-height: 1.2;
   flex-shrink: 0;
-}
-
-.group-name--detail {
-  transition: opacity 0.12s ease;
-
-  &:active {
-    opacity: 0.72;
-  }
 }
 
 .group-title-divider {

@@ -60,4 +60,16 @@ describe('resolveBatchCardProgress', () => {
     expect(Array.from(state.activeDogIds)).toEqual(['dog-1', 'dog-2'])
     expect(Array.from(state.checkedDogIds)).toEqual(['dog-1'])
   })
+
+  it('保留已完成犬只时仍按整张卡显示 1/2', () => {
+    const state = resolveBatchCardProgress([
+      { dogId: 'dog-1', dogName: '泡泡', completed: true },
+      { dogId: 'dog-2', dogName: '豆豆', completed: false },
+    ])
+
+    expect(state.doneCount).toBe(1)
+    expect(state.totalDogs).toBe(2)
+    expect(state.allDone).toBe(false)
+    expect(Array.from(state.checkedDogIds)).toEqual([])
+  })
 })

@@ -596,6 +596,42 @@ describe('task-service', () => {
       expect(result.data.skipped).toBe(1)
       expect(logs).toHaveLength(0)
     })
+
+    it('当天已存在相同健康记录时不应再次创建同日相同待办', async () => {
+      const now = Date.now()
+      seedCollection('health_records', [{
+        _id: 'existing_health_record_1',
+        family_id: familyId,
+        dog_id: 'dog_1',
+        dog_name: '奶盖',
+        type: 'vaccination',
+        date: now - 3600000,
+        details: { vaccine_type: '卫佳5' },
+        created_at: now - 3600000,
+        updated_at: now - 3600000,
+      }])
+      seedCollection('operation_logs', [])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      const result = await taskService.batchCreateManualTasks.call(ctx, {
+        dogs: [{ dog_id: 'dog_1', dog_name: '奶盖' }],
+        type: 'vaccination',
+        due_date: now,
+        details: { vaccine_type: '卫佳5' },
+      })
+
+      const { data: tasks } = await db.collection('tasks').where({ family_id: familyId, dog_id: 'dog_1' }).get()
+      const { data: logs } = await db.collection('operation_logs').where({ family_id: familyId }).get()
+      expect(result.data.created).toBe(0)
+      expect(result.data.skipped).toBe(1)
+      expect(result.data.skippedDogs).toEqual([{
+        dog_id: 'dog_1',
+        dog_name: '奶盖',
+        reason: 'existing_record',
+      }])
+      expect(tasks).toHaveLength(0)
+      expect(logs).toHaveLength(0)
+    })
   })
 
   describe('postponeTask 推迟任务', () => {

@@ -113,6 +113,34 @@ function getTaskVariantKey(task) {
   return task.type || ''
 }
 
+function shouldSkipDuplicateHealthRecordTask(type) {
+  return type === 'vaccination' || type === 'deworming'
+}
+
+async function findDuplicateRecordedDogIdsForTask(familyId, dogIds = [], type, targetTs, details = {}) {
+  if (!shouldSkipDuplicateHealthRecordTask(type) || !dogIds.length || !targetTs) return new Set()
+
+  const dayStart = startOfDay(targetTs)
+  const dayEnd = dayStart + DAY_MS - 1
+  const expectedVariant = getTaskVariantKey({ type, details })
+  const { data: records } = await db.collection('health_records')
+    .where({
+      family_id: familyId,
+      dog_id: dbCmd.in(dogIds),
+      type,
+      date: dbCmd.gte(dayStart).and(dbCmd.lte(dayEnd)),
+    })
+    .get()
+
+  return new Set(
+    (records || [])
+      .filter(record => !record.deleted_at)
+      .filter(record => getTaskVariantKey({ type: record.type, details: record.details || {} }) === expectedVariant)
+      .map(record => record.dog_id)
+      .filter(Boolean),
+  )
+}
+
 function normalizeIllnessCondition(condition) {
   return typeof condition === 'string' ? condition.trim() : ''
 }
@@ -1714,7 +1742,29 @@ module.exports = {
             taskId: null,
             created: 0,
             skipped: 1,
+            skippedDogs: [{ dog_id: data.dog_id, dog_name: data.dog_name || '', reason: 'existing_task' }],
             message: '该犬已有同类型待办',
+          }
+        }
+      }
+    }
+
+    if (data.dog_id && data.type) {
+      const duplicateRecordedDogIds = await findDuplicateRecordedDogIdsForTask(
+        this.familyId,
+        [data.dog_id],
+        data.type,
+        data.due_date,
+        data.details || {},
+      )
+      if (duplicateRecordedDogIds.has(data.dog_id)) {
+        return {
+          data: {
+            taskId: null,
+            created: 0,
+            skipped: 1,
+            skippedDogs: [{ dog_id: data.dog_id, dog_name: data.dog_name || '', reason: 'existing_record' }],
+            message: '该犬今日已记录相同事项',
           }
         }
       }
@@ -1755,6 +1805,7 @@ module.exports = {
         taskId: id,
         created: 1,
         skipped: 0,
+        skippedDogs: [],
         message: '已创建待办',
       }
     }
@@ -1792,14 +1843,32 @@ module.exports = {
       })
       .get()
     const expectedVariant = getTaskVariantKey({ type: data.type, details: data.details || {} })
-    const existingDogIds = new Set(
+    const existingTaskDogIds = new Set(
       (existingTasks || [])
         .filter(task => getTaskVariantKey(task) === expectedVariant)
         .map(task => task.dog_id)
     )
+    const duplicateRecordedDogIds = await findDuplicateRecordedDogIdsForTask(
+      familyId,
+      dogIds,
+      data.type,
+      data.due_date,
+      data.details || {},
+    )
+    const existingDogIds = new Set([
+      ...existingTaskDogIds,
+      ...duplicateRecordedDogIds,
+    ])
 
     // ② 并行创建不重复的任务
     const dogsToCreate = data.dogs.filter(d => !existingDogIds.has(d.dog_id))
+    const skippedDogs = data.dogs
+      .filter(d => existingDogIds.has(d.dog_id))
+      .map((dog) => ({
+        dog_id: dog.dog_id,
+        dog_name: dog.dog_name || '',
+        reason: duplicateRecordedDogIds.has(dog.dog_id) ? 'existing_record' : 'existing_task',
+      }))
 
     const results = await Promise.all(dogsToCreate.map(async (dog, index) => {
       const taskTitle = data.title
@@ -1848,6 +1917,7 @@ module.exports = {
       data: {
         created: results.length,
         skipped: data.dogs.length - results.length,
+        skippedDogs,
         tasks: results.map(({ task }) => task),
         message: results.length > 0 ? '已创建待办' : '已有相同待办',
       },

@@ -338,6 +338,23 @@ function normalizeDogName(dog: Record<string, any> | null | undefined) {
   return dog?.name || dog?.dog_name || '未命名'
 }
 
+function getHealthVariantKey(type: string, details: Record<string, any> = {}) {
+  if (type === 'vaccination') {
+    return `vaccination:${details.vaccine_type || ''}`
+  }
+  if (type === 'deworming') {
+    return `deworming:${details.deworming_type || ''}:${details.drug_name || ''}`
+  }
+  if (type === 'illness') {
+    return `illness:${details.primary_condition || details.condition || ''}`
+  }
+  return type || ''
+}
+
+function shouldSkipDuplicateHealthRecord(type: string) {
+  return type === 'vaccination' || type === 'deworming'
+}
+
 async function getDogsByIds(dogIds: string[]) {
   const uniqueIds = [...new Set(dogIds.filter(Boolean))]
   if (!uniqueIds.length) return []
@@ -1924,7 +1941,53 @@ class LocalSyncRuntime {
     const familyId = getFamilyId(familyIdInput)
     if (!Array.isArray(data.dogs) || !data.dogs.length) throw new Error('请选择犬只')
     const now = getNow()
-    const tasks = data.dogs.map((dog: any) => buildLocalTaskFromManualPayload(
+    const expectedVariant = getHealthVariantKey(data.type, data.details || {})
+    const weekMs = 7 * 86400000
+    const dogIds = data.dogs.map((dog: any) => dog.dog_id).filter(Boolean)
+    const existingTasks = dogIds.length > 0
+      ? await localDb.query<any>('tasks', row =>
+        row.family_id === familyId
+        && row.status === 'pending'
+        && row.type === data.type
+        && dogIds.includes(row.dog_id)
+        && Number(row.due_date || 0) >= Number(data.due_date) - weekMs
+        && Number(row.due_date || 0) <= Number(data.due_date) + weekMs,
+      )
+      : []
+    const duplicateDogIdSet = new Set(
+      (existingTasks || [])
+        .filter(task => getHealthVariantKey(task.type, task.details || {}) === expectedVariant)
+        .map(task => task.dog_id)
+        .filter(Boolean),
+    )
+    const duplicateRecordedDogIdSet = shouldSkipDuplicateHealthRecord(data.type)
+      ? new Set(
+        (await localDb.query<any>('health_records', row =>
+          row.family_id === familyId
+          && !row.deleted_at
+          && row.type === data.type
+          && dogIds.includes(row.dog_id)
+          && startOfDay(Number(row.date || 0)) === startOfDay(Number(data.due_date || 0)),
+        ))
+          .filter(row => getHealthVariantKey(row.type, row.details || {}) === expectedVariant)
+          .map(row => row.dog_id)
+          .filter(Boolean),
+      )
+      : new Set<string>()
+    const duplicateAnyDogIdSet = new Set<string>([
+      ...duplicateDogIdSet,
+      ...duplicateRecordedDogIdSet,
+    ])
+
+    const dogsToCreate = data.dogs.filter((dog: any) => !duplicateAnyDogIdSet.has(dog.dog_id))
+    const skippedDogs = data.dogs
+      .filter((dog: any) => duplicateAnyDogIdSet.has(dog.dog_id))
+      .map((dog: any) => ({
+        dog_id: dog.dog_id,
+        dog_name: dog.dog_name || '',
+        reason: duplicateRecordedDogIdSet.has(dog.dog_id) ? 'existing_record' : 'existing_task',
+      }))
+    const tasks = dogsToCreate.map((dog: any) => buildLocalTaskFromManualPayload(
       familyId,
       dog,
       data,
@@ -1936,19 +1999,22 @@ class LocalSyncRuntime {
       clientEntityIds: { tasks: tasks.map(task => task._id) },
     })
 
-    await localDb.upsertRows('tasks', tasks)
-    await this.enqueueMutation(
-      HOME_MUTATION_TYPES.BATCH_CREATE_TASKS,
-      familyId,
-      { ...data, _sync: syncMeta },
-      ['tasks'],
-      syncMeta,
-    )
+    if (tasks.length > 0) {
+      await localDb.upsertRows('tasks', tasks)
+      await this.enqueueMutation(
+        HOME_MUTATION_TYPES.BATCH_CREATE_TASKS,
+        familyId,
+        { ...data, dogs: dogsToCreate, _sync: syncMeta },
+        ['tasks'],
+        syncMeta,
+      )
+    }
 
     return {
       data: {
         created: tasks.length,
-        skipped: 0,
+        skipped: skippedDogs.length,
+        skippedDogs,
         tasks,
         message: tasks.length > 0 ? '已创建待办' : '已有相同待办',
       },
@@ -1964,13 +2030,51 @@ class LocalSyncRuntime {
   async batchAddHealthRecordsLocally(familyIdInput: string, data: Record<string, any>) {
     const familyId = getFamilyId(familyIdInput)
     if (!Array.isArray(data.dog_ids) || !data.dog_ids.length) throw new Error('请选择犬只')
+    const uniqueDogIds = [...new Set(data.dog_ids)]
     const dogs = await getDogsByIds(data.dog_ids)
     if (dogs.length !== [...new Set(data.dog_ids)].length) throw new Error('部分犬只未同步到本地，请联网刷新一次')
 
     const now = getNow()
+    const duplicateCandidates = shouldSkipDuplicateHealthRecord(data.type)
+      ? await localDb.query<any>('health_records', row =>
+        row.family_id === familyId
+        && !row.deleted_at
+        && row.type === data.type
+        && uniqueDogIds.includes(row.dog_id)
+        && startOfDay(Number(row.date || 0)) === startOfDay(Number(data.date || 0)),
+      )
+      : []
+    const expectedVariant = getHealthVariantKey(data.type, data.details || {})
+    const duplicateDogIdSet = new Set(
+      (duplicateCandidates || [])
+        .filter(row => getHealthVariantKey(row.type, row.details || {}) === expectedVariant)
+        .map(row => row.dog_id)
+        .filter(Boolean),
+    )
+    const indexedDogs = dogs.map((dog, index) => ({ dog, index }))
+    const dogsToCreate = indexedDogs.filter(({ dog }) => !duplicateDogIdSet.has(dog._id))
+    const skippedDogs = indexedDogs
+      .filter(({ dog }) => duplicateDogIdSet.has(dog._id))
+      .map(({ dog }) => ({ dog_id: dog._id, dog_name: normalizeDogName(dog) }))
+
+    if (dogsToCreate.length === 0) {
+      return {
+        data: {
+          count: 0,
+          skipped: skippedDogs.length,
+          skippedDogs,
+          records: [],
+          completedTasks: [],
+        },
+        ...buildLocalAck(buildSyncMeta({}, {
+          clientMutationId: createClientMutationId(HOME_MUTATION_TYPES.CREATE_HEALTH_RECORDS),
+        })),
+      }
+    }
+
     const totalCost = data.cost || null
-    const perDogCost = totalCost && dogs.length > 1 ? Math.round(totalCost / dogs.length * 100) / 100 : totalCost
-    const records = dogs.map(dog => buildLocalHealthRecord(
+    const perDogCost = totalCost && dogsToCreate.length > 1 ? Math.round(totalCost / dogsToCreate.length * 100) / 100 : totalCost
+    const records = dogsToCreate.map(({ dog }) => buildLocalHealthRecord(
       familyId,
       dog,
       data,
@@ -1979,7 +2083,7 @@ class LocalSyncRuntime {
       perDogCost && perDogCost > 0 ? perDogCost : null,
     ))
     const expenseRows = perDogCost && perDogCost > 0
-      ? dogs.map((dog, index) => buildLocalHealthExpense(
+      ? dogsToCreate.map(({ dog }, index) => buildLocalHealthExpense(
         familyId,
         dog,
         data,
@@ -1999,10 +2103,11 @@ class LocalSyncRuntime {
       task.family_id === familyId
       && task.status === 'pending'
       && task.type === data.type
-      && data.dog_ids.includes(task.dog_id)
+      && dogsToCreate.some(({ dog }) => dog._id === task.dog_id)
       && (sourceTaskIdSet.size === 0 || sourceTaskIdSet.has(task._id)),
     )
     const completedTaskIds = pendingTasks.map(task => task._id)
+    const createdDogIds = dogsToCreate.map(({ dog }) => dog._id)
     const syncMeta = buildSyncMeta(
       pendingTasks.reduce<Record<string, number>>((acc, task) => {
         acc[task._id] = Number(task.version || 0)
@@ -2032,7 +2137,7 @@ class LocalSyncRuntime {
     await this.enqueueMutation(
       HOME_MUTATION_TYPES.CREATE_HEALTH_RECORDS,
       familyId,
-      { ...data, _sync: syncMeta },
+      { ...data, dog_ids: createdDogIds, _sync: syncMeta },
       ['health_records', 'tasks', 'expenses'],
       syncMeta,
     )
@@ -2040,6 +2145,8 @@ class LocalSyncRuntime {
     return {
       data: {
         count: records.length,
+        skipped: skippedDogs.length,
+        skippedDogs,
         records: records.map(record => ({ recordId: record._id, dog_id: record.dog_id })),
         completedTasks: pendingTasks,
       },

@@ -40,6 +40,11 @@ interface SimpleRecommendation {
   url: string
 }
 
+interface PersistedBatchCardProgress {
+  dogs: any[]
+  completedDogIds: string[]
+}
+
 const STORAGE_KEY = 'recent_actions'
 
 function getRecommendationDedupKey(url: string): string {
@@ -53,13 +58,14 @@ export const useTaskStore = defineStore('tasks', {
   state: () => ({
     cards: [] as TaskCard[],
     counts: { today: 0, week: 0, month30: 0, hasOverdue: false },
+    batchCardProgress: {} as Record<string, PersistedBatchCardProgress>,
     pendingHomeTarget: '' as '' | HomeCardFocusTarget,
     loaded: false,
   }),
 
   // @ts-ignore
   unistorage: {
-    paths: ['cards', 'counts'],
+    paths: ['cards', 'counts', 'batchCardProgress'],
   },
 
   actions: {

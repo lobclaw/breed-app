@@ -982,6 +982,27 @@ function getHealthHomeAnchorKey(type: string, detailPayload: Record<string, any>
   return ''
 }
 
+function summarizeDogNames(names: string[] = []) {
+  const clean = [...new Set(names.map(name => String(name || '').trim()).filter(Boolean))]
+  if (clean.length <= 2) return clean.join('、')
+  return `${clean.slice(0, 2).join('、')}等${clean.length}只`
+}
+
+function showSkippedDuplicateToast(
+  skippedDogs: Array<{ dog_name?: string; reason?: string }> = [],
+  kind: 'record' | 'task' = 'record',
+) {
+  if (!skippedDogs.length) return
+  const names = summarizeDogNames(skippedDogs.map(item => item.dog_name || ''))
+  if (!names) return
+  uni.showToast({
+    title: kind === 'task'
+      ? `${names}今天已有相同事项，已跳过`
+      : `${names}今日已有相同记录，已跳过`,
+    icon: 'none',
+  })
+}
+
 async function handleDuplicateIllnessIfNeeded() {
   if (resolvedType.value !== 'illness') return false
 
@@ -1071,6 +1092,11 @@ async function submitCreateRecord() {
 
     const created = result?.data?.created || 0
     const skipped = result?.data?.skipped || 0
+    const skippedDogs = result?.data?.skippedDogs || []
+    if (created === 0 && skipped > 0) {
+      showSkippedDuplicateToast(skippedDogs, 'task')
+      return false
+    }
     markSuccess()
     queueSubmitFeedback({
       message: buildTaskFeedbackMessage(created, skipped),
@@ -1081,7 +1107,7 @@ async function submitCreateRecord() {
       skippedCount: skipped,
       refreshHome: true,
     })
-    return
+    return true
   }
 
   const payload: Record<string, any> = {
@@ -1100,9 +1126,16 @@ async function submitCreateRecord() {
   }
 
   const result = await localSyncRuntime.batchAddHealthRecordsLocally(currentFamily.value?._id || '', payload)
+  const savedCount = result?.data?.count || 0
+  const skippedCount = result?.data?.skipped || 0
+  const skippedDogs = result?.data?.skippedDogs || []
   const completedTasks = result?.data?.completedTasks || []
   const completedTaskIds = completedTasks.map((task: any) => task._id).filter(Boolean)
   const suppressTaskIds = sourceTaskIds.value.length > 0 ? sourceTaskIds.value : completedTaskIds
+  if (savedCount === 0 && skippedCount > 0) {
+    showSkippedDuplicateToast(skippedDogs, 'record')
+    return false
+  }
 
   if (resolvedType.value === 'illness') {
     const illnessLinks = buildIllnessRouteLinks(result?.data?.records || [], detailPayload)
@@ -1114,16 +1147,18 @@ async function submitCreateRecord() {
 
   markSuccess()
   queueSubmitFeedback({
-    message: buildRecordFeedbackMessage(selectedDogs.value.length, completedTasks.length),
+    message: buildRecordFeedbackMessage(savedCount, completedTasks.length, skippedCount),
     homeSection: 'reminders',
     homeAnchorKey: getHealthHomeAnchorKey(resolvedType.value, detailPayload, isTodo.value),
     completedTaskIds,
     suppressTaskIds,
+    skippedCount,
     removeBatchCard: sourceTaskIds.value.length > 0
       && completedTaskIds.length > 0
       && completedTaskIds.length === sourceTaskIds.value.length,
     refreshHome: true,
   })
+  return true
 }
 
 async function submitEditRecord() {
@@ -1160,7 +1195,11 @@ async function submit() {
       return
     }
 
-    await submitCreateRecord()
+    const created = await submitCreateRecord()
+    if (!created) {
+      resetSubmitState()
+      return
+    }
 
     if (resolvedType.value === 'illness' && details.treatment_status !== '已康复') {
       showMedPrompt.value = true
