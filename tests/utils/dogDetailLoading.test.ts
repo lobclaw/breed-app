@@ -20,7 +20,7 @@ describe('dog detail loading contract', () => {
     expect(source).toContain(`const pageLoadStage = ref<'bootstrapping' | 'ready'>('bootstrapping')`)
     expect(source).toContain('const healthRecordsLoaded = ref(false)')
     expect(source).toContain('const cyclesLoaded = ref(false)')
-    expect(source).toContain('const overviewHydrating = computed(() => !!dog.value && (!healthRecordsLoaded.value || showTertiaryStatSkeleton.value))')
+    expect(source).toContain('const overviewHydrating = computed(() => !!dog.value && !isExternalSireDetail.value && (!healthRecordsLoaded.value || showTertiaryStatSkeleton.value))')
     expect(source).toContain("const showBootstrapSkeleton = !silent && !hasLoadedOnce")
     expect(source).toContain("pageLoadStage.value = 'bootstrapping'")
     expect(source).toContain("pageLoadStage.value = 'ready'")
@@ -29,13 +29,27 @@ describe('dog detail loading contract', () => {
     expect(source).toContain('getLocalDogFinanceSummary')
   })
 
+  it('应让出生当天的详情页年龄最低显示为 1 天', () => {
+    expect(source).toContain('const days = Math.max(1, Math.floor((Date.now() - birthTs) / 86400000))')
+    expect(source).not.toContain('const days = Math.floor((Date.now() - birthTs) / 86400000)')
+  })
+
+  it('应隐藏默认正常状态，只展示需要关注的当前状态', () => {
+    expect(source).toContain("const displayStatuses = computed(() => isExternalSireDetail.value ? [] : statuses.value.filter((status: any) => status?.type !== '正常'))")
+    expect(source).toContain('v-if="displayStatuses.length > 0" class="dog-detail__section"')
+    expect(source).toContain('v-for="(s, idx) in displayStatuses"')
+    expect(source).not.toContain('v-if="!isExternalSireDetail && statuses.length > 0"')
+    expect(source).not.toContain('v-for="(s, idx) in statuses"')
+  })
+
   it('应让概览与各 tab 在数据未回齐时使用局部骨架而非提前空态', () => {
     expect(source).toContain('v-if="showTertiaryStatSkeleton" class="dog-detail__stat-value-skeleton dog-detail__skeleton-shimmer"')
     expect(source).toContain('v-if="!healthRecordsLoaded" class="dog-detail__rec-list dog-detail__rec-list--skeleton"')
     expect(source).toContain('v-if="!breedingTabLoaded" class="dog-detail__tab-loading"')
     expect(source).toContain('v-if="!healthTabLoaded" class="dog-detail__tab-loading"')
     expect(source).toContain('v-if="!financeLoaded" class="dog-detail__tab-loading"')
-    expect(source).toContain('const breedingTabLoaded = computed(() => cyclesLoaded.value && littersLoaded.value)')
+    expect(source).toContain('const externalSireMatingRecordsLoaded = ref(false)')
+    expect(source).toContain('const breedingTabLoaded = computed(() => cyclesLoaded.value && littersLoaded.value && (!isExternalSireDetail.value || externalSireMatingRecordsLoaded.value))')
     expect(source).toContain('const healthTabLoaded = computed(() => healthRecordsLoaded.value && medicationHistoryLoaded.value)')
   })
 

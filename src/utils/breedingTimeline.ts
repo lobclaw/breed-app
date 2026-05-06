@@ -227,7 +227,7 @@ function buildBreedingTimelineUpcomingSummary(
     const follicleRecord = getLatestBreedingRecord(records, 'follicle_check')
     if (typeof follicleRecord?.date === 'number') {
       const delta = Math.max(1, Math.floor((startOfDay(now) - startOfDay(follicleRecord.date)) / DAY_MS) + 1)
-      return `卵泡检查后第${delta}天`
+      return `卵检后第${delta}天`
     }
     return '建议尽快配种'
   }

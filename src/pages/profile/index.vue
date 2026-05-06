@@ -389,8 +389,9 @@ async function loadStats() {
   const litters = result.litters || []
   const sales = result.sales || []
   const activeAndSoldDogs = [...activeDogs, ...soldDogs]
+  const ownedActiveAndSoldDogs = activeAndSoldDogs.filter(dog => dog.role !== '外部种公')
 
-  stats.dogCount = activeAndSoldDogs.length
+  stats.dogCount = ownedActiveAndSoldDogs.length
   stats.forSaleCount = activeDogs.filter(dog => dog.disposition === '待售').length
   stats.soldCount = Math.max(
     soldDogs.length,

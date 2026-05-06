@@ -234,8 +234,14 @@
 
         <!-- 窝信息 -->
         <template v-if="litter">
-          <BSectionLabel title="窝信息" color="green" />
-          <BCard color="green" @click="goToLitter(litter._id)">
+          <view class="litter-section-head">
+            <BSectionLabel title="窝信息" color="green" />
+            <view class="litter-section-head__action" @click="goToLitter(litter._id)">
+              <text class="litter-section-head__action-text">查看详情</text>
+              <text class="material-icons-round litter-section-head__action-icon">chevron_right</text>
+            </view>
+          </view>
+          <BCard class="litter-link-card" color="green" @click="goToLitter(litter._id)">
             <view class="info-rows">
               <view class="info-row">
                 <text class="info-label">生产日期</text>
@@ -255,6 +261,10 @@
                   {{ litter.weaned_at ? '已断奶' : '未断奶' }}
                 </text>
               </view>
+            </view>
+            <view class="litter-link-card__hint">
+              <text class="litter-link-card__hint-text">进入窝详情</text>
+              <text class="material-icons-round litter-link-card__hint-icon">arrow_forward</text>
             </view>
           </BCard>
         </template>
@@ -897,6 +907,63 @@ onShow(() => {
   display: flex;
   flex-direction: column;
   gap: var(--space-card-gap);
+}
+
+.litter-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: -6px;
+
+  :deep(.b-section-label) {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+.litter-section-head__action {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 2px 6px 8px;
+  flex-shrink: 0;
+}
+
+.litter-section-head__action-text {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.litter-section-head__action-icon {
+  font-size: 16px;
+  color: var(--primary);
+}
+
+.litter-link-card {
+  border-right: 1px solid rgba(61, 168, 160, 0.18);
+}
+
+.litter-link-card__hint {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(216, 203, 189, 0.32);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.litter-link-card__hint-text {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--green);
+}
+
+.litter-link-card__hint-icon {
+  font-size: 15px;
+  color: var(--green);
 }
 
 /* 母犬信息行 */

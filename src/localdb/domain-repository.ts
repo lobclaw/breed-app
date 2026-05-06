@@ -246,6 +246,11 @@ function formatMedicationFrequencyLabel(frequency: unknown) {
   return `每日${count}次`
 }
 
+function getMedicationStartTs(task: any) {
+  const startTs = Number(task?.actual_start_date || task?.start_date || task?.created_at || 0)
+  return Number.isFinite(startTs) && startTs > 0 ? startTs : null
+}
+
 function getMedicationStatusCompletionSummary(task: any) {
   const frequency = Math.max(1, Number(task?.frequency) || 1)
   const durationDays = Math.max(1, Number(task?.duration_days) || 1)
@@ -271,6 +276,22 @@ function getMedicationStatusCompletionSummary(task: any) {
     completedDoseCount,
     totalDoseCount: durationDays * frequency,
     frequency,
+  }
+}
+
+function getMedicationTodayDoseSummary(task: any, nowTs = Date.now()) {
+  const frequency = Math.max(1, Number(task?.frequency) || 1)
+  const { currentDay } = getMedicationTaskProgress(task, nowTs)
+  const todayTs = startOfDay(nowTs)
+  const completedDates = new Set(Array.isArray(task?.completed_dates) ? task.completed_dates.map((item: unknown) => startOfDay(Number(item))) : [])
+  const dailyDoses = task?.daily_doses || {}
+  const completedCount = completedDates.has(todayTs)
+    ? frequency
+    : Math.min(Math.max(0, Number(dailyDoses[String(currentDay)]) || 0), frequency)
+
+  return {
+    completedCount,
+    requiredCount: frequency,
   }
 }
 
@@ -305,12 +326,14 @@ function buildDetailMedicationStatuses(tasks: any[] = [], nowTs = Date.now(), ac
   return Array.from(taskByDrug.values()).map((task) => {
     const { currentDay, totalDays } = getMedicationTaskProgress(task, nowTs)
     const relationType = buildMedicationRelationType(task, activeIllnesses)
-    const { completedDoseCount, totalDoseCount, frequency } = getMedicationStatusCompletionSummary(task)
+    const { frequency } = getMedicationStatusCompletionSummary(task)
+    const todayDose = getMedicationTodayDoseSummary(task, nowTs)
     const drugName = task?.drug_name || task?.details?.drug_name || '用药'
     const detail = [
       drugName,
       formatMedicationDose(task),
       formatMedicationMethod(task?.method),
+      formatMedicationFrequencyLabel(frequency),
     ].filter(Boolean).join(' · ')
 
     return {
@@ -324,8 +347,8 @@ function buildDetailMedicationStatuses(tasks: any[] = [], nowTs = Date.now(), ac
         : undefined,
       meta: [
         { icon: 'link', text: getMedicationRelationLabel(relationType) },
-        { icon: 'schedule', text: formatMedicationFrequencyLabel(frequency) },
-        { icon: 'check_circle', text: `已执行 ${completedDoseCount}/${totalDoseCount} 次` },
+        { icon: 'check_circle', text: `今日完成 ${todayDose.completedCount}/${todayDose.requiredCount} 次` },
+        ...(getMedicationStartTs(task) ? [{ icon: 'event', text: `开始于 ${formatMonthDay(getMedicationStartTs(task) || 0)}` }] : []),
       ],
       activityTs: task?.updated_at || task?.created_at || 0,
     } as DeriveStatus
@@ -343,9 +366,64 @@ function getLatestMatingRecord(cycleId: string, breedingRecords: any[] = []) {
     .sort((left, right) => getBreedingRecordTs(right) - getBreedingRecordTs(left))[0] || null
 }
 
+function getLatestBreedingRecordByType(cycleId: string, breedingRecords: any[] = [], type: string) {
+  if (!cycleId) return null
+  return [...breedingRecords]
+    .filter(record => record?.cycle_id === cycleId && record?.type === type && !record?.deleted_at)
+    .sort((left, right) => getBreedingRecordTs(right) - getBreedingRecordTs(left))[0] || null
+}
+
 function getMatingSireName(record: any) {
   const details = record?.details || {}
   return details.sire_name || details.male_name || record?.sire_name || ''
+}
+
+function normalizeSireLookupName(value?: string | null) {
+  return String(value || '').trim()
+}
+
+function getMatingSireId(record: any) {
+  const details = record?.details || {}
+  return String(details.sire_id || record?.sire_id || '').trim()
+}
+
+function doesSireRefMatch(source: Record<string, any> | null | undefined, sireId: string, sireName: string) {
+  if (!source) return false
+  const sourceSireId = String(source.sire_id || '').trim()
+  const sourceSireName = normalizeSireLookupName(source.sire_name)
+  return (!!sireId && sourceSireId === sireId)
+    || (!!sireName && sourceSireName === sireName)
+}
+
+function doesMatingRecordSireMatch(record: Record<string, any>, sireId: string, sireName: string) {
+  const recordSireId = getMatingSireId(record)
+  const recordSireName = normalizeSireLookupName(getMatingSireName(record))
+  return (!!sireId && recordSireId === sireId)
+    || (!!sireName && recordSireName === sireName)
+}
+
+async function collectLocalSireCycleIds(familyId: string, sireId: string, sireName: string) {
+  if (!familyId || (!sireId && !sireName)) return new Set<string>()
+
+  const [cycles, matingRecords] = await Promise.all([
+    localDb.query<any>('breeding_cycles', row =>
+      row.family_id === familyId
+      && !row.deleted_at
+      && doesSireRefMatch(row, sireId, sireName),
+    ),
+    localDb.query<any>('breeding_records', row =>
+      row.family_id === familyId
+      && row.type === 'mating'
+      && !row.deleted_at
+      && !!row.cycle_id
+      && doesMatingRecordSireMatch(row, sireId, sireName),
+    ),
+  ])
+
+  return new Set([
+    ...cycles.map(row => String(row._id || '')).filter(Boolean),
+    ...matingRecords.map(row => String(row.cycle_id || '')).filter(Boolean),
+  ])
 }
 
 function getMatingNumberText(record: any) {
@@ -360,13 +438,16 @@ function buildDetailBreedingStatuses(cycles: any[] = [], activeLitters: any[] = 
     .sort((left, right) => Number(right.updated_at || right.created_at || 0) - Number(left.updated_at || left.created_at || 0))[0]
 
   if (activeCycle?.status === '发情中') {
-    const startTs = activeCycle.start_date || activeCycle.created_at || now
-    const day = getBeijingElapsedDays(startTs, now) + 1
+    const latestFollicle = getLatestBreedingRecordByType(activeCycle._id, breedingRecords, 'follicle_check')
+    const latestMating = getLatestMatingRecord(activeCycle._id, breedingRecords)
+    const follicleDay = latestFollicle?.date && !latestMating
+      ? Math.max(1, getBeijingElapsedDays(Number(latestFollicle.date), now) + 1)
+      : null
     return [{
       type: '发情中',
       cycleId: activeCycle._id,
       activityTs: activeCycle.updated_at || activeCycle.created_at || 0,
-      meta: [{ icon: 'schedule', text: `第${day}天` }],
+      meta: follicleDay ? [{ icon: 'schedule', text: `卵检后第${follicleDay}天` }] : [],
     }]
   }
 
@@ -585,7 +666,7 @@ export async function getLocalDogDetail(familyId: string, dogId: string): Promis
     localDb.query<BreedingRecord & { deleted_at?: number | null }>('breeding_records', record =>
       record.family_id === familyId
       && record.dog_id === dogId
-      && record.type === 'mating'
+      && ['follicle_check', 'mating'].includes(record.type)
       && !record.deleted_at,
     ),
   ])
@@ -681,19 +762,37 @@ function formatDate(ts?: number): string {
   return `${y}-${m}-${d}`
 }
 
+function formatMonthDay(ts?: number): string {
+  if (!ts) return '--'
+  const date = new Date(ts)
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${m}月${d}日`
+}
+
 export async function listLocalLitters(
   familyId: string,
   options: {
     activeOnly?: boolean
     damId?: string
+    sireId?: string
+    sireName?: string
   } = {},
 ) {
   if (!familyId) return [] as Array<Litter & ReturnType<typeof formatLitterProjection>>
+  const normalizedSireId = String(options.sireId || '').trim()
+  const normalizedSireName = normalizeSireLookupName(options.sireName)
+  const sireCycleIds = await collectLocalSireCycleIds(familyId, normalizedSireId, normalizedSireName)
   const rows = await localDb.query<any>('litters', (row) => {
     if (row.family_id !== familyId) return false
     if (row.deleted_at) return false
     if (options.activeOnly && row.weaned_at) return false
     if (options.damId && row.dam_id !== options.damId) return false
+    if (normalizedSireId || normalizedSireName) {
+      const matchedByLitter = doesSireRefMatch(row, normalizedSireId, normalizedSireName)
+      const matchedByCycle = !!row.cycle_id && sireCycleIds.has(row.cycle_id)
+      if (!matchedByLitter && !matchedByCycle) return false
+    }
     return true
   }, {
     sort: sortByRecent,
@@ -722,14 +821,24 @@ export async function listLocalBreedingCycles(
   familyId: string,
   options: {
     damId?: string
+    sireId?: string
+    sireName?: string
     includeClosed?: boolean
   } = {},
 ) {
   if (!familyId) return [] as Array<BreedingCycle & ReturnType<typeof buildCycleProjection>>
+  const normalizedSireId = String(options.sireId || '').trim()
+  const normalizedSireName = normalizeSireLookupName(options.sireName)
+  const sireCycleIds = await collectLocalSireCycleIds(familyId, normalizedSireId, normalizedSireName)
   const rows = await localDb.query<any>('breeding_cycles', (row) => {
     if (row.family_id !== familyId) return false
     if (row.deleted_at) return false
     if (options.damId && row.dam_id !== options.damId) return false
+    if (normalizedSireId || normalizedSireName) {
+      const matchedByCycle = doesSireRefMatch(row, normalizedSireId, normalizedSireName)
+      const matchedByRecord = sireCycleIds.has(row._id)
+      if (!matchedByCycle && !matchedByRecord) return false
+    }
     if (!options.includeClosed && ['失败', '放弃'].includes(row.status)) return false
     return true
   }, {
@@ -740,6 +849,20 @@ export async function listLocalBreedingCycles(
     },
   })
   return rows.map(row => buildCycleProjection(row)) as Array<BreedingCycle & ReturnType<typeof buildCycleProjection>>
+}
+
+export async function listLocalMatingRecordsBySire(familyId: string, input: { sireId?: string; sireName?: string } = {}) {
+  const sireId = String(input.sireId || '').trim()
+  const sireName = String(input.sireName || '').trim()
+  if (!familyId || (!sireId && !sireName)) return []
+
+  return localDb.query<BreedingRecord & { deleted_at?: number | null }>('breeding_records', row =>
+    row.family_id === familyId
+    && row.type === 'mating'
+    && !row.deleted_at
+    && doesMatingRecordSireMatch(row, sireId, sireName),
+    { sort: sortByRecent },
+  )
 }
 
 export async function getLocalBreedingCycleDetail(familyId: string, cycleId: string): Promise<BreedingCycleDetailResponse | null> {
@@ -919,6 +1042,21 @@ export async function listLocalLittersByDam(familyId: string, damId: string) {
   const litters = await listLocalLitters(familyId, { damId })
   if (!litters.length) return []
 
+  return hydrateLittersWithPupStats(familyId, litters)
+}
+
+export async function listLocalLittersBySire(familyId: string, input: { sireId?: string; sireName?: string } = {}) {
+  const sireId = String(input.sireId || '').trim()
+  const sireName = String(input.sireName || '').trim()
+  if (!familyId || (!sireId && !sireName)) return []
+
+  const litters = await listLocalLitters(familyId, { sireId, sireName })
+  if (!litters.length) return []
+
+  return hydrateLittersWithPupStats(familyId, litters)
+}
+
+async function hydrateLittersWithPupStats(familyId: string, litters: Array<Record<string, any>>) {
   const litterIds = litters.map(item => item._id)
   const cycleIds = Array.from(new Set(litters.map(item => item.cycle_id).filter(Boolean)))
   const [puppies, cycles, matingRecords] = await Promise.all([

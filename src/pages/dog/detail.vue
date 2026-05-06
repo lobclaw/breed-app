@@ -43,7 +43,7 @@
 
     <view class="dog-detail__tab-content">
       <view class="dog-detail__pane">
-        <view class="dog-detail__section">
+        <view v-if="!isExternalSireDetail" class="dog-detail__section">
           <view class="dog-detail__sec dog-detail__sec--rose">
             <text class="dog-detail__sec-text">当前状态</text>
           </view>
@@ -66,7 +66,7 @@
           </view>
         </view>
 
-        <view class="dog-detail__section">
+        <view v-if="!isExternalSireDetail" class="dog-detail__section">
           <view class="dog-detail__sec dog-detail__sec--green">
             <text class="dog-detail__sec-text">最近健康记录</text>
           </view>
@@ -110,7 +110,7 @@
       >
         {{ dog.name || '未命名' }}
       </text>
-      <view class="dog-detail__topbar-cta" @click="addRecord">
+      <view v-if="!isExternalSireDetail" class="dog-detail__topbar-cta" @click="addRecord">
         <text class="material-icons-round dog-detail__topbar-cta-icon">add</text>
         <text class="dog-detail__topbar-cta-text">添加记录</text>
       </view>
@@ -134,7 +134,7 @@
         <view class="dog-detail__hero-tags">
           <!-- 活跃状态标签（带箭头，可点击） -->
           <view
-            v-for="(s, idx) in statuses"
+            v-for="(s, idx) in displayStatuses"
             :key="'status-' + idx"
             class="dog-detail__hero-tag"
             :class="statusToneClass(s.type, 'hero')"
@@ -152,7 +152,7 @@
     </view>
 
     <!-- ==================== 快捷统计条 ==================== -->
-    <view class="dog-detail__stats">
+    <view v-if="!isExternalSireDetail" class="dog-detail__stats">
       <view class="dog-detail__stat-item">
         <text class="material-icons-round dog-detail__stat-icon">cake</text>
         <text class="dog-detail__stat-value">{{ dog.birth_date ? formatAge(dog.birth_date) : '未知' }}</text>
@@ -168,6 +168,23 @@
         <view v-if="showTertiaryStatSkeleton" class="dog-detail__stat-value-skeleton dog-detail__skeleton-shimmer" />
         <text v-else class="dog-detail__stat-value">{{ tertiaryStatValue }}</text>
         <text class="dog-detail__stat-label">{{ tertiaryStatLabel }}</text>
+      </view>
+    </view>
+    <view v-else class="dog-detail__stats">
+      <view class="dog-detail__stat-item">
+        <text class="material-icons-round dog-detail__stat-icon">handshake</text>
+        <text class="dog-detail__stat-value">{{ externalSireCycleCount }}</text>
+        <text class="dog-detail__stat-label">使用</text>
+      </view>
+      <view class="dog-detail__stat-item">
+        <text class="material-icons-round dog-detail__stat-icon">child_friendly</text>
+        <text class="dog-detail__stat-value">{{ externalSireLitterCount }}</text>
+        <text class="dog-detail__stat-label">成功</text>
+      </view>
+      <view class="dog-detail__stat-item">
+        <text class="material-icons-round dog-detail__stat-icon">event</text>
+        <text class="dog-detail__stat-value">{{ externalSireLastMatingText }}</text>
+        <text class="dog-detail__stat-label">最近配种</text>
       </view>
     </view>
 
@@ -191,14 +208,14 @@
       <view v-if="activeTab === 'overview'" class="dog-detail__pane">
 
         <!-- 当前状态 -->
-        <view v-if="statuses.length > 0" class="dog-detail__section" :class="{ 'dog-detail__section--hydrating': overviewHydrating }">
+        <view v-if="displayStatuses.length > 0" class="dog-detail__section" :class="{ 'dog-detail__section--hydrating': overviewHydrating }">
           <view class="dog-detail__sec dog-detail__sec--rose">
             <text class="dog-detail__sec-text">当前状态</text>
           </view>
 
           <view class="dog-detail__status-merged">
             <view
-              v-for="(s, idx) in statuses"
+              v-for="(s, idx) in displayStatuses"
               :key="'st-' + idx"
               class="dog-detail__status-row"
               :class="statusToneClass(s.type, 'row')"
@@ -239,7 +256,7 @@
         </view>
 
         <!-- 最近健康记录 -->
-        <view class="dog-detail__section">
+        <view v-if="!isExternalSireDetail" class="dog-detail__section">
           <view class="dog-detail__sec dog-detail__sec--green">
             <text class="dog-detail__sec-text">最近健康记录</text>
             <text class="dog-detail__sec-link" @click="activeTab = 'health'">查看全部</text>
@@ -289,7 +306,65 @@
         </view>
 
         <!-- 详细信息（可折叠） -->
-        <view class="dog-detail__section">
+        <view v-if="isExternalSireDetail" class="dog-detail__section">
+          <view class="dog-detail__sec dog-detail__sec--blue">
+            <text class="dog-detail__sec-text">外部种公档案</text>
+          </view>
+          <view class="dog-detail__external-card">
+            <view class="dog-detail__info-row">
+              <text class="dog-detail__info-row-label">主人信息</text>
+              <text class="dog-detail__info-row-value">{{ dog.owner_info || '—' }}</text>
+            </view>
+            <view class="dog-detail__info-row">
+              <text class="dog-detail__info-row-label">品种</text>
+              <text class="dog-detail__info-row-value">{{ dog.breed || '马尔济斯' }}</text>
+            </view>
+            <view v-if="dog.birth_date" class="dog-detail__info-row">
+              <text class="dog-detail__info-row-label">出生日期</text>
+              <text class="dog-detail__info-row-value">{{ formatDate(dog.birth_date) }}</text>
+            </view>
+            <view v-if="dog.disposition_notes" class="dog-detail__info-row">
+              <text class="dog-detail__info-row-label">备注</text>
+              <text class="dog-detail__info-row-value">{{ dog.disposition_notes }}</text>
+            </view>
+          </view>
+        </view>
+
+        <view v-if="isExternalSireDetail" class="dog-detail__section">
+          <view class="dog-detail__sec dog-detail__sec--teal">
+            <text class="dog-detail__sec-text">最近使用</text>
+            <text class="dog-detail__sec-link" @click="activeTab = 'breeding'">查看全部</text>
+          </view>
+          <view v-if="externalSireUseCards.length > 0" class="dog-detail__cycle-list">
+            <view
+              v-for="card in externalSireUseCards.slice(0, 3)"
+              :key="card.key"
+              class="dog-detail__cycle-card"
+              @click="openExternalSireUseCard(card)"
+            >
+              <view class="dog-detail__rec-icon dog-detail__rec-icon--rose">
+                <text class="material-icons-round">pets</text>
+              </view>
+              <view class="dog-detail__cycle-body">
+                <text class="dog-detail__cycle-title">{{ card.title }}</text>
+                <text v-if="card.meta" class="dog-detail__cycle-meta">{{ card.meta }}</text>
+                <text v-if="card.result" class="dog-detail__cycle-result">{{ card.result }}</text>
+              </view>
+              <view v-if="card.tagText" class="dog-detail__rec-tag" :class="`dog-detail__rec-tag--${card.tagTone}`">
+                <text class="dog-detail__rec-tag-text">{{ card.tagText }}</text>
+              </view>
+              <text class="material-icons-round dog-detail__rec-chevron">chevron_right</text>
+            </view>
+          </view>
+          <BEmpty
+            v-else
+            icon="handshake"
+            title="暂无使用记录"
+            description="作为种公参与的配种周期会显示在这里"
+          />
+        </view>
+
+        <view v-if="!isExternalSireDetail" class="dog-detail__section">
           <view class="dog-detail__collapse-head" :class="{ 'dog-detail__collapse-head--open': infoExpanded }" @click="infoExpanded = !infoExpanded">
             <view class="dog-detail__collapse-head-text">
               <text class="material-icons-round">info_outline</text>
@@ -351,6 +426,45 @@
         <view v-if="!breedingTabLoaded" class="dog-detail__tab-loading">
           <BSkeleton :rows="3" />
         </view>
+        <template v-else-if="isExternalSireDetail">
+          <BEmpty
+            v-if="externalSireUseCards.length === 0"
+            icon="handshake"
+            title="暂无使用记录"
+            description="作为种公参与的使用记录会显示在这里"
+          />
+          <view v-else class="dog-detail__breeding-stack">
+            <view class="dog-detail__breeding-group">
+              <view class="dog-detail__sec dog-detail__sec--blue">
+                <text class="dog-detail__sec-text">使用记录</text>
+                <view class="dog-detail__sec-badge">
+                  <text class="dog-detail__sec-badge-text">{{ externalSireUseCards.length }}次</text>
+                </view>
+              </view>
+              <view class="dog-detail__cycle-list">
+                <view
+                  v-for="card in externalSireUseCards"
+                  :key="card.key"
+                  class="dog-detail__cycle-card"
+                  @click="openExternalSireUseCard(card)"
+                >
+                  <view class="dog-detail__rec-icon dog-detail__rec-icon--rose">
+                    <text class="material-icons-round">pets</text>
+                  </view>
+                  <view class="dog-detail__cycle-body">
+                    <text class="dog-detail__cycle-title">{{ card.title }}</text>
+                    <text v-if="card.meta" class="dog-detail__cycle-meta">{{ card.meta }}</text>
+                    <text v-if="card.result" class="dog-detail__cycle-result">{{ card.result }}</text>
+                  </view>
+                  <view v-if="card.tagText" class="dog-detail__rec-tag" :class="`dog-detail__rec-tag--${card.tagTone}`">
+                    <text class="dog-detail__rec-tag-text">{{ card.tagText }}</text>
+                  </view>
+                  <text class="material-icons-round dog-detail__rec-chevron">chevron_right</text>
+                </view>
+              </view>
+            </view>
+          </view>
+        </template>
         <template v-else>
         <!-- 发情中快捷操作 -->
         <view v-if="isInEstrus" class="breeding-estrus-banner">
@@ -714,7 +828,7 @@
           <text class="dog-detail__action-sheet-desc">修改犬只基础信息</text>
         </view>
       </view>
-      <view v-if="hasHealthActions" class="dog-detail__action-sheet-item" @click="openStatusSheet">
+      <view v-if="!isExternalSireDetail && hasHealthActions" class="dog-detail__action-sheet-item" @click="openStatusSheet">
         <view class="dog-detail__action-sheet-icon dog-detail__action-sheet-icon--amber">
           <text class="material-icons-round">flag</text>
         </view>
@@ -723,7 +837,7 @@
           <text class="dog-detail__action-sheet-desc">康复、治疗推进等快捷操作</text>
         </view>
       </view>
-      <view class="dog-detail__action-sheet-item" @click="openDispositionSheet">
+      <view v-if="!isExternalSireDetail" class="dog-detail__action-sheet-item" @click="openDispositionSheet">
         <view class="dog-detail__action-sheet-icon dog-detail__action-sheet-icon--plum">
           <text class="material-icons-round">swap_horiz</text>
         </view>
@@ -1140,6 +1254,7 @@
     />
 
     <BAddRecordSheet
+      v-if="!isExternalSireDetail"
       v-model:visible="showAddRecordSheet"
       :context-title="dog?.name || '当前犬只'"
       :context-status="activeCycle?.status || ''"
@@ -1177,6 +1292,8 @@ import {
   listLocalDogMedicationHistory,
   listLocalDogWeights,
   listLocalLittersByDam,
+  listLocalLittersBySire,
+  listLocalMatingRecordsBySire,
   listLocalSales,
 } from '@/localdb/domain-repository'
 import { useDogStore } from '@/stores/dogStore'
@@ -1210,6 +1327,7 @@ const statuses = ref<DeriveStatus[]>([])
 const cycles = ref<any[]>([])
 const healthRecords = ref<any[]>([])
 const medicationRecords = ref<any[]>([])
+const externalSireMatingRecords = ref<any[]>([])
 const activeTab = ref('overview')
 type HealthFilterKey = 'all' | 'ongoing' | 'medication' | 'illness' | 'vaccination' | 'deworming'
 type UnifiedHealthItemKind = 'medication' | 'illness' | 'vaccination' | 'deworming'
@@ -1231,6 +1349,7 @@ type UnifiedHealthTimelineItem = {
 const pageLoadStage = ref<'bootstrapping' | 'ready'>('bootstrapping')
 const healthRecordsLoaded = ref(false)
 const medicationHistoryLoaded = ref(false)
+const externalSireMatingRecordsLoaded = ref(false)
 const financeLoaded = ref(false)
 const cyclesLoaded = ref(false)
 const littersLoaded = ref(false)
@@ -1260,6 +1379,13 @@ let latestLoadToken = 0
 let latestActiveCycleSummaryToken = 0
 
 const tabs = computed(() => {
+  if (dog.value?.role === '外部种公') {
+    return [
+      { key: 'overview', label: '概览' },
+      { key: 'breeding', label: '繁育' },
+    ]
+  }
+
   if (dog.value?.role === '幼崽') {
     return [
       { key: 'overview', label: '概览' },
@@ -1277,14 +1403,25 @@ const tabs = computed(() => {
 })
 
 const isPuppyDetail = computed(() => dog.value?.role === '幼崽')
-const showTertiaryStatSkeleton = computed(() => !isPuppyDetail.value && !cyclesLoaded.value)
-const overviewHydrating = computed(() => !!dog.value && (!healthRecordsLoaded.value || showTertiaryStatSkeleton.value))
-const breedingTabLoaded = computed(() => cyclesLoaded.value && littersLoaded.value)
+const isExternalSireDetail = computed(() => dog.value?.role === '外部种公')
+const displayStatuses = computed(() => isExternalSireDetail.value ? [] : statuses.value.filter((status: any) => status?.type !== '正常'))
+const showTertiaryStatSkeleton = computed(() => !isPuppyDetail.value && !isExternalSireDetail.value && !cyclesLoaded.value)
+const overviewHydrating = computed(() => !!dog.value && !isExternalSireDetail.value && (!healthRecordsLoaded.value || showTertiaryStatSkeleton.value))
+const breedingTabLoaded = computed(() => cyclesLoaded.value && littersLoaded.value && (!isExternalSireDetail.value || externalSireMatingRecordsLoaded.value))
 const healthTabLoaded = computed(() => healthRecordsLoaded.value && medicationHistoryLoaded.value)
 
 const tertiaryStatIcon = computed(() => isPuppyDetail.value ? 'route' : 'child_friendly')
 const tertiaryStatValue = computed(() => isPuppyDetail.value ? (dog.value?.disposition || '在养') : `${cycles.value.length}窝`)
 const tertiaryStatLabel = computed(() => isPuppyDetail.value ? '去向' : '繁育')
+const externalSireCycleCount = computed(() => cycles.value.length)
+const externalSireLitterCount = computed(() => litters.value.length)
+const externalSireLastMatingTs = computed(() => {
+  const recordTs = externalSireMatingRecords.value.map((record: any) => Number(record.date || 0)).filter(ts => ts > 0)
+  const cycleTs = cycles.value.map((cycle: any) => Number(cycle.mated_at || 0)).filter(ts => ts > 0)
+  const matingTs = [...recordTs, ...cycleTs]
+  return matingTs.length ? Math.max(...matingTs) : 0
+})
+const externalSireLastMatingText = computed(() => externalSireLastMatingTs.value ? formatShortDate(externalSireLastMatingTs.value) : '暂无')
 
 // 状态 → 功能色映射
 const statusColorMap: Record<string, 'amber' | 'rose' | 'red' | 'plum'> = {
@@ -1322,9 +1459,11 @@ onPageScroll(({ scrollTop }) => {
 // 繁育周期计算属性
 const isInEstrus = computed(() => statuses.value.some((s: any) => s.type === '发情中'))
 const activeCycle = computed(() => cycles.value.find((cycle: any) => {
+  if (isExternalSireDetail.value) return false
   return isDogDetailActiveBreedingCycle(cycle, litterByCycleId.value.get(cycle._id) || null)
 }))
 const pastCycles = computed(() => cycles.value.filter((cycle: any) => {
+  if (isExternalSireDetail.value) return false
   return isDogDetailHistoryBreedingCycle(cycle, litterByCycleId.value.get(cycle._id) || null)
 }))
 const activeCycleId = computed(() => activeCycle.value?._id || '')
@@ -1352,13 +1491,13 @@ const hasStandaloneActiveMedication = computed(() => activeMedicationRecords.val
   return !sourceRecordId
 }))
 const latestActiveIllnessRecord = computed(() => {
-  const activeIllnesses = illnessRecords.value.filter((record: any) => illnessStatusLabel(record) !== '已康复')
+  const activeIllnesses = illnessRecords.value.filter((record: any) => illnessTreatmentStatus(record) !== '已康复')
   const linked = activeIllnesses.find((record: any) => linkedActiveIllnessIds.value.has(record._id))
   return linked || activeIllnesses[0] || null
 })
 const quickStartIllnessRecord = computed(() => {
   if (hasStandaloneActiveMedication.value) return null
-  const activeIllnesses = illnessRecords.value.filter((record: any) => illnessStatusLabel(record) !== '已康复')
+  const activeIllnesses = illnessRecords.value.filter((record: any) => illnessTreatmentStatus(record) !== '已康复')
   const candidate = activeIllnesses.find((record: any) => !linkedActiveIllnessIds.value.has(record._id))
   return candidate || null
 })
@@ -1500,9 +1639,8 @@ const hasHealthActions = computed(() => healthActions.value.length > 0)
 const healthActionSummary = computed(() => {
   if (latestActiveIllnessRecord.value) {
     const illnessName = illnessPrimaryCondition(latestActiveIllnessRecord.value) || '当前疾病'
-    const treatmentStatus = illnessStatusLabel(latestActiveIllnessRecord.value) || '观察中'
-    const symptomSummary = illnessSymptomSummary(latestActiveIllnessRecord.value)
-    return [illnessName, symptomSummary, treatmentStatus].filter(Boolean).join(' · ')
+    const illnessSummary = illnessStatusSummary(latestActiveIllnessRecord.value)
+    return [illnessName, illnessSummary].filter(Boolean).join(' · ')
   }
   if (activeMedicationRecords.value.length > 0) {
     return `进行中用药 ${activeMedicationRecords.value.length} 项`
@@ -1781,6 +1919,82 @@ const historyCycleCards = computed(() => {
     }
   })
 })
+type ExternalSireUseCard = {
+  key: string
+  targetType: 'cycle' | 'litter'
+  targetId: string
+  title: string
+  meta: string
+  result: string
+  tagText: string
+  tagTone: 'green' | 'amber' | 'red' | 'gray'
+  sortTime: number
+}
+
+function buildExternalSireUseCardFromCycle(cycle: any): ExternalSireUseCard {
+  const litter = litterByCycleId.value.get(cycle._id) || null
+  const matingRecords = getExternalSireMatingRecordsForCycle(cycle._id)
+  const firstMatingRecord = matingRecords[0] || null
+  const matingTs = Number(firstMatingRecord?.date || cycle.mated_at || 0)
+  const totalCount = litter ? getLitterTotalCount(litter) : 0
+  const aliveCount = litter ? getLitterAliveCount(litter) : 0
+  const tagText = litter ? '已生产' : (cycle.status || '')
+  const matingCountText = matingRecords.length > 1 ? ` · ${matingRecords.length}次` : ''
+
+  return {
+    key: `cycle-${cycle._id}`,
+    targetType: 'cycle',
+    targetId: cycle._id,
+    title: cycle.dam_name || '母犬未记录',
+    meta: matingTs ? `${formatDate(matingTs)} 配种${matingCountText}` : '配种日期未记录',
+    result: litter && totalCount > 0 ? `存活 ${aliveCount}/${totalCount}` : '',
+    tagText,
+    tagTone: getExternalSireUseTagTone(tagText),
+    sortTime: Number(matingTs || litter?.birth_date || cycle.updated_at || cycle.created_at || 0),
+  }
+}
+
+function buildExternalSireUseCardFromLitter(litter: any): ExternalSireUseCard {
+  const totalCount = getLitterTotalCount(litter)
+  const aliveCount = getLitterAliveCount(litter)
+
+  return {
+    key: `litter-${litter._id}`,
+    targetType: 'litter',
+    targetId: litter._id,
+    title: litter.dam_name || '母犬未记录',
+    meta: litter.birth_date ? `${formatDate(litter.birth_date)} 生产` : '生产日期未知',
+    result: totalCount > 0 ? `存活 ${aliveCount}/${totalCount}` : '',
+    tagText: '已生产',
+    tagTone: 'green',
+    sortTime: Number(litter.birth_date || litter.updated_at || litter.created_at || 0),
+  }
+}
+
+function getExternalSireUseTagTone(status: string): ExternalSireUseCard['tagTone'] {
+  if (status === '已生产') return 'green'
+  if (status === '怀孕中' || status === '发情中') return 'amber'
+  if (status === '失败') return 'red'
+  return 'gray'
+}
+
+function getExternalSireMatingRecordsForCycle(cycleId: string) {
+  if (!cycleId) return []
+  return externalSireMatingRecords.value
+    .filter((record: any) => record?.cycle_id === cycleId)
+    .sort((left: any, right: any) => Number(left.date || 0) - Number(right.date || 0))
+}
+
+const externalSireUseCards = computed<ExternalSireUseCard[]>(() => {
+  const cards = cycles.value.map((cycle: any) => buildExternalSireUseCardFromCycle(cycle))
+  const cycleIds = new Set(cycles.value.map((cycle: any) => cycle._id).filter(Boolean))
+  const orphanLitterCards = litters.value
+    .filter((litter: any) => !litter.cycle_id || !cycleIds.has(litter.cycle_id))
+    .map((litter: any) => buildExternalSireUseCardFromLitter(litter))
+
+  return [...cards, ...orphanLitterCards].sort((left, right) => right.sortTime - left.sortTime)
+})
+
 const litterCards = computed(() => {
   return litters.value.map((litter: any) => {
     const totalCount = getLitterTotalCount(litter)
@@ -1801,7 +2015,9 @@ const litterCards = computed(() => {
       ...litter,
       summaryTitle: formatDate(litter.birth_date),
       summaryNumber: Number.isFinite(Number(litter.litter_number)) && Number(litter.litter_number) > 0 ? `第${litter.litter_number}窝` : '',
-      summarySire: litter.sire_name ? `种公: ${litter.sire_name}` : '',
+      summarySire: isExternalSireDetail.value
+        ? (litter.dam_name ? `母犬: ${litter.dam_name}` : '')
+        : (litter.sire_name ? `种公: ${litter.sire_name}` : ''),
       chips,
     }
   })
@@ -1814,6 +2030,11 @@ const activeCycleDetailLoading = ref(false)
 function formatDate(ts: number) {
   const d = new Date(ts)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function formatStatusDate(ts: number) {
+  const d = new Date(ts)
+  return `${String(d.getMonth() + 1).padStart(2, '0')}月${String(d.getDate()).padStart(2, '0')}日`
 }
 
 function todayTs() {
@@ -1846,7 +2067,7 @@ function onInlineDateConfirm(value: number | string) {
 }
 
 function formatAge(birthTs: number) {
-  const days = Math.floor((Date.now() - birthTs) / 86400000)
+  const days = Math.max(1, Math.floor((Date.now() - birthTs) / 86400000))
   if (days < 30) return `${days}天`
   if (days < 365) return `${Math.floor(days / 30)}月龄`
   const years = Math.floor(days / 365)
@@ -1882,6 +2103,35 @@ function illnessSymptomSummary(record: any, limit = 2) {
   if (tags.length === 0) return ''
   if (tags.length <= limit) return tags.join(' / ')
   return `${tags.slice(0, limit).join(' / ')} 等${tags.length}项`
+}
+
+function joinDisplayParts(parts: Array<string | null | undefined>) {
+  return parts.map(part => String(part || '').trim()).filter(Boolean).join(' · ')
+}
+
+function illnessTreatmentStatus(record: any) {
+  if (record?.type !== 'illness') return ''
+  return String(record?.details?.treatment_status || '').trim()
+}
+
+function illnessSeverityLabel(record: any) {
+  if (record?.type !== 'illness') return ''
+  return String(record?.details?.severity || '').trim()
+}
+
+function illnessStatusSummary(record: any) {
+  return joinDisplayParts([
+    illnessSymptomSummary(record),
+    illnessTreatmentStatus(record),
+    illnessSeverityLabel(record),
+  ])
+}
+
+function illnessStatusTag(record: any) {
+  return joinDisplayParts([
+    illnessTreatmentStatus(record),
+    illnessSeverityLabel(record),
+  ])
 }
 
 function recordSubtitle(record: any) {
@@ -1930,8 +2180,8 @@ function medicationRecordSub(record: any) {
   }
 
   const startText = typeof record?.start_date === 'number'
-    ? `${formatDate(record.start_date)} 开始`
-    : '开始日期未知'
+    ? formatDate(record.start_date)
+    : '日期未知'
 
   if (typeof record?.completed_dose_count === 'number' && typeof record?.total_dose_count === 'number' && record.total_dose_count > 0) {
     const summary = record.status === 'completed'
@@ -2001,8 +2251,8 @@ function buildHealthTimelineItem(record: any): UnifiedHealthTimelineItem | null 
   if (type !== 'vaccination' && type !== 'deworming' && type !== 'illness') return null
 
   const targetId = `${record?._id || record?.id || ''}`.trim()
-  const tagText = type === 'illness' ? illnessStatusLabel(record) : ''
-  const isOngoing = type === 'illness' ? illnessStatusLabel(record) !== '已康复' : false
+  const tagText = type === 'illness' ? illnessStatusTag(record) : ''
+  const isOngoing = type === 'illness' ? illnessTreatmentStatus(record) !== '已康复' : false
 
   return {
     key: `${type}-${targetId || resolveHealthRecordSortTime(record)}`,
@@ -2022,12 +2272,11 @@ function buildHealthTimelineItem(record: any): UnifiedHealthTimelineItem | null 
 }
 
 function illnessStatusLabel(record: any) {
-  if (record?.type !== 'illness') return ''
-  return record.details?.treatment_status || ''
+  return illnessStatusTag(record)
 }
 
 function illnessStatusTone(record: any) {
-  const status = illnessStatusLabel(record)
+  const status = illnessTreatmentStatus(record)
   if (status === '已康复') return 'green'
   if (status === '治疗中') return 'amber'
   return 'red'
@@ -2080,10 +2329,28 @@ function getElapsedDaysFromTs(startTs?: number | null) {
   return Math.max(1, Math.floor((getBeijingDayStart(Date.now()) - getBeijingDayStart(startTs)) / 86400000) + 1)
 }
 
+function normalizeBreedingStageLabel(text?: string | null) {
+  const raw = String(text || '').trim()
+  if (!raw) return ''
+  return raw.replace(/卵泡检查后第\s*(\d+)\s*天/, '卵检后第$1天')
+}
+
+function estrusStageMetaText(status?: DeriveStatus) {
+  const upcoming = activeCycleSummary.value.timeline.find(item => item.kind === 'upcoming')
+  const normalizedSummary = normalizeBreedingStageLabel(upcoming?.summary)
+  if (normalizedSummary && !/^发情第\d+天$/.test(normalizedSummary)) return normalizedSummary
+
+  const statusMetaText = status?.meta
+    ?.map(item => normalizeBreedingStageLabel(item.text))
+    .find(text => text && !/^第\d+天$/.test(text) && !/^发情第\d+天$/.test(text))
+
+  return statusMetaText || ''
+}
+
 function statusTitle(s: DeriveStatus): string {
   return buildCompactDeriveStatusTitle(s, {
     dayCount: s.type === '发情中'
-      ? (s.progress?.current || activeCycle.value?.day_count)
+      ? (s.progress?.current || activeCycle.value?.day_count || getElapsedDaysFromTs(activeCycle.value?.start_date || activeCycle.value?.created_at))
       : s.type === '生病中'
         ? getElapsedDaysFromTs(getIllnessStartTs())
         : undefined,
@@ -2100,13 +2367,12 @@ function statusSub(s: DeriveStatus): string {
     return splitStatusDetail(s.detail).secondary
   }
   if (s.type === '生病中') {
-    const treatmentStatus = latestActiveIllnessRecord.value?.details?.treatment_status
-    const symptomSummary = illnessSymptomSummary(latestActiveIllnessRecord.value)
-    return s.detail || symptomSummary || treatmentStatus || latestActiveIllnessRecord.value?.notes || '查看症状与治疗状态'
+    const illnessSummary = illnessStatusSummary(latestActiveIllnessRecord.value)
+    return illnessSummary || s.detail || latestActiveIllnessRecord.value?.notes || '查看症状与治疗状态'
   }
   if (s.type === '发情中') {
     const startTs = activeCycle.value?.start_date || activeCycle.value?.created_at
-    return startTs ? `当前周期开始于 ${formatDate(startTs)}` : '当前繁育周期进行中'
+    return startTs ? `开始于 ${formatStatusDate(startTs)}` : '当前繁育周期进行中'
   }
   if (s.type === '哺乳中') {
     return s.detail || '当前处于哺乳照护阶段'
@@ -2147,24 +2413,21 @@ function statusMeta(s: DeriveStatus): Array<{ icon: string; text: string }> {
     return items
   }
 
-  if (Array.isArray(s.meta) && s.meta.length > 0) return s.meta
-
   if (s.type === '生病中') {
-    const items: Array<{ icon: string; text: string }> = []
+    const items: Array<{ icon: string; text: string }> = Array.isArray(s.meta) ? [...s.meta] : []
     const dateTs = getIllnessStartTs()
-    // 标题已承接“病名第X天”，副标题已承接治疗状态，这里只保留不重复的起始信息
-    if (typeof dateTs === 'number') items.push({ icon: 'event', text: `开始于 ${formatDate(dateTs)}` })
+    if (typeof dateTs === 'number') items.push({ icon: 'event', text: `开始于 ${formatStatusDate(dateTs)}` })
     return items
   }
 
   if (s.type === '发情中') {
     const items: Array<{ icon: string; text: string }> = []
-    const startTs = activeCycle.value?.start_date || activeCycle.value?.created_at
-    const day = s.progress?.current || activeCycle.value?.day_count
-    if (typeof startTs === 'number') items.push({ icon: 'event', text: `开始于 ${formatDate(startTs)}` })
-    if (day) items.push({ icon: 'schedule', text: `第${day}天` })
+    const stageText = estrusStageMetaText(s)
+    if (stageText) items.push({ icon: 'schedule', text: stageText })
     return items
   }
+
+  if (Array.isArray(s.meta) && s.meta.length > 0) return s.meta
 
   return []
 }
@@ -2310,6 +2573,14 @@ function goToCycle(cycleId: string) {
   })
 }
 
+function openExternalSireUseCard(card: ExternalSireUseCard) {
+  if (card.targetType === 'litter') {
+    goToOriginLitter(card.targetId)
+    return
+  }
+  goToCycle(card.targetId)
+}
+
 function editDog() {
   showMore.value = false
   uni.navigateTo({ url: `/pages/dog/add?id=${dogId}` })
@@ -2325,6 +2596,10 @@ const addRecordGroups = computed(() => createDogDetailAddRecordGroups({
 }))
 
 function addRecord() {
+  if (isExternalSireDetail.value) {
+    uni.showToast({ title: '外部种公仅保留使用追踪', icon: 'none' })
+    return
+  }
   showAddRecordSheet.value = true
 }
 
@@ -2769,6 +3044,7 @@ async function loadWeightHistory() {
 }
 
 function openWeightChart() {
+  if (isExternalSireDetail.value) return
   loadWeightHistory()
   showWeightChart.value = true
 }
@@ -2779,7 +3055,9 @@ function formatWeightKg(grams: number) {
 
 function formatShortDate(ts: number) {
   const d = new Date(ts)
-  return `${d.getMonth() + 1}/${d.getDate()}`
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${month}-${day}`
 }
 
 const weightChartMax = computed(() => {
@@ -2829,20 +3107,24 @@ async function doDelete() {
 
 // ==================== 数据加载 ====================
 
-function resetSectionLoadingState(isPuppy = false) {
-  healthRecordsLoaded.value = false
-  medicationHistoryLoaded.value = false
-  financeLoaded.value = false
-  cyclesLoaded.value = isPuppy
-  littersLoaded.value = isPuppy
+function resetSectionLoadingState(options: { isPuppy?: boolean; isExternalSire?: boolean } = {}) {
+  const isExternalSire = !!options.isExternalSire
+  healthRecordsLoaded.value = isExternalSire
+  medicationHistoryLoaded.value = isExternalSire
+  externalSireMatingRecordsLoaded.value = !isExternalSire
+  financeLoaded.value = isExternalSire
+  cyclesLoaded.value = !!options.isPuppy
+  littersLoaded.value = !!options.isPuppy
 }
 
 function syncActiveCycleSummary({
   isPuppy,
+  isExternalSire,
   nextCycles,
   refreshBreedingSummary,
 }: {
   isPuppy: boolean
+  isExternalSire?: boolean
   nextCycles: any[]
   refreshBreedingSummary: boolean
 }) {
@@ -2855,13 +3137,13 @@ function syncActiveCycleSummary({
     activeCycleSummaryDetail.value = null
   }
 
-  const nextActiveCycleId = isPuppy
+  const nextActiveCycleId = isPuppy || isExternalSire
     ? ''
     : nextCycles.find((cycle: any) => {
         return isDogDetailActiveBreedingCycle(cycle, litterByCycleId.value.get(cycle._id) || null)
       })?._id || ''
 
-  if (!nextActiveCycleId || isPuppy) {
+  if (!nextActiveCycleId || isPuppy || isExternalSire) {
     activeCycleSummaryDetail.value = null
     return nextActiveCycleId
   }
@@ -2894,6 +3176,7 @@ async function loadData({
         statuses.value = []
         healthRecords.value = []
         medicationRecords.value = []
+        externalSireMatingRecords.value = []
         cycles.value = []
         litters.value = []
         dogFinance.value = null
@@ -2914,8 +3197,9 @@ async function loadData({
 
     if (detail) {
       dog.value = detail
-      statuses.value = detail.statuses || []
-      if (detail.role === '幼崽' && activeTab.value === 'breeding') {
+      const isExternalSire = detail.role === '外部种公'
+      statuses.value = isExternalSire ? [] : (detail.statuses || [])
+      if ((detail.role === '幼崽' && activeTab.value === 'breeding') || (isExternalSire && (activeTab.value === 'health' || activeTab.value === 'finance'))) {
         activeTab.value = 'overview'
       }
     } else {
@@ -2924,8 +3208,9 @@ async function loadData({
     }
 
     const isPuppy = detail?.role === '幼崽'
+    const isExternalSire = detail?.role === '外部种公'
     if (showBootstrapSkeleton) {
-      resetSectionLoadingState(isPuppy)
+      resetSectionLoadingState({ isPuppy, isExternalSire })
       pageLoadStage.value = 'ready'
     }
 
@@ -2934,6 +3219,17 @@ async function loadData({
     if (isPuppy) {
       cycles.value = []
       litters.value = []
+    }
+      if (isExternalSire) {
+        healthRecords.value = []
+        medicationRecords.value = []
+        dogFinance.value = null
+        damFinanceRoi.value = null
+        activeCycleSummaryDetail.value = null
+      } else {
+        externalSireMatingRecords.value = []
+      }
+    if (isPuppy) {
       activeCycleSummaryDetail.value = null
     }
     puppySaleRecordsLoaded.value = !isPuppy
@@ -2941,7 +3237,13 @@ async function loadData({
       puppySaleRecords.value = []
     }
 
-    const healthPromise = Promise.resolve()
+    const healthPromise = isExternalSire
+      ? Promise.resolve().then(() => {
+          if (loadToken !== latestLoadToken) return
+          healthRecords.value = []
+          healthRecordsLoaded.value = true
+        })
+      : Promise.resolve()
       .then(async () => {
         if (loadToken !== latestLoadToken) return
         healthRecords.value = await listLocalDogHealthHistory(familyId, dogId)
@@ -2956,7 +3258,13 @@ async function loadData({
         }
       })
 
-    const medicationPromise = Promise.resolve()
+    const medicationPromise = isExternalSire
+      ? Promise.resolve().then(() => {
+          if (loadToken !== latestLoadToken) return
+          medicationRecords.value = []
+          medicationHistoryLoaded.value = true
+        })
+      : Promise.resolve()
       .then(async () => {
         if (loadToken !== latestLoadToken) return
         medicationRecords.value = await listLocalDogMedicationHistory(familyId, dogId)
@@ -2988,47 +3296,80 @@ async function loadData({
           })
       : Promise.resolve()
 
-    const shouldLoadDamRoi = detail?.role === '种狗' && detail?.gender === '母'
-    const financePromise = Promise.all([
-      getLocalDogFinanceSummary(familyId, dogId)
-        .then((financeRes) => {
+    const externalSireMatingPromise = isExternalSire
+      ? listLocalMatingRecordsBySire(familyId, { sireId: dogId, sireName: detail?.name })
+          .then((records) => {
+            if (loadToken !== latestLoadToken) return
+            externalSireMatingRecords.value = records || []
+          })
+          .catch(() => {
+            if (loadToken !== latestLoadToken) return
+            externalSireMatingRecords.value = []
+          })
+          .finally(() => {
+            if (loadToken === latestLoadToken) {
+              externalSireMatingRecordsLoaded.value = true
+            }
+          })
+      : Promise.resolve().then(() => {
           if (loadToken !== latestLoadToken) return
-          dogFinance.value = financeRes || null
+          externalSireMatingRecords.value = []
+          externalSireMatingRecordsLoaded.value = true
         })
-        .catch(() => {
+
+    const shouldLoadDamRoi = detail?.role === '种狗' && detail?.gender === '母'
+    const financePromise = isExternalSire
+      ? Promise.resolve().then(() => {
           if (loadToken !== latestLoadToken) return
           dogFinance.value = null
-        }),
-      shouldLoadDamRoi
-        ? getLocalDamRoi(familyId, dogId)
-            .then((roiRes) => {
+          damFinanceRoi.value = null
+          financeLoaded.value = true
+        })
+      : Promise.all([
+          getLocalDogFinanceSummary(familyId, dogId)
+            .then((financeRes) => {
               if (loadToken !== latestLoadToken) return
-              damFinanceRoi.value = roiRes || null
+              dogFinance.value = financeRes || null
             })
             .catch(() => {
               if (loadToken !== latestLoadToken) return
-              damFinanceRoi.value = null
-            })
-        : Promise.resolve().then(() => {
+              dogFinance.value = null
+            }),
+          shouldLoadDamRoi
+            ? getLocalDamRoi(familyId, dogId)
+                .then((roiRes) => {
+                  if (loadToken !== latestLoadToken) return
+                  damFinanceRoi.value = roiRes || null
+                })
+                .catch(() => {
+                  if (loadToken !== latestLoadToken) return
+                  damFinanceRoi.value = null
+                })
+            : Promise.resolve().then(() => {
+                if (loadToken !== latestLoadToken) return
+                damFinanceRoi.value = null
+              }),
+        ])
+          .finally(() => {
             if (loadToken !== latestLoadToken) return
-            damFinanceRoi.value = null
-          }),
-    ])
-      .finally(() => {
-        if (loadToken === latestLoadToken) {
-          financeLoaded.value = true
-        }
-      })
+            financeLoaded.value = true
+          })
 
     const cyclesPromise = isPuppy
       ? Promise.resolve()
-      : listLocalBreedingCycles(familyId, { damId: dogId, includeClosed: true })
+      : listLocalBreedingCycles(
+          familyId,
+          isExternalSire
+            ? { sireId: dogId, sireName: detail?.name, includeClosed: true }
+            : { damId: dogId, includeClosed: true },
+        )
           .then(async (nextCycles) => {
             if (loadToken !== latestLoadToken) return
 
             cycles.value = nextCycles || []
             const nextActiveCycleId = syncActiveCycleSummary({
               isPuppy,
+              isExternalSire,
               nextCycles: nextCycles || [],
               refreshBreedingSummary,
             })
@@ -3042,6 +3383,7 @@ async function loadData({
             cycles.value = []
             syncActiveCycleSummary({
               isPuppy,
+              isExternalSire,
               nextCycles: [],
               refreshBreedingSummary,
             })
@@ -3054,7 +3396,9 @@ async function loadData({
 
     const littersPromise = isPuppy
       ? Promise.resolve()
-      : listLocalLittersByDam(familyId, dogId)
+      : (isExternalSire
+          ? listLocalLittersBySire(familyId, { sireId: dogId, sireName: detail?.name })
+          : listLocalLittersByDam(familyId, dogId))
           .then((localLitters) => {
             if (loadToken !== latestLoadToken) return
             litters.value = localLitters || []
@@ -3073,6 +3417,7 @@ async function loadData({
       healthPromise,
       medicationPromise,
       salePromise,
+      externalSireMatingPromise,
       financePromise,
       cyclesPromise,
       littersPromise,
@@ -4298,6 +4643,12 @@ onShow(() => {
   background: var(--card);
   border-radius: 0 0 var(--radius-row) var(--radius-row);
   padding: 0 16px 12px;
+  box-shadow: var(--shadow);
+}
+.dog-detail__external-card {
+  background: var(--card);
+  border-radius: var(--radius-row);
+  padding: 3px 16px;
   box-shadow: var(--shadow);
 }
 .dog-detail__info-row {

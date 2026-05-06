@@ -152,7 +152,7 @@ describe('dogBreedingSummary', () => {
 
     expect(summary.timeline[0]).toMatchObject({
       title: '建议配种',
-      summary: '卵泡检查后第2天',
+      summary: '卵检后第2天',
     })
   })
 

@@ -24,7 +24,9 @@ import {
   listLocalDogWeights,
   listLocalDogsWithStatus,
   listLocalLittersByDam,
+  listLocalLittersBySire,
   listLocalLitters,
+  listLocalMatingRecordsBySire,
   listLocalMedicationProtocols,
   listLocalTasksByIds,
 } from '../../src/localdb/domain-repository'
@@ -240,13 +242,13 @@ describe('local domain repository', () => {
     })
     expect(medicationStatus).toMatchObject({
       taskId: 'med_detail_status_1',
-      detail: '阿莫西林 · 2片 · 口服',
+      detail: '阿莫西林 · 2片 · 口服 · 每日2次',
       relationType: 'linked',
       progress: { current: 2, total: 5 },
       meta: [
         { icon: 'link', text: '关联疾病' },
-        { icon: 'schedule', text: '每日2次' },
-        { icon: 'check_circle', text: '已执行 3/10 次' },
+        { icon: 'check_circle', text: '今日完成 1/2 次' },
+        { icon: 'event', text: '开始于 05月05日' },
       ],
     })
     expect(pregnancyStatus).toMatchObject({
@@ -258,6 +260,53 @@ describe('local domain repository', () => {
         { icon: 'schedule', text: '还有62天' },
       ],
     })
+  })
+
+  it('犬只详情当前发情状态应读取卵检记录并显示卵检后天数', async () => {
+    const now = new Date('2026-05-06T12:00:00+08:00').getTime()
+    vi.useFakeTimers()
+    vi.setSystemTime(now)
+
+    await localDb.replaceTable('dogs', [{
+      _id: 'dog_estrus_follicle_1',
+      family_id: 'fam_estrus_follicle',
+      name: '波妞',
+      gender: '母',
+      role: '种狗',
+      disposition: '在养',
+      updated_at: now,
+    }])
+    await localDb.replaceTable('breeding_cycles', [{
+      _id: 'cycle_estrus_follicle_1',
+      family_id: 'fam_estrus_follicle',
+      dam_id: 'dog_estrus_follicle_1',
+      dam_name: '波妞',
+      status: '发情中',
+      start_date: now,
+      created_at: now,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('breeding_records', [{
+      _id: 'record_follicle_1',
+      family_id: 'fam_estrus_follicle',
+      cycle_id: 'cycle_estrus_follicle_1',
+      dog_id: 'dog_estrus_follicle_1',
+      dog_name: '波妞',
+      type: 'follicle_check',
+      date: now,
+      details: { left_count: 3, right_count: 3, result: '发育良好' },
+      created_at: now,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('health_records', [])
+    await localDb.replaceTable('medication_tasks', [])
+    await localDb.replaceTable('litters', [])
+
+    const detail = await getLocalDogDetail('fam_estrus_follicle', 'dog_estrus_follicle_1')
+    const estrusStatus = detail?.statuses.find(status => status.type === '发情中')
+
+    expect(estrusStatus?.meta).toContainEqual({ icon: 'schedule', text: '卵检后第1天' })
+    expect(estrusStatus?.meta).not.toContainEqual({ icon: 'schedule', text: '第1天' })
   })
 
   it('录入带费用的卵泡检查后应立即出现在本地财务列表', async () => {
@@ -1729,6 +1778,62 @@ describe('local domain repository', () => {
     expect(damLitters[0]).toMatchObject({
       _id: 'litter_history_2',
       sire_name: '弟弟',
+    })
+  })
+
+  it('外部种公使用记录应能从配种记录 details 反查周期与产窝', async () => {
+    const now = new Date('2026-05-06T10:00:00+08:00').getTime()
+    await localDb.replaceTable('breeding_cycles', [{
+      _id: 'cycle_external_sire_record',
+      family_id: 'fam_external_sire',
+      dam_id: 'dam_external_sire',
+      dam_name: '肉肉',
+      status: '已生产',
+      created_at: now - 30 * 86400000,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('breeding_records', [{
+      _id: 'mating_external_sire_record',
+      family_id: 'fam_external_sire',
+      cycle_id: 'cycle_external_sire_record',
+      dog_id: 'dam_external_sire',
+      type: 'mating',
+      date: now - 28 * 86400000,
+      details: {
+        sire_id: 'external_sire_1',
+        sire_name: '弟弟',
+        mating_number: 1,
+      },
+      created_at: now - 28 * 86400000,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('litters', [{
+      _id: 'litter_external_sire_record',
+      family_id: 'fam_external_sire',
+      cycle_id: 'cycle_external_sire_record',
+      dam_id: 'dam_external_sire',
+      dam_name: '肉肉',
+      birth_date: now,
+      total_born: 3,
+      born_alive: 3,
+      created_at: now,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('dogs', [])
+    await localDb.replaceTable('dog_weights', [])
+
+    const cycles = await listLocalBreedingCycles('fam_external_sire', { sireId: 'external_sire_1', sireName: '弟弟', includeClosed: true })
+    const litters = await listLocalLittersBySire('fam_external_sire', { sireId: 'external_sire_1', sireName: '弟弟' })
+    const matingRecords = await listLocalMatingRecordsBySire('fam_external_sire', { sireId: 'external_sire_1', sireName: '弟弟' })
+
+    expect(cycles.map(item => item._id)).toEqual(['cycle_external_sire_record'])
+    expect(litters.map(item => item._id)).toEqual(['litter_external_sire_record'])
+    expect(matingRecords.map(item => item._id)).toEqual(['mating_external_sire_record'])
+    expect(matingRecords[0].date).toBe(now - 28 * 86400000)
+    expect(litters[0]).toMatchObject({
+      sire_name: '弟弟',
+      aliveCount: 3,
+      totalCount: 3,
     })
   })
 

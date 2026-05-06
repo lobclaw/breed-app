@@ -78,6 +78,7 @@
 
           <view class="dog-list__card-side">
             <view
+              v-if="shouldShowDispositionTag(dog)"
               class="dog-list__side-tag dog-list__side-tag--disposition"
               :class="dispositionTagClass(dog)"
             >
@@ -691,6 +692,10 @@ function dispositionTagClass(dog: DogListItem) {
   }
 
   return map[dog.displayDisposition]
+}
+
+function shouldShowDispositionTag(dog: DogListItem) {
+  return dog.role !== '外部种公'
 }
 
 function roleTagClass(dog: DogListItem) {

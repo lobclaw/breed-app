@@ -46,6 +46,12 @@ describe('dog list page source contract', () => {
     expect(source).toContain('return pickVisibleStatusTags(activeStatuses).map((status, index) => ({')
   })
 
+  it('外部种公列表卡片不展示在养这类去向标签', () => {
+    expect(source).toContain('v-if="shouldShowDispositionTag(dog)"')
+    expect(source).toContain("function shouldShowDispositionTag(dog: DogListItem) {")
+    expect(source).toContain("return dog.role !== '外部种公'")
+  })
+
   it('从档案页进入新建页时应显式传回跳目标路由，并在后台刷新后继续尝试承接新犬只', () => {
     expect(source).toContain("uni.navigateTo({ url: `/pages/dog/add?targetRoute=${encodeURIComponent('/pages/dog/list')}` })")
     expect(source).toContain("pendingFeedbackDogId = feedback.targetDogId")

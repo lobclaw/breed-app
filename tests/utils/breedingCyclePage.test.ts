@@ -37,6 +37,14 @@ describe('breeding cycle page source contract', () => {
     expect(source).toContain("{{ resolvedSireName || '未知' }}")
   })
 
+  it('应让窝信息卡显式表现为可进入详情', () => {
+    expect(source).toContain('litter-section-head__action')
+    expect(source).toContain('查看详情')
+    expect(source).toContain('litter-link-card__hint')
+    expect(source).toContain('进入窝详情')
+    expect(source).toContain('@click="goToLitter(litter._id)"')
+  })
+
   it('应收敛未来节点和历史节点的颜色语义，并复用共享 tone helper', () => {
     expect(source).toContain('getBreedingTimelineRecordTone')
     expect(source).toContain('getBreedingTimelineCurrentStatusTone')

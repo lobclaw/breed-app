@@ -133,6 +133,10 @@
               <text class="info-row-value">{{ formatDate(task.end_date) }} · {{ endDateRelativeText }}</text>
             </view>
             <view class="info-row">
+              <text class="info-row-label">执行进度</text>
+              <text class="info-row-value">{{ totalExecutionSummary }}</text>
+            </view>
+            <view class="info-row">
               <text class="info-row-label">关联来源</text>
               <text class="info-row-value" :class="{ 'info-row-value--wrap': relationType === 'fallback' }">{{ relationTypeLabel }}</text>
             </view>
@@ -455,6 +459,13 @@ const summaryMetaValue = computed(() => {
 
 const summaryMetaLabel = computed(() => {
   return '今日完成'
+})
+
+const totalExecutionSummary = computed(() => {
+  if (!task.value) return '已执行 0/0 次'
+  const completed = Number(task.value.completed_dose_count || 0)
+  const total = Number(task.value.total_dose_count || 0)
+  return `已执行 ${completed}/${total} 次`
 })
 
 const treatmentSummaryText = computed(() => {

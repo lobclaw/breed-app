@@ -71,6 +71,13 @@ describe('dog detail breeding tab source contract', () => {
 
   it('应让幼崽详情隐藏繁育能力面，但保留来源窝追溯', () => {
     expect(source).toContain(`const tabs = computed(() => {
+  if (dog.value?.role === '外部种公') {
+    return [
+      { key: 'overview', label: '概览' },
+      { key: 'breeding', label: '繁育' },
+    ]
+  }
+
   if (dog.value?.role === '幼崽') {
     return [
       { key: 'overview', label: '概览' },
@@ -107,8 +114,36 @@ describe('dog detail breeding tab source contract', () => {
     expect(source).toContain('const littersPromise = isPuppy')
     expect(source).toContain('listLocalBreedingCycles')
     expect(source).toContain('listLocalLittersByDam')
-    expect(source).toContain("if (detail.role === '幼崽' && activeTab.value === 'breeding') {")
+    expect(source).toContain("const isExternalSire = detail?.role === '外部种公'")
+    expect(source).toContain("if ((detail.role === '幼崽' && activeTab.value === 'breeding') || (isExternalSire && (activeTab.value === 'health' || activeTab.value === 'finance'))) {")
     expect(source).toContain("usePageSync({ routePath: 'pages/dog/detail' })")
+  })
+
+  it('应让外部种公详情收敛为轻量档案与使用追踪', () => {
+    expect(source).toContain("const isExternalSireDetail = computed(() => dog.value?.role === '外部种公')")
+    expect(source).toContain("const displayStatuses = computed(() => isExternalSireDetail.value ? [] : statuses.value.filter((status: any) => status?.type !== '正常'))")
+    expect(source).toContain('v-if="!isExternalSireDetail" class="dog-detail__topbar-cta"')
+    expect(source).toContain('<view v-else class="dog-detail__stats">')
+    expect(source).toContain('外部种公档案')
+    expect(source).toContain('使用记录')
+    expect(source).toContain('externalSireUseCards')
+    expect(source).toContain('openExternalSireUseCard(card)')
+    expect(source).toContain('listLocalMatingRecordsBySire')
+    expect(source).toContain('externalSireMatingRecords')
+    expect(source).toContain("meta: matingTs ? `${formatDate(matingTs)} 配种${matingCountText}` : '配种日期未记录'")
+    expect(source).toContain('const recordTs = externalSireMatingRecords.value.map')
+    expect(source).toContain('dog-detail__rec-icon dog-detail__rec-icon--rose')
+    expect(source).toContain('<text class="material-icons-round">pets</text>')
+    expect(source).toContain("return `${month}-${day}`")
+    expect(source).not.toContain("return `${d.getMonth() + 1}/${d.getDate()}`")
+    expect(source).not.toContain('可用状态')
+    expect(source).not.toContain('externalSireAvailabilityText')
+    expect(source).not.toContain('配种使用')
+    expect(source).not.toContain('产窝结果')
+    expect(source).toContain('listLocalLittersBySire')
+    expect(source).toContain('? { sireId: dogId, sireName: detail?.name, includeClosed: true }')
+    expect(source).toContain('v-if="!isExternalSireDetail && hasHealthActions"')
+    expect(source).toContain('v-if="!isExternalSireDetail" class="dog-detail__action-sheet-item" @click="openDispositionSheet"')
   })
 
   it('应让哺乳状态可点击进入周期详情，并展示副文案与窝信息', () => {

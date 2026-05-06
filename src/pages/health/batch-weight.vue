@@ -34,7 +34,7 @@
     </view>
 
     <!-- 录入体重（已选窝） -->
-    <view v-else class="content">
+    <view v-else class="content content--with-fixed-submit">
       <view class="litter-card" @click="openLitterSelector">
         <view class="litter-info">
           <view class="litter-avatar">
@@ -43,7 +43,7 @@
           <view class="litter-detail">
             <text class="litter-eyebrow">当前窝 · 点击切换</text>
             <text class="litter-name">{{ selectedLitter.dam_name }}{{ selectedLitter.litter_number ? `第${selectedLitter.litter_number}窝` : '窝' }}</text>
-            <text class="litter-meta">出生日期 {{ formatDate(selectedLitter.birth_date) }} · 存活 {{ puppies.length }}/{{ selectedLitter.total_born || puppies.length }}</text>
+            <text class="litter-meta">出生日期 {{ formatDate(selectedLitter.birth_date) }} · 存活 {{ livePuppyCount }}/{{ totalPuppyCount }}</text>
           </view>
         </view>
         <view class="litter-card__side">
@@ -57,47 +57,72 @@
         <text>逐只体重录入</text>
       </view>
 
-      <view
-        v-for="(puppy, idx) in puppies"
-        :id="`puppy-card-${idx}`"
-        :key="puppy._id"
-        class="puppy-card"
-        :class="puppy.gender === '公' ? 'puppy-card--male' : 'puppy-card--female'"
-      >
-        <view class="puppy-header">
-          <text class="puppy-name">{{ puppy.name || `${selectedLitter.dam_name}窝-${idx + 1}号` }}</text>
-          <view class="puppy-gender" :class="puppy.gender === '公' ? 'puppy-gender--male' : 'puppy-gender--female'">
-            <text>{{ puppy.gender }}</text>
+      <BSkeleton v-if="selectedLitterLoading" :rows="2" />
+
+      <template v-else>
+        <view
+          v-for="(puppy, idx) in puppies"
+          :id="`puppy-card-${idx}`"
+          :key="puppy._id"
+          class="puppy-card"
+          :class="puppy.gender === '公' ? 'puppy-card--male' : 'puppy-card--female'"
+        >
+          <view class="puppy-header">
+            <text class="puppy-name">{{ puppy.name || `${selectedLitter.dam_name}窝-${idx + 1}号` }}</text>
+            <view class="puppy-gender" :class="puppy.gender === '公' ? 'puppy-gender--male' : 'puppy-gender--female'">
+              <text>{{ puppy.gender }}</text>
+            </view>
+          </view>
+          <view class="puppy-input-row">
+            <view class="weight-input-group" :class="{ 'weight-input-group--empty': !weights[idx] }">
+              <input
+                class="weight-input"
+                type="digit"
+                :value="weights[idx]"
+                :placeholder="!weights[idx] ? '输入体重' : ''"
+                placeholder-class="weight-input__placeholder"
+                @input="onWeightInput($event, idx)"
+                @confirm="focusNext(idx)"
+              />
+              <text class="weight-unit">g</text>
+            </view>
+            <view class="weight-meta">
+              <view class="weight-detail">
+                <text class="weight-comparison">上次: {{ puppy.last_weight ? `${puppy.last_weight}g` : '无记录' }}<text v-if="puppy.last_weight_at"> · {{ formatWeightTime(puppy.last_weight_at) }}</text></text>
+                <text
+                  v-if="weights[idx] && puppy.last_weight"
+                  class="weight-delta"
+                  :class="weightDelta(idx) > 0 ? 'weight-delta--positive' : weightDelta(idx) < 0 ? 'weight-delta--negative' : ''"
+                >
+                  {{ weightDelta(idx) > 0 ? '↑' : weightDelta(idx) < 0 ? '↓' : '' }}{{ Math.abs(weightDelta(idx)) }}g{{ weightDelta(idx) < 0 ? ' ⚠️' : '' }}
+                </text>
+              </view>
+              <view class="mini-trend" :class="`mini-trend--${getTrendTone(puppy, idx)}`">
+                <view v-if="getTrendPoints(puppy, idx).length > 1" class="mini-trend__plot">
+                  <view
+                    v-for="(segment, segmentIdx) in getTrendSegments(puppy, idx)"
+                    :key="`segment-${puppy._id}-${segmentIdx}`"
+                    class="mini-trend__segment"
+                    :style="segment"
+                  />
+                  <view
+                    v-for="(point, pointIdx) in getTrendPoints(puppy, idx)"
+                    :key="`point-${puppy._id}-${pointIdx}`"
+                    class="mini-trend__point"
+                    :class="{ 'mini-trend__point--latest': pointIdx === getTrendPoints(puppy, idx).length - 1 }"
+                    :style="point"
+                  />
+                </view>
+                <view v-else class="mini-trend__placeholder">
+                  <view class="mini-trend__placeholder-line mini-trend__placeholder-line--one" />
+                  <view class="mini-trend__placeholder-line mini-trend__placeholder-line--two" />
+                  <view class="mini-trend__placeholder-line mini-trend__placeholder-line--three" />
+                </view>
+              </view>
+            </view>
           </view>
         </view>
-        <view class="puppy-input-row">
-          <view class="weight-input-group" :class="{ 'weight-input-group--empty': !weights[idx] }">
-            <input
-              class="weight-input"
-              type="digit"
-              :value="weights[idx]"
-              :placeholder="!weights[idx] ? '输入体重' : ''"
-              placeholder-class="weight-input__placeholder"
-              @input="onWeightInput($event, idx)"
-              @confirm="focusNext(idx)"
-            />
-            <text class="weight-unit">g</text>
-          </view>
-          <view class="weight-detail">
-            <text class="weight-comparison">上次: {{ puppy.last_weight ? `${puppy.last_weight}g` : '无记录' }}<text v-if="puppy.last_weight_at"> · {{ formatWeightTime(puppy.last_weight_at) }}</text></text>
-            <text
-              v-if="weights[idx] && puppy.last_weight"
-              class="weight-delta"
-              :class="weightDelta(idx) > 0 ? 'weight-delta--positive' : weightDelta(idx) < 0 ? 'weight-delta--negative' : ''"
-            >
-              {{ weightDelta(idx) > 0 ? '↑' : weightDelta(idx) < 0 ? '↓' : '' }}{{ Math.abs(weightDelta(idx)) }}g{{ weightDelta(idx) < 0 ? ' ⚠️' : '' }}
-            </text>
-          </view>
-          <view v-if="puppy.weight_history.length > 1" class="mini-trend">
-            <text class="mini-trend-text">{{ formatWeightHistory(puppy.weight_history) }}</text>
-          </view>
-        </view>
-      </view>
+      </template>
 
       <view v-if="filledCount > 0" class="summary-bar">
         <view class="summary-item">
@@ -137,17 +162,19 @@
           </view>
         </view>
 
-        <text v-if="filledCount > 0 && filledCount < puppies.length" class="submit-hint">未录入的幼崽不会被提交，后续可补录。</text>
-        <text v-if="submitError" class="submit-error">{{ submitError }}</text>
+      </view>
 
-        <button
-          class="save-btn"
-          :class="{ 'save-btn--success': submitState === 'success' }"
+      <view class="fixed-bottom">
+        <text v-if="filledCount > 0 && filledCount < puppies.length" class="submit-hint submit-hint--fixed">未录入的幼崽不会被提交，后续可补录。</text>
+        <text v-if="submitError" class="submit-error submit-error--fixed">{{ submitError }}</text>
+        <BSubmitButton
+          :loading="submitState === 'submitting'"
+          :success="submitState === 'success'"
           :disabled="!hasAnyWeight || submitState === 'submitting'"
           @click="submit"
         >
-          <text>{{ submitButtonText }}</text>
-        </button>
+          {{ submitButtonText }}
+        </BSubmitButton>
       </view>
     </view>
 
@@ -170,19 +197,21 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import type { CSSProperties } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useAuth } from '@/composables/useAuth'
 import { usePageSync } from '@/composables/usePageSync'
-import { listLocalLitters } from '@/localdb/domain-repository'
+import { getLocalLitterDetail, listLocalLitters } from '@/localdb/domain-repository'
 import { localSyncRuntime } from '@/localdb/runtime'
 import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
+import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 import BLitterSelector from '@/components/form/BLitterSelector.vue'
 import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
-import { buildTimestampFromDayOffset, formatDateTimeInputValue } from '@/utils/date'
+import { buildTimestampFromDayOffset, formatDateTimeInputValue, getBeijingDayStart } from '@/utils/date'
 
 type DateChipKey = 'today' | 'yesterday' | 'dayBefore' | ''
 
@@ -190,6 +219,9 @@ interface WeightHistoryItem {
   weight: number
   date: number
 }
+
+type TrendPointStyle = CSSProperties
+type TrendSegmentStyle = CSSProperties
 
 interface PuppyWeightItem {
   _id: string
@@ -213,6 +245,7 @@ const dateChipActive = ref<DateChipKey>('today')
 const recordDateTime = ref(Date.now())
 const showLitterSelector = ref(false)
 const showDateTimePicker = ref(false)
+const selectedLitterLoading = ref(false)
 const { currentFamily } = useAuth()
 usePageSync({ routePath: 'pages/health/batch-weight' })
 
@@ -254,10 +287,21 @@ const isMinWarning = computed(() => {
 })
 const daysSinceBirth = computed(() => {
   if (!selectedLitter.value?.birth_date) return 0
-  return Math.floor((Date.now() - selectedLitter.value.birth_date) / 86400000)
+  return Math.max(1, Math.floor((getBeijingDayStart(Date.now()) - getBeijingDayStart(selectedLitter.value.birth_date)) / 86400000) + 1)
+})
+const livePuppyCount = computed(() => {
+  const alive = Number(selectedLitter.value?.born_alive ?? selectedLitter.value?.aliveCount ?? selectedLitter.value?.pupStats?.alive)
+  if (Number.isFinite(alive) && alive >= 0) return alive
+  return puppies.value.length
+})
+const totalPuppyCount = computed(() => {
+  const total = Number(selectedLitter.value?.total_born ?? selectedLitter.value?.totalCount ?? selectedLitter.value?.puppyCount ?? selectedLitter.value?.pupStats?.total)
+  if (Number.isFinite(total) && total > 0) return total
+  return puppies.value.length
 })
 
 let preselectedLitterId = ''
+let latestSelectionToken = 0
 
 function getStartOfDay(ts: number) {
   const date = new Date(ts)
@@ -287,10 +331,6 @@ function formatWeightTime(ts: number) {
   return formatDate(ts)
 }
 
-function formatWeightHistory(history: WeightHistoryItem[]) {
-  return history.slice(-3).map(item => `${item.weight}g`).join(' → ')
-}
-
 function normalizeHistory(history: any[]) {
   return (history || [])
     .map(item => ({
@@ -317,13 +357,31 @@ function buildNormalizedPuppies(items: any[]) {
   return (items || []).map(normalizePuppy)
 }
 
-function selectLitter(litter: any) {
+async function selectLitter(litter: any) {
+  if (!litter?._id) return
+  const selectionToken = ++latestSelectionToken
   selectedLitter.value = litter
-  puppies.value = buildNormalizedPuppies(litter.puppies || [])
+  selectedLitterLoading.value = true
+  puppies.value = []
+  weights.value = []
   weights.value = puppies.value.map(() => '')
   submitError.value = ''
   recordDateTime.value = Date.now()
   syncDateChipActive()
+
+  try {
+    const familyId = currentFamily.value?._id || ''
+    const detail = familyId ? await getLocalLitterDetail(familyId, litter._id) : null
+    if (selectionToken !== latestSelectionToken) return
+    const hydratedLitter = detail?.litter ? { ...litter, ...detail.litter } : litter
+    selectedLitter.value = hydratedLitter
+    puppies.value = buildNormalizedPuppies(detail?.puppies || litter.puppies || [])
+    weights.value = puppies.value.map(() => '')
+  } finally {
+    if (selectionToken === latestSelectionToken) {
+      selectedLitterLoading.value = false
+    }
+  }
 }
 
 function setDateChip(chip: Exclude<DateChipKey, ''>) {
@@ -357,6 +415,71 @@ function weightDelta(idx: number) {
   const last = puppies.value[idx]?.last_weight || 0
   if (!current || !last) return 0
   return Math.round(current - last)
+}
+
+function getTrendSamples(puppy: PuppyWeightItem, idx: number) {
+  const history = puppy.weight_history.slice(-4).map(item => item.weight)
+  const current = parseWeightValue(weights.value[idx] || '')
+  if (current > 0) {
+    history.push(current)
+  }
+  return history.slice(-4)
+}
+
+function getTrendTone(puppy: PuppyWeightItem, idx: number) {
+  const current = parseWeightValue(weights.value[idx] || '')
+  const previous = puppy.last_weight || 0
+  if (!current || !previous) return 'idle'
+  if (current > previous) return 'up'
+  if (current < previous) return 'down'
+  return 'idle'
+}
+
+function getTrendPoints(puppy: PuppyWeightItem, idx: number): TrendPointStyle[] {
+  const samples = getTrendSamples(puppy, idx)
+  if (samples.length <= 1) return []
+
+  const width = 58
+  const height = 30
+  const padding = 2
+  const max = Math.max(...samples)
+  const min = Math.min(...samples)
+  const range = max - min
+
+  return samples.map((weight, sampleIdx) => {
+    const x = samples.length === 1 ? width / 2 : (width / (samples.length - 1)) * sampleIdx
+    const y = range === 0
+      ? height / 2
+      : padding + ((max - weight) / range) * (height - padding * 2)
+    return {
+      left: `${x}px`,
+      top: `${y}px`,
+    }
+  })
+}
+
+function getTrendSegments(puppy: PuppyWeightItem, idx: number): TrendSegmentStyle[] {
+  const points = getTrendPoints(puppy, idx)
+  if (points.length <= 1) return []
+
+  return points.slice(0, -1).map((point, pointIdx) => {
+    const nextPoint = points[pointIdx + 1]
+    const x1 = Number.parseFloat(String(point.left ?? 0))
+    const y1 = Number.parseFloat(String(point.top ?? 0))
+    const x2 = Number.parseFloat(String(nextPoint.left ?? 0))
+    const y2 = Number.parseFloat(String(nextPoint.top ?? 0))
+    const dx = x2 - x1
+    const dy = y2 - y1
+    const width = Math.sqrt(dx * dx + dy * dy)
+    const angle = Math.atan2(dy, dx)
+
+    return {
+      left: `${x1}px`,
+      top: `${y1}px`,
+      width: `${width}px`,
+      transform: `translateY(-50%) rotate(${angle}rad)`,
+    }
+  })
 }
 
 function focusNext(idx: number) {
@@ -418,7 +541,7 @@ function openLitterSelector() {
 
 function handleLitterSelect(litter: any) {
   const match = litters.value.find(item => item._id === litter._id)
-  selectLitter(match || litter)
+  void selectLitter(match || litter)
 }
 
 async function loadLitters() {
@@ -436,7 +559,7 @@ async function loadLitters() {
     if (preselectedLitterId) {
       const match = litters.value.find((item: any) => item._id === preselectedLitterId)
       if (match) {
-        selectLitter(match)
+        await selectLitter(match)
         preselectedLitterId = ''
         return
       }
@@ -444,7 +567,7 @@ async function loadLitters() {
     }
 
     if (!selectedLitter.value && litters.value.length === 1) {
-      selectLitter(litters.value[0])
+      await selectLitter(litters.value[0])
     }
   } catch (e: any) {
     litters.value = []
@@ -505,6 +628,10 @@ onLoad((query) => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+
+  &--with-fixed-submit {
+    padding-bottom: calc(118px + env(safe-area-inset-bottom, 0px));
+  }
 }
 
 .litter-card {
@@ -685,14 +812,17 @@ onLoad((query) => {
 
 .puppy-input-row {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  align-items: flex-start;
+  gap: 12px;
 }
 
 .weight-input-group {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  width: 96px;
+  min-height: 48px;
+  box-sizing: border-box;
   flex-shrink: 0;
 
   &--empty {
@@ -731,43 +861,147 @@ onLoad((query) => {
 }
 
 .weight-unit {
+  min-width: 14px;
   font-size: 14px;
   font-weight: 600;
+  line-height: 48px;
+  text-align: center;
   color: var(--text-3);
 }
 
-.weight-detail {
+.weight-meta {
   flex: 1;
   min-width: 0;
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.weight-detail {
+  display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
 }
 
 .weight-comparison {
   font-size: 12px;
   font-weight: 500;
   color: var(--text-3);
+  line-height: 1.45;
 }
 
 .weight-delta {
   font-size: 13px;
   font-weight: 700;
+  line-height: 1.4;
 
   &--positive { color: var(--red); }
   &--negative { color: var(--green); }
 }
 
 .mini-trend {
+  width: 64px;
+  height: 42px;
   flex-shrink: 0;
-  max-width: 108px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  --trend-color: rgba(216, 203, 189, 0.95);
+  --trend-soft: rgba(216, 203, 189, 0.16);
+
+  &::after {
+    content: '';
+    position: absolute;
+    right: 2px;
+    bottom: 1px;
+    width: 28px;
+    height: 22px;
+    background: linear-gradient(180deg, transparent 0%, var(--trend-soft) 100%);
+    border-radius: 999px 999px 4px 4px;
+    pointer-events: none;
+  }
+
+  &--up {
+    --trend-color: rgba(224, 82, 82, 0.95);
+    --trend-soft: rgba(224, 82, 82, 0.16);
+  }
+
+  &--down {
+    --trend-color: rgba(61, 174, 111, 0.95);
+    --trend-soft: rgba(61, 174, 111, 0.16);
+  }
 }
 
-.mini-trend-text {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-3);
-  white-space: nowrap;
+.mini-trend__plot {
+  width: 58px;
+  height: 30px;
+  position: relative;
+}
+
+.mini-trend__segment {
+  position: absolute;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--trend-color);
+  transform-origin: left center;
+}
+
+.mini-trend__point {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  margin-top: -2px;
+  border-radius: 50%;
+  background: var(--trend-color);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.92);
+
+  &--latest {
+    width: 6px;
+    height: 6px;
+    margin-left: -3px;
+    margin-top: -3px;
+  }
+}
+
+.mini-trend__placeholder {
+  width: 58px;
+  height: 30px;
+  position: relative;
+}
+
+.mini-trend__placeholder-line {
+  position: absolute;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--trend-color);
+  opacity: 0.58;
+
+  &--one {
+    left: 8px;
+    top: 20px;
+    width: 16px;
+    transform: rotate(-24deg);
+  }
+
+  &--two {
+    left: 22px;
+    top: 15px;
+    width: 18px;
+    transform: rotate(-18deg);
+  }
+
+  &--three {
+    left: 38px;
+    top: 9px;
+    width: 14px;
+    transform: rotate(-28deg);
+  }
 }
 
 .summary-bar {
@@ -884,8 +1118,9 @@ onLoad((query) => {
   }
 
   &.active {
-    background: var(--teal);
+    background: var(--primary);
     color: #fff;
+    box-shadow: 0 2px 8px rgba(234, 62, 119, 0.25);
   }
 }
 
@@ -924,30 +1159,14 @@ onLoad((query) => {
   color: var(--red);
 }
 
-.save-btn {
-  width: 100%;
-  height: 48px;
-  border-radius: var(--radius-btn);
-  background: var(--teal);
-  color: #fff;
-  font-family: var(--font-display);
-  font-size: 15px;
-  font-weight: 700;
-  transition: all 0.12s ease;
-  box-shadow: 0 4px 16px rgba(61, 168, 160, 0.25);
+.fixed-bottom {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
 
-  &:active:not([disabled]) {
-    transform: scale(0.94);
-    opacity: 0.85;
-  }
-
-  &[disabled] {
-    opacity: 0.5;
-  }
-
-  &.save-btn--success {
-    background: var(--green);
-    box-shadow: 0 4px 16px rgba(68, 170, 107, 0.22);
-  }
+.submit-hint--fixed,
+.submit-error--fixed {
+  padding: 0 2px;
 }
 </style>
