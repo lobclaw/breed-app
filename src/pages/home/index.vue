@@ -1245,6 +1245,50 @@ async function refreshDayCacheFromLocal(dayTs: number) {
   }
 }
 
+async function refreshWeekCacheFromLocal(extraDays: number[] = []) {
+  const DAY_MS = 86400000
+  const todayTs = startOfDay(Date.now())
+  const start = todayTs + DAY_MS
+  const end = todayTs + 7 * DAY_MS - 1
+  const result = await fetchWeekCards(start, end)
+  const nextCache = { ...weekCache.value }
+
+  Object.keys(nextCache).forEach((key) => {
+    const ts = Number(key)
+    if (ts >= start && ts <= end) delete nextCache[ts]
+  })
+
+  pruneSuppressedTasks()
+  if (result) {
+    for (const [key, value] of Object.entries(result)) {
+      const dayData = value as { cards?: any[] }
+      nextCache[Number(key)] = {
+        cards: filterSuppressedCards(dayData.cards || []),
+      }
+    }
+  }
+  weekCache.value = nextCache
+  await ensureDateCountsRange(todayTs, end, { force: true })
+
+  const extraDaySet = new Set(
+    extraDays
+      .map(day => startOfDay(day))
+      .filter(day => day !== todayTs && (day < start || day > end)),
+  )
+  for (const day of extraDaySet) {
+    await refreshDayCacheFromLocal(day)
+  }
+}
+
+async function refreshHomeAfterLocalMutation(extraDays: number[] = []) {
+  const selectedTs = selectedDate.value
+  await loadTodayCards()
+  await refreshWeekCacheFromLocal(extraDays)
+  if (selectedTs !== startOfDay(Date.now())) {
+    await refreshDayCacheFromLocal(selectedTs)
+  }
+}
+
 function toggleCalendar() {
   showHomeDatePicker.value = true
 }
@@ -1428,10 +1472,12 @@ function removeCardLocally(taskId: string, forceRemoveCard = false, showSuccess 
           markCardCompleting(card.id)
           setTimeout(() => {
             const currentIdx = list.value.findIndex(c => c.id === card.id)
-            if (currentIdx >= 0) list.value.splice(currentIdx, 1)
+            if (currentIdx >= 0) {
+              list.value.splice(currentIdx, 1)
+              counts.today = Math.max(0, counts.today - 1)
+              syncTodayDayCountFromVisibleCards()
+            }
             clearCardCompleting(card.id)
-            counts.today = Math.max(0, counts.today - 1)
-            syncTodayDayCountFromVisibleCards()
           }, 220)
         }, 280)
       } else {
@@ -1439,10 +1485,12 @@ function removeCardLocally(taskId: string, forceRemoveCard = false, showSuccess 
         markCardCompleting(card.id)
         setTimeout(() => {
           const currentIdx = list.value.findIndex(c => c.id === card.id)
-          if (currentIdx >= 0) list.value.splice(currentIdx, 1)
+          if (currentIdx >= 0) {
+            list.value.splice(currentIdx, 1)
+            counts.today = Math.max(0, counts.today - 1)
+            syncTodayDayCountFromVisibleCards()
+          }
           clearCardCompleting(card.id)
-          counts.today = Math.max(0, counts.today - 1)
-          syncTodayDayCountFromVisibleCards()
         }, 220)
       }
     } else {
@@ -1590,41 +1638,51 @@ function updateSickDogsStatusLocally(illnessIds: string[] = [], status = '治疗
 }
 
 async function onComplete(taskId: string, mode?: boolean | string) {
+  const completeAndRefresh = async (autoRecord = false) => {
+    const result = await doCompleteTask(taskId, autoRecord)
+    if (!result) {
+      await loadTodayCards()
+      return
+    }
+    addSuppressedTasks(result?.data?.completedTaskIds || [taskId])
+    await refreshHomeAfterLocalMutation()
+  }
+
   // 批量卡片全部勾完
   if (mode === true) {
     removeCardLocally(taskId)
-    doCompleteTask(taskId)
+    await completeAndRefresh()
     return
   }
   // 批量卡片部分勾选
   if (mode === false) {
-    doCompleteTask(taskId)
+    await completeAndRefresh()
     return
   }
   if (mode === 'batch-auto') {
     removeCardLocally(taskId, true)
-    doCompleteTask(taskId, true)
+    await completeAndRefresh(true)
     return
   }
   if (mode === 'batch-auto-partial') {
-    doCompleteTask(taskId, true)
+    await completeAndRefresh(true)
     return
   }
   // DogCard "完成" (mode='auto'): 一键完成 + 自动创建记录
   if (mode === 'auto') {
     removeCardLocally(taskId)
-    doCompleteTask(taskId, true) // autoRecord=true
+    await completeAndRefresh(true)
     return
   }
   // DogCard "跳过" (mode='skip'): 仅标记 done，不创建记录
   if (mode === 'skip') {
     removeCardLocally(taskId, false, false)
-    doCompleteTask(taskId)
+    await completeAndRefresh()
     return
   }
   // 兜底
   removeCardLocally(taskId)
-  doCompleteTask(taskId)
+  await completeAndRefresh()
 }
 
 const postponeTaskInfo = ref<any>(null)
@@ -1673,10 +1731,12 @@ async function doPostpone() {
         markCardCompleting(card.id)
         setTimeout(() => {
           const ci = list.value.findIndex(c => c.id === card.id)
-          if (ci >= 0) list.value.splice(ci, 1)
+          if (ci >= 0) {
+            list.value.splice(ci, 1)
+            counts.today = Math.max(0, counts.today - 1)
+            syncTodayDayCountFromVisibleCards()
+          }
           clearCardCompleting(card.id)
-          counts.today = Math.max(0, counts.today - 1)
-          syncTodayDayCountFromVisibleCards()
         }, 450)
         break
       }
@@ -1701,7 +1761,7 @@ async function doPostpone() {
     return
   }
 
-  await refreshDayCacheFromLocal(targetDayTs)
+  await refreshHomeAfterLocalMutation([targetDayTs])
 }
 
 async function onBatchComplete(payload: any) {
@@ -1735,6 +1795,7 @@ async function onBatchComplete(payload: any) {
     return
   }
   addSuppressedTasks(result?.data?.completedTaskIds || taskIds)
+  await refreshHomeAfterLocalMutation()
 }
 
 async function onBatchSkip(taskIds: string[]) {
@@ -1745,12 +1806,17 @@ async function onBatchSkip(taskIds: string[]) {
     return
   }
   addSuppressedTasks(result?.data?.completedTaskIds || taskIds)
+  await refreshHomeAfterLocalMutation()
 }
 
 async function onRecordDose({ medicationTaskId }: { medicationTaskId: string }) {
   const result = await doRecordMedDose(medicationTaskId)
-  if (result?.data?.completed || result?.data?.allComplete) {
+  if (!result) {
     await loadTodayCards()
+    return
+  }
+  if (result?.data?.completed || result?.data?.allComplete) {
+    await refreshHomeAfterLocalMutation()
   }
 }
 
@@ -1768,8 +1834,10 @@ async function onBatchCompleteMed(medicationTaskIds: string[]) {
     completedMedicationTaskIds.length !== medicationTaskIds.length
     || fullyCompletedMedicationTaskIds.length > 0
   ) {
-    await loadTodayCards()
+    await refreshHomeAfterLocalMutation()
+    return
   }
+  await refreshHomeAfterLocalMutation()
 }
 
 function applyHomeFeedback(payload: any) {
@@ -1817,10 +1885,12 @@ function removeSickDogLocally(dogId: string, illnessId?: string) {
       markCardCompleting(card.id)
       setTimeout(() => {
         const ci = list.value.findIndex(c => c.id === card.id)
-        if (ci >= 0) list.value.splice(ci, 1)
+        if (ci >= 0) {
+          list.value.splice(ci, 1)
+          counts.today = Math.max(0, counts.today - 1)
+          syncTodayDayCountFromVisibleCards()
+        }
         clearCardCompleting(card.id)
-        counts.today = Math.max(0, counts.today - 1)
-        syncTodayDayCountFromVisibleCards()
       }, 450)
     } else {
       card.dogs = remaining
@@ -1866,19 +1936,28 @@ function onAction(payload: { type: string; data: any }) {
     showStopConfirm.value = true
   } else if (payload.type === 'recover' && payload.data?.illnessId) {
     removeSickDogLocally(payload.data.dogId, payload.data.illnessId)
-    void recoverIllnesses({ illnessIds: [payload.data.illnessId] })
+    void recoverIllnesses({ illnessIds: [payload.data.illnessId] }).then(async (result) => {
+      if (!result) {
+        await loadTodayCards()
+        return
+      }
+      await refreshHomeAfterLocalMutation()
+    })
   } else if (payload.type === 'update_status' && payload.data?.illnessId) {
     // 就地更新状态标签（不移除行）
     updateSickDogsStatusLocally([payload.data.illnessId], payload.data.status)
-    void batchUpdateIllnessStatus({ illnessIds: [payload.data.illnessId], status: payload.data.status })
+    void batchUpdateIllnessStatus({ illnessIds: [payload.data.illnessId], status: payload.data.status }).then(async (result) => {
+      if (!result) await loadTodayCards()
+    })
   } else if (payload.type === 'stop_medication' && payload.data?.dogId) {
-    endMedication(payload.data.dogId).then((result) => {
+    endMedication(payload.data.dogId).then(async (result) => {
       if (!result) {
         return loadTodayCards()
       }
       const cancelledMedicationTaskIds = result?.data?.cancelledMedicationTaskIds || []
       if (cancelledMedicationTaskIds.length > 0) {
         removeMedicationDogsLocally([payload.data.dogId])
+        await refreshHomeAfterLocalMutation()
       } else {
         return loadTodayCards()
       }
@@ -1902,8 +1981,10 @@ async function confirmMedBatchComplete() {
     }
     const completedMedicationTaskIds = result?.data?.completedMedicationTaskIds || medIds
     if (completedMedicationTaskIds.length !== medIds.length) {
-      await loadTodayCards()
+      await refreshHomeAfterLocalMutation()
+      return
     }
+    await refreshHomeAfterLocalMutation()
   }
 }
 
@@ -1922,6 +2003,7 @@ async function confirmMedBatchRecover() {
   }
   if (result?.data?.recoveredIllnessIds?.length) {
     removeMedicationDogsLocally(selectedItems.map(item => item.dogId))
+    await refreshHomeAfterLocalMutation()
   } else {
     await loadTodayCards()
   }
@@ -1938,14 +2020,20 @@ async function confirmSickBatchAction(action: SickBatchAction) {
     selectedItems.forEach((item) => {
       removeSickDogLocally(item.dogId, item.illnessId)
     })
-    await recoverIllnesses({ illnessIds })
+    const result = await recoverIllnesses({ illnessIds })
+    if (!result) {
+      await loadTodayCards()
+      return
+    }
+    await refreshHomeAfterLocalMutation()
     return
   }
 
   if (action === 'update_status') {
     const illnessIds = [...new Set(selectedItems.map(item => item.illnessId).filter(Boolean))]
     updateSickDogsStatusLocally(illnessIds, '治疗中')
-    await batchUpdateIllnessStatus({ illnessIds, status: '治疗中' })
+    const result = await batchUpdateIllnessStatus({ illnessIds, status: '治疗中' })
+    if (!result) await loadTodayCards()
     return
   }
 
@@ -2040,7 +2128,13 @@ async function confirmQuickComplete() {
   removeCardLocally(taskId)
 
   // 后台静默调接口
-  void doCompleteTask(taskId)
+  const result = await doCompleteTask(taskId)
+  if (!result) {
+    await loadTodayCards()
+  } else {
+    addSuppressedTasks(result?.data?.completedTaskIds || [taskId])
+    await refreshHomeAfterLocalMutation()
+  }
   quickCompleteNotes.value = ''
   quickCompleteTask.value = null
 }
@@ -2067,6 +2161,7 @@ async function confirmBatchComplete() {
   } else {
     taskIdsToComplete.forEach(taskId => removeCardLocally(taskId))
   }
+  await refreshHomeAfterLocalMutation()
 }
 
 onShow(async () => {

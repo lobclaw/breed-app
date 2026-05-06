@@ -4084,10 +4084,13 @@ class LocalSyncRuntime {
       ? [{
           taskId,
           recordId: createStableEntityId('health_record'),
+          expenseId: Number(task.details?.cost || 0) > 0 ? createStableEntityId('expense') : '',
           dogId: task.dog_id,
           dogName: task.dog_name,
           type: task.type,
           date: now,
+          cost: Number(task.details?.cost || 0) > 0 ? Number(task.details.cost) : null,
+          notes: task.details?.notes || null,
           details: task.details || {},
         }]
       : []
@@ -4099,7 +4102,7 @@ class LocalSyncRuntime {
       },
     )
 
-    await localDb.transact(['tasks', 'health_records'], (tables) => {
+    await localDb.transact(['tasks', 'health_records', 'expenses'], (tables) => {
       tables.tasks = (tables.tasks as any[]).map((currentTask) => currentTask._id === taskId
         ? {
             ...currentTask,
@@ -4119,6 +4122,8 @@ class LocalSyncRuntime {
             dog_name: record.dogName || '',
             family_id: familyId,
             date: record.date,
+            cost: record.cost,
+            notes: record.notes,
             details: record.details || {},
             version: 0,
             created_at: now,
@@ -4127,6 +4132,24 @@ class LocalSyncRuntime {
           })
         })
         tables.health_records = nextRecords
+        const expenseRows = autoHealthRecords
+          .filter(record => record.expenseId && Number(record.cost || 0) > 0)
+          .map((record) => buildLocalHealthExpense(
+            familyId,
+            { _id: record.dogId, name: record.dogName || '' },
+            {
+              type: record.type,
+              date: record.date,
+              notes: record.notes,
+            },
+            record.recordId,
+            Number(record.cost),
+            record.expenseId,
+            now,
+          ))
+        if (expenseRows.length > 0) {
+          tables.expenses = [...(tables.expenses as any[]), ...expenseRows]
+        }
       }
     })
 
@@ -4135,7 +4158,7 @@ class LocalSyncRuntime {
       autoRecord,
       _sync: syncMeta,
     }
-    await this.enqueueMutation(HOME_MUTATION_TYPES.COMPLETE_TASK, familyId, payload, ['tasks', 'health_records'], syncMeta)
+    await this.enqueueMutation(HOME_MUTATION_TYPES.COMPLETE_TASK, familyId, payload, ['tasks', 'health_records', 'expenses'], syncMeta)
     return {
       message: '已完成',
       data: {
@@ -4158,10 +4181,13 @@ class LocalSyncRuntime {
         .map(task => ({
           taskId: task._id,
           recordId: createStableEntityId('health_record'),
+          expenseId: Number(task.details?.cost || 0) > 0 ? createStableEntityId('expense') : '',
           dogId: task.dog_id,
           dogName: task.dog_name,
           type: task.type,
           date: now,
+          cost: Number(task.details?.cost || 0) > 0 ? Number(task.details.cost) : null,
+          notes: task.details?.notes || null,
           details: task.details || {},
         }))
       : []
@@ -4175,7 +4201,7 @@ class LocalSyncRuntime {
       autoHealthRecords,
     })
 
-    await localDb.transact(['tasks', 'health_records'], (tables) => {
+    await localDb.transact(['tasks', 'health_records', 'expenses'], (tables) => {
       const targetIds = new Set(pendingTasks.map(task => task._id))
       tables.tasks = (tables.tasks as any[]).map((task) => targetIds.has(task._id)
         ? {
@@ -4196,6 +4222,8 @@ class LocalSyncRuntime {
             dog_name: record.dogName || '',
             family_id: familyId,
             date: record.date,
+            cost: record.cost,
+            notes: record.notes,
             details: record.details || {},
             version: 0,
             created_at: now,
@@ -4203,6 +4231,24 @@ class LocalSyncRuntime {
             _local_pending: true,
           })),
         ]
+        const expenseRows = autoHealthRecords
+          .filter(record => record.expenseId && Number(record.cost || 0) > 0)
+          .map((record) => buildLocalHealthExpense(
+            familyId,
+            { _id: record.dogId, name: record.dogName || '' },
+            {
+              type: record.type,
+              date: record.date,
+              notes: record.notes,
+            },
+            record.recordId,
+            Number(record.cost),
+            record.expenseId,
+            now,
+          ))
+        if (expenseRows.length > 0) {
+          tables.expenses = [...(tables.expenses as any[]), ...expenseRows]
+        }
       }
     })
 
@@ -4211,7 +4257,7 @@ class LocalSyncRuntime {
       autoRecord,
       _sync: syncMeta,
     }
-    await this.enqueueMutation(HOME_MUTATION_TYPES.BATCH_COMPLETE_TASK, familyId, payload, ['tasks', 'health_records'], syncMeta)
+    await this.enqueueMutation(HOME_MUTATION_TYPES.BATCH_COMPLETE_TASK, familyId, payload, ['tasks', 'health_records', 'expenses'], syncMeta)
     return {
       data: {
         completedTaskIds: pendingTasks.map(task => task._id),

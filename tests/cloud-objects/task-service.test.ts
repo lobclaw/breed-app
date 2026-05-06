@@ -424,6 +424,40 @@ describe('task-service', () => {
       expect(records.every(r => r.type === 'vaccination')).toBe(true)
     })
 
+    it('批量健康完成启用 autoRecord 且带费用时应创建 expense', async () => {
+      const now = Date.now()
+      seedCollection('tasks', [
+        {
+          _id: 'vac_batch_cost_1',
+          family_id: familyId,
+          dog_id: 'dog_1',
+          dog_name: '奶盖',
+          type: 'vaccination',
+          status: 'pending',
+          due_date: now,
+          details: { vaccine_type: '卫佳5', cost: 88, notes: '门店接种' },
+        },
+      ])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      const result = await taskService.batchCompleteTask.call(ctx, ['vac_batch_cost_1'], true)
+
+      const { data: records } = await db.collection('health_records').get()
+      const { data: expenses } = await db.collection('expenses').get()
+      expect(result.touchedEntities).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'health_records' }),
+        expect.objectContaining({ collection: 'expenses' }),
+      ]))
+      expect(records).toHaveLength(1)
+      expect(records[0]).toMatchObject({ cost: 88, notes: '门店接种' })
+      expect(expenses).toHaveLength(1)
+      expect(expenses[0]).toMatchObject({
+        category: '疫苗驱虫',
+        total_amount: 88,
+        notes: '疫苗 · 门店接种',
+      })
+    })
+
     it('批量完成没有 pending 任务时不应写入 0 条操作日志', async () => {
       const now = Date.now()
       seedCollection('tasks', [{
@@ -487,6 +521,49 @@ describe('task-service', () => {
       const { data: tasks } = await db.collection('tasks').doc('task_sync_1').get()
       expect(tasks[0].status).toBe('completed')
       expect(tasks[0].version).toBe(4)
+    })
+
+    it('completeTask 自动建疫苗记录且带费用时应创建 expense', async () => {
+      const now = Date.now()
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      seedCollection('tasks', [{
+        _id: 'task_sync_cost_1',
+        family_id: familyId,
+        dog_id: 'dog_1',
+        dog_name: '花花',
+        type: 'vaccination',
+        title: '疫苗',
+        status: 'pending',
+        due_date: now,
+        details: {
+          vaccine_type: '卫佳5',
+          cost: 66,
+          notes: '上门接种',
+        },
+        version: 1,
+        created_at: now - DAY_MS,
+        updated_at: now - DAY_MS,
+      }])
+
+      const result = await taskService.completeTask.call(ctx, {
+        taskId: 'task_sync_cost_1',
+        autoRecord: true,
+      })
+
+      expect(result.ack).toBe('accepted')
+      expect(result.touchedEntities).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'tasks', id: 'task_sync_cost_1' }),
+        expect.objectContaining({ collection: 'health_records' }),
+        expect.objectContaining({ collection: 'expenses' }),
+      ]))
+
+      const { data: expenses } = await db.collection('expenses').get()
+      expect(expenses).toHaveLength(1)
+      expect(expenses[0]).toMatchObject({
+        category: '疫苗驱虫',
+        total_amount: 66,
+        notes: '疫苗 · 上门接种',
+      })
     })
   })
 

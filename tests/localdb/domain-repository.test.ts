@@ -582,6 +582,47 @@ describe('local domain repository', () => {
     })
   })
 
+  it('完成带费用的疫苗待办并自动建记录后应立即出现在本地财务列表', async () => {
+    const now = new Date('2026-05-06T10:00:00+08:00').getTime()
+
+    await localDb.replaceTable('tasks', [{
+      _id: 'task_vaccination_cost_1',
+      family_id: 'fam_finance_9',
+      dog_id: 'dog_task_finance_1',
+      dog_name: '奶糕',
+      type: 'vaccination',
+      status: 'pending',
+      due_date: now,
+      updated_at: now,
+      version: 1,
+      details: {
+        vaccine_type: '卫佳5',
+        cost: 128,
+        notes: '门店接种',
+      },
+    }])
+    await localDb.replaceTable('health_records', [])
+    await localDb.replaceTable('expenses', [])
+    await localDb.replaceTable('outbox_mutations', [])
+    await localDb.replaceTable('local_operation_logs', [])
+
+    await localSyncRuntime.completeTaskLocally('fam_finance_9', 'task_vaccination_cost_1', true)
+
+    const txList = await getLocalTransactionList('fam_finance_9', {
+      year: 2026,
+      month: 5,
+      type: 'expense',
+    })
+
+    expect(txList).toHaveLength(1)
+    expect(txList[0]).toMatchObject({
+      _txType: 'expense',
+      category: '疫苗驱虫',
+      total_amount: 128,
+      notes: '疫苗 · 门店接种',
+    })
+  })
+
   it('应从本地方案库和犬舍总览集合读取数据', async () => {
     const monthTs = new Date('2026-04-10T10:00:00+08:00').getTime()
     await localDb.replaceTable('medication_protocols', [{

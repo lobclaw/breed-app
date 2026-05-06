@@ -534,8 +534,38 @@ function toLegacyMedItem(task) {
   }
 }
 
-async function createAutoHealthRecord({ familyId, uid, task, now, recordId = '' }) {
-  if (!task || !['vaccination', 'deworming'].includes(task.type)) return false
+function buildAutoHealthExpensePayload({ familyId, uid, task, now, recordId }) {
+  const sourceLabels = {
+    vaccination: '疫苗',
+    deworming: '驱虫',
+  }
+  const categoryMap = {
+    vaccination: '疫苗驱虫',
+    deworming: '疫苗驱虫',
+  }
+  const sourceLabel = sourceLabels[task.type] || '健康'
+  const category = categoryMap[task.type] || '其他'
+  const noteText = typeof task.details?.notes === 'string' ? task.details.notes.trim() : ''
+
+  return buildVersionedCreate({
+    total_amount: Number(task.details?.cost),
+    category,
+    date: now,
+    notes: noteText
+      ? (sourceLabel !== category ? `${sourceLabel} · ${noteText}` : noteText)
+      : (sourceLabel !== category ? sourceLabel : null),
+    linked_dog_ids: [task.dog_id],
+    dog_names: [task.dog_name || ''],
+    source_type: 'auto',
+    source_record_id: recordId,
+    family_id: familyId,
+    created_by: uid,
+    deleted_at: null,
+  }, now)
+}
+
+async function createAutoHealthRecord({ familyId, uid, task, now, recordId = '', expenseId = '' }) {
+  if (!task || !['vaccination', 'deworming'].includes(task.type)) return null
 
   const details = {}
   if (task.type === 'vaccination') details.vaccine_type = task.details?.vaccine_type || null
@@ -551,12 +581,23 @@ async function createAutoHealthRecord({ familyId, uid, task, now, recordId = '' 
     dog_name: task.dog_name,
     type: task.type,
     date: now,
+    cost: Number(task.details?.cost || 0) > 0 ? Number(task.details.cost) : null,
+    notes: task.details?.notes || null,
     details,
     source: 'auto_complete',
     created_by: uid,
   }, now)
   await db.collection('health_records').add(recordData)
-  return recordData
+  let expenseData = null
+  if (Number(task.details?.cost || 0) > 0) {
+    expenseData = buildAutoHealthExpensePayload({ familyId, uid, task, now, recordId: recordData._id })
+    if (expenseId) expenseData._id = expenseId
+    await db.collection('expenses').add(expenseData)
+  }
+  return {
+    record: recordData,
+    expense: expenseData,
+  }
 }
 
 function normalizeTaskIdList(taskIds = []) {
@@ -1304,18 +1345,22 @@ module.exports = {
     }
 
     const createdHealthRecords = []
-    const autoRecordMap = new Map((autoHealthRecords || []).map(item => [item.taskId, item.recordId]))
+    const createdExpenses = []
+    const autoRecordMap = new Map((autoHealthRecords || []).map(item => [item.taskId, item]))
     if (shouldAutoRecord && pendingTasks.length > 0) {
       await Promise.all(pendingTasks.map(async (task) => {
         try {
-          const record = await createAutoHealthRecord({
+          const autoRecordMeta = autoRecordMap.get(task._id) || {}
+          const result = await createAutoHealthRecord({
             familyId: this.familyId,
             uid: this.uid,
             task,
             now,
-            recordId: autoRecordMap.get(task._id) || '',
+            recordId: autoRecordMeta.recordId || '',
+            expenseId: autoRecordMeta.expenseId || '',
           })
-          if (record) createdHealthRecords.push(record)
+          if (result?.record) createdHealthRecords.push(result.record)
+          if (result?.expense) createdExpenses.push(result.expense)
         } catch (e) {
           console.log('[batchCompleteTask] auto-record failed:', e.message)
         }
@@ -1341,6 +1386,7 @@ module.exports = {
     const touchedEntities = [
       ...(updatedTasks || []).map(task => buildTouchedEntity('tasks', task)),
       ...createdHealthRecords.map(record => buildTouchedEntity('health_records', record)),
+      ...createdExpenses.map(expense => buildTouchedEntity('expenses', expense)),
     ]
     const response = {
       data: {
@@ -1351,7 +1397,7 @@ module.exports = {
       ...buildSyncAck(syncMeta, {
         ack: 'accepted',
         touchedEntities,
-        resyncScopes: ['tasks', 'health_records'],
+        resyncScopes: ['tasks', 'health_records', 'expenses'],
       }),
     }
     if (syncMeta?.clientMutationId) {
@@ -1461,10 +1507,20 @@ module.exports = {
     // 健康类一键完成：自动创建记录，不再自动生成下次提醒
     const HEALTH_TYPES = ['vaccination', 'deworming']
     let createdHealthRecord = null
+    let createdExpense = null
     if (shouldAutoRecord && HEALTH_TYPES.includes(task.type)) {
       try {
-        const recordId = Array.isArray(autoHealthRecords) && autoHealthRecords.length > 0 ? autoHealthRecords[0].recordId : ''
-        createdHealthRecord = await createAutoHealthRecord({ familyId, uid: this.uid, task, now, recordId })
+        const autoRecordMeta = Array.isArray(autoHealthRecords) && autoHealthRecords.length > 0 ? autoHealthRecords[0] : {}
+        const result = await createAutoHealthRecord({
+          familyId,
+          uid: this.uid,
+          task,
+          now,
+          recordId: autoRecordMeta.recordId || '',
+          expenseId: autoRecordMeta.expenseId || '',
+        })
+        createdHealthRecord = result?.record || null
+        createdExpense = result?.expense || null
       } catch (e) {
         console.log('[completeTask] auto-record failed:', e.message)
         // 不影响任务完成，静默失败
@@ -1486,6 +1542,7 @@ module.exports = {
     const touchedEntities = [
       ...(updatedTasks || []).map(item => buildTouchedEntity('tasks', item)),
       ...(createdHealthRecord ? [buildTouchedEntity('health_records', createdHealthRecord)] : []),
+      ...(createdExpense ? [buildTouchedEntity('expenses', createdExpense)] : []),
     ]
     const response = {
       message: '已完成',
@@ -1497,7 +1554,7 @@ module.exports = {
       ...buildSyncAck(syncMeta, {
         ack: 'accepted',
         touchedEntities,
-        resyncScopes: ['tasks', 'health_records'],
+        resyncScopes: ['tasks', 'health_records', 'expenses'],
       }),
     }
     if (syncMeta?.clientMutationId) {
