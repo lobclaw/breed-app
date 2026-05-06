@@ -30,6 +30,13 @@ describe('breeding cycle page source contract', () => {
     expect(source).not.toContain('最新')
   })
 
+  it('应在周期摘要卡为种公名称提供最近配种记录 fallback', () => {
+    expect(source).toContain('const resolvedSireName = computed(() => {')
+    expect(source).toContain("const latestMatingRecord = timelineRecords.value.find(record => record?.type === 'mating')")
+    expect(source).toContain("String(matingDetails.sire_name || matingDetails.male_name || '').trim()")
+    expect(source).toContain("{{ resolvedSireName || '未知' }}")
+  })
+
   it('应收敛未来节点和历史节点的颜色语义，并复用共享 tone helper', () => {
     expect(source).toContain('getBreedingTimelineRecordTone')
     expect(source).toContain('getBreedingTimelineCurrentStatusTone')

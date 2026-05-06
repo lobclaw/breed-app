@@ -84,10 +84,19 @@ function getPregnancyCount(details: Record<string, any> = {}) {
   return value > 0 ? value : null
 }
 
+function getMatingSireName(record?: BreedingRecord | null) {
+  const details = record?.details || {}
+  return String(details.sire_name || details.male_name || '').trim()
+}
+
 function buildSubtitle(cycle?: BreedingCycle | null, records: BreedingRecord[] = [], now = Date.now()) {
   if (!cycle) return ''
   const parts = []
-  if (cycle.sire_name) parts.push(`种公: ${cycle.sire_name}`)
+  const matingRecords = getOrderedMatingRecords(records)
+  const latestMating = getLatestBreedingRecord(records, 'mating')
+  const sireName = String(cycle.sire_name || '').trim() || getMatingSireName(latestMating)
+  if (sireName) parts.push(`种公: ${sireName}`)
+  if (matingRecords.length > 0) parts.push(`配种${matingRecords.length}次`)
   if (!parts.length) parts.push(buildCompactBreedingCycleStatusTitle(cycle, records, now) || cycle.status || '进行中')
   return parts.join(' · ')
 }

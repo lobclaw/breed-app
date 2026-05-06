@@ -554,6 +554,7 @@ const selectedSire = ref<any>(null)
 const dogLocked = ref(false)
 const cycleId = ref('')
 const prefillTaskId = ref('')
+const prefillTaskIsPersisted = ref(false)
 const date = ref<number | null>(null)
 const recordTime = ref<number>(Date.now())
 const notes = ref('')
@@ -793,6 +794,7 @@ function resetDetails() {
   dogLocked.value = false
   cycleId.value = ''
   prefillTaskId.value = ''
+  prefillTaskIsPersisted.value = false
   date.value = null
   notes.value = ''
   costInput.value = ''
@@ -1007,7 +1009,10 @@ async function loadCreateState() {
 
   if (prefillTaskId.value) {
     const task = await getLocalTaskById(currentFamily.value?._id || '', prefillTaskId.value)
-    if (task) applyTaskPrefill(task)
+    if (task) {
+      prefillTaskIsPersisted.value = true
+      applyTaskPrefill(task)
+    }
   }
 }
 
@@ -1122,7 +1127,7 @@ async function submitCreate() {
   }
 
   const result = await localSyncRuntime.addBreedingRecordLocally(currentFamily.value?._id || '', payload)
-  if (prefillTaskId.value) {
+  if (prefillTaskId.value && prefillTaskIsPersisted.value) {
     await localSyncRuntime.completeTaskLocally(currentFamily.value?._id || '', prefillTaskId.value)
   }
 
@@ -1131,9 +1136,9 @@ async function submitCreate() {
   if (breedingType.value === 'heat_observation') {
     queueSubmitFeedback({ message: '已保存观察记录' })
   } else {
-    const completedTaskIds = prefillTaskId.value ? [prefillTaskId.value] : []
+    const completedTaskIds = prefillTaskId.value && prefillTaskIsPersisted.value ? [prefillTaskId.value] : []
     queueSubmitFeedback({
-      message: buildRecordFeedbackMessage(1, prefillTaskId.value ? 1 : 0),
+      message: buildRecordFeedbackMessage(1, completedTaskIds.length),
       homeSection: 'breeding',
       homeAnchorKey: resolveBreedingHomeAnchorKey(detailPayload),
       completedTaskIds,

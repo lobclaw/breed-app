@@ -315,7 +315,7 @@ function buildMedicationRelationInfo(task, illnesses = []) {
 
 function buildIllnessRelationInfo(illness, tasks = []) {
   if ((tasks || []).some(task => task?.source_record_id === illness?._id)) {
-    return { relationType: 'linked', relationLabel: '已关联用药' }
+    return { relationType: 'linked', relationLabel: '关联用药' }
   }
   if ((tasks || []).some(task => !task?.source_record_id)) {
     return { relationType: 'fallback', relationLabel: '按当前治疗状态推断关联' }

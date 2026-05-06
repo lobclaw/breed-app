@@ -120,7 +120,7 @@
           <view class="info-rows">
             <view class="info-row">
               <text class="info-label">种公</text>
-              <text class="info-value">{{ cycle.sire_name || '未知' }}</text>
+              <text class="info-value">{{ resolvedSireName || '未知' }}</text>
             </view>
             <view class="info-row">
               <text class="info-label">发情日期</text>
@@ -404,6 +404,14 @@ const firstMatingDate = computed(() => {
 })
 const firstMatingDateText = computed(() => {
   return typeof firstMatingDate.value === 'number' ? formatDate(firstMatingDate.value) : ''
+})
+const resolvedSireName = computed(() => {
+  const cycleSireName = String(cycle.value?.sire_name || '').trim()
+  if (cycleSireName) return cycleSireName
+
+  const latestMatingRecord = timelineRecords.value.find(record => record?.type === 'mating')
+  const matingDetails = latestMatingRecord?.details || {}
+  return String(matingDetails.sire_name || matingDetails.male_name || '').trim()
 })
 
 const costItems = computed(() => {

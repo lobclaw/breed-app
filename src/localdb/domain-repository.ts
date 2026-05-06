@@ -25,11 +25,42 @@ const LIST_STATUS_PRIORITY: Record<string, number> = {
   正常: 5,
 }
 
+const DETAIL_STATUS_PRIORITY: Record<string, number> = {
+  生病中: 0,
+  用药中: 1,
+  怀孕中: 2,
+  哺乳中: 3,
+  发情中: 4,
+  正常: 5,
+}
+
+const MEDICATION_DOSAGE_UNIT_MAP: Record<string, string> = {
+  ml: 'ml',
+  mg: 'mg',
+  tablet: '片',
+}
+
+const MEDICATION_METHOD_MAP: Record<string, string> = {
+  oral: '口服',
+  injection: '注射',
+  topical: '外用',
+  other: '其他',
+}
+
 function sortListStatuses(statuses: DeriveStatus[] = []) {
   return [...statuses].sort((a, b) => {
     const left = LIST_STATUS_PRIORITY[a.type] ?? 99
     const right = LIST_STATUS_PRIORITY[b.type] ?? 99
     return left - right
+  })
+}
+
+function sortDetailStatuses(statuses: DeriveStatus[] = []) {
+  return [...statuses].sort((a, b) => {
+    const left = DETAIL_STATUS_PRIORITY[a.type] ?? 99
+    const right = DETAIL_STATUS_PRIORITY[b.type] ?? 99
+    if (left !== right) return left - right
+    return Number(b.activityTs || 0) - Number(a.activityTs || 0)
   })
 }
 
@@ -78,6 +109,12 @@ function buildIllnessRelationType(illnessId: string, activeMedicationTasks: any[
   return 'standalone'
 }
 
+function getIllnessRelationLabel(relationType: 'linked' | 'fallback' | 'standalone') {
+  if (relationType === 'linked') return '关联用药'
+  if (relationType === 'fallback') return '按当前治疗状态推断关联'
+  return '未关联用药'
+}
+
 function buildListIllnessStatuses(illnesses: any[] = [], activeMedicationTasks: any[] = []): DeriveStatus[] {
   const sortedRecords = [...illnesses].sort((a, b) => (b.updated_at || b.date || b.created_at || 0) - (a.updated_at || a.date || a.created_at || 0))
   const labels: string[] = []
@@ -99,7 +136,7 @@ function buildListIllnessStatuses(illnesses: any[] = [], activeMedicationTasks: 
   const illnessDay = labels.length === 1 ? getIllnessDayCount(illnessStartTs) : null
   const relationType = buildIllnessRelationType(firstRecordId, activeMedicationTasks)
   const meta = [
-    ...(relationType === 'standalone' ? [] : [{ icon: 'link', text: relationType === 'linked' ? '已关联用药' : '按当前治疗状态推断关联' }]),
+    ...(relationType === 'standalone' ? [] : [{ icon: 'link', text: getIllnessRelationLabel(relationType) }]),
     ...(illnessDay ? [{ icon: 'schedule', text: `第${illnessDay}天` }] : []),
   ]
   const label = labels.length === 1
@@ -123,8 +160,6 @@ function buildDetailIllnessStatuses(illnesses: any[] = [], activeMedicationTasks
   const sortedRecords = [...illnesses].sort((a, b) => (b.updated_at || b.date || b.created_at || 0) - (a.updated_at || a.date || a.created_at || 0))
 
   return sortedRecords.map((illness) => {
-    const illnessStartTs = illness?.details?.start_date || illness?.date || illness?.created_at || 0
-    const illnessDay = getIllnessDayCount(illnessStartTs)
     const symptomTags = Array.isArray(illness?.details?.symptom_tags)
       ? illness.details.symptom_tags
         .map((item: unknown) => typeof item === 'string' ? item.trim() : '')
@@ -145,8 +180,7 @@ function buildDetailIllnessStatuses(illnesses: any[] = [], activeMedicationTasks
       activityTs: illness?.updated_at || illness?.date || illness?.created_at || 0,
       detail: symptomSummary || treatmentStatus,
       meta: [
-        ...(relationType === 'standalone' ? [] : [{ icon: 'link', text: relationType === 'linked' ? '已关联用药' : '按当前治疗状态推断关联' }]),
-        ...(illnessDay ? [{ icon: 'schedule', text: `第${illnessDay}天` }] : []),
+        ...(relationType === 'standalone' ? [] : [{ icon: 'link', text: getIllnessRelationLabel(relationType) }]),
       ],
     } as DeriveStatus
   })
@@ -190,6 +224,56 @@ function buildMedicationRelationType(task: any, illnesses: any[]) {
   return 'standalone'
 }
 
+function getMedicationRelationLabel(relationType: 'linked' | 'fallback' | 'standalone') {
+  if (relationType === 'linked') return '关联疾病'
+  if (relationType === 'fallback') return '按当前治疗状态推断关联'
+  return '独立用药'
+}
+
+function formatMedicationDose(task: any) {
+  if (task?.dosage === null || task?.dosage === undefined || task?.dosage === '') return ''
+  const unit = MEDICATION_DOSAGE_UNIT_MAP[task?.dosage_unit] || task?.dosage_unit || ''
+  return `${task.dosage}${unit}`
+}
+
+function formatMedicationMethod(method: unknown) {
+  if (typeof method !== 'string' || !method.trim()) return ''
+  return MEDICATION_METHOD_MAP[method] || method
+}
+
+function formatMedicationFrequencyLabel(frequency: unknown) {
+  const count = Math.max(1, Number(frequency) || 1)
+  return `每日${count}次`
+}
+
+function getMedicationStatusCompletionSummary(task: any) {
+  const frequency = Math.max(1, Number(task?.frequency) || 1)
+  const durationDays = Math.max(1, Number(task?.duration_days) || 1)
+  const dailyDoses = task?.daily_doses || {}
+  const completedDates = new Set(Array.isArray(task?.completed_dates) ? task.completed_dates : [])
+  const startTs = startOfDay(task?.actual_start_date || task?.start_date || task?.created_at || Date.now())
+  let completedDoseCount = 0
+
+  for (let day = 1; day <= durationDays; day += 1) {
+    const doses = Number(dailyDoses[String(day)])
+    if (Number.isFinite(doses)) {
+      completedDoseCount += Math.min(Math.max(0, doses), frequency)
+      continue
+    }
+
+    const dayTs = startTs + ((day - 1) * 86400000)
+    if (completedDates.has(dayTs)) {
+      completedDoseCount += frequency
+    }
+  }
+
+  return {
+    completedDoseCount,
+    totalDoseCount: durationDays * frequency,
+    frequency,
+  }
+}
+
 function buildListMedicationStatus(tasks: any[] = [], nowTs = Date.now(), activeIllnesses: any[] = []): DeriveStatus[] {
   if (!tasks.length) return []
   const preferredTask = tasks.reduce((currentTask, nextTask) => pickPreferredMedicationTask(currentTask, nextTask), null)
@@ -207,6 +291,142 @@ function buildListMedicationStatus(tasks: any[] = [], nowTs = Date.now(), active
     progress: { current: Math.min(currentDay, totalDays), total: totalDays },
     meta: relationType === 'standalone' ? [] : [{ icon: 'link', text: relationType === 'linked' ? '关联疾病' : '按当前治疗状态推断关联' }],
     activityTs: preferredTask?.updated_at || preferredTask?.created_at || 0,
+  }]
+}
+
+function buildDetailMedicationStatuses(tasks: any[] = [], nowTs = Date.now(), activeIllnesses: any[] = []): DeriveStatus[] {
+  const taskByDrug = new Map<string, any>()
+
+  for (const task of tasks) {
+    const drugName = task?.drug_name || task?.details?.drug_name || '用药'
+    taskByDrug.set(drugName, pickPreferredMedicationTask(taskByDrug.get(drugName), task))
+  }
+
+  return Array.from(taskByDrug.values()).map((task) => {
+    const { currentDay, totalDays } = getMedicationTaskProgress(task, nowTs)
+    const relationType = buildMedicationRelationType(task, activeIllnesses)
+    const { completedDoseCount, totalDoseCount, frequency } = getMedicationStatusCompletionSummary(task)
+    const drugName = task?.drug_name || task?.details?.drug_name || '用药'
+    const detail = [
+      drugName,
+      formatMedicationDose(task),
+      formatMedicationMethod(task?.method),
+    ].filter(Boolean).join(' · ')
+
+    return {
+      type: '用药中',
+      label: '用药中',
+      taskId: task?._id,
+      detail,
+      relationType,
+      progress: task?.duration_days
+        ? { current: Math.min(currentDay, totalDays), total: totalDays }
+        : undefined,
+      meta: [
+        { icon: 'link', text: getMedicationRelationLabel(relationType) },
+        { icon: 'schedule', text: formatMedicationFrequencyLabel(frequency) },
+        { icon: 'check_circle', text: `已执行 ${completedDoseCount}/${totalDoseCount} 次` },
+      ],
+      activityTs: task?.updated_at || task?.created_at || 0,
+    } as DeriveStatus
+  })
+}
+
+function getBreedingRecordTs(record: any) {
+  return Number(record?.date || record?.updated_at || record?.created_at || 0)
+}
+
+function getLatestMatingRecord(cycleId: string, breedingRecords: any[] = []) {
+  if (!cycleId) return null
+  return [...breedingRecords]
+    .filter(record => record?.cycle_id === cycleId && record?.type === 'mating' && !record?.deleted_at)
+    .sort((left, right) => getBreedingRecordTs(right) - getBreedingRecordTs(left))[0] || null
+}
+
+function getMatingSireName(record: any) {
+  const details = record?.details || {}
+  return details.sire_name || details.male_name || record?.sire_name || ''
+}
+
+function getMatingNumberText(record: any) {
+  const details = record?.details || {}
+  const matingNumber = Number(details.mating_number || details.mating_count)
+  return Number.isFinite(matingNumber) && matingNumber > 0 ? `配种${matingNumber}次` : ''
+}
+
+function buildDetailBreedingStatuses(cycles: any[] = [], activeLitters: any[] = [], breedingRecords: any[] = [], now = Date.now()): DeriveStatus[] {
+  const activeCycle = [...cycles]
+    .filter(cycle => cycle.status === '发情中' || cycle.status === '怀孕中')
+    .sort((left, right) => Number(right.updated_at || right.created_at || 0) - Number(left.updated_at || left.created_at || 0))[0]
+
+  if (activeCycle?.status === '发情中') {
+    const startTs = activeCycle.start_date || activeCycle.created_at || now
+    const day = getBeijingElapsedDays(startTs, now) + 1
+    return [{
+      type: '发情中',
+      cycleId: activeCycle._id,
+      activityTs: activeCycle.updated_at || activeCycle.created_at || 0,
+      meta: [{ icon: 'schedule', text: `第${day}天` }],
+    }]
+  }
+
+  if (activeCycle?.status === '怀孕中') {
+    const latestMating = getLatestMatingRecord(activeCycle._id, breedingRecords)
+    const startTs = activeCycle.mated_at || latestMating?.date || activeCycle.updated_at || activeCycle.created_at || now
+    const sireName = activeCycle.sire_name || getMatingSireName(latestMating)
+    const matingNumberText = getMatingNumberText(latestMating)
+    const totalDays = 63
+    const daysPassed = Math.max(1, getBeijingElapsedDays(startTs, now))
+    const dueTs = startTs + totalDays * 86400000
+    const dueDate = new Date(dueTs)
+    const dueMd = `${dueDate.getMonth() + 1}月${dueDate.getDate()}日`
+
+    return [{
+      type: '怀孕中',
+      cycleId: activeCycle._id,
+      detail: [
+        sireName ? `种公: ${sireName}` : '',
+        matingNumberText,
+      ].filter(Boolean).join(' · '),
+      progress: { current: Math.min(daysPassed, totalDays), total: totalDays },
+      activityTs: activeCycle.updated_at || activeCycle.created_at || 0,
+      meta: [
+        { icon: 'event', text: `预产期 ${dueMd}` },
+        { icon: 'schedule', text: `还有${Math.max(0, totalDays - daysPassed)}天` },
+      ],
+    }]
+  }
+
+  if (activeLitters.length === 0) return []
+
+  const latestLitter = [...activeLitters].sort((left, right) => {
+    const leftTs = left.birth_date || left.updated_at || left.created_at || 0
+    const rightTs = right.birth_date || right.updated_at || right.created_at || 0
+    return rightTs - leftTs
+  })[0]
+  const birthTs = latestLitter?.birth_date || latestLitter?.created_at || 0
+  const nursingDay = birthTs ? getBeijingElapsedDays(birthTs, now) + 1 : null
+  const totalBorn = Number(latestLitter?.total_born)
+  const bornAlive = Number(latestLitter?.born_alive)
+  const aliveSummary = Number.isFinite(totalBorn) && totalBorn > 0 && Number.isFinite(bornAlive)
+    ? `本窝存活 ${bornAlive}/${totalBorn}`
+    : ''
+  const detail = [
+    latestLitter?.sire_name ? `种公: ${latestLitter.sire_name}` : '',
+    aliveSummary,
+  ].filter(Boolean).join(' · ')
+  const meta = [
+    ...(birthTs ? [{ icon: 'event', text: `生产于 ${formatDate(birthTs)}` }] : []),
+    ...(nursingDay ? [{ icon: 'schedule', text: `第${nursingDay}天` }] : []),
+    ...(aliveSummary ? [{ icon: 'favorite', text: aliveSummary }] : []),
+  ]
+
+  return [{
+    type: '哺乳中',
+    cycleId: latestLitter?.cycle_id || '',
+    detail,
+    meta,
+    activityTs: latestLitter?.updated_at || latestLitter?.created_at || 0,
   }]
 }
 
@@ -339,7 +559,7 @@ export async function getLocalDogDetail(familyId: string, dogId: string): Promis
   if (!familyId || !dogId) return null
 
   const now = Date.now()
-  const [dog, cycles, illnesses, medicationTasks, activeLitters] = await Promise.all([
+  const [dog, cycles, illnesses, medicationTasks, activeLitters, breedingRecords] = await Promise.all([
     localDb.findById<DogWithStatus & { deleted_at?: number | null }>('dogs', dogId),
     localDb.query<any>('breeding_cycles', cycle =>
       cycle.family_id === familyId
@@ -362,17 +582,27 @@ export async function getLocalDogDetail(familyId: string, dogId: string): Promis
       && litter.dam_id === dogId
       && !litter.weaned_at,
     ),
+    localDb.query<BreedingRecord & { deleted_at?: number | null }>('breeding_records', record =>
+      record.family_id === familyId
+      && record.dog_id === dogId
+      && record.type === 'mating'
+      && !record.deleted_at,
+    ),
   ])
 
   if (!dog || dog.family_id !== familyId || dog.deleted_at) return null
 
-  const breedingStatusMap = buildBreedingStatusMap(cycles, activeLitters, now)
   const illnessMap = groupRowsByDogId(illnesses)
   const medicationMap = groupRowsByDogId(medicationTasks)
+  const statuses = sortDetailStatuses([
+    ...buildDetailIllnessStatuses(illnessMap.get(dogId) || [], medicationMap.get(dogId) || []),
+    ...buildDetailMedicationStatuses(medicationMap.get(dogId) || [], now, illnessMap.get(dogId) || []),
+    ...buildDetailBreedingStatuses(cycles, activeLitters, breedingRecords, now),
+  ])
 
   return {
     ...dog,
-    statuses: buildDogStatuses(dog, breedingStatusMap, illnessMap, medicationMap, now, { aggregateIllnesses: false }),
+    statuses: statuses.length > 0 ? statuses : [{ type: '正常' as const }],
   }
 }
 

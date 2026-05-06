@@ -1399,6 +1399,10 @@ function addSuppressedTasks(taskIds: string[] = [], duration = 2500) {
   })
 }
 
+function filterSuppressibleTaskIds(taskIds: string[] = []) {
+  return taskIds.filter(taskId => taskId && !taskId.startsWith('synthetic_breeding_milestone:'))
+}
+
 function isTaskSuppressed(taskId?: string) {
   if (!taskId) return false
   pruneSuppressedTasks()
@@ -2153,9 +2157,12 @@ async function onBatchCompleteMed(medicationTaskIds: string[]) {
 }
 
 function applyHomeFeedback(payload: any) {
-  addSuppressedTasks(payload?.suppressTaskIds || payload?.completedTaskIds || [])
+  addSuppressedTasks(filterSuppressibleTaskIds(payload?.suppressTaskIds || payload?.completedTaskIds || []))
+  const shouldKeepBreedingCardInPlace = payload?.homeSection === 'breeding'
+    && typeof payload?.homeAnchorKey === 'string'
+    && payload.homeAnchorKey.startsWith('breeding-step:')
 
-  if (payload?.completedTaskIds?.length) {
+  if (payload?.completedTaskIds?.length && !shouldKeepBreedingCardInPlace) {
     if (payload.removeBatchCard) {
       removeCardLocally(payload.completedTaskIds[0], true)
     } else {
@@ -2556,9 +2563,11 @@ onShow(async () => {
 
   // 首页回到前台先读本地事实源，云端同步只做后台校正，避免表单返回后卡片延迟出现。
   await loadAll()
-  void localSyncRuntime.syncScope('home').then(() => {
-    if (isHomeActive.value) void loadAll()
-  })
+  void localSyncRuntime.flushOutbox(familyId)
+    .then(() => localSyncRuntime.syncScope('home'))
+    .then(() => {
+      if (isHomeActive.value) void loadAll()
+    })
   if (deferredTarget) {
     scheduleHomeCardFocus(deferredTarget)
   }

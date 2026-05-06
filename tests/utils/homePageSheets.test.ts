@@ -26,10 +26,22 @@ describe('home page sheet source contract', () => {
   })
 
   it('今日用药卡的康复菜单应透传 illnessIds 与 medicationTaskIds', () => {
-    expect(source).toContain("const illnessIds = [...new Set([")
+    expect(source).toContain('const rawIllnessIds: unknown[] = [')
     expect(source).toContain("...(Array.isArray(dog.illnessIds) ? dog.illnessIds : [])")
-    expect(source).toContain("const medicationTaskIds = (dog.allMedTasks || [])")
+    expect(source).toContain('const medicationTaskIds = (dog.allMedTasks || [])')
     expect(source).toContain("removeMedicationDogsLocally(payload.data?.dogId ? [payload.data.dogId] : [])")
     expect(source).toContain("void recoverIllnesses({ illnessIds, medicationTaskIds })")
+  })
+
+  it('繁育主链记录返回首页时应保留卡片，由本地投影更新下一阶段', () => {
+    expect(source).toContain("const shouldKeepBreedingCardInPlace = payload?.homeSection === 'breeding'")
+    expect(source).toContain("payload.homeAnchorKey.startsWith('breeding-step:')")
+    expect(source).toContain("if (payload?.completedTaskIds?.length && !shouldKeepBreedingCardInPlace)")
+  })
+
+  it('首页反馈 suppression 不应隐藏本地合成繁育 milestone', () => {
+    expect(source).toContain('function filterSuppressibleTaskIds(taskIds: string[] = [])')
+    expect(source).toContain("!taskId.startsWith('synthetic_breeding_milestone:')")
+    expect(source).toContain('addSuppressedTasks(filterSuppressibleTaskIds(payload?.suppressTaskIds || payload?.completedTaskIds || []))')
   })
 })

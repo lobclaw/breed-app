@@ -194,6 +194,7 @@ Local-First Foundation：
 - ack / touchedEntities / version / conflict contract
 - 云对象业务约束
 - 首页本地投影纯函数行为
+- 首页繁育主链本地合成 milestone 不得进入普通任务 suppression，避免未成熟复查后同一合成 id 的下一张卡被隐藏
 - 批量健康完成是否真实落 `health_record`
 - 首页批量健康卡单只完成后是否保留 `1/2` 等局部进度承接
 - 首页批量健康卡是否只在全部完成后整卡退场

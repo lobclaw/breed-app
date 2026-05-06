@@ -154,6 +154,109 @@ describe('local domain repository', () => {
     ])
     expect(detailIllnessStatuses.map(status => status.label)).toEqual(['皮肤病', '腹泻', '感冒'])
     expect(detailIllnessStatuses[2].detail).toBe('食欲差 / 呕吐 等3项')
+    expect(detailIllnessStatuses.some(status => status.meta?.some(item => item.icon === 'schedule'))).toBe(false)
+  })
+
+  it('犬只详情当前状态应保留怀孕和用药详情', async () => {
+    const now = new Date('2026-05-06T10:00:00+08:00').getTime()
+    vi.useFakeTimers()
+    vi.setSystemTime(now)
+
+    await localDb.replaceTable('dogs', [{
+      _id: 'dog_detail_status_1',
+      family_id: 'fam_detail_status',
+      name: '团子',
+      gender: '母',
+      role: '种狗',
+      disposition: '在养',
+      updated_at: now,
+    }])
+    await localDb.replaceTable('breeding_cycles', [{
+      _id: 'cycle_detail_status_1',
+      family_id: 'fam_detail_status',
+      dam_id: 'dog_detail_status_1',
+      status: '怀孕中',
+      created_at: new Date('2026-05-05T10:00:00+08:00').getTime(),
+      updated_at: now,
+    }])
+    await localDb.replaceTable('breeding_records', [{
+      _id: 'mating_detail_status_1',
+      family_id: 'fam_detail_status',
+      dog_id: 'dog_detail_status_1',
+      cycle_id: 'cycle_detail_status_1',
+      type: 'mating',
+      date: new Date('2026-05-05T10:00:00+08:00').getTime(),
+      details: {
+        sire_id: 'sire_detail_status_1',
+        sire_name: '小王子',
+        mating_number: 1,
+      },
+      created_at: new Date('2026-05-05T10:00:00+08:00').getTime(),
+      updated_at: new Date('2026-05-05T10:00:00+08:00').getTime(),
+    }])
+    await localDb.replaceTable('health_records', [{
+      _id: 'ill_detail_status_1',
+      family_id: 'fam_detail_status',
+      dog_id: 'dog_detail_status_1',
+      type: 'illness',
+      date: new Date('2026-05-05T09:00:00+08:00').getTime(),
+      updated_at: now - 1000,
+      details: {
+        primary_condition: '感冒',
+        treatment_status: '治疗中',
+      },
+    }])
+    await localDb.replaceTable('medication_tasks', [{
+      _id: 'med_detail_status_1',
+      family_id: 'fam_detail_status',
+      dog_id: 'dog_detail_status_1',
+      dog_name: '团子',
+      source_record_id: 'ill_detail_status_1',
+      status: '进行中',
+      drug_name: '阿莫西林',
+      dosage: '2',
+      dosage_unit: 'tablet',
+      method: 'oral',
+      frequency: 2,
+      duration_days: 5,
+      actual_start_date: new Date('2026-05-05T10:00:00+08:00').getTime(),
+      daily_doses: { 1: 2, 2: 1 },
+      created_at: now - 86400000,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('litters', [])
+
+    const detail = await getLocalDogDetail('fam_detail_status', 'dog_detail_status_1')
+    const illnessStatus = detail?.statuses.find(status => status.type === '生病中')
+    const medicationStatus = detail?.statuses.find(status => status.type === '用药中')
+    const pregnancyStatus = detail?.statuses.find(status => status.type === '怀孕中')
+
+    expect(illnessStatus).toMatchObject({
+      recordId: 'ill_detail_status_1',
+      meta: [
+        { icon: 'link', text: '关联用药' },
+      ],
+    })
+    expect(medicationStatus).toMatchObject({
+      taskId: 'med_detail_status_1',
+      detail: '阿莫西林 · 2片 · 口服',
+      relationType: 'linked',
+      progress: { current: 2, total: 5 },
+      meta: [
+        { icon: 'link', text: '关联疾病' },
+        { icon: 'schedule', text: '每日2次' },
+        { icon: 'check_circle', text: '已执行 3/10 次' },
+      ],
+    })
+    expect(pregnancyStatus).toMatchObject({
+      cycleId: 'cycle_detail_status_1',
+      detail: '种公: 小王子 · 配种1次',
+      progress: { current: 1, total: 63 },
+      meta: [
+        { icon: 'event', text: '预产期 7月7日' },
+        { icon: 'schedule', text: '还有62天' },
+      ],
+    })
   })
 
   it('录入带费用的卵泡检查后应立即出现在本地财务列表', async () => {

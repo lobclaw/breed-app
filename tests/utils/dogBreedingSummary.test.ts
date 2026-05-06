@@ -80,7 +80,7 @@ describe('dogBreedingSummary', () => {
     ] as any, now)
 
     expect(summary.title).toBe('第3次繁育周期')
-    expect(summary.subtitle).toBe('种公: 团团')
+    expect(summary.subtitle).toBe('种公: 团团 · 配种4次')
     expect(summary.timeline.map(item => item.title)).toEqual([
       '待产',
       '怀孕第56天',
@@ -106,6 +106,21 @@ describe('dogBreedingSummary', () => {
     expect(summary.timeline[4].summary).toContain('确认怀孕 · 5只')
     expect(summary.stageSummary).toContain('怀孕第56天')
     expect(summary.stageSummary).toContain('预产期 2026-04-23')
+  })
+
+  it('怀孕中的当前周期摘要应从最近配种记录回填种公名', () => {
+    const summary = buildActiveCycleSummaryViewModel(createCycle({
+      status: '怀孕中',
+      cycle_number: 1,
+      mated_at: new Date('2026-05-06T00:00:00+08:00').getTime(),
+    }), [
+      createRecord('mating', '2026-05-06T00:00:00+08:00', {
+        sire_name: '弟弟',
+        mating_number: 1,
+      }),
+    ] as any, now)
+
+    expect(summary.subtitle).toBe('种公: 弟弟 · 配种1次')
   })
 
   it('发情中且只有发情记录时，顶部显示建议卵泡检查', () => {
