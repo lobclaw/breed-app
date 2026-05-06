@@ -48,13 +48,15 @@
       </view>
 
       <!-- 日期 -->
-      <view class="field-group">
-        <view class="field-label"><text>日期</text></view>
-        <view class="form-input form-input--picker" @click="showDatePicker = true">
-          <text>{{ dateStr || '请选择日期' }}</text>
-          <text class="material-icons-round form-input__suffix">calendar_today</text>
+      <view class="date-field">
+        <view class="form-row form-row--date">
+          <text class="form-label">日期</text>
+          <view class="date-picker-pill" @click="showDatePicker = true">
+            <text class="material-icons-round date-picker-pill__icon">event</text>
+            <text class="date-picker-pill__text">{{ dateStr || '请选择日期' }}</text>
+          </view>
         </view>
-        <view class="date-chips">
+        <view class="date-chips date-chips--right">
           <text class="date-chip" :class="{ active: chipActive === 'today' }" @click="setChip('today')">今天</text>
           <text class="date-chip" :class="{ active: chipActive === 'yesterday' }" @click="setChip('yesterday')">昨天</text>
           <text class="date-chip" :class="{ active: chipActive === 'dayBefore' }" @click="setChip('dayBefore')">前天</text>
@@ -590,6 +592,11 @@ onShow(() => {
   flex-shrink: 0;
 }
 
+.form-row--date {
+  padding-bottom: 10px;
+  border-bottom: none;
+}
+
 .form-right {
   display: flex;
   align-items: center;
@@ -610,6 +617,42 @@ onShow(() => {
   font-size: 14px;
   font-weight: 600;
   color: var(--text-1);
+}
+
+/* ---- Date field ---- */
+.date-field {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  padding-bottom: 12px;
+}
+
+.date-picker-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: var(--card-dim);
+}
+
+.date-picker-pill__icon {
+  font-size: 14px;
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+
+.date-picker-pill__text {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.date-chips--right {
+  justify-content: flex-end;
+  margin-top: 0;
 }
 
 /* ---- Photo row ---- */
@@ -665,19 +708,22 @@ onShow(() => {
 
 /* ---- Note section ---- */
 .note-section {
-  padding: 14px 0 4px;
+  padding: 18px 0 4px;
 }
 
 .note-label {
+  display: block;
   font-size: 14px;
+  line-height: 20px;
   font-weight: 600;
   color: var(--text-2);
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .note-textarea {
+  box-sizing: border-box;
   width: 100%;
-  min-height: 72px;
+  min-height: 148px;
   border: 1px solid rgba(0, 0, 0, 0.06);
   border-radius: 12px;
   padding: 12px 14px;

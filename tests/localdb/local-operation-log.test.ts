@@ -26,6 +26,9 @@ describe('local operation log', () => {
     ;(globalThis as any).uniCloud = {
       getCurrentUserInfo: vi.fn(() => ({ uid: 'user_1' })),
     }
+    ;(globalThis as any).uni = {
+      getStorageSync: vi.fn(() => ''),
+    }
   })
 
   it('应为新增繁育记录生成本地待同步日志', async () => {
@@ -90,6 +93,37 @@ describe('local operation log', () => {
       domain: 'task',
       target_name: '2个任务',
       summary: '批量创建了 2 个任务',
+    })
+  })
+
+  it('本地家庭表缺少成员昵称时，应从家庭缓存兜底生成操作者昵称', async () => {
+    await localDb.replaceTable('families', [{
+      _id: 'fam_1',
+      members: [],
+      updated_at: 2,
+    } as any])
+    ;(globalThis as any).uni.getStorageSync = vi.fn((key: string) => {
+      if (key !== 'breed_family_cache') return ''
+      return JSON.stringify({
+        _id: 'fam_1',
+        members: [{ user_id: 'user_1', nickname: '缓存昵称', status: 'active' }],
+      })
+    })
+
+    const row = await createPendingLocalOperationLog(
+      LOCAL_MUTATION_TYPES.CREATE_BREEDING_RECORD,
+      'fam_1',
+      { dog_id: 'dog_1', type: 'follicle_check' },
+      {
+        clientMutationId: 'mutation_4',
+        deviceId: 'device_1',
+        clientTimestamp: 1003,
+      },
+    )
+
+    expect(row).toMatchObject({
+      actor_name: '缓存昵称',
+      summary: '为 十一 新增了卵泡检查记录',
     })
   })
 

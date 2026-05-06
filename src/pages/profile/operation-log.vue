@@ -546,6 +546,15 @@ function buildLogDetail(raw: Record<string, any>): string {
   return '进行了操作'
 }
 
+function resolveDisplayActorName(raw: Record<string, any>, fallback = '未知用户'): string {
+  const actorUserId = String(raw.actor_user_id || '').trim()
+  const actorName = String(raw.actor_name || '').trim()
+  const member = (currentFamily.value?.members || []).find(item => item.user_id === actorUserId && item.status === 'active')
+  const memberName = String(member?.nickname || '').trim()
+  if (memberName && (!actorName || actorName === actorUserId)) return memberName
+  return actorName || memberName || fallback
+}
+
 function processLog(raw: Record<string, any>): LogItem {
   const action = String(raw.action_type || 'update')
   const createdAt = Number(raw.created_at || Date.now())
@@ -560,7 +569,7 @@ function processLog(raw: Record<string, any>): LogItem {
   return {
     _id: String(raw._id || createdAt),
     actor_user_id: String(raw.actor_user_id || ''),
-    actor_name: String(raw.actor_name || '未知用户'),
+    actor_name: resolveDisplayActorName(raw),
     action_type: action,
     actionLabel: actionLabels[action] || '操作',
     detail: buildLogDetail(raw),
@@ -595,7 +604,7 @@ function processLocalLog(raw: Record<string, any>): LogItem {
   return {
     _id: String(raw._id || createdAt),
     actor_user_id: String(raw.actor_user_id || ''),
-    actor_name: String(raw.actor_name || '我'),
+    actor_name: resolveDisplayActorName(raw, '我'),
     action_type: action,
     actionLabel: actionLabels[action] || '操作',
     detail: buildLogDetail(raw),

@@ -28,8 +28,39 @@ const LOCAL_OPERATION_STATUS_TEXT: Record<MutationStatus, string> = {
   conflict: '同步冲突',
 }
 
+const FAMILY_CACHE_KEY = 'breed_family_cache'
+const UNI_ID_USER_INFO_KEY = 'uni-id-pages-userInfo'
+
 function normalizeDogName(dog: Record<string, any> | null | undefined) {
   return dog?.name || dog?.dog_name || '未命名犬只'
+}
+
+function readStorageObject(key: string): Record<string, any> | null {
+  try {
+    const raw = uni.getStorageSync(key)
+    if (!raw) return null
+    if (typeof raw === 'string') return JSON.parse(raw)
+    if (typeof raw === 'object') return raw as Record<string, any>
+  } catch {
+    return null
+  }
+  return null
+}
+
+function findActiveMemberName(family: Record<string, any> | null | undefined, actorUserId: string) {
+  const member = (family?.members || []).find((item: any) => item.user_id === actorUserId && item.status === 'active')
+  return String(member?.nickname || '').trim()
+}
+
+function getCachedActorName(actorUserId: string) {
+  const cachedFamily = readStorageObject(FAMILY_CACHE_KEY)
+  const familyMemberName = findActiveMemberName(cachedFamily, actorUserId)
+  if (familyMemberName) return familyMemberName
+
+  const userInfo = readStorageObject(UNI_ID_USER_INFO_KEY)
+  const userId = String(userInfo?._id || userInfo?.uid || '').trim()
+  if (userId && userId !== actorUserId) return ''
+  return String(userInfo?.nickname || userInfo?.username || '').trim()
 }
 
 function getCurrentUserId() {
@@ -44,10 +75,11 @@ async function resolveCurrentActor(familyId: string) {
   const actorUserId = getCurrentUserId()
   if (!actorUserId) return { actorUserId: '', actorName: '我' }
   const family = await localDb.findById<any>('families', familyId)
-  const member = (family?.members || []).find((item: any) => item.user_id === actorUserId && item.status === 'active')
+  const localMemberName = findActiveMemberName(family, actorUserId)
+  const cachedActorName = getCachedActorName(actorUserId)
   return {
     actorUserId,
-    actorName: member?.nickname || actorUserId,
+    actorName: localMemberName || cachedActorName || actorUserId,
   }
 }
 

@@ -23,22 +23,38 @@
     </view>
 
     <view v-if="hasUnsyncedData" class="sync-warning-card">
-      <text class="sync-warning-card__title">仍有本地数据未完全同步</text>
-      <text class="sync-warning-card__desc">{{ syncWarningText }}</text>
-      <text class="sync-warning-card__hint">请先恢复联网并等待同步完成，再执行备份或导出，避免遗漏离线期间的数据。</text>
+      <view class="sync-warning-card__header">
+        <view class="sync-warning-card__icon-wrap">
+          <text class="material-icons-round sync-warning-card__icon">cloud_sync</text>
+        </view>
+        <view class="sync-warning-card__main">
+          <view class="sync-warning-card__title-row">
+            <text class="sync-warning-card__title">备份前需完成同步</text>
+            <text class="sync-warning-card__badge">{{ syncWarningCount }} 项</text>
+          </view>
+          <text class="sync-warning-card__desc">{{ syncWarningText }}</text>
+        </view>
+      </view>
+      <view class="sync-warning-card__hint-row">
+        <text class="material-icons-round sync-warning-card__hint-icon">info</text>
+        <text class="sync-warning-card__hint">请先恢复联网并等待同步完成，再执行备份或导出，避免遗漏离线期间的数据。</text>
+      </view>
       <view v-if="syncIssues.length" class="sync-warning-card__issues">
         <view v-for="issue in syncIssues" :key="issue._id" class="sync-warning-card__issue">
           <text class="sync-warning-card__issue-type">{{ issue.type }}</text>
           <text class="sync-warning-card__issue-error">{{ issue.lastError || '同步失败，等待重试' }}</text>
         </view>
       </view>
-      <button class="sync-warning-card__retry" :disabled="retryingSync" @click="retrySyncNow">
-        <text class="material-icons-round sync-warning-card__retry-icon">sync</text>
-        <text>{{ retryingSync ? '正在重试' : '立即重试同步' }}</text>
-      </button>
-      <button class="sync-warning-card__detail" @click="goToSyncStatus">
-        <text>查看同步状态</text>
-      </button>
+      <view class="sync-warning-card__actions">
+        <button class="sync-warning-card__retry" :disabled="retryingSync" @click="retrySyncNow">
+          <text class="material-icons-round sync-warning-card__retry-icon">sync</text>
+          <text>{{ retryingSync ? '正在重试' : '立即重试同步' }}</text>
+        </button>
+        <button class="sync-warning-card__detail" @click="goToSyncStatus">
+          <text>同步状态</text>
+          <text class="material-icons-round sync-warning-card__detail-icon">chevron_right</text>
+        </button>
+      </view>
     </view>
 
     <!-- 操作按钮 -->
@@ -152,6 +168,15 @@ const syncWarningText = computed(() => {
     parts.push(`待上传 ${syncStatus.value.pendingUpload} 条`)
   }
   return parts.join(' · ') || '仍有未同步数据'
+})
+
+const syncWarningCount = computed(() => {
+  const current = syncStatus.value
+  return current.pending
+    + current.processing
+    + current.failed
+    + current.conflict
+    + current.pendingUpload
 })
 
 function formatDate(ts: number): string {
@@ -327,46 +352,136 @@ onShow(() => loadInfo())
 
 .sync-warning-card {
   margin: 0 var(--space-page) 18px;
-  padding: 16px;
+  padding: 14px;
   border-radius: var(--radius-card);
-  background: rgba(214, 65, 65, 0.08);
-  border: 1px solid rgba(214, 65, 65, 0.16);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(255, 248, 246, 0.94) 100%),
+    var(--card);
+  border: 1px solid rgba(224, 82, 82, 0.12);
+  box-shadow: 0 10px 28px rgba(224, 82, 82, 0.08);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 12px;
+  overflow: hidden;
+  position: relative;
 
-  &__title {
-    font-size: 15px;
-    font-weight: 700;
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 16px;
+    right: 16px;
+    height: 3px;
+    border-radius: 0 0 999px 999px;
+    background: linear-gradient(90deg, var(--red), var(--amber));
+    opacity: 0.88;
+  }
+
+  &__header {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    position: relative;
+    z-index: 1;
+  }
+
+  &__icon-wrap {
+    width: 38px;
+    height: 38px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, rgba(224, 82, 82, 0.14), rgba(232, 155, 62, 0.12));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  &__icon {
+    font-size: 21px;
+    line-height: 1;
     color: var(--red);
   }
 
-  &__desc {
-    font-size: 13px;
+  &__main {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 3px;
+  }
+
+  &__title {
+    font-size: 15px;
+    font-weight: 800;
+    line-height: 1.35;
     color: var(--text-1);
-    line-height: 1.5;
+  }
+
+  &__badge {
+    padding: 3px 8px;
+    border-radius: var(--radius-badge);
+    background: rgba(224, 82, 82, 0.10);
+    color: var(--red);
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1.2;
+    flex-shrink: 0;
+  }
+
+  &__desc {
+    display: block;
+    font-size: 12px;
+    color: var(--text-2);
+    line-height: 1.45;
+  }
+
+  &__hint-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    padding: 9px 10px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.62);
+    border: 1px solid rgba(216, 203, 189, 0.42);
+    position: relative;
+    z-index: 1;
+  }
+
+  &__hint-icon {
+    font-size: 15px;
+    line-height: 1.35;
+    color: var(--amber);
+    flex-shrink: 0;
   }
 
   &__hint {
+    flex: 1;
     font-size: 12px;
-    color: var(--text-3);
-    line-height: 1.5;
+    color: var(--text-2);
+    line-height: 1.45;
   }
 
   &__issues {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    margin-top: 4px;
+    position: relative;
+    z-index: 1;
   }
 
   &__issue {
     display: flex;
     flex-direction: column;
     gap: 2px;
-    padding: 8px 10px;
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.72);
+    padding: 9px 10px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.78);
+    border: 1px solid rgba(224, 82, 82, 0.08);
   }
 
   &__issue-type {
@@ -381,20 +496,37 @@ onShow(() => loadInfo())
     color: var(--red);
   }
 
+  &__actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    position: relative;
+    z-index: 1;
+  }
+
   &__retry {
-    width: 100%;
-    height: 38px;
-    margin-top: 4px;
+    flex: 1;
+    height: 42px;
     border: none;
-    border-radius: 19px;
-    background: var(--red);
+    border-radius: var(--radius-btn);
+    background: linear-gradient(135deg, var(--red), #e97862);
     color: #fff;
     font-size: 13px;
-    font-weight: 700;
+    font-weight: 800;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 4px;
+    gap: 5px;
+    box-shadow: 0 8px 18px rgba(224, 82, 82, 0.18);
+    transition: transform 0.12s ease, opacity 0.12s ease;
+
+    &::after {
+      border: 0;
+    }
+
+    &:active {
+      transform: scale(0.97);
+    }
 
     &[disabled] {
       opacity: 0.72;
@@ -407,15 +539,35 @@ onShow(() => loadInfo())
   }
 
   &__detail {
-    height: 34px;
+    min-width: 104px;
+    height: 42px;
     border: 0;
-    border-radius: var(--radius-row);
-    background: rgba(214, 65, 65, 0.10);
-    color: var(--red);
+    border-radius: var(--radius-btn);
+    background: rgba(255, 255, 255, 0.72);
+    color: var(--text-2);
     font-size: 13px;
-    font-weight: 600;
-    line-height: 34px;
-    margin-top: 2px;
+    font-weight: 700;
+    line-height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    box-shadow: inset 0 0 0 1px rgba(216, 203, 189, 0.5);
+    transition: transform 0.12s ease, opacity 0.12s ease;
+
+    &::after {
+      border: 0;
+    }
+
+    &:active {
+      transform: scale(0.97);
+      opacity: 0.86;
+    }
+  }
+
+  &__detail-icon {
+    font-size: 16px;
+    color: var(--text-3);
   }
 }
 
