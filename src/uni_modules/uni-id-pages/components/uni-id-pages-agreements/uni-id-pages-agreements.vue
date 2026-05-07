@@ -134,41 +134,52 @@
 	/* #endif */
 	.root {
 		flex-direction: row;
-		align-items: center;
+		align-items: flex-start;
+		flex-wrap: wrap;
+		min-height: 36px;
+		margin-top: 2px;
 		font-size: 12px;
-		color: #8a8f8b;
+		color: var(--text-2, #8b7355);
 	}
 
 	.checkbox-box ,.uni-label-pointer{
 		align-items: center;
 		display: flex;
 		flex-direction: row;
+		min-height: 32px;
+		padding-right: 4px;
 	}
 
 	.item {
 		flex-direction: row;
 	}
 	.text{
-		line-height: 26px;
+		line-height: 32px;
 	}
 	.agreement {
-		color: #04498c;
+		color: var(--primary, #ea3e77);
+		font-weight: 700;
 		cursor: pointer;
 	}
 
 	.checkbox-box ::v-deep .uni-checkbox-input{
 		border-radius: 100%;
+		width: 18px;
+		height: 18px;
+		border-color: var(--text-4, #d8cbbd);
 	}
 
 	.checkbox-box ::v-deep .uni-checkbox-input.uni-checkbox-input-checked{
-		border-color: $uni-color-primary;
+		border-color: var(--primary, #ea3e77);
 		color: #FFFFFF !important;
-		background-color: $uni-color-primary;
+		background-color: var(--primary, #ea3e77);
 	}
 
 	.content{
 		flex-wrap: wrap;
 		flex-direction: row;
+		flex: 1;
+		min-width: 0;
 	}
 
 	.root ::v-deep .uni-popup__error{

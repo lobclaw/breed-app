@@ -38,10 +38,13 @@
 		</template>
 		<template v-else>
 			<text class="tip">未注册的账号验证通过后将自动注册</text>
-			<view class="phone-box">
-				<view @click="chooseArea" class="area">+86</view>
-				<uni-easyinput trim="both" :focus="focusPhone" @blur="focusPhone = false" class="input-box" type="number"
-					:inputBorder="false" v-model="phone" maxlength="11" placeholder="请输入手机号" />
+			<view class="auth-field">
+				<text class="auth-field__label">手机号</text>
+				<view class="phone-box">
+					<view @click="chooseArea" class="auth-field__prefix area">+86</view>
+					<uni-easyinput trim="both" :focus="focusPhone" @blur="focusPhone = false" class="input-box" type="number"
+						:inputBorder="false" v-model="phone" maxlength="11" placeholder="请输入手机号" />
+				</view>
 			</view>
 			<uni-id-pages-agreements scope="register" ref="agreements"></uni-id-pages-agreements>
 			<button class="uni-btn" type="primary" @click="toSmsPage">获取验证码</button>
@@ -226,26 +229,24 @@
 	}
 
 	.phone-box {
-		position: relative;
 		/* #ifndef APP-NVUE */
 		display: flex;
 		/* #endif */
+		flex-direction: row;
+		align-items: center;
+		gap: 10px;
 	}
 
 	.area {
-		position: absolute;
-		left: 10px;
-		z-index: 9;
-		top: 12px;
-		font-size: 14px;
+		position: relative;
 	}
 
 	.area::after {
 		content: "";
 		border: 3px solid transparent;
-		border-top-color: #000;
-		top: 12px;
-		left: 3px;
+		border-top-color: var(--text-2);
+		top: 11px;
+		left: 6px;
 		position: relative;
 	}
 
@@ -258,9 +259,6 @@
 		box-sizing: border-box;
 		/* #endif */
 		flex: 1;
-		padding-left: 45px;
-		margin-bottom: 10px;
-		border-radius: 0;
 	}
 
 	.quickLogin {
@@ -282,8 +280,7 @@
 	}
 
 	.tip {
-		margin-top: -15px;
-		margin-bottom: 20px;
+		margin-bottom: 18px;
 	}
 
 	@media screen and (min-width: 690px) {

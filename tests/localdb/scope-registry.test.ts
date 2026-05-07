@@ -21,6 +21,12 @@ describe('sync scope registry', () => {
     expect(resolveSyncScopeForRoute('pages/record/medication-detail', { medication_task_id: 'med_1' })?.key).toBe('medication-task:med_1')
   })
 
+  it('犬舍总览应同步家庭镜像以支持昵称本地写入', () => {
+    const scope = resolveSyncScopeForRoute('pages/profile/index')
+    expect(scope?.key).toBe('kennel-dashboard')
+    expect(scope?.collections).toContain('families')
+  })
+
   it('应把静态页、在线优先页和废弃重定向页正确归类', () => {
     expect(resolveSyncScopeForRoute('pages/profile/about')?.mode).toBe('static')
     expect(resolveSyncScopeForRoute('pages/profile/backup')?.mode).toBe('online-first')

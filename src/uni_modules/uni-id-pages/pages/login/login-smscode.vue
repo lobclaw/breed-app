@@ -8,8 +8,11 @@
 		<text class="title">请输入验证码</text>
 		<text class="tip">先输入图形验证码，再获取短信验证码</text>
 		<uni-forms>
-			<uni-id-pages-sms-form focusCaptchaInput v-model="code" type="login-by-sms" ref="smsCode" :phone="phone">
-			</uni-id-pages-sms-form>
+			<view class="auth-field">
+				<text class="auth-field__label">短信验证码</text>
+				<uni-id-pages-sms-form focusCaptchaInput v-model="code" type="login-by-sms" ref="smsCode" :phone="phone">
+				</uni-id-pages-sms-form>
+			</view>
 			<button class="uni-btn send-btn" type="primary" @click="submit">登录</button>
 		</uni-forms>
 		<uni-popup-captcha @confirm="submit" v-model="captcha" scene="login-by-sms" ref="popup"></uni-popup-captcha>
@@ -83,11 +86,6 @@
 </script>
 <style scoped lang="scss">
 	@import "@/uni_modules/uni-id-pages/common/login-page.scss";
-
-	.tip {
-		margin-top: -15px;
-		margin-bottom: 15px;
-	}
 
 	.popup-captcha {
 		/* #ifndef APP-NVUE */

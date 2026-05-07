@@ -162,7 +162,7 @@ export const SYNC_SCOPE_REGISTRY: SyncScopeDefinition[] = [
     label: '犬舍总览',
     mode: 'local-first',
     ttlMs: FINANCE_TTL_MS,
-    collections: ['dogs', 'litters', 'expenses', 'incomes', 'sale_records', 'breeding_cycles', 'health_records', 'medication_tasks'],
+    collections: ['families', 'dogs', 'litters', 'expenses', 'incomes', 'sale_records', 'breeding_cycles', 'health_records', 'medication_tasks'],
     routeMatchers: ['pages/profile/index'],
   },
   {

@@ -94,14 +94,16 @@
 		/* #endif */
 		width: 600rpx;
 		padding-bottom: 0;
-		background-color: #FFF;
-		border-radius: 10px;
+		background-color: var(--card, #fff);
+		border-radius: 18px;
+		box-shadow: 0 18px 48px rgba(45, 27, 20, 0.12);
 		flex-direction: column;
 		position: relative;
+		overflow: hidden;
 	}
 
 	.popup-captcha .content {
-		padding: 1.3em 0.8em;
+		padding: 22px 18px 18px;
 	}
 
 	.popup-captcha .title {
@@ -109,32 +111,35 @@
 		word-wrap: break-word;
 		word-break: break-all;
 		white-space: pre-wrap;
-		font-weight: 400;
-		font-size: 18px;
+		font-weight: 800;
+		font-size: 17px;
 		overflow: hidden;
 		text-overflow: ellipsis;
-		color: #111;
+		color: var(--text-1, #1a1a2e);
 		margin-bottom: 15px;
 	}
 
 	.button-box {
-		height: 44px;
-		border-top: solid 1px #eee;
+		height: 48px;
+		border-top: solid 1px rgba(216, 203, 189, 0.45);
 		flex-direction: row;
 		align-items: center;
 		justify-content: space-around;
 	}
 	.button-box ,.btn{
-		height: 44px;
-		line-height: 44px;
+		height: 48px;
+		line-height: 48px;
 	}
 	.button-box .btn{
 		flex: 1;
 		margin: 1px;
 		text-align: center;
+		color: var(--text-2, #8b7355);
+		font-size: 14px;
+		font-weight: 700;
 	}
 	.button-box .confirm{
-		color: #007aff;
-		border-left: solid 1px #eee;
+		color: var(--primary, #ea3e77);
+		border-left: solid 1px rgba(216, 203, 189, 0.45);
 	}
 </style>

@@ -1,9 +1,11 @@
 <template>
-	<view>
-		<uni-captcha :focus="focusCaptchaInput" ref="captcha" scene="send-sms-code" v-model="captcha" />
+	<view class="short-code-form">
+		<view class="short-code-form__captcha">
+			<uni-captcha :focus="focusCaptchaInput" ref="captcha" scene="send-sms-code" v-model="captcha" />
+		</view>
 		<view class="box">
 			<uni-easyinput :focus="focusSmsCodeInput" @blur="focusSmsCodeInput = false" type="number" class="input-box" :inputBorder="false" v-model="modelValue" maxlength="6" :clearable="false" trim="both"
-				placeholder="请输入短信验证码">
+				placeholder="短信验证码">
 			</uni-easyinput>
 			<view class="short-code-btn" hover-class="hover" @click="start">
 				<text class="inner-text" :class="reverseNumber==0?'inner-text-active':''">{{innerText}}</text>
@@ -189,19 +191,30 @@
 </script>
 
 <style lang="scss" scoped>
+	.short-code-form {
+		/* #ifndef APP-NVUE */
+		display: flex;
+		/* #endif */
+		flex-direction: column;
+		gap: 10px;
+	}
+
+	.short-code-form__captcha {
+		width: 100%;
+	}
+
 	.box {
 		position: relative;
-		margin-top: 10px;
 	}
 
 	.short-code-btn {
 		padding: 0;
 		position: absolute;
 		top: 0;
-		right: 8px;
+		right: 6px;
 		width: 260rpx;
-		max-width: 100px;
-		height: 44px;
+		max-width: 110px;
+		height: 48px;
 		/* #ifndef APP-NVUE */
 		display: flex;
 		/* #endif */
@@ -210,12 +223,13 @@
 	}
 
 	.inner-text {
-		font-size: 14px;
-		color: #AAAAAA;
+		font-size: 12px;
+		font-weight: 700;
+		color: var(--text-3, #b8a08a);
 	}
 
 	.inner-text-active {
-		color: #04498c;
+		color: var(--primary, #ea3e77);
 	}
 
 	.captcha {
@@ -224,13 +238,17 @@
 
 	.input-box {
 		margin: 0;
-		padding: 4px;
-		background-color: #F8F8F8;
+		padding: 0;
+		height: 48px;
+		min-height: 48px;
+		border-radius: var(--radius-row, 14px);
+		border: 1px solid rgba(216, 203, 189, 0.72);
+		background-color: rgba(255, 255, 255, 0.96);
 		font-size: 14px;
 	}
 
 	.box ::v-deep .content-clear-icon {
-		margin-right: 110px;
+		margin-right: 118px;
 	}
 
 	.box {

@@ -258,16 +258,29 @@ type DrawerMenuGroup = {
   items: DrawerMenuItem[]
 }
 
-const { currentFamily, currentUser, userRole, isInitialized, logout, loadFamily } = useAuth()
+const { currentFamily, currentUser, userRole, isInitialized, logout, setCurrentFamily } = useAuth()
 usePageSync({ routePath: 'pages/profile/index' })
 
 const hasFamily = computed(() => !!currentFamily.value)
 const familyName = computed(() => currentFamily.value?.name || '')
+function getAccountUsername() {
+  try {
+    const userInfo = uni.getStorageSync('uni-id-pages-userInfo') || {}
+    return String(userInfo.username || '').trim()
+  } catch {
+    return ''
+  }
+}
+
+function getMemberDisplayName(member?: { nickname?: string } | null) {
+  return String(member?.nickname || '').trim() || getAccountUsername()
+}
+
 const userName = computed(() => {
   const uid = currentUser.value?.uid
   if (!uid || !currentFamily.value) return '未创建家庭'
   const member = currentFamily.value.members.find(m => m.user_id === uid)
-  return member?.nickname || familyName.value || '未创建家庭'
+  return getMemberDisplayName(member) || familyName.value || '未创建家庭'
 })
 const roleLabel = computed(() => {
   const map: Record<string, string> = { creator: '创建者', admin: '管理员', helper: '协助者' }
@@ -430,9 +443,23 @@ function getCurrentMember() {
   return currentFamily.value.members.find(m => m.user_id === uid) || null
 }
 
+function buildFamilyWithCurrentMemberNickname(nickname: string) {
+  const family = currentFamily.value
+  const uid = currentUser.value?.uid
+  if (!family || !uid) return null
+  return {
+    ...family,
+    members: family.members.map(member => (
+      member.user_id === uid && member.status === 'active'
+        ? { ...member, nickname }
+        : member
+    )),
+  }
+}
+
 function editNickname() {
   const member = getCurrentMember()
-  nicknameInput.value = member?.nickname || ''
+  nicknameInput.value = getMemberDisplayName(member)
   showNicknameModal.value = true
 }
 
@@ -444,28 +471,35 @@ async function onNicknameConfirm() {
 
   const member = getCurrentMember()
   const previousNickname = member?.nickname || ''
+  const familyId = currentFamily.value?._id || ''
+  const userId = currentUser.value?.uid || ''
 
   if (nextNickname === previousNickname) {
     showNicknameModal.value = false
     return
   }
 
-  if (!member) {
-    showNicknameModal.value = false
-    await localSyncRuntime.updateNicknameLocally(currentFamily.value?._id || '', currentUser.value?.uid || '', nextNickname)
-    await loadFamily()
+  if (!member || !familyId || !userId) {
+    uni.showToast({ title: '成员信息异常，请刷新后重试', icon: 'none' })
     return
   }
 
-  member.nickname = nextNickname
+  const previousFamily = currentFamily.value
+    ? {
+        ...currentFamily.value,
+        members: currentFamily.value.members.map(item => ({ ...item })),
+      }
+    : null
+  const nextFamily = buildFamilyWithCurrentMemberNickname(nextNickname)
+  if (nextFamily) setCurrentFamily(nextFamily)
   showNicknameModal.value = false
   updatingNickname.value = true
 
   try {
-    await localSyncRuntime.updateNicknameLocally(currentFamily.value?._id || '', currentUser.value?.uid || '', nextNickname)
-    await loadFamily()
-  } catch {
-    member.nickname = previousNickname
+    await localSyncRuntime.updateNicknameLocally(familyId, userId, nextNickname)
+  } catch (e: any) {
+    setCurrentFamily(previousFamily)
+    uni.showToast({ title: e?.message || '昵称保存失败', icon: 'none' })
   } finally {
     updatingNickname.value = false
   }

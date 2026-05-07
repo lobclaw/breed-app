@@ -131,7 +131,7 @@ export const mutations = {
 	},
 	loginSuccess(e = {}){
 		const {
-			showToast = true, toastText = '登录成功', autoBack = true, uniIdRedirectUrl = '', passwordConfirmed
+			showToast = false, toastText = '登录成功', autoBack = true, uniIdRedirectUrl = '', passwordConfirmed
 		} = e
 		// console.log({toastText,autoBack});
 		if (showToast) {

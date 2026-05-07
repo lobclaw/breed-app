@@ -136,6 +136,11 @@ export function useAuth() {
     }
   }
 
+  function setCurrentFamily(family: Family | null) {
+    currentFamily.value = family
+    cacheFamily(family)
+  }
+
   /**
    * 创建家庭
    */
@@ -171,6 +176,7 @@ export function useAuth() {
     isInitialized,
     init,
     loadFamily,
+    setCurrentFamily,
     createFamily,
     logout,
     navigateToLogin,

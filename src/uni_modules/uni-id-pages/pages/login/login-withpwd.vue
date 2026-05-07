@@ -7,22 +7,31 @@
 		<!-- 顶部文字 -->
 		<text class="title title-box">账号密码登录</text>
 		<uni-forms>
-			<uni-forms-item name="username">
-				<uni-easyinput :focus="focusUsername" @blur="focusUsername = false" class="input-box"
-					:inputBorder="false" v-model="username" placeholder="请输入手机号/用户名/邮箱" trim="all" />
-			</uni-forms-item>
-			<uni-forms-item name="password">
-					<uni-easyinput :focus="focusPassword" @blur="focusPassword = false" class="input-box" clearable
-					               type="password" :inputBorder="false" v-model="password" placeholder="请输入密码" trim="all" />
-			</uni-forms-item>
+			<view class="auth-field">
+				<text class="auth-field__label">账号</text>
+				<uni-forms-item name="username">
+					<uni-easyinput :focus="focusUsername" @blur="focusUsername = false" class="input-box"
+						:inputBorder="false" v-model="username" placeholder="手机号 / 用户名 / 邮箱" trim="all" />
+				</uni-forms-item>
+			</view>
+			<view class="auth-field">
+				<text class="auth-field__label">密码</text>
+				<uni-forms-item name="password">
+						<uni-easyinput :focus="focusPassword" @blur="focusPassword = false" class="input-box" clearable
+						               type="password" :inputBorder="false" v-model="password" placeholder="请输入密码" trim="all" />
+				</uni-forms-item>
+			</view>
 		</uni-forms>
-		<uni-captcha v-if="needCaptcha" focus ref="captcha" scene="login-by-pwd" v-model="captcha" />
+		<view class="auth-field" v-if="needCaptcha">
+			<text class="auth-field__label">验证码</text>
+			<uni-captcha focus ref="captcha" scene="login-by-pwd" v-model="captcha" />
+		</view>
 		<!-- 带选择框的隐私政策协议组件 -->
 		<uni-id-pages-agreements scope="login" ref="agreements"></uni-id-pages-agreements>
 		<button class="uni-btn" type="primary" @click="pwdLogin">登录</button>
 		<!-- 忘记密码 -->
 		<view class="link-box">
-			<view v-if="!config.isAdmin">
+			<view class="link-box__group" v-if="!config.isAdmin">
 				<text class="forget">忘记了？</text>
 				<text class="link" @click="toRetrievePwd">找回密码</text>
 			</view>
@@ -37,9 +46,7 @@
 <script>
 	import mixin from '@/uni_modules/uni-id-pages/common/login-page.mixin.js';
 	const uniIdCo = uniCloud.importObject("uni-id-co", {
-		errorOptions: {
-			type: 'toast'
-		}
+		customUI: true
 	})
 	export default {
 		mixins: [mixin],
@@ -122,6 +129,11 @@
 					data.username = this.username
 				}
 
+				uni.showLoading({
+					title: '登录中...',
+					mask: true
+				})
+
 				uniIdCo.login(data).then(e => {
 					this.loginSuccess(e)
 				}).catch(e => {
@@ -131,6 +143,15 @@
 						//登录失败，自动重新获取验证码
 						this.$refs.captcha.getImageCaptcha()
 					}
+					if (e.message || e.errMsg) {
+						uni.showToast({
+							title: e.message || e.errMsg,
+							icon: 'none',
+							duration: 3000
+						})
+					}
+				}).finally(() => {
+					uni.hideLoading()
 				})
 			},
 			/* 前往注册 */
@@ -154,23 +175,5 @@
 		.uni-content {
 			height: auto;
 		}
-	}
-
-	.forget {
-		font-size: 12px;
-		color: #8a8f8b;
-	}
-
-	.link-box {
-		/* #ifndef APP-NVUE */
-		display: flex;
-		/* #endif */
-		flex-direction: row;
-		justify-content: space-between;
-		margin-top: 20px;
-	}
-
-	.link {
-		font-size: 12px;
 	}
 </style>

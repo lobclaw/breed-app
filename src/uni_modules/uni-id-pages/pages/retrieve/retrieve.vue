@@ -9,23 +9,35 @@
 		<text class="title title-box">通过手机验证码找回密码</text>
 		</match-media>
 		<uni-forms ref="form" :value="formData" err-show-type="toast">
-			<uni-forms-item name="phone">
-				<uni-easyinput :focus="focusPhone" @blur="focusPhone = false" class="input-box" :disabled="lock" type="number" :inputBorder="false" trim="both"
-					v-model="formData.phone" maxlength="11" placeholder="请输入手机号">
-				</uni-easyinput>
-			</uni-forms-item>
-			<uni-forms-item name="code">
-				<uni-id-pages-sms-form ref="shortCode" :phone="formData.phone" type="reset-pwd-by-sms" v-model="formData.code">
-				</uni-id-pages-sms-form>
-			</uni-forms-item>
-			<uni-forms-item name="password">
-				<uni-easyinput :focus="focusPassword" @blur="focusPassword = false" class="input-box" type="password" :inputBorder="false" v-model="formData.password" trim="both"
-					placeholder="请输入新密码"></uni-easyinput>
-			</uni-forms-item>
-			<uni-forms-item name="password2">
-				<uni-easyinput :focus="focusPassword2" @blur="focusPassword2 = false" class="input-box" type="password" :inputBorder="false" v-model="formData.password2" trim="both"
-					placeholder="请再次输入新密码"></uni-easyinput>
-			</uni-forms-item>
+			<view class="auth-field">
+				<text class="auth-field__label">手机号</text>
+				<uni-forms-item name="phone">
+					<uni-easyinput :focus="focusPhone" @blur="focusPhone = false" class="input-box" :disabled="lock" type="number" :inputBorder="false" trim="both"
+						v-model="formData.phone" maxlength="11" placeholder="请输入手机号">
+					</uni-easyinput>
+				</uni-forms-item>
+			</view>
+			<view class="auth-field">
+				<text class="auth-field__label">短信验证码</text>
+				<uni-forms-item name="code">
+					<uni-id-pages-sms-form ref="shortCode" :phone="formData.phone" type="reset-pwd-by-sms" v-model="formData.code">
+					</uni-id-pages-sms-form>
+				</uni-forms-item>
+			</view>
+			<view class="auth-field">
+				<text class="auth-field__label">新密码</text>
+				<uni-forms-item name="password">
+					<uni-easyinput :focus="focusPassword" @blur="focusPassword = false" class="input-box" type="password" :inputBorder="false" v-model="formData.password" trim="both"
+						placeholder="请输入新密码"></uni-easyinput>
+				</uni-forms-item>
+			</view>
+			<view class="auth-field">
+				<text class="auth-field__label">确认密码</text>
+				<uni-forms-item name="password2">
+					<uni-easyinput :focus="focusPassword2" @blur="focusPassword2 = false" class="input-box" type="password" :inputBorder="false" v-model="formData.password2" trim="both"
+						placeholder="请再次输入新密码"></uni-easyinput>
+				</uni-forms-item>
+			</view>
 			<button class="uni-btn send-btn-box" type="primary" @click="submit">提交</button>
 			<match-media :min-width="690">
 				<view class="link-box">
@@ -215,27 +227,9 @@
 <style lang="scss">
 	@import "@/uni_modules/uni-id-pages/common/login-page.scss";
 
-	@media screen and (max-width: 690px) {
-		.uni-content{
-			margin-top: 15px;
-		}
-	}
 	@media screen and (min-width: 690px) {
 		.uni-content{
-			padding: 30px 40px 40px;
-			max-height: 650px;
-		}
-		.link-box {
-			/* #ifndef APP-NVUE */
-			display: flex;
-			/* #endif */
-			flex-direction: row;
-			justify-content: space-between;
-			margin-top: 10px;
-		}
-
-		.link {
-			font-size: 12px;
+			max-height: none;
 		}
 	}
 </style>

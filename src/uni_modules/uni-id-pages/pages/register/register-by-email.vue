@@ -9,28 +9,43 @@
 			<text class="title title-box">邮箱验证码注册</text>
 		</match-media>
 		<uni-forms ref="form" :value="formData" :rules="rules" validate-trigger="submit" err-show-type="toast">
-			<uni-forms-item name="email" required>
-				<uni-easyinput :inputBorder="false" :focus="focusEmail" @blur="focusEmail = false"
-					class="input-box" placeholder="请输入邮箱" v-model="formData.email" trim="both" />
-			</uni-forms-item>
-			<uni-forms-item name="nickname">
-				<uni-easyinput :inputBorder="false" :focus="focusNickname" @blur="focusNickname = false" class="input-box" placeholder="请输入用户昵称" 
-				v-model="formData.nickname" trim="both" />
-			</uni-forms-item>
-			<uni-forms-item name="password" v-model="formData.password" required>
-				<uni-easyinput :inputBorder="false" :focus="focusPassword" @blur="focusPassword = false"
-					class="input-box" maxlength="20" :placeholder="'请输入' + (config.passwordStrength == 'weak'?'6':'8') + '-16位密码'" type="password"
-					v-model="formData.password" trim="both" />
-			</uni-forms-item>
-			<uni-forms-item name="password2" v-model="formData.password2" required>
-				<uni-easyinput :inputBorder="false" :focus="focusPassword2" @blur="focusPassword2 =false"
-					class="input-box" placeholder="再次输入密码" maxlength="20" type="password" v-model="formData.password2"
-					trim="both" />
-			</uni-forms-item>
-			<uni-forms-item name="code" >
-				<uni-id-pages-email-form ref="shortCode" :email="formData.email" type="register" v-model="formData.code">
-				</uni-id-pages-email-form>
-			</uni-forms-item>
+			<view class="auth-field">
+				<text class="auth-field__label">邮箱</text>
+				<uni-forms-item name="email">
+					<uni-easyinput :inputBorder="false" :focus="focusEmail" @blur="focusEmail = false"
+						class="input-box" placeholder="请输入邮箱" v-model="formData.email" trim="both" />
+				</uni-forms-item>
+			</view>
+			<view class="auth-field">
+				<text class="auth-field__label">昵称<text class="auth-field__optional">（选填）</text></text>
+				<uni-forms-item name="nickname">
+					<uni-easyinput :inputBorder="false" :focus="focusNickname" @blur="focusNickname = false" class="input-box" placeholder="可稍后填写"
+					v-model="formData.nickname" trim="both" />
+				</uni-forms-item>
+			</view>
+			<view class="auth-field">
+				<text class="auth-field__label">密码</text>
+				<uni-forms-item name="password" v-model="formData.password">
+					<uni-easyinput :inputBorder="false" :focus="focusPassword" @blur="focusPassword = false"
+						class="input-box" maxlength="20" :placeholder="'请输入' + (config.passwordStrength == 'weak'?'6':'8') + '-16位密码'" type="password"
+						v-model="formData.password" trim="both" />
+				</uni-forms-item>
+			</view>
+			<view class="auth-field">
+				<text class="auth-field__label">确认密码</text>
+				<uni-forms-item name="password2" v-model="formData.password2">
+					<uni-easyinput :inputBorder="false" :focus="focusPassword2" @blur="focusPassword2 =false"
+						class="input-box" placeholder="请再次输入密码" maxlength="20" type="password" v-model="formData.password2"
+						trim="both" />
+				</uni-forms-item>
+			</view>
+			<view class="auth-field">
+				<text class="auth-field__label">邮箱验证码</text>
+				<uni-forms-item name="code" >
+					<uni-id-pages-email-form ref="shortCode" :email="formData.email" type="register" v-model="formData.code">
+					</uni-id-pages-email-form>
+				</uni-forms-item>
+			</view>
 			<uni-id-pages-agreements scope="register" ref="agreements" ></uni-id-pages-agreements>
 			<button class="uni-btn" type="primary" @click="submit">注册</button>
 			<button @click="navigateBack" class="register-back">返回</button>
@@ -183,34 +198,9 @@
 <style lang="scss">
 	@import "@/uni_modules/uni-id-pages/common/login-page.scss";
 	
-	@media screen and (max-width: 690px) {
-		.uni-content{
-			margin-top: 15px;
-		}
-	}
 	@media screen and (min-width: 690px) {
 		.uni-content{
-			padding: 30px 40px;
-			max-height: 650px;
+			max-height: none;
 		}
-		.link-box {
-			/* #ifndef APP-NVUE */
-			display: flex;
-			/* #endif */
-			flex-direction: row;
-			justify-content: space-between;
-			margin-top: 10px;
-		}
-		.link {
-			font-size: 12px;
-		}
-	}
-	.uni-content ::v-deep .uni-forms-item__label {
-		position: absolute;
-		left: -15px;
-	}
-
-	button {
-		margin-top: 15px;
 	}
 </style>

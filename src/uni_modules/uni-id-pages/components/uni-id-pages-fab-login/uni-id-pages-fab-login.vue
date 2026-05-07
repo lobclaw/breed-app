@@ -491,11 +491,6 @@
 					customUI:true
 				})
 				uniIdCo[action](params).then(result => {
-					uni.showToast({
-						title: '登录成功',
-						icon: 'none',
-						duration: 2000
-					});
 					// #ifdef H5
 					result.loginType = type
 					// #endif

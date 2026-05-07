@@ -1,12 +1,15 @@
 <template>
 	<view class="captcha-box">
-		<view class="captcha-img-box">
+		<view class="captcha-img-box" @click="getImageCaptcha">
 			<uni-icons class="loding" size="20px" color="#BBB" v-if="loging" type="spinner-cycle"></uni-icons>
-			<image class="captcha-img" :class="{opacity:loging}" @click="getImageCaptcha" :src="captchaBase64"
-				mode="widthFix"></image>
+			<image v-if="captchaBase64" class="captcha-img" :class="{opacity:loging}" :src="captchaBase64"
+				mode="aspectFit"></image>
+			<view v-else class="captcha-placeholder">
+				<text v-if="!loging">点击刷新</text>
+			</view>
 		</view>
 		<input @blur="focusCaptchaInput = false" :focus="focusCaptchaInput" type="text" class="captcha"
-			:inputBorder="false" maxlength="4" v-model="val" placeholder="请输入验证码">
+			:inputBorder="false" maxlength="4" v-model="val" placeholder="验证码">
 	</view>
 </template>
 
@@ -105,27 +108,34 @@
 		/* #endif */
 		flex-direction: row;
 		align-items: center;
-		justify-content: flex-end;
+		gap: 10px;
 		flex: 1;
 	}
 
 	.captcha-img-box,
 	.captcha {
-		height: 44px;
-		line-height: 44px;
+		height: 48px;
+		line-height: 48px;
 	}
 
 	.captcha-img-box {
 		position: relative;
-		background-color: #FEFAE7;
+		flex-shrink: 0;
+		overflow: hidden;
+		background-color: var(--amber-soft, #fff9f0);
+		border: 1px solid rgba(216, 203, 189, 0.7);
+		border-radius: var(--radius-row, 14px);
+		cursor: pointer;
 	}
 
 	.captcha {
-		background-color: #F8F8F8;
+		background-color: rgba(255, 255, 255, 0.96);
+		border: 1px solid rgba(216, 203, 189, 0.72);
+		border-radius: var(--radius-row, 14px);
+		color: var(--text-1, #1a1a2e);
 		font-size: 14px;
 		flex: 1;
-		padding: 0 20rpx;
-		margin-left: 20rpx;
+		padding: 0 14px;
 		/* #ifndef APP-NVUE */
 		box-sizing: border-box;
 		/* #endif */
@@ -134,8 +144,24 @@
 	.captcha-img-box,
 	.captcha-img,
 	.loding {
-		height: 44px !important;
-		width: 100px;
+		height: 48px !important;
+		width: 106px;
+	}
+
+	.captcha-placeholder {
+		/* #ifndef APP-NVUE */
+		display: flex;
+		/* #endif */
+		width: 106px;
+		height: 48px;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.captcha-placeholder text {
+		color: var(--text-3, #b8a08a);
+		font-size: 12px;
+		font-weight: 600;
 	}
 	
 	.captcha-img{
@@ -147,7 +173,10 @@
 		color: #bbb;
 		position: absolute;
 		text-align: center;
-		line-height: 45px;
+		line-height: 48px;
+		left: 50%;
+		top: 50%;
+		transform: translate(-50%, -50%);
 		animation: rotate 1s linear infinite;
 	}
 
@@ -157,11 +186,11 @@
 
 	@keyframes rotate {
 		from {
-			transform: rotate(0deg)
+			transform: translate(-50%, -50%) rotate(0deg)
 		}
 
 		to {
-			transform: rotate(360deg)
+			transform: translate(-50%, -50%) rotate(360deg)
 		}
 	}
 </style>
