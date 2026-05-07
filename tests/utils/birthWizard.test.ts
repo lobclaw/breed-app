@@ -7,10 +7,34 @@ const testDir = dirname(fileURLToPath(import.meta.url))
 const source = readFileSync(resolve(testDir, '../../src/pages/breeding/birth-wizard.vue'), 'utf8')
 
 describe('birth-wizard source contract', () => {
+  it('母犬名称不应使用测试犬名兜底，应缺省为空并从本地周期补齐', () => {
+    expect(source).toContain("const cycleId = ref('')")
+    expect(source).toContain("const damName = ref('')")
+    expect(source).toContain('const selectedDam = ref<any>(null)')
+    expect(source).toContain("const damDisplayName = computed(() => damName.value || selectedDam.value?.name || '未选择母犬')")
+    expect(source).toContain('async function loadDamNameFromLocalCycle()')
+    expect(source).toContain("findLocal<any>('breeding_cycles', cycleId.value)")
+    expect(source).not.toContain("const damName = ref('花花')")
+  })
+
+  it('自由入口应通过种母选择解析怀孕周期，不在加载时直接提示缺少周期', () => {
+    expect(source).toContain('<BDogPicker')
+    expect(source).toContain(":candidate-dogs=\"birthCandidateDogs\"")
+    expect(source).toContain("getEligibleBreedingDogs(dogStore.list, 'birth')")
+    expect(source).toContain('getBirthCycleIdFromDog(dog)')
+    expect(source).toContain('cycleId.value = birthCycleId')
+    expect(source).toContain(":readonly=\"cycleLocked\"")
+
+    const onLoadSource = source.slice(source.indexOf('onLoad((query) => {'))
+    expect(onLoadSource).not.toContain("uni.showToast({ title: '缺少周期信息'")
+  })
+
   it('Step 2 应保留昵称选填并补充自动命名弱提示', () => {
     expect(source).toContain('标识/昵称 <text class="optional">（选填）</text>')
     expect(source).toContain('未填写时将自动生成默认名称')
-    expect(source).toContain(':placeholder="`${damName}窝-${idx + 1}号`"')
+    expect(source).toContain(':placeholder="getDefaultPuppyName(idx)"')
+    expect(source).toContain('function getDefaultPuppyName(idx: number)')
+    expect(source).toContain("return `${defaultPuppyDamName.value}${previewLitterNumber.value || 1}窝-${idx + 1}号`")
   })
 
   it('Step 3 应包含经验心得与首次健康提醒勾选项', () => {

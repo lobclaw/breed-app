@@ -34,6 +34,13 @@ function hasQualifiedCycleStatus(dog: DogWithStatus, allowedStatuses: DeriveStat
   return getBreedingStatuses(dog).some(status => allowedStatuses.includes(status.type) && !!getStatusCycleId(status))
 }
 
+export function getBirthCycleIdFromDog(dog: DogWithStatus | Record<string, any> | null | undefined) {
+  const rawStatuses = dog?.statuses
+  const statuses = Array.isArray(rawStatuses) ? rawStatuses : []
+  const pregnantStatus = statuses.find(status => status?.type === '怀孕中' && !!getStatusCycleId(status))
+  return pregnantStatus ? getStatusCycleId(pregnantStatus) : ''
+}
+
 export function isEligibleBreedingDog(dog: DogWithStatus, type: BreedingRecordType) {
   if (!isBreedingDam(dog)) return false
 
@@ -53,7 +60,7 @@ export function isEligibleBreedingDog(dog: DogWithStatus, type: BreedingRecordTy
     return !hasBlockedBreedingStatus(dog, BLOCKED_HEAT_STATUSES)
   }
 
-  if (type === 'pregnancy_check' || type === 'prenatal_check' || type === 'pre_labor') {
+  if (type === 'pregnancy_check' || type === 'prenatal_check' || type === 'pre_labor' || type === 'birth') {
     return hasQualifiedCycleStatus(dog, ['怀孕中'])
   }
 
@@ -65,7 +72,6 @@ export function isEligibleBreedingDog(dog: DogWithStatus, type: BreedingRecordTy
 }
 
 export function getEligibleBreedingDogs(dogs: DogWithStatus[], type: BreedingRecordType) {
-  if (type === 'birth') return []
   return (dogs || []).filter(dog => isEligibleBreedingDog(dog, type))
 }
 
@@ -127,6 +133,13 @@ export function getBreedingDogPickerEmptyState(
   if (type === 'pre_labor') {
     return {
       title: '暂无可录入临产监测的种母',
+      description: '只有怀孕中的当前周期犬只才会显示在这里',
+    }
+  }
+
+  if (type === 'birth') {
+    return {
+      title: '暂无可记录生产的种母',
       description: '只有怀孕中的当前周期犬只才会显示在这里',
     }
   }

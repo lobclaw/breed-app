@@ -7,6 +7,7 @@
     content — 描述文字（可选）
     confirmText — 确认按钮文字（默认"确定"）
     cancelText — 取消按钮文字（默认"取消"）
+    showCancel — 是否显示取消按钮（默认 true）
     confirmColor — 确认按钮颜色（默认 primary）
     danger — 是否为危险操作（确认按钮变红）
     manualClose — 设为 true 时点确认不自动关闭，由父组件控制 visible
@@ -19,7 +20,7 @@
       <text v-if="content" class="b-modal__content">{{ content }}</text>
       <slot />
       <view class="b-modal__actions">
-        <view class="b-modal__btn b-modal__btn--cancel" @click="cancel">
+        <view v-if="showCancel" class="b-modal__btn b-modal__btn--cancel" @click="cancel">
           <text class="b-modal__btn-text b-modal__btn-text--cancel">{{ cancelText }}</text>
         </view>
         <view class="b-modal__btn b-modal__btn--confirm" :class="btnClass" @click="confirm">
@@ -39,12 +40,14 @@ const props = withDefaults(defineProps<{
   content?: string
   confirmText?: string
   cancelText?: string
+  showCancel?: boolean
   danger?: boolean
   manualClose?: boolean
 }>(), {
   content: '',
   confirmText: '确定',
   cancelText: '取消',
+  showCancel: true,
   danger: false,
   manualClose: false,
 })

@@ -27,17 +27,15 @@
           <view class="section-dot" style="background: var(--rose);" />
           <text>母犬信息</text>
         </view>
-        <view class="dog-info-card">
-          <view class="dog-info-row">
-            <view class="dog-avatar">
-              <BEntityIcon :size="22" color="#fff" />
-            </view>
-            <view class="dog-info-text">
-              <text class="dog-name">{{ damName }}</text>
-              <text class="dog-breed">马尔济斯 · 种母</text>
-            </view>
-          </view>
-        </view>
+        <BDogPicker
+          v-model="selectedDam"
+          :candidate-dogs="birthCandidateDogs"
+          title="选择种母"
+          :readonly="cycleLocked"
+          placeholder="点击选择种母"
+          :empty-title="birthPickerEmptyState.title"
+          :empty-description="birthPickerEmptyState.description"
+        />
       </view>
 
       <!-- 生产信息 -->
@@ -143,7 +141,7 @@
 
             <view class="form-field full-width">
               <text class="field-label">标识/昵称 <text class="optional">（选填）</text></text>
-              <input v-model="puppy.name" class="field-input" :placeholder="`${damName}窝-${idx + 1}号`" />
+              <input v-model="puppy.name" class="field-input" :placeholder="getDefaultPuppyName(idx)" />
               <text class="field-help">未填写时将自动生成默认名称</text>
             </view>
           </view>
@@ -167,7 +165,7 @@
         <view class="summary-card">
           <view class="summary-row">
             <text class="summary-label">母犬</text>
-            <text class="summary-value">{{ damName }}</text>
+            <text class="summary-value">{{ damDisplayName }}</text>
           </view>
           <view class="summary-row">
             <text class="summary-label">生产日期</text>
@@ -200,7 +198,7 @@
             <text style="font-size: 14px;">{{ puppy.alive === false ? '💀' : puppy.gender === '公' ? '♂' : '♀' }}</text>
           </view>
           <text class="puppy-summary-text">
-            {{ puppy.name || `${damName}窝-${idx + 1}号` }}
+            {{ puppy.name || getDefaultPuppyName(idx) }}
             <text style="color: var(--text-3);"> · {{ puppy.gender }}{{ puppy.weight ? ` · ${puppy.weight}g` : '' }}{{ puppy.alive === false ? ' · 死胎' : '' }}</text>
           </text>
           <text class="material-icons-round" style="font-size: 16px; color: var(--primary);">check_circle</text>
@@ -259,8 +257,8 @@
       <button
         v-if="step < 3"
         class="btn-next"
-        :disabled="!canNext"
-        @click="step++"
+        :disabled="step === 1 ? !form.birth_date : !canNext"
+        @click="goNext"
       >
         <text>{{ step === 1 ? '下一步：录入幼崽' : '下一步：确认' }}</text>
         <text class="material-icons-round" style="font-size: 18px;">arrow_forward</text>
@@ -287,25 +285,33 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, watch } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useAuth } from '@/composables/useAuth'
 import { usePageSync } from '@/composables/usePageSync'
 import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
+import { findLocal, queryLocal } from '@/localdb/repository'
 import { localSyncRuntime } from '@/localdb/runtime'
+import { useDogStore } from '@/stores/dogStore'
+import { getBirthCycleIdFromDog, getBreedingDogPickerEmptyState, getEligibleBreedingDogs } from '@/utils/breedingDogEligibility'
 import { buildTimestampFromDayOffset, formatDateInputValue, getLocalCalendarDayDiff } from '@/utils/date'
-import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
+import BDogPicker from '@/components/form/BDogPicker.vue'
 
-let cycleId = ''
-const damName = ref('花花')
+const cycleId = ref('')
+const damName = ref('')
+const selectedDam = ref<any>(null)
+const cycleLocked = ref(false)
 const { currentFamily } = useAuth()
+const dogStore = useDogStore()
 usePageSync({ routePath: 'pages/breeding/birth-wizard' })
 
 const step = ref(1)
 const submitState = ref<'idle' | 'submitting' | 'success'>('idle')
 const costInput = ref('')
 const showBirthDatePicker = ref(false)
+const previewLitterNumber = ref(1)
+let previewLitterRequestToken = 0
 
 const form = reactive({
   birth_date: null as number | null,
@@ -332,6 +338,10 @@ const aliveCount = computed(() => puppies.filter(p => p.alive !== false).length)
 const deadCount = computed(() => puppies.filter(p => p.alive === false).length)
 const maleCount = computed(() => puppies.filter(p => p.gender === '公').length)
 const femaleCount = computed(() => puppies.filter(p => p.gender === '母').length)
+const birthCandidateDogs = computed(() => getEligibleBreedingDogs(dogStore.list, 'birth'))
+const birthPickerEmptyState = computed(() => getBreedingDogPickerEmptyState('birth', dogStore.list, birthCandidateDogs.value))
+const damDisplayName = computed(() => damName.value || selectedDam.value?.name || '未选择母犬')
+const defaultPuppyDamName = computed(() => damDisplayName.value === '未选择母犬' ? '母犬' : damDisplayName.value)
 
 const birthDateStr = computed(() => {
   return formatDateInputValue(form.birth_date)
@@ -347,7 +357,7 @@ const dateChips = computed(() => {
 })
 
 const canNext = computed(() => {
-  if (step.value === 1) return !!form.birth_date
+  if (step.value === 1) return !!cycleId.value && !!form.birth_date
   if (step.value === 2) return puppies.length > 0
   return true
 })
@@ -366,6 +376,14 @@ function onBack() {
   }
 }
 
+function goNext() {
+  if (step.value === 1 && !cycleId.value) {
+    uni.showToast({ title: '请选择怀孕中种母', icon: 'none' })
+    return
+  }
+  step.value++
+}
+
 function onBirthDateConfirm(value: number | string) {
   if (typeof value !== 'number') return
   form.birth_date = value
@@ -379,13 +397,79 @@ function removePuppy(idx: number) {
   puppies.splice(idx, 1)
 }
 
+function getDefaultPuppyName(idx: number) {
+  return `${defaultPuppyDamName.value}${previewLitterNumber.value || 1}窝-${idx + 1}号`
+}
+
+function normalizeQueryValue(value: unknown) {
+  const raw = Array.isArray(value) ? value[0] : value
+  if (typeof raw !== 'string') return ''
+  try {
+    return decodeURIComponent(raw)
+  } catch {
+    return raw
+  }
+}
+
+async function loadDamNameFromLocalCycle() {
+  if (!cycleId.value) return
+  const familyId = currentFamily.value?._id || ''
+  const cycle = await findLocal<any>('breeding_cycles', cycleId.value)
+  if (!cycle || cycle.deleted_at || (familyId && cycle.family_id !== familyId)) return
+
+  const cycleDamName = String(cycle.dam_name || '').trim()
+  const dog = cycle.dam_id ? await findLocal<any>('dogs', String(cycle.dam_id)) : null
+  const validDog = dog && !dog.deleted_at && (!familyId || dog.family_id === familyId) ? dog : null
+  const resolvedName = cycleDamName || String(validDog?.name || '').trim()
+  if (resolvedName) damName.value = resolvedName
+  selectedDam.value = {
+    ...(validDog || {}),
+    _id: cycle.dam_id || validDog?._id || '',
+    name: resolvedName || '未选择母犬',
+    gender: validDog?.gender || '母',
+    role: validDog?.role || '种狗',
+    statuses: validDog?.statuses || [{ type: '怀孕中', cycleId: cycleId.value }],
+  }
+  void refreshPreviewLitterNumber()
+}
+
+async function refreshPreviewLitterNumber() {
+  const requestToken = ++previewLitterRequestToken
+  const familyId = currentFamily.value?._id || ''
+  const birthDate = Number(form.birth_date || 0)
+  let damId = String(selectedDam.value?._id || '').trim()
+  if (!damId && cycleId.value) {
+    const cycle = await findLocal<any>('breeding_cycles', cycleId.value)
+    damId = String(cycle?.dam_id || '').trim()
+  }
+
+  if (requestToken !== previewLitterRequestToken) return
+  if (!familyId || !damId || !birthDate) {
+    previewLitterNumber.value = 1
+    return
+  }
+
+  const olderLitters = await queryLocal<any>('litters', row =>
+    row.family_id === familyId
+    && row.dam_id === damId
+    && Number(row.birth_date || row.created_at || 0) < birthDate,
+  )
+  if (requestToken !== previewLitterRequestToken) return
+  previewLitterNumber.value = olderLitters.length + 1
+}
+
 async function submit() {
+  if (!cycleId.value) {
+    uni.showToast({ title: '请选择怀孕中种母', icon: 'none' })
+    return
+  }
+
   submitState.value = 'submitting'
   try {
     const cost = costInput.value ? parseFloat(costInput.value) : null
 
     const res = await localSyncRuntime.addBirthRecordLocally(currentFamily.value?._id || '', {
-      cycle_id: cycleId,
+      cycle_id: cycleId.value,
       birth_date: form.birth_date,
       birth_type: form.birth_type,
       birth_notes: form.birth_notes || null,
@@ -417,15 +501,44 @@ async function submit() {
   }
 }
 
-onLoad((query) => {
-  cycleId = query?.cycleId || ''
-  if (!cycleId) {
-    uni.showToast({ title: '缺少周期信息', icon: 'none' })
+watch(selectedDam, (dog) => {
+  if (cycleLocked.value) return
+  if (!dog) {
+    cycleId.value = ''
+    damName.value = ''
+    return
   }
-  if (query?.damName) damName.value = query.damName
+  const birthCycleId = getBirthCycleIdFromDog(dog)
+  cycleId.value = birthCycleId
+  damName.value = String(dog.name || '').trim()
+  void refreshPreviewLitterNumber()
+}, { deep: true })
+
+watch(() => form.birth_date, () => {
+  void refreshPreviewLitterNumber()
+})
+
+onLoad((query) => {
+  cycleId.value = normalizeQueryValue(query?.cycleId || query?.cycle_id || query?.id)
+  cycleLocked.value = !!cycleId.value
+  const queryDamName = normalizeQueryValue(query?.damName || query?.dam_name)
+  if (queryDamName) {
+    damName.value = queryDamName
+    if (cycleId.value) {
+      selectedDam.value = {
+        _id: '',
+        name: queryDamName,
+        gender: '母',
+        role: '种狗',
+        statuses: [{ type: '怀孕中', cycleId: cycleId.value }],
+      }
+    }
+  }
+  void loadDamNameFromLocalCycle()
 
   // 默认日期为今天
   form.birth_date = buildTimestampFromDayOffset(0)
+  void refreshPreviewLitterNumber()
 })
 </script>
 

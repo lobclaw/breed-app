@@ -1354,6 +1354,20 @@ describe('breeding-service', () => {
       const birthDate = Date.now()
       const cycleId = await seedPregnantCycle()
       const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      await db.collection('litters').add({
+        _id: 'older_litter_for_name',
+        cycle_id: 'older_cycle_for_name',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        birth_date: birthDate - 86400000,
+        total_born: 1,
+        born_alive: 1,
+        born_dead: 0,
+        created_at: birthDate - 86400000,
+        updated_at: birthDate - 86400000,
+        deleted_at: null,
+      })
 
       const res = await breedingService.addBirthRecord.call(ctx, {
         cycle_id: cycleId,
@@ -1385,7 +1399,7 @@ describe('breeding-service', () => {
         .where({ origin_litter_id: litters[0]._id })
         .get()
       expect(puppies).toHaveLength(2)
-      expect(puppies.map(item => item.name)).toEqual(expect.arrayContaining(['花花窝-1号', '奶球']))
+      expect(puppies.map(item => item.name)).toEqual(expect.arrayContaining(['花花2窝-1号', '奶球']))
 
       const { data: tasks } = await db.collection('tasks')
         .where({ litter_id: litters[0]._id, status: 'pending' })
@@ -1433,7 +1447,7 @@ describe('breeding-service', () => {
       expect(weaningTasks).toHaveLength(1)
       expect(dewormingTasks[0].title).toBe('首次驱虫')
       expect(dewormingTasks[0].due_date).toBe(birthDate + 14 * 86400000)
-      expect(dewormingTasks[0].dog_name).toBe('花花窝-1号')
+      expect(dewormingTasks[0].dog_name).toBe('花花1窝-1号')
     })
 
     it('仅勾选首次疫苗时只为存活幼崽创建疫苗提醒', async () => {
@@ -1513,8 +1527,8 @@ describe('breeding-service', () => {
       expect(vaccinationTasks.every(item => item.title === '首次疫苗')).toBe(true)
       expect(dewormingTasks.every(item => item.due_date === birthDate + 14 * 86400000)).toBe(true)
       expect(vaccinationTasks.every(item => item.due_date === birthDate + 21 * 86400000)).toBe(true)
-      expect(dewormingTasks.map(item => item.dog_name)).toEqual(expect.arrayContaining(['花花窝-1号', '奶球']))
-      expect(vaccinationTasks.map(item => item.dog_name)).toEqual(expect.arrayContaining(['花花窝-1号', '奶球']))
+      expect(dewormingTasks.map(item => item.dog_name)).toEqual(expect.arrayContaining(['花花1窝-1号', '奶球']))
+      expect(vaccinationTasks.map(item => item.dog_name)).toEqual(expect.arrayContaining(['花花1窝-1号', '奶球']))
     })
 
     it('addBirthRecord 应支持 _sync 幂等重放并复用客户端实体 ID', async () => {

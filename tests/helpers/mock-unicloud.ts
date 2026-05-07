@@ -224,6 +224,31 @@ function setNestedValue(obj: any, path: string, value: any) {
 
 /** 创建 mock uniCloud 全局对象 */
 export function createMockUniCloud() {
+  const uploadedFiles: Array<{ cloudPath: string; fileContent: Buffer; fileID: string; url: string }> = []
+  const deletedFiles: string[] = []
+  const uploadFile = vi.fn().mockImplementation(async ({ cloudPath, fileContent }: { cloudPath: string; fileContent: Buffer }) => {
+    const fileID = `mock://${cloudPath}`
+    const url = `https://mock-cloud.local/${cloudPath}`
+    uploadedFiles.push({
+      cloudPath,
+      fileContent: Buffer.isBuffer(fileContent) ? fileContent : Buffer.from(fileContent),
+      fileID,
+      url,
+    })
+    return { fileID, url }
+  })
+  const getTempFileURL = vi.fn().mockImplementation(async ({ fileList }: { fileList: string[] }) => ({
+    fileList: fileList.map(fileID => ({
+      fileID,
+      tempFileURL: String(fileID).replace('mock://', 'https://mock-cloud.local/'),
+    })),
+  }))
+  const deleteFile = vi.fn().mockImplementation(async ({ fileList }: { fileList: string[] }) => {
+    deletedFiles.push(...fileList)
+    return {
+      fileList: fileList.map(fileID => ({ fileID, code: 0 })),
+    }
+  })
   const mockDb = {
     collection: (name: string) => createQueryChain(name),
     command: createDbCommand(),
@@ -234,7 +259,19 @@ export function createMockUniCloud() {
     auth: () => ({
       getUserInfo: vi.fn().mockResolvedValue({ uid: 'test_uid' }),
     }),
+    uploadFile,
+    getTempFileURL,
+    deleteFile,
     request: vi.fn(),
+    __getUploadedFiles: () => uploadedFiles,
+    __getDeletedFiles: () => deletedFiles,
+    __resetUploadedFiles: () => {
+      uploadedFiles.splice(0, uploadedFiles.length)
+      deletedFiles.splice(0, deletedFiles.length)
+      uploadFile.mockClear()
+      getTempFileURL.mockClear()
+      deleteFile.mockClear()
+    },
   }
 
   return uniCloud

@@ -41,6 +41,7 @@ Local-First Foundation：
 - 更新家庭设置
 - 回收站聚合查询
 - 回收站恢复与永久删除路由
+- 数据备份、导出与安全数据修复
 - 在线优先的家庭协作与 `operation_logs`
 - 依赖 `_before` 注入 `familyId`
 - `operation_logs` schema 尚未部署时，操作日志页静默降级为空列表，不向前端抛 `not found collection`

@@ -38,6 +38,7 @@ describe('family-service', () => {
 
   beforeEach(() => {
     resetDB()
+    ;(mockUniCloud as any).__resetUploadedFiles?.()
   })
 
   describe('createFamily', () => {
@@ -682,6 +683,201 @@ describe('family-service', () => {
         .rejects.toThrow('回收站项目不存在')
       await expect(familyService.permanentDeleteItem.call(ctx, { id: 'dog_1', type: 'sale' }))
         .rejects.toThrow('不支持的回收站类型')
+    })
+  })
+
+  describe('backup/export/repair', () => {
+    it('getBackupInfo 应返回新旧字段别名', async () => {
+      seedCollection('families', [{
+        _id: familyId,
+        name: '测试犬舍',
+        settings: {
+          last_backup_date: 1700000000000,
+          auto_backup_enabled: true,
+        },
+        created_at: 1000,
+        updated_at: 1000,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, role: 'creator' })
+      const result = await familyService.getBackupInfo.call(ctx)
+
+      expect(result.data).toMatchObject({
+        last_backup: 1700000000000,
+        auto_backup: true,
+        lastBackupDate: 1700000000000,
+        autoBackupEnabled: true,
+      })
+    })
+
+    it('exportData backup JSON 应只导出当前家庭业务数据并更新上次备份', async () => {
+      const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1700000000000)
+      seedCollection('families', [{
+        _id: familyId,
+        name: '测试犬舍',
+        members: [],
+        settings: { auto_backup_enabled: true },
+        created_at: 1000,
+        updated_at: 1000,
+      }])
+      seedCollection('dogs', [
+        { _id: 'dog_1', family_id: familyId, name: '奶盖', deleted_at: null, updated_at: 1000, version: 1 },
+        { _id: 'dog_other', family_id: 'other_family', name: '不该导出', updated_at: 1000, version: 1 },
+      ])
+      seedCollection('expenses', [
+        { _id: 'expense_1', family_id: familyId, category: '医疗', total_amount: 200, deleted_at: 1690000000000 },
+      ])
+      seedCollection('operation_logs', [
+        { _id: 'log_1', family_id: familyId, summary: '不导出' },
+      ])
+      seedCollection('sync_mutations', [
+        { _id: 'sync_1', family_id: familyId },
+      ])
+
+      const ctx = createCloudObjectContext({ familyId, role: 'creator' })
+      const result = await familyService.exportData.call(ctx, { format: 'json', mode: 'backup' })
+      const uploads = (mockUniCloud as any).__getUploadedFiles()
+      const archive = JSON.parse(uploads[0].fileContent.toString('utf8'))
+
+      expect(result.data).toMatchObject({
+        format: 'json',
+        mode: 'backup',
+        created_at: 1700000000000,
+      })
+      expect(uploads[0].cloudPath).toBe(`backups/${familyId}/backup-1700000000000.json`)
+      expect(archive).toMatchObject({
+        schemaVersion: 1,
+        exportedAt: 1700000000000,
+        familyId,
+      })
+      expect(archive.collections.families[0]._id).toBe(familyId)
+      expect(archive.collections.dogs.map((dog: any) => dog._id)).toEqual(['dog_1'])
+      expect(archive.collections.expenses.map((expense: any) => expense._id)).toEqual(['expense_1'])
+      expect(archive.collections.operation_logs).toBeUndefined()
+      expect(archive.collections.sync_mutations).toBeUndefined()
+
+      const { data } = await db.collection('families').doc(familyId).get()
+      expect(data[0].settings.last_backup_date).toBe(1700000000000)
+      expect(data[0].settings.last_backup_file_id).toBe(`mock://backups/${familyId}/backup-1700000000000.json`)
+      expect(data[0].settings.backup_file_ids).toEqual([`mock://backups/${familyId}/backup-1700000000000.json`])
+
+      nowSpy.mockRestore()
+    })
+
+    it('exportData backup 应只保留最近 4 份备份文件', async () => {
+      const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1700000005000)
+      seedCollection('families', [{
+        _id: familyId,
+        name: '测试犬舍',
+        settings: {
+          last_backup_date: 1700000004000,
+          last_backup_file_id: `mock://backups/${familyId}/backup-1700000004000.json`,
+          backup_file_ids: [
+            `mock://backups/${familyId}/backup-1700000001000.json`,
+            `mock://backups/${familyId}/backup-1700000002000.json`,
+            `mock://backups/${familyId}/backup-1700000003000.json`,
+            `mock://backups/${familyId}/backup-1700000004000.json`,
+          ],
+        },
+        created_at: 1000,
+        updated_at: 1000,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, role: 'creator' })
+      await familyService.exportData.call(ctx, { format: 'json', mode: 'backup' })
+
+      const { data } = await db.collection('families').doc(familyId).get()
+      expect(data[0].settings.backup_file_ids).toEqual([
+        `mock://backups/${familyId}/backup-1700000002000.json`,
+        `mock://backups/${familyId}/backup-1700000003000.json`,
+        `mock://backups/${familyId}/backup-1700000004000.json`,
+        `mock://backups/${familyId}/backup-1700000005000.json`,
+      ])
+      expect(data[0].settings.last_backup_file_id).toBe(`mock://backups/${familyId}/backup-1700000005000.json`)
+      expect((mockUniCloud as any).__getDeletedFiles()).toEqual([
+        `mock://backups/${familyId}/backup-1700000001000.json`,
+      ])
+
+      nowSpy.mockRestore()
+    })
+
+    it('exportData 普通导出不应更新上次备份，CSV 应生成 zip', async () => {
+      const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1700000001000)
+      seedCollection('families', [{
+        _id: familyId,
+        name: '测试犬舍',
+        settings: { last_backup_date: 1600000000000 },
+        created_at: 1000,
+        updated_at: 1000,
+      }])
+      seedCollection('dogs', [
+        { _id: 'dog_1', family_id: familyId, name: '奶盖', updated_at: 1000, version: 1 },
+      ])
+
+      const ctx = createCloudObjectContext({ familyId, role: 'creator' })
+      const result = await familyService.exportData.call(ctx, { format: 'csv', mode: 'export' })
+      const uploads = (mockUniCloud as any).__getUploadedFiles()
+      const zipText = uploads[0].fileContent.toString('binary')
+
+      expect(result.data).toMatchObject({ format: 'csv', mode: 'export' })
+      expect(uploads[0].cloudPath).toBe(`backups/${familyId}/export-1700000001000.zip`)
+      expect(uploads[0].fileContent.slice(0, 2).toString('utf8')).toBe('PK')
+      expect(zipText).toContain('metadata.csv')
+      expect(zipText).toContain('dogs.csv')
+
+      const { data } = await db.collection('families').doc(familyId).get()
+      expect(data[0].settings.last_backup_date).toBe(1600000000000)
+
+      nowSpy.mockRestore()
+    })
+
+    it('repairData 应自动修复低风险技术字段并只报告高风险业务问题', async () => {
+      seedCollection('families', [{
+        _id: familyId,
+        name: '测试犬舍',
+        settings: {
+          morning_summary_time: '09:00',
+        },
+        created_at: 1000,
+        updated_at: 1000,
+      }])
+      seedCollection('dogs', [
+        { _id: 'dog_1', family_id: familyId, name: '奶盖', gender: '母', created_at: 1000 },
+        { _id: 'dog_bad', family_id: familyId, name: '异常', gender: '未知', updated_at: 1000, version: 1 },
+      ])
+      seedCollection('health_records', [
+        { _id: 'health_1', family_id: familyId, dog_id: 'missing_dog', updated_at: 1000, version: 1 },
+      ])
+      seedCollection('medication_tasks', [
+        { _id: 'med_1', family_id: familyId, dog_id: 'dog_1', drug_name: '阿莫西林', status: '进行中', updated_at: 1000, version: 1 },
+        { _id: 'med_2', family_id: familyId, dog_id: 'dog_1', drug_name: '阿莫西林', status: '进行中', updated_at: 1000, version: 1 },
+      ])
+
+      const ctx = createCloudObjectContext({ familyId, role: 'creator' })
+      const result = await familyService.repairData.call(ctx)
+
+      expect(result.data.checkedCollections).toContain('dogs')
+      expect(result.data.repairedCount).toBeGreaterThanOrEqual(2)
+      expect(result.data.warnings).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'dogs', id: 'dog_bad', type: 'invalid_enum', field: 'gender' }),
+        expect.objectContaining({ collection: 'health_records', id: 'health_1', type: 'missing_dog' }),
+        expect.objectContaining({ collection: 'medication_tasks', id: 'med_2', type: 'duplicate_active_medication' }),
+      ]))
+
+      const { data: dogs } = await db.collection('dogs').doc('dog_1').get()
+      expect(dogs[0].version).toBe(1)
+      expect(dogs[0].updated_at).toBe(1000)
+      expect(dogs[0].deleted_at).toBeNull()
+
+      const { data: families } = await db.collection('families').doc(familyId).get()
+      expect(families[0].settings.auto_backup_enabled).toBe(false)
+      expect(families[0].settings.notification_types.overdue).toBe(true)
+
+      const secondResult = await familyService.repairData.call(ctx)
+      expect(secondResult.data.repairedCount).toBe(0)
+      expect(secondResult.data.warnings).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'dogs', id: 'dog_bad', type: 'invalid_enum', field: 'gender' }),
+      ]))
     })
   })
 

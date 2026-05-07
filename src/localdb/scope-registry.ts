@@ -67,7 +67,7 @@ export const SYNC_SCOPE_REGISTRY: SyncScopeDefinition[] = [
     mode: 'local-first',
     ttlMs: DETAIL_TTL_MS,
     collections: ['dogs', 'breeding_cycles', 'litters', 'health_records', 'medication_tasks', 'tasks', 'medication_protocols'],
-    routeMatchers: ['pages/record/breeding-detail'],
+    routeMatchers: ['pages/record/breeding-detail', 'pages/breeding/birth-wizard'],
   },
   {
     key: 'breeding-cycle',
@@ -83,7 +83,7 @@ export const SYNC_SCOPE_REGISTRY: SyncScopeDefinition[] = [
     mode: 'local-first',
     ttlMs: DETAIL_TTL_MS,
     collections: ['litters', 'dogs', 'tasks', 'health_records', 'expenses'],
-    routeMatchers: ['pages/breeding/litter', 'pages/breeding/birth-wizard'],
+    routeMatchers: ['pages/breeding/litter'],
   },
   {
     key: 'health-record',

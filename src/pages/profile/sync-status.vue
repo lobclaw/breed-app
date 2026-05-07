@@ -15,11 +15,39 @@
     </view>
 
     <view class="sync-section">
+      <view class="sync-card" :class="`sync-card--${syncTone}`">
+        <view class="sync-card__header">
+          <view class="sync-card__icon-wrap">
+            <text class="material-icons-round sync-card__icon">{{ syncIcon }}</text>
+          </view>
+          <view class="sync-card__main">
+            <text class="sync-card__title">{{ syncHeadline }}</text>
+            <text class="sync-card__desc">{{ syncDescription }}</text>
+          </view>
+        </view>
+        <view class="sync-card__rows">
+          <view class="sync-card__row">
+            <text class="sync-card__label">最近同步</text>
+            <text class="sync-card__value">{{ recentSyncText }}</text>
+          </view>
+          <view class="sync-card__row">
+            <text class="sync-card__label">当前状态</text>
+            <text class="sync-card__value">{{ syncStateText }}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view v-if="isDevMode" class="sync-section">
       <view class="sync-section__header">
-        <text class="sync-section__title">当前 Scope</text>
+        <text class="sync-section__title">开发信息</text>
         <text class="sync-section__meta">{{ activeScopeText }}</text>
       </view>
       <view class="scope-panel">
+        <view class="scope-panel__row">
+          <text class="scope-panel__label">当前 Scope</text>
+          <text class="scope-panel__value">{{ activeScopeText }}</text>
+        </view>
         <view class="scope-panel__row">
           <text class="scope-panel__label">最近同步</text>
           <text class="scope-panel__value">{{ recentSyncText }}</text>
@@ -39,33 +67,30 @@
     </view>
 
     <view class="sync-actions">
-      <button class="sync-actions__primary" :disabled="syncingScope || !syncStatus.activeScope" @click="forceSyncActiveScope">
-        <text class="material-icons-round sync-actions__icon">sync</text>
-        <text>{{ syncingScope ? '正在同步' : '同步当前 Scope' }}</text>
-      </button>
-      <button class="sync-actions__secondary" :disabled="retryingIssues || !canRetryIssues" @click="retryIssues">
-        <text class="material-icons-round sync-actions__icon">restart_alt</text>
-        <text>{{ retryingIssues ? '正在重试' : (hasAuthExpiredIssue ? '重新登录' : '重试失败/冲突') }}</text>
+      <button class="sync-actions__primary" :disabled="syncActionDisabled" @click="handleSyncAction">
+        <text class="material-icons-round sync-actions__icon">{{ syncActionIcon }}</text>
+        <text>{{ syncActionText }}</text>
       </button>
     </view>
 
     <view class="sync-section">
       <view class="sync-section__header">
-        <text class="sync-section__title">待处理项</text>
+        <text class="sync-section__title">需要处理</text>
         <text class="sync-section__meta">{{ issueMetaText }}</text>
       </view>
       <view v-if="issues.length" class="issue-list">
         <view v-for="issue in issues" :key="issue._id" class="issue-row">
           <view class="issue-row__main">
-            <text class="issue-row__title">{{ issue.type }}</text>
-            <text class="issue-row__desc">{{ issue.lastError || issueStatusText(issue.status) }}</text>
+            <text class="issue-row__title">{{ issueTitle(issue) }}</text>
+            <text class="issue-row__desc">{{ issueDescription(issue) }}</text>
           </view>
           <text class="issue-row__badge" :class="`issue-row__badge--${issue.status}`">{{ issueStatusText(issue.status) }}</text>
         </view>
       </view>
       <view v-else class="empty-state">
         <text class="material-icons-round empty-state__icon">check_circle</text>
-        <text class="empty-state__title">没有失败或冲突项</text>
+        <text class="empty-state__title">没有需要处理的同步问题</text>
+        <text class="empty-state__desc">联网后会自动完成数据同步</text>
       </view>
     </view>
   </view>
@@ -109,10 +134,10 @@ const scopeStatus = reactive({
 })
 
 const statusItems = computed(() => [
-  { key: 'pending', label: '待同步', value: syncStatus.pending + syncStatus.processing, tone: 'amber' },
-  { key: 'failed', label: '失败', value: syncStatus.failed, tone: 'red' },
-  { key: 'conflict', label: '冲突', value: syncStatus.conflict, tone: 'plum' },
-  { key: 'pendingUpload', label: '待上传', value: syncStatus.pendingUpload, tone: 'blue' },
+  { key: 'pending', label: '待同步', value: pendingSyncCount.value, tone: 'amber' },
+  { key: 'failed', label: '同步失败', value: syncStatus.failed, tone: 'red' },
+  { key: 'conflict', label: '需确认', value: syncStatus.conflict, tone: 'plum' },
+  { key: 'pendingUpload', label: '附件上传', value: syncStatus.pendingUpload, tone: 'blue' },
 ])
 const activeScopeText = computed(() => syncStatus.activeScope || '暂无')
 const recentSyncText = computed(() => formatTime(scopeStatus.lastSyncedAt || syncStatus.recentSyncAt || syncStatus.lastPulledAt))
@@ -121,6 +146,60 @@ const scopeCollectionsText = computed(() => scopeStatus.collections.length ? sco
 const canRetryIssues = computed(() => syncStatus.failed > 0 || syncStatus.conflict > 0)
 const issueMetaText = computed(() => issues.value.length ? `${issues.value.length} 项` : '正常')
 const hasAuthExpiredIssue = computed(() => issues.value.some(issue => isAuthTokenError(issue.lastError)))
+const pendingSyncCount = computed(() => syncStatus.pending + syncStatus.processing)
+const syncActionLoading = computed(() => syncingScope.value || retryingIssues.value)
+const syncActionText = computed(() => {
+  if (retryingIssues.value) return '正在重试'
+  if (syncingScope.value) return '正在同步'
+  if (hasAuthExpiredIssue.value) return '重新登录'
+  if (canRetryIssues.value) return '重试同步'
+  return '立即同步'
+})
+const syncActionIcon = computed(() => {
+  if (hasAuthExpiredIssue.value) return 'login'
+  if (canRetryIssues.value) return 'restart_alt'
+  return 'sync'
+})
+const syncActionDisabled = computed(() => syncActionLoading.value || (!hasAuthExpiredIssue.value && !canRetryIssues.value && !syncStatus.activeScope))
+const isDevMode = computed(() => {
+  const devFlag = typeof globalThis !== 'undefined' ? (globalThis as any).__DEV__ : undefined
+  return devFlag === true || import.meta.env.DEV === true
+})
+const syncTone = computed(() => {
+  if (syncStatus.conflict > 0) return 'plum'
+  if (syncStatus.failed > 0) return 'red'
+  if (syncStatus.pendingUpload > 0) return 'blue'
+  if (pendingSyncCount.value > 0) return 'amber'
+  return 'green'
+})
+const syncIcon = computed(() => {
+  if (syncStatus.conflict > 0) return 'priority_high'
+  if (syncStatus.failed > 0) return 'sync_problem'
+  if (syncStatus.pendingUpload > 0) return 'cloud_upload'
+  if (pendingSyncCount.value > 0) return 'cloud_sync'
+  return 'cloud_done'
+})
+const syncHeadline = computed(() => {
+  if (syncStatus.conflict > 0) return '有数据需要确认'
+  if (syncStatus.failed > 0) return '有数据同步失败'
+  if (syncStatus.pendingUpload > 0) return '有附件等待上传'
+  if (pendingSyncCount.value > 0) return '有数据等待同步'
+  return '数据已同步'
+})
+const syncDescription = computed(() => {
+  if (syncStatus.conflict > 0) return '部分记录和云端版本不一致，请确认后再继续同步。'
+  if (syncStatus.failed > 0) return '可能是网络或登录状态导致，恢复后可以手动重试。'
+  if (syncStatus.pendingUpload > 0) return '图片或附件会在网络稳定后继续上传。'
+  if (pendingSyncCount.value > 0) return '离线期间的改动已保存在本机，联网后会继续同步。'
+  return '本机数据和云端保持一致，可以放心继续使用。'
+})
+const syncStateText = computed(() => {
+  if (syncStatus.conflict > 0) return `${syncStatus.conflict} 项需要确认`
+  if (syncStatus.failed > 0) return `${syncStatus.failed} 项同步失败`
+  if (syncStatus.pendingUpload > 0) return `${syncStatus.pendingUpload} 项附件待上传`
+  if (pendingSyncCount.value > 0) return `${pendingSyncCount.value} 项待同步`
+  return '正常'
+})
 
 function hasRemainingSyncWork() {
   return syncStatus.pending > 0
@@ -158,7 +237,7 @@ function promptLoginExpired() {
 function formatTime(ts: number) {
   if (!ts) return '暂无'
   const d = new Date(ts)
-  return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
 function issueStatusText(status: string) {
@@ -167,6 +246,31 @@ function issueStatusText(status: string) {
   if (status === 'processing') return '同步中'
   if (status === 'pending') return '待同步'
   return '待处理'
+}
+
+function issueTypeText(type: string) {
+  if (type.startsWith('dog.')) return '犬只资料'
+  if (type.startsWith('breeding.')) return '繁育记录'
+  if (type.startsWith('health.')) return '健康用药'
+  if (type.startsWith('task.')) return '待办事项'
+  if (type.startsWith('finance.')) return '财务销售'
+  if (type.startsWith('family.')) return '犬舍设置'
+  if (type.startsWith('recycle.')) return '回收站'
+  return '同步数据'
+}
+
+function issueTitle(issue: SyncIssue) {
+  return `${issueTypeText(issue.type)}未同步`
+}
+
+function issueDescription(issue: SyncIssue) {
+  if (hasAuthExpiredIssue.value && isAuthTokenError(issue.lastError)) {
+    return '登录状态已过期，请重新登录后再同步。'
+  }
+  if (issue.status === 'conflict') return '这条记录需要确认后才能继续同步。'
+  if (issue.status === 'failed') return issue.lastError || '同步失败，可以在网络恢复后重试。'
+  if (issue.status === 'processing') return '正在同步，请稍候。'
+  return '等待网络恢复后自动同步。'
 }
 
 function normalizeIssues(items: Array<Record<string, any>> = []): SyncIssue[] {
@@ -226,6 +330,9 @@ async function retryIssues() {
   retryingIssues.value = true
   try {
     await localSyncRuntime.retryFailedOutboxNow(familyId)
+    if (syncStatus.activeScope) {
+      await localSyncRuntime.forceSyncScope(syncStatus.activeScope)
+    }
     await loadStatus()
     uni.showToast(getRemainingSyncToast())
   } catch (error) {
@@ -240,13 +347,26 @@ async function retryIssues() {
   }
 }
 
+async function handleSyncAction() {
+  if (syncActionLoading.value) return
+  if (hasAuthExpiredIssue.value || isCurrentLoginExpired()) {
+    promptLoginExpired()
+    return
+  }
+  if (canRetryIssues.value) {
+    await retryIssues()
+    return
+  }
+  await forceSyncActiveScope()
+}
+
 async function forceSyncActiveScope() {
   if (syncingScope.value || !syncStatus.activeScope) return
   syncingScope.value = true
   try {
     await localSyncRuntime.forceSyncScope(syncStatus.activeScope)
     await loadStatus()
-    uni.showToast({ title: '已同步当前 Scope', icon: 'success' })
+    uni.showToast({ title: '同步完成', icon: 'success' })
   } catch (error) {
     await loadStatus()
     if (isAuthTokenError(error)) {
@@ -297,6 +417,11 @@ onShow(() => {
     font-size: 12px;
     color: var(--text-3);
   }
+
+  &__item--amber .sync-overview__value { color: var(--amber); }
+  &__item--red .sync-overview__value { color: var(--red); }
+  &__item--plum .sync-overview__value { color: var(--plum); }
+  &__item--blue .sync-overview__value { color: var(--blue); }
 }
 
 .sync-section {
@@ -319,6 +444,95 @@ onShow(() => {
     font-size: 12px;
     color: var(--text-3);
   }
+}
+
+.sync-card {
+  border-radius: var(--radius-card);
+  background: var(--card);
+  box-shadow: var(--shadow);
+  padding: 14px;
+
+  &__header {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  &__icon-wrap {
+    width: 38px;
+    height: 38px;
+    border-radius: 19px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    background: var(--green-soft);
+  }
+
+  &__icon {
+    font-size: 22px;
+    color: var(--green);
+  }
+
+  &__main {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  &__title {
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--text-1);
+    line-height: 1.3;
+  }
+
+  &__desc {
+    font-size: 12px;
+    color: var(--text-3);
+    line-height: 1.45;
+  }
+
+  &__rows {
+    margin-top: 13px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+
+  &__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  &__label {
+    font-size: 12px;
+    color: var(--text-3);
+  }
+
+  &__value {
+    flex: 1;
+    text-align: right;
+    font-size: 13px;
+    color: var(--text-1);
+    font-weight: 600;
+    word-break: break-word;
+  }
+
+  &--amber .sync-card__icon-wrap { background: var(--amber-soft); }
+  &--amber .sync-card__icon { color: var(--amber); }
+  &--red .sync-card__icon-wrap { background: var(--red-soft); }
+  &--red .sync-card__icon { color: var(--red); }
+  &--plum .sync-card__icon-wrap { background: var(--plum-soft); }
+  &--plum .sync-card__icon { color: var(--plum); }
+  &--blue .sync-card__icon-wrap { background: var(--blue-soft); }
+  &--blue .sync-card__icon { color: var(--blue); }
 }
 
 .scope-panel {
@@ -366,12 +580,9 @@ onShow(() => {
 
 .sync-actions {
   margin: 0 var(--space-page) 18px;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
 
-  &__primary,
-  &__secondary {
+  &__primary {
+    width: 100%;
     height: 42px;
     border: 0;
     border-radius: var(--radius-row);
@@ -389,13 +600,7 @@ onShow(() => {
     background: var(--primary);
   }
 
-  &__secondary {
-    color: var(--text-1);
-    background: var(--card-dim);
-  }
-
-  &__primary[disabled],
-  &__secondary[disabled] {
+  &__primary[disabled] {
     opacity: 0.45;
   }
 
@@ -480,6 +685,11 @@ onShow(() => {
   &__title {
     font-size: 14px;
     color: var(--text-2);
+  }
+
+  &__desc {
+    font-size: 12px;
+    color: var(--text-3);
   }
 }
 </style>

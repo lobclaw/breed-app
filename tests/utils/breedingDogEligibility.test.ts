@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { getBreedingDogPickerEmptyState, getEligibleBreedingDogs } from '@/utils/breedingDogEligibility'
+import { getBirthCycleIdFromDog, getBreedingDogPickerEmptyState, getEligibleBreedingDogs } from '@/utils/breedingDogEligibility'
 
 function createDog(overrides: Record<string, any> = {}) {
   return {
@@ -51,6 +51,21 @@ describe('breedingDogEligibility', () => {
     expect(getEligibleBreedingDogs(dogs as any, 'pre_labor').map(dog => dog._id)).toEqual(['dam_pregnant'])
   })
 
+  it('生产候选应只保留带怀孕中当前周期的种母', () => {
+    const dogs = [
+      createDog({ _id: 'dam_idle' }),
+      createDog({ _id: 'dam_heat', statuses: [{ type: '发情中', cycleId: 'cycle_heat' }] }),
+      createDog({ _id: 'dam_pregnant', statuses: [{ type: '怀孕中', cycleId: 'cycle_pregnant' }] }),
+      createDog({ _id: 'dam_pregnant_legacy', statuses: [{ type: '怀孕中', cycle_id: 'cycle_legacy' }] }),
+      createDog({ _id: 'dam_pregnant_no_cycle', statuses: [{ type: '怀孕中' }] }),
+      createDog({ _id: 'sire_pregnant_bad_data', gender: '公', statuses: [{ type: '怀孕中', cycleId: 'cycle_sire' }] }),
+    ]
+
+    expect(getEligibleBreedingDogs(dogs as any, 'birth').map(dog => dog._id)).toEqual(['dam_pregnant', 'dam_pregnant_legacy'])
+    expect(getBirthCycleIdFromDog(dogs[2] as any)).toBe('cycle_pregnant')
+    expect(getBirthCycleIdFromDog(dogs[3] as any)).toBe('cycle_legacy')
+  })
+
   it('应返回对应记录类型的空态文案', () => {
     const dams = [
       createDog({ _id: 'dam_heat', statuses: [{ type: '发情中', cycleId: 'cycle_heat' }] }),
@@ -74,6 +89,11 @@ describe('breedingDogEligibility', () => {
     expect(getBreedingDogPickerEmptyState('abnormal_termination', dams as any, [])).toEqual({
       title: '暂无可终止的繁育周期',
       description: '只有发情中或怀孕中的当前周期犬只才会显示在这里',
+    })
+
+    expect(getBreedingDogPickerEmptyState('birth', dams as any, [])).toEqual({
+      title: '暂无可记录生产的种母',
+      description: '只有怀孕中的当前周期犬只才会显示在这里',
     })
   })
 })

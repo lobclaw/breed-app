@@ -27,6 +27,14 @@ describe('sync scope registry', () => {
     expect(scope?.collections).toContain('families')
   })
 
+  it('生产向导自由入口应同步种母候选与生产事务必需集合', () => {
+    const scope = resolveSyncScopeForRoute('pages/breeding/birth-wizard')
+    expect(scope?.key).toBe('record-form-support')
+    expect(scope?.mode).toBe('local-first')
+    expect(scope?.collections).toEqual(expect.arrayContaining(['dogs', 'breeding_cycles', 'litters', 'tasks']))
+    expect(scope?.collections).not.toEqual(expect.arrayContaining(['expenses', 'incomes', 'sale_records']))
+  })
+
   it('应把静态页、在线优先页和废弃重定向页正确归类', () => {
     expect(resolveSyncScopeForRoute('pages/profile/about')?.mode).toBe('static')
     expect(resolveSyncScopeForRoute('pages/profile/backup')?.mode).toBe('online-first')

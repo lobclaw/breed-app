@@ -22,36 +22,36 @@
       </view>
     </view>
 
-    <view v-if="hasUnsyncedData" class="sync-warning-card">
+    <view class="sync-warning-card" :class="{ 'sync-warning-card--ok': !hasUnsyncedData }">
       <view class="sync-warning-card__header">
         <view class="sync-warning-card__icon-wrap">
-          <text class="material-icons-round sync-warning-card__icon">cloud_sync</text>
+          <text class="material-icons-round sync-warning-card__icon">{{ hasUnsyncedData ? 'cloud_sync' : 'cloud_done' }}</text>
         </view>
         <view class="sync-warning-card__main">
           <view class="sync-warning-card__title-row">
-            <text class="sync-warning-card__title">备份前需完成同步</text>
-            <text class="sync-warning-card__badge">{{ syncWarningCount }} 项</text>
+            <text class="sync-warning-card__title">{{ hasUnsyncedData ? '备份前需完成同步' : '同步状态' }}</text>
+            <text class="sync-warning-card__badge">{{ hasUnsyncedData ? `${syncWarningCount} 项` : '已同步' }}</text>
           </view>
-          <text class="sync-warning-card__desc">{{ syncWarningText }}</text>
+          <text class="sync-warning-card__desc">{{ hasUnsyncedData ? syncWarningText : '所有本地数据已同步，可安心备份或导出。' }}</text>
         </view>
       </view>
-      <view class="sync-warning-card__hint-row">
+      <view v-if="hasUnsyncedData" class="sync-warning-card__hint-row">
         <text class="material-icons-round sync-warning-card__hint-icon">info</text>
         <text class="sync-warning-card__hint">请先恢复联网并等待同步完成，再执行备份或导出，避免遗漏离线期间的数据。</text>
       </view>
-      <view v-if="syncIssues.length" class="sync-warning-card__issues">
+      <view v-if="hasUnsyncedData && syncIssues.length" class="sync-warning-card__issues">
         <view v-for="issue in syncIssues" :key="issue._id" class="sync-warning-card__issue">
           <text class="sync-warning-card__issue-type">{{ issue.type }}</text>
           <text class="sync-warning-card__issue-error">{{ issue.lastError || '同步失败，等待重试' }}</text>
         </view>
       </view>
       <view class="sync-warning-card__actions">
-        <button class="sync-warning-card__retry" :disabled="retryingSync" @click="retrySyncNow">
+        <button v-if="hasUnsyncedData" class="sync-warning-card__retry" :disabled="retryingSync" @click="retrySyncNow">
           <text class="material-icons-round sync-warning-card__retry-icon">sync</text>
           <text>{{ retryButtonText }}</text>
         </button>
-        <button class="sync-warning-card__detail" @click="goToSyncStatus">
-          <text>同步状态</text>
+        <button class="sync-warning-card__detail" :class="{ 'sync-warning-card__detail--wide': !hasUnsyncedData }" @click="goToSyncStatus">
+          <text>查看同步状态</text>
           <text class="material-icons-round sync-warning-card__detail-icon">chevron_right</text>
         </button>
       </view>
@@ -59,28 +59,29 @@
 
     <!-- 操作按钮 -->
     <view class="backup-actions">
-      <BSubmitButton :loading="exporting" @click="startBackup">
-        <text v-if="!exporting" class="material-icons-round" style="font-size: 18px; color: #fff; margin-right: 6px;">backup</text>
+      <BSubmitButton :loading="backingUp" :disabled="exporting || repairing" @click="startBackup">
+        <text v-if="!backingUp" class="material-icons-round" style="font-size: 18px; color: #fff; margin-right: 6px;">backup</text>
         立即备份
       </BSubmitButton>
 
-      <button class="action-btn-ghost" @click="startExport">
+      <button class="action-btn-ghost" :disabled="backingUp || exporting || repairing" @click="startExport">
         <text class="material-icons-round" style="font-size: 18px; color: var(--text-1); margin-right: 6px;">download</text>
-        导出到本地
+        {{ exporting ? '导出中' : '导出到本地' }}
       </button>
 
-      <button class="action-btn-dim" @click="startRepair">
+      <button class="action-btn-dim" :disabled="backingUp || exporting || repairing" @click="startRepair">
         <text class="material-icons-round" style="font-size: 18px; color: var(--text-3); margin-right: 6px;">build</text>
-        数据修复
+        {{ repairing ? '修复中' : '数据修复' }}
       </button>
     </view>
 
     <!-- 进度条 -->
-    <view v-if="exporting" class="progress-area">
+    <view v-if="backingUp || exporting" class="progress-area">
       <view class="export-progress">
         <view class="export-progress__bar">
           <view class="export-progress__fill" :style="{ width: exportProgress + '%' }" />
         </view>
+        <text class="export-progress__label">{{ backingUp ? '备份中' : '导出中' }}</text>
         <text class="export-progress__text">{{ exportProgress }}%</text>
       </view>
     </view>
@@ -102,6 +103,88 @@
       confirmText="开始修复"
       @confirm="handleRepairConfirm"
     />
+
+    <BModal
+      v-model:visible="showRepairResult"
+      title="数据修复完成"
+      confirmText="知道了"
+      :showCancel="false"
+    >
+      <view class="repair-result">
+        <view class="repair-result__icon-wrap" :class="{ 'repair-result__icon-wrap--warning': repairResult.warningCount > 0 }">
+          <text class="material-icons-round repair-result__icon">{{ repairResult.warningCount > 0 ? 'priority_high' : 'check' }}</text>
+        </view>
+        <view class="repair-result__stats">
+          <view class="repair-result__stat">
+            <text class="repair-result__stat-value">{{ repairResult.checkedCount }}</text>
+            <text class="repair-result__stat-label">已检查</text>
+          </view>
+          <view class="repair-result__stat">
+            <text class="repair-result__stat-value">{{ repairResult.repairedCount }}</text>
+            <text class="repair-result__stat-label">已修复</text>
+          </view>
+          <view class="repair-result__stat" :class="{ 'repair-result__stat--warning': repairResult.warningCount > 0 }">
+            <text class="repair-result__stat-value">{{ repairResult.warningCount }}</text>
+            <text class="repair-result__stat-label">需确认</text>
+          </view>
+        </view>
+        <text class="repair-result__desc">
+          {{ repairResult.warningCount > 0 ? `仍有 ${repairResult.warningCount} 项需要人工确认。` : '未发现需人工处理的问题。' }}
+        </text>
+      </view>
+    </BModal>
+
+    <BSheet v-model:visible="showExportSheet" title="导出到本地" height="auto">
+      <view class="export-format-sheet">
+        <view class="export-format-sheet__item export-format-sheet__item--json" @click="chooseExportFormat('json')">
+          <view class="export-format-sheet__icon export-format-sheet__icon--json">
+            <text class="material-icons-round export-format-sheet__icon-text">data_object</text>
+          </view>
+          <view class="export-format-sheet__info">
+            <text class="export-format-sheet__title">JSON 格式</text>
+            <text class="export-format-sheet__desc">完整归档，适合备份留存</text>
+          </view>
+          <text class="material-icons-round export-format-sheet__arrow">chevron_right</text>
+        </view>
+
+        <view class="export-format-sheet__item export-format-sheet__item--csv" @click="chooseExportFormat('csv')">
+          <view class="export-format-sheet__icon export-format-sheet__icon--csv">
+            <text class="material-icons-round export-format-sheet__icon-text">table_chart</text>
+          </view>
+          <view class="export-format-sheet__info">
+            <text class="export-format-sheet__title">CSV 格式</text>
+            <text class="export-format-sheet__desc">表格文件，适合查看统计</text>
+          </view>
+          <text class="material-icons-round export-format-sheet__arrow">chevron_right</text>
+        </view>
+      </view>
+    </BSheet>
+
+    <BSheet v-model:visible="showExportResultSheet" title="导出完成" height="auto">
+      <view class="export-result-sheet">
+        <view class="export-result-sheet__status">
+          <view class="export-result-sheet__icon-wrap">
+            <text class="material-icons-round export-result-sheet__icon">download_done</text>
+          </view>
+          <view class="export-result-sheet__main">
+            <text class="export-result-sheet__title">{{ exportResultName }}</text>
+            <text class="export-result-sheet__desc">平台未能自动保存，请手动下载或复制临时链接。</text>
+          </view>
+        </view>
+        <view class="export-result-sheet__hint">
+          <text class="material-icons-round export-result-sheet__hint-icon">lock_clock</text>
+          <text class="export-result-sheet__hint-text">链接短期有效，备份文件包含敏感数据，请妥善保管。</text>
+        </view>
+        <button class="export-result-sheet__primary" :disabled="exportResultDownloading" @click="downloadExportResult">
+          <text class="material-icons-round export-result-sheet__button-icon">download</text>
+          <text>{{ exportResultDownloading ? '下载中' : '下载文件' }}</text>
+        </button>
+        <button class="export-result-sheet__secondary" @click="copyExportResultLink">
+          <text class="material-icons-round export-result-sheet__button-icon">content_copy</text>
+          <text>复制下载链接</text>
+        </button>
+      </view>
+    </BSheet>
   </view>
 </template>
 
@@ -113,15 +196,52 @@ import { useAuth } from '@/composables/useAuth'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BModal from '@/components/layout/BModal.vue'
+import BSheet from '@/components/layout/BSheet.vue'
 import { localSyncRuntime } from '@/localdb/runtime'
 import { isAuthTokenError } from '@/utils/cloudError'
 
+const backingUp = ref(false)
 const exporting = ref(false)
+const repairing = ref(false)
 const retryingSync = ref(false)
 const exportProgress = ref(0)
 const lastBackupDate = ref('')
 const autoBackup = ref(true)
 const showRepairConfirm = ref(false)
+const showRepairResult = ref(false)
+const showExportSheet = ref(false)
+const showExportResultSheet = ref(false)
+const repairResult = ref({
+  checkedCount: 0,
+  repairedCount: 0,
+  warningCount: 0,
+})
+const BACKUP_INFO_CACHE_PREFIX = 'breed_backup_info:'
+type ExportFormat = 'json' | 'csv'
+type ExportMode = 'backup' | 'export'
+
+interface BackupInfoCache {
+  lastBackupDate: number | null
+  autoBackupEnabled: boolean
+  cachedAt: number
+}
+
+interface BackupInfoResponse {
+  last_backup?: number | null
+  auto_backup?: boolean
+  lastBackupDate?: number | null
+  autoBackupEnabled?: boolean
+}
+
+interface ExportFileResult {
+  url: string
+  fileID?: string
+  format: ExportFormat
+  mode: ExportMode
+  size?: number
+  created_at?: number
+}
+
 interface SyncIssue {
   _id: string
   type: string
@@ -129,6 +249,8 @@ interface SyncIssue {
   lastError: string
 }
 
+const exportResult = ref<ExportFileResult | null>(null)
+const exportResultDownloading = ref(false)
 const syncIssues = ref<SyncIssue[]>([])
 const syncStatus = ref({
   pending: 0,
@@ -139,8 +261,11 @@ const syncStatus = ref({
 })
 
 const { currentFamily, navigateToLogin } = useAuth()
-const { run: getBackupInfo } = useCloudCall<{ data: { last_backup?: number; auto_backup?: boolean } }>('family-service', 'getBackupInfo')
-const { run: exportData } = useCloudCall<{ data: { url: string } }>('family-service', 'exportData', {
+const { run: getBackupInfo } = useCloudCall<{ data: BackupInfoResponse }>('family-service', 'getBackupInfo')
+const { run: exportData } = useCloudCall<{ data: ExportFileResult }>('family-service', 'exportData', {
+  showLoading: false,
+})
+const { run: repairData } = useCloudCall<{ data: { checkedCollections: string[]; repairedCount: number; warnings: unknown[]; details: unknown[] } }>('family-service', 'repairData', {
   showLoading: false,
 })
 const { run: updateSettings } = useCloudCall('family-service', 'updateSettings')
@@ -184,6 +309,10 @@ const retryButtonText = computed(() => {
   if (retryingSync.value) return '正在重试'
   return hasAuthExpiredIssue.value ? '重新登录' : '立即重试同步'
 })
+const exportResultName = computed(() => {
+  if (!exportResult.value) return '备份文件'
+  return getExportFileName(exportResult.value)
+})
 
 function getRemainingSyncToast() {
   if (!hasUnsyncedData.value) {
@@ -216,6 +345,75 @@ function formatDate(ts: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
+function getBackupInfoCacheKey() {
+  const familyId = currentFamily.value?._id || ''
+  return familyId ? `${BACKUP_INFO_CACHE_PREFIX}${familyId}` : ''
+}
+
+function normalizeBackupInfo(data: BackupInfoResponse = {}): BackupInfoCache {
+  return {
+    lastBackupDate: data.last_backup ?? data.lastBackupDate ?? null,
+    autoBackupEnabled: !!(data.auto_backup ?? data.autoBackupEnabled),
+    cachedAt: Date.now(),
+  }
+}
+
+function applyBackupInfo(info: BackupInfoCache) {
+  lastBackupDate.value = info.lastBackupDate ? formatDate(info.lastBackupDate) : ''
+  autoBackup.value = info.autoBackupEnabled
+}
+
+function readCachedBackupInfo() {
+  const key = getBackupInfoCacheKey()
+  if (!key) return null
+  try {
+    const raw = uni.getStorageSync(key)
+    if (!raw) return null
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+    if (!parsed || typeof parsed !== 'object') return null
+    return {
+      lastBackupDate: parsed.lastBackupDate ? Number(parsed.lastBackupDate) : null,
+      autoBackupEnabled: !!parsed.autoBackupEnabled,
+      cachedAt: Number(parsed.cachedAt || 0),
+    } satisfies BackupInfoCache
+  } catch {
+    return null
+  }
+}
+
+function cacheBackupInfo(info: BackupInfoCache) {
+  const key = getBackupInfoCacheKey()
+  if (!key) return
+  uni.setStorageSync(key, JSON.stringify(info))
+}
+
+function hydrateBackupInfoFromCache() {
+  const cached = readCachedBackupInfo()
+  if (!cached) return
+  applyBackupInfo(cached)
+}
+
+function formatDateForFileName(ts = Date.now()): string {
+  const d = new Date(ts)
+  return [
+    d.getFullYear(),
+    String(d.getMonth() + 1).padStart(2, '0'),
+    String(d.getDate()).padStart(2, '0'),
+    String(d.getHours()).padStart(2, '0'),
+    String(d.getMinutes()).padStart(2, '0'),
+  ].join('')
+}
+
+function getExportFileName(result: ExportFileResult): string {
+  const extension = result.format === 'csv' ? 'zip' : 'json'
+  const prefix = result.mode === 'backup' ? 'backup' : 'export'
+  return `${prefix}-${formatDateForFileName(result.created_at)}.${extension}`
+}
+
+function getExportUrl(result: ExportFileResult | null): string {
+  return String(result?.url || result?.fileID || '')
+}
+
 function normalizeSyncIssues(items: Array<Record<string, any>> = []): SyncIssue[] {
   return items.map(item => ({
     _id: String(item._id || ''),
@@ -231,12 +429,9 @@ async function loadInfo() {
     localSyncRuntime.getSyncStatus(),
     localSyncRuntime.getOutboxIssues({ limit: 3 }),
   ])
-  if (res?.data?.last_backup) {
-    lastBackupDate.value = formatDate(res.data.last_backup)
-  }
-  if (res?.data?.auto_backup !== undefined) {
-    autoBackup.value = res.data.auto_backup
-  }
+  const backupInfo = normalizeBackupInfo(res?.data)
+  applyBackupInfo(backupInfo)
+  cacheBackupInfo(backupInfo)
   syncStatus.value = {
     pending: Number(currentSyncStatus?.pending || 0),
     processing: Number(currentSyncStatus?.processing || 0),
@@ -249,7 +444,13 @@ async function loadInfo() {
 
 async function toggleAutoBackup() {
   autoBackup.value = !autoBackup.value
-  await updateSettings({ auto_backup: autoBackup.value })
+  const cached = readCachedBackupInfo()
+  cacheBackupInfo({
+    lastBackupDate: cached?.lastBackupDate ?? null,
+    autoBackupEnabled: autoBackup.value,
+    cachedAt: Date.now(),
+  })
+  await updateSettings({ auto_backup_enabled: autoBackup.value })
 }
 
 async function ensureBackupReady() {
@@ -268,6 +469,122 @@ async function ensureBackupReady() {
     icon: 'none',
   })
   return false
+}
+
+function triggerH5Download(url: string, fileName: string) {
+  // #ifdef H5
+  try {
+    const link = document.createElement('a')
+    link.href = url
+    link.download = fileName
+    link.rel = 'noopener'
+    link.style.display = 'none'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    return true
+  } catch (error) {
+    console.warn('[backup] h5 download failed', error)
+  }
+  // #endif
+  return false
+}
+
+function downloadToTempFile(url: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    uni.downloadFile({
+      url,
+      success: (res) => {
+        const statusCode = Number(res.statusCode || 200)
+        if (statusCode >= 200 && statusCode < 300 && res.tempFilePath) {
+          resolve(res.tempFilePath)
+          return
+        }
+        reject(new Error('下载文件失败'))
+      },
+      fail: reject,
+    })
+  })
+}
+
+function saveTempFile(tempFilePath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const api = uni as typeof uni & {
+      saveFile?: (options: {
+        tempFilePath: string
+        success?: (res: { savedFilePath?: string }) => void
+        fail?: (error: unknown) => void
+      }) => void
+    }
+    if (typeof api.saveFile !== 'function') {
+      reject(new Error('当前平台不支持自动保存'))
+      return
+    }
+    api.saveFile({
+      tempFilePath,
+      success: (res) => resolve(String(res.savedFilePath || tempFilePath)),
+      fail: reject,
+    })
+  })
+}
+
+async function saveExportFile(result: ExportFileResult) {
+  const url = getExportUrl(result)
+  if (!url) throw new Error('缺少下载链接')
+
+  const fileName = getExportFileName(result)
+  if (triggerH5Download(url, fileName)) {
+    uni.showToast({ title: '导出成功，已开始下载', icon: 'success' })
+    return true
+  }
+
+  const tempFilePath = await downloadToTempFile(url)
+  await saveTempFile(tempFilePath)
+  uni.showToast({ title: '已保存备份文件', icon: 'success' })
+  return true
+}
+
+function showExportFallback(result: ExportFileResult) {
+  exportResult.value = result
+  showExportResultSheet.value = true
+}
+
+async function trySaveExportFile(result: ExportFileResult) {
+  try {
+    await saveExportFile(result)
+    return true
+  } catch (error) {
+    console.warn('[backup] direct export download failed', error)
+    showExportFallback(result)
+    return false
+  }
+}
+
+async function downloadExportResult() {
+  if (!exportResult.value || exportResultDownloading.value) return
+  exportResultDownloading.value = true
+  try {
+    await saveExportFile(exportResult.value)
+    showExportResultSheet.value = false
+  } catch {
+    uni.showToast({ title: '下载失败，可复制链接', icon: 'none' })
+  } finally {
+    exportResultDownloading.value = false
+  }
+}
+
+function copyExportResultLink() {
+  const url = getExportUrl(exportResult.value)
+  if (!url) {
+    uni.showToast({ title: '缺少下载链接', icon: 'none' })
+    return
+  }
+  uni.setClipboardData({
+    data: url,
+    success: () => {
+      uni.showToast({ title: '链接已复制', icon: 'success' })
+    },
+  })
 }
 
 async function retrySyncNow() {
@@ -302,11 +619,16 @@ async function retrySyncNow() {
   }
 }
 
-async function runExport(format: string) {
+async function runExport(format: ExportFormat, mode: ExportMode) {
+  if (backingUp.value || exporting.value || repairing.value) return
   const ready = await ensureBackupReady()
   if (!ready) return
 
-  exporting.value = true
+  if (mode === 'backup') {
+    backingUp.value = true
+  } else {
+    exporting.value = true
+  }
   exportProgress.value = 0
 
   const timer = setInterval(() => {
@@ -317,19 +639,16 @@ async function runExport(format: string) {
   }, 300)
 
   try {
-    const res = await exportData({ format })
+    const res = await exportData({ format, mode })
     exportProgress.value = 100
     clearInterval(timer)
 
-    if (res?.data?.url) {
-      uni.setClipboardData({
-        data: res.data.url,
-        success: () => {
-          uni.showToast({ title: '下载链接已复制', icon: 'success' })
-        },
-      })
+    if (mode === 'backup') {
+      uni.showToast({ title: '云端备份已完成', icon: 'success' })
+    } else if (res?.data && getExportUrl(res.data)) {
+      await trySaveExportFile(res.data)
     } else {
-      uni.showToast({ title: '操作完成', icon: 'success' })
+      uni.showToast({ title: '导出已完成', icon: 'success' })
     }
     loadInfo()
   } catch {
@@ -337,6 +656,7 @@ async function runExport(format: string) {
     uni.showToast({ title: '操作失败', icon: 'none' })
   } finally {
     setTimeout(() => {
+      backingUp.value = false
       exporting.value = false
       exportProgress.value = 0
     }, 1000)
@@ -344,24 +664,45 @@ async function runExport(format: string) {
 }
 
 function startBackup() {
-  runExport('json')
+  runExport('json', 'backup')
 }
 
 function startExport() {
-  uni.showActionSheet({
-    itemList: ['JSON 格式', 'CSV 格式'],
-    success: (res) => {
-      runExport(res.tapIndex === 0 ? 'json' : 'csv')
-    },
-  })
+  if (backingUp.value || exporting.value || repairing.value) return
+  showExportSheet.value = true
+}
+
+function chooseExportFormat(format: 'json' | 'csv') {
+  showExportSheet.value = false
+  runExport(format, 'export')
 }
 
 function startRepair() {
   showRepairConfirm.value = true
 }
 
-function handleRepairConfirm() {
-  uni.showToast({ title: '修复中...', icon: 'loading' })
+async function handleRepairConfirm() {
+  if (repairing.value) return
+  const ready = await ensureBackupReady()
+  if (!ready) return
+
+  repairing.value = true
+  try {
+    const res = await repairData({ dryRun: false })
+    const repairedCount = Number(res?.data?.repairedCount || 0)
+    const checkedCount = Number(res?.data?.checkedCollections?.length || 0)
+    const warningCount = Number(res?.data?.warnings?.length || 0)
+    repairResult.value = { checkedCount, repairedCount, warningCount }
+    showRepairResult.value = true
+    await loadInfo()
+  } catch (error) {
+    uni.showToast({
+      title: error instanceof Error ? error.message : '数据修复失败',
+      icon: 'none',
+    })
+  } finally {
+    repairing.value = false
+  }
 }
 
 function goToRecycleBin() {
@@ -372,7 +713,10 @@ function goToSyncStatus() {
   uni.navigateTo({ url: '/pages/profile/sync-status' })
 }
 
-onShow(() => loadInfo())
+onShow(() => {
+  hydrateBackupInfoFromCache()
+  loadInfo()
+})
 </script>
 
 <style lang="scss" scoped>
@@ -598,11 +942,40 @@ onShow(() => loadInfo())
       transform: scale(0.97);
       opacity: 0.86;
     }
+
+    &--wide {
+      flex: 1;
+    }
   }
 
   &__detail-icon {
     font-size: 16px;
     color: var(--text-3);
+  }
+
+  &--ok {
+    background:
+      linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(245, 253, 249, 0.94) 100%),
+      var(--card);
+    border-color: rgba(61, 174, 111, 0.12);
+    box-shadow: 0 10px 28px rgba(61, 174, 111, 0.07);
+
+    &::before {
+      background: linear-gradient(90deg, var(--green), #7fcfb0);
+    }
+
+    .sync-warning-card__icon-wrap {
+      background: linear-gradient(135deg, rgba(61, 174, 111, 0.14), rgba(61, 174, 111, 0.08));
+    }
+
+    .sync-warning-card__icon {
+      color: var(--green);
+    }
+
+    .sync-warning-card__badge {
+      background: rgba(61, 174, 111, 0.10);
+      color: var(--green);
+    }
   }
 }
 
@@ -646,6 +1019,7 @@ onShow(() => loadInfo())
 .action-btn-ghost {
   width: 100%;
   height: 50px;
+  box-sizing: border-box;
   border-radius: var(--radius-btn);
   border: 1.5px solid var(--text-4);
   background: var(--card);
@@ -657,15 +1031,29 @@ onShow(() => loadInfo())
   align-items: center;
   justify-content: center;
   transition: all 0.12s ease;
-  &:active { transform: scale(0.94); opacity: 0.85; }
+
+  &::after {
+    border: 0;
+  }
+
+  &[disabled] {
+    color: var(--text-3);
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.72);
+    border-color: rgba(216, 203, 189, 0.42);
+  }
+
+  &:not([disabled]):active { transform: scale(0.94); opacity: 0.85; }
 }
 
 .action-btn-dim {
   width: 100%;
   height: 50px;
+  box-sizing: border-box;
   border-radius: var(--radius-btn);
   border: none;
   background: var(--card-dim);
+  box-shadow: inset 0 0 0 1px rgba(216, 203, 189, 0.28);
   font-size: 15px;
   font-weight: 700;
   color: var(--text-2);
@@ -674,7 +1062,19 @@ onShow(() => loadInfo())
   align-items: center;
   justify-content: center;
   transition: all 0.12s ease;
-  &:active { transform: scale(0.94); opacity: 0.85; }
+
+  &::after {
+    border: 0;
+  }
+
+  &[disabled] {
+    background: rgba(245, 242, 238, 0.96);
+    color: var(--text-3);
+    opacity: 1;
+    box-shadow: inset 0 0 0 1px rgba(216, 203, 189, 0.2);
+  }
+
+  &:not([disabled]):active { transform: scale(0.94); opacity: 0.85; }
 }
 
 /* ==================== PROGRESS ==================== */
@@ -703,6 +1103,13 @@ onShow(() => loadInfo())
     transition: width 0.3s ease;
   }
 
+  &__label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-3);
+    white-space: nowrap;
+  }
+
   &__text {
     font-family: var(--font-display);
     font-size: 13px;
@@ -710,6 +1117,293 @@ onShow(() => loadInfo())
     color: var(--primary);
     min-width: 40px;
     text-align: right;
+  }
+}
+
+/* ==================== REPAIR RESULT ==================== */
+.repair-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  margin-top: 8px;
+
+  &__icon-wrap {
+    width: 48px;
+    height: 48px;
+    border-radius: 18px;
+    background: var(--green-soft);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &--warning {
+      background: var(--amber-soft);
+    }
+  }
+
+  &__icon {
+    font-size: 26px;
+    color: var(--green);
+
+    .repair-result__icon-wrap--warning & {
+      color: var(--amber);
+    }
+  }
+
+  &__stats {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  &__stat {
+    min-width: 0;
+    border-radius: 14px;
+    background: var(--card-dim);
+    padding: 10px 6px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+
+    &--warning {
+      background: var(--amber-soft);
+    }
+  }
+
+  &__stat-value {
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--text-1);
+    line-height: 1;
+  }
+
+  &__stat-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-3);
+    line-height: 1.2;
+  }
+
+  &__desc {
+    display: block;
+    width: 100%;
+    font-size: 13px;
+    line-height: 1.5;
+    text-align: center;
+    color: var(--text-2);
+  }
+}
+
+/* ==================== EXPORT FORMAT SHEET ==================== */
+.export-format-sheet {
+  padding: 0 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  &__item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 70px;
+    padding: 12px 14px;
+    border-radius: var(--radius-card);
+    border: 1px solid transparent;
+    transition: transform 0.12s ease, opacity 0.12s ease;
+
+    &:active {
+      transform: scale(0.985);
+      opacity: 0.82;
+    }
+
+    &--json {
+      background: linear-gradient(135deg, rgba(234, 62, 119, 0.11), rgba(234, 62, 119, 0.05));
+      border-color: rgba(234, 62, 119, 0.12);
+    }
+
+    &--csv {
+      background: linear-gradient(135deg, rgba(61, 174, 111, 0.12), rgba(61, 174, 111, 0.05));
+      border-color: rgba(61, 174, 111, 0.12);
+    }
+  }
+
+  &__icon {
+    width: 42px;
+    height: 42px;
+    border-radius: var(--radius-icon);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+
+    &--json {
+      background: rgba(234, 62, 119, 0.16);
+      color: var(--primary);
+    }
+
+    &--csv {
+      background: rgba(61, 174, 111, 0.16);
+      color: var(--green);
+    }
+  }
+
+  &__icon-text {
+    font-size: 20px;
+  }
+
+  &__info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__title {
+    display: block;
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--text-1);
+    line-height: 1.3;
+  }
+
+  &__desc {
+    display: block;
+    margin-top: 3px;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--text-3);
+  }
+
+  &__arrow {
+    font-size: 18px;
+    color: var(--text-4);
+    flex-shrink: 0;
+  }
+}
+
+/* ==================== EXPORT RESULT SHEET ==================== */
+.export-result-sheet {
+  padding: 0 0 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+
+  &__status {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px;
+    border-radius: var(--radius-card);
+    background: linear-gradient(135deg, rgba(61, 174, 111, 0.12), rgba(255, 255, 255, 0.82));
+    border: 1px solid rgba(61, 174, 111, 0.14);
+  }
+
+  &__icon-wrap {
+    width: 42px;
+    height: 42px;
+    border-radius: var(--radius-icon);
+    background: rgba(61, 174, 111, 0.16);
+    color: var(--green);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  &__icon {
+    font-size: 21px;
+    line-height: 1;
+  }
+
+  &__main {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__title {
+    display: block;
+    font-size: 15px;
+    font-weight: 800;
+    line-height: 1.35;
+    color: var(--text-1);
+    word-break: break-all;
+  }
+
+  &__desc {
+    display: block;
+    margin-top: 4px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--text-2);
+  }
+
+  &__hint {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: var(--card-dim);
+  }
+
+  &__hint-icon {
+    font-size: 15px;
+    line-height: 1.35;
+    color: var(--amber);
+    flex-shrink: 0;
+  }
+
+  &__hint-text {
+    flex: 1;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--text-2);
+  }
+
+  &__primary,
+  &__secondary {
+    width: 100%;
+    height: 48px;
+    border-radius: var(--radius-btn);
+    border: 0;
+    font-size: 14px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: transform 0.12s ease, opacity 0.12s ease;
+
+    &::after {
+      border: 0;
+    }
+
+    &:not([disabled]):active {
+      transform: scale(0.96);
+      opacity: 0.86;
+    }
+  }
+
+  &__primary {
+    background: var(--primary);
+    color: #fff;
+
+    &[disabled] {
+      opacity: 0.72;
+    }
+  }
+
+  &__secondary {
+    background: var(--card-dim);
+    color: var(--text-1);
+    box-shadow: inset 0 0 0 1px rgba(216, 203, 189, 0.34);
+  }
+
+  &__button-icon {
+    font-size: 17px;
+    line-height: 1;
   }
 }
 

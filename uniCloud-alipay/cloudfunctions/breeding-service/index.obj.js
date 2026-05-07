@@ -1415,6 +1415,7 @@ module.exports = {
     const clientPuppyIds = Array.isArray(clientEntityIds.dogs) ? clientEntityIds.dogs.filter(Boolean) : []
     const clientWeightIds = Array.isArray(clientEntityIds.dog_weights) ? clientEntityIds.dog_weights.filter(Boolean) : []
     const clientTaskIds = Array.isArray(clientEntityIds.tasks) ? clientEntityIds.tasks.filter(Boolean) : []
+    const litterNumber = await computeLitterNumber(familyId, cycle.dam_id, data.birth_date)
 
     // 创建 breeding_record (type=birth)
     const birthRecordData = buildVersionedCreate({
@@ -1469,7 +1470,7 @@ module.exports = {
       const puppy = data.puppies[idx]
       if (puppy.alive === false) continue // 死胎不建档
 
-      const puppyName = (puppy.name || '').trim() || `${damDisplayName}窝-${idx + 1}号`
+      const puppyName = (puppy.name || '').trim() || `${damDisplayName}${litterNumber}窝-${idx + 1}号`
 
       const clientPuppyId = clientPuppyIds[puppyIds.length] || null
       const puppyData = buildVersionedCreate({

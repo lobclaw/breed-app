@@ -469,6 +469,10 @@
 - `push_enabled`
 - `morning_summary_enabled`
 - `morning_summary_time`
+- `auto_backup_enabled`
+- `last_backup_date`
+- `last_backup_file_id`
+- `backup_file_ids`
 - `notification_types`
 - `custom_vaccine_types`
 - `custom_deworming_drugs`
@@ -531,6 +535,10 @@
 - `morning_summary_time` 使用北京时间 `HH:MM` 字符串
 - `morning_summary_time` 是唯一保留为 `HH:MM` 的每日触发模板字段，不参与 timestamp 统一口径
 - `notification_types.overdue` 固定为 `true`
+- `auto_backup_enabled` 表示是否开启每周自动备份
+- `last_backup_date` 表示最近一次“立即备份/自动备份”成功生成文件的 timestamp 毫秒数；普通导出不更新
+- `last_backup_file_id` 保存最近一次备份文件的云存储 fileID
+- `backup_file_ids` 保存最近 4 份“立即备份/自动备份”的云存储 fileID，由服务端维护；新备份成功后删除更旧备份文件
 - 自定义支出分组统一存放在 `custom_expense_category_groups`
 - 自定义支出分组使用 `{ key, label }`；`key` 由服务端生成且不可变，`label` 可编辑
 - 自定义支出分类必须带 `parent_group`

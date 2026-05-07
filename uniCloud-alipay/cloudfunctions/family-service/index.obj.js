@@ -54,6 +54,10 @@ const DEFAULT_SETTINGS = {
   custom_deworming_drugs: { internal: [], external: [], combo: [] },
   custom_condition_types: [],
   custom_breed_types: [],
+  auto_backup_enabled: false,
+  last_backup_date: null,
+  last_backup_file_id: '',
+  backup_file_ids: [],
 }
 
 function mergeFamilySettings(settings = {}) {
@@ -124,6 +128,35 @@ function getEntityConflict(syncMeta, collection, entity) {
 }
 
 const RECYCLE_RETENTION_DAYS = 30
+const BACKUP_FILE_RETENTION_LIMIT = 4
+const SYSTEM_MANAGED_SETTING_KEYS = new Set(['last_backup_date', 'last_backup_file_id', 'backup_file_ids'])
+const EXPORT_SCHEMA_VERSION = 1
+const EXPORT_COLLECTIONS = [
+  'dogs',
+  'breeding_cycles',
+  'litters',
+  'breeding_records',
+  'health_records',
+  'medication_tasks',
+  'tasks',
+  'expenses',
+  'incomes',
+  'sale_records',
+  'agents',
+  'dog_weights',
+  'medication_protocols',
+]
+const SOFT_DELETE_REPAIR_COLLECTIONS = new Set([
+  'dogs',
+  'expenses',
+  'incomes',
+  'agents',
+  'medication_protocols',
+  'sale_records',
+])
+const DOG_GENDERS = new Set(['公', '母'])
+const DOG_ROLES = new Set(['种狗', '幼崽', '外部种公'])
+const DOG_DISPOSITIONS = new Set(['在养', '待售', '已预定', '已售', '已领养', '已赠送', '自留', '已退休', '已故'])
 const LEGACY_INCOME_TYPE_MAP = {
   定金: '定金保留',
   领养费: '领养',
@@ -279,8 +312,523 @@ function isZeroEffectOperationLog(log) {
   return /批量创建了\s*0\s*个/.test(summary) || /批量完成了\s*0\s*个/.test(summary)
 }
 
+function normalizeExportInput(input = {}) {
+  const format = String(input?.format || 'json').trim().toLowerCase()
+  const mode = String(input?.mode || 'export').trim().toLowerCase()
+
+  if (!['json', 'csv'].includes(format)) {
+    throw new Error('导出格式无效')
+  }
+  if (!['backup', 'export'].includes(mode)) {
+    throw new Error('导出模式无效')
+  }
+
+  return { format, mode }
+}
+
+function sanitizePathSegment(value) {
+  return String(value || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '_')
+}
+
+function escapeCsvCell(value) {
+  if (value === undefined || value === null) return ''
+  const raw = typeof value === 'object' ? JSON.stringify(value) : String(value)
+  if (!/[",\n\r]/.test(raw)) return raw
+  return `"${raw.replace(/"/g, '""')}"`
+}
+
+function buildCsv(rows = []) {
+  const keys = []
+  const seen = new Set()
+  const addKey = (key) => {
+    if (!seen.has(key)) {
+      seen.add(key)
+      keys.push(key)
+    }
+  }
+
+  addKey('_id')
+  for (const row of rows) {
+    Object.keys(row || {}).forEach(addKey)
+  }
+
+  const lines = [
+    keys.map(escapeCsvCell).join(','),
+    ...rows.map(row => keys.map(key => escapeCsvCell(row?.[key])).join(',')),
+  ]
+  return `${lines.join('\n')}\n`
+}
+
+let crcTable = null
+function getCrcTable() {
+  if (crcTable) return crcTable
+  crcTable = new Uint32Array(256)
+  for (let i = 0; i < 256; i++) {
+    let c = i
+    for (let k = 0; k < 8; k++) {
+      c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1)
+    }
+    crcTable[i] = c >>> 0
+  }
+  return crcTable
+}
+
+function crc32(buffer) {
+  const table = getCrcTable()
+  let crc = 0xffffffff
+  for (const byte of buffer) {
+    crc = table[(crc ^ byte) & 0xff] ^ (crc >>> 8)
+  }
+  return (crc ^ 0xffffffff) >>> 0
+}
+
+function getDosDateTime(date = new Date()) {
+  const year = Math.max(1980, date.getFullYear())
+  const dosTime = (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2)
+  const dosDate = ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate()
+  return { dosTime, dosDate }
+}
+
+function createZip(entries) {
+  const localParts = []
+  const centralParts = []
+  let offset = 0
+  const { dosTime, dosDate } = getDosDateTime()
+
+  for (const entry of entries) {
+    const nameBuffer = Buffer.from(entry.name)
+    const contentBuffer = Buffer.isBuffer(entry.content) ? entry.content : Buffer.from(String(entry.content || ''))
+    const checksum = crc32(contentBuffer)
+
+    const localHeader = Buffer.alloc(30)
+    localHeader.writeUInt32LE(0x04034b50, 0)
+    localHeader.writeUInt16LE(20, 4)
+    localHeader.writeUInt16LE(0, 6)
+    localHeader.writeUInt16LE(0, 8)
+    localHeader.writeUInt16LE(dosTime, 10)
+    localHeader.writeUInt16LE(dosDate, 12)
+    localHeader.writeUInt32LE(checksum, 14)
+    localHeader.writeUInt32LE(contentBuffer.length, 18)
+    localHeader.writeUInt32LE(contentBuffer.length, 22)
+    localHeader.writeUInt16LE(nameBuffer.length, 26)
+    localHeader.writeUInt16LE(0, 28)
+
+    localParts.push(localHeader, nameBuffer, contentBuffer)
+
+    const centralHeader = Buffer.alloc(46)
+    centralHeader.writeUInt32LE(0x02014b50, 0)
+    centralHeader.writeUInt16LE(20, 4)
+    centralHeader.writeUInt16LE(20, 6)
+    centralHeader.writeUInt16LE(0, 8)
+    centralHeader.writeUInt16LE(0, 10)
+    centralHeader.writeUInt16LE(dosTime, 12)
+    centralHeader.writeUInt16LE(dosDate, 14)
+    centralHeader.writeUInt32LE(checksum, 16)
+    centralHeader.writeUInt32LE(contentBuffer.length, 20)
+    centralHeader.writeUInt32LE(contentBuffer.length, 24)
+    centralHeader.writeUInt16LE(nameBuffer.length, 28)
+    centralHeader.writeUInt16LE(0, 30)
+    centralHeader.writeUInt16LE(0, 32)
+    centralHeader.writeUInt16LE(0, 34)
+    centralHeader.writeUInt16LE(0, 36)
+    centralHeader.writeUInt32LE(0, 38)
+    centralHeader.writeUInt32LE(offset, 42)
+    centralParts.push(centralHeader, nameBuffer)
+
+    offset += localHeader.length + nameBuffer.length + contentBuffer.length
+  }
+
+  const centralDirectory = Buffer.concat(centralParts)
+  const endRecord = Buffer.alloc(22)
+  endRecord.writeUInt32LE(0x06054b50, 0)
+  endRecord.writeUInt16LE(0, 4)
+  endRecord.writeUInt16LE(0, 6)
+  endRecord.writeUInt16LE(entries.length, 8)
+  endRecord.writeUInt16LE(entries.length, 10)
+  endRecord.writeUInt32LE(centralDirectory.length, 12)
+  endRecord.writeUInt32LE(offset, 16)
+  endRecord.writeUInt16LE(0, 20)
+
+  return Buffer.concat([...localParts, centralDirectory, endRecord])
+}
+
+async function collectFamilyArchive(familyId) {
+  const { data: familyDocs } = await db.collection('families').doc(familyId).get()
+  const family = familyDocs?.[0] || familyDocs || null
+  if (!family) throw new Error('家庭不存在')
+
+  const collections = {
+    families: [{ ...family, settings: mergeFamilySettings(family.settings) }],
+  }
+
+  for (const collection of EXPORT_COLLECTIONS) {
+    const { data } = await db.collection(collection)
+      .where({ family_id: familyId })
+      .get()
+    collections[collection] = data || []
+  }
+
+  return {
+    schemaVersion: EXPORT_SCHEMA_VERSION,
+    exportedAt: Date.now(),
+    familyId,
+    collections,
+  }
+}
+
+function buildArchiveContent(archive, format) {
+  if (format === 'json') {
+    return Buffer.from(JSON.stringify(archive, null, 2))
+  }
+
+  const entries = Object.entries(archive.collections).map(([collection, rows]) => ({
+    name: `${collection}.csv`,
+    content: buildCsv(rows),
+  }))
+  entries.unshift({
+    name: 'metadata.csv',
+    content: buildCsv([{
+      schemaVersion: archive.schemaVersion,
+      exportedAt: archive.exportedAt,
+      familyId: archive.familyId,
+    }]),
+  })
+  return createZip(entries)
+}
+
+async function resolveUploadedFileUrl(uploadResult) {
+  const fileID = uploadResult?.fileID || uploadResult?.fileId || uploadResult?.url || ''
+  if (uploadResult?.url) return { fileID, url: uploadResult.url }
+  if (fileID && typeof uniCloud.getTempFileURL === 'function') {
+    try {
+      const tempResult = await uniCloud.getTempFileURL({ fileList: [fileID] })
+      const first = tempResult?.fileList?.[0]
+      const tempUrl = first?.tempFileURL || first?.url
+      if (tempUrl) return { fileID, url: tempUrl }
+    } catch (error) {
+      console.warn('[backup] getTempFileURL failed', error)
+    }
+  }
+  return { fileID, url: fileID }
+}
+
+function normalizeBackupFileIds(fileIds = []) {
+  if (!Array.isArray(fileIds)) return []
+  const result = []
+  for (const fileId of fileIds) {
+    const normalized = String(fileId || '').trim()
+    if (normalized && !result.includes(normalized)) {
+      result.push(normalized)
+    }
+  }
+  return result
+}
+
+async function deleteOldBackupFiles(fileIds = []) {
+  const normalized = normalizeBackupFileIds(fileIds)
+  if (!normalized.length || typeof uniCloud.deleteFile !== 'function') return
+  try {
+    await uniCloud.deleteFile({ fileList: normalized })
+  } catch (error) {
+    console.warn('[backup] delete old backup files failed', error)
+  }
+}
+
+function buildRetainedBackupFileIds(previousFileIds = [], currentFileId = '') {
+  const normalizedCurrentFileId = String(currentFileId || '').trim()
+  const allFileIds = normalizeBackupFileIds([
+    ...normalizeBackupFileIds(previousFileIds).filter(fileId => fileId !== normalizedCurrentFileId),
+    normalizedCurrentFileId,
+  ])
+  const retainedFileIds = allFileIds.slice(-BACKUP_FILE_RETENTION_LIMIT)
+  const deletedFileIds = allFileIds.slice(0, Math.max(0, allFileIds.length - BACKUP_FILE_RETENTION_LIMIT))
+  return { retainedFileIds, deletedFileIds }
+}
+
+async function createFamilyArchiveFile(familyId, options = {}) {
+  const { format, mode } = normalizeExportInput(options)
+  const now = Number(options.now) || Date.now()
+  const archive = await collectFamilyArchive(familyId)
+  archive.exportedAt = now
+  const content = buildArchiveContent(archive, format)
+  const extension = format === 'csv' ? 'zip' : 'json'
+  const cloudPath = [
+    'backups',
+    sanitizePathSegment(familyId),
+    `${mode}-${now}.${extension}`,
+  ].join('/')
+
+  const uploadResult = await uniCloud.uploadFile({
+    cloudPath,
+    fileContent: content,
+  })
+  const { fileID, url } = await resolveUploadedFileUrl(uploadResult)
+
+  if (mode === 'backup') {
+    const previousSettings = mergeFamilySettings(archive.collections.families?.[0]?.settings)
+    const previousFileIds = normalizeBackupFileIds([
+      ...normalizeBackupFileIds(previousSettings.backup_file_ids),
+      previousSettings.last_backup_file_id,
+    ])
+    const { retainedFileIds, deletedFileIds } = buildRetainedBackupFileIds(previousFileIds, fileID)
+    await db.collection('families').doc(familyId).update({
+      'settings.last_backup_date': now,
+      'settings.last_backup_file_id': fileID,
+      'settings.backup_file_ids': retainedFileIds,
+      ...buildVersionUpdate(dbCmd, now),
+    })
+    await deleteOldBackupFiles(deletedFileIds)
+  }
+
+  return {
+    data: {
+      url,
+      fileID,
+      format,
+      mode,
+      size: content.length,
+      created_at: now,
+    },
+  }
+}
+
+function getFamilySettingsRepairPatch(settings = {}) {
+  const current = settings && typeof settings === 'object' ? settings : {}
+  const patch = {}
+  const fields = []
+  const setField = (key, value) => {
+    patch[`settings.${key}`] = value
+    fields.push(key)
+  }
+  const ensureNumber = (key, fallback) => {
+    if (!Number.isFinite(Number(current[key]))) {
+      setField(key, fallback)
+    }
+  }
+  const ensureBoolean = (key, fallback) => {
+    if (typeof current[key] !== 'boolean') {
+      setField(key, fallback)
+    }
+  }
+  const ensureArray = (key) => {
+    if (!Array.isArray(current[key])) {
+      setField(key, [])
+    }
+  }
+
+  ensureNumber('default_weaning_days', DEFAULT_SETTINGS.default_weaning_days)
+  ensureNumber('default_vaccine_interval_puppy', DEFAULT_SETTINGS.default_vaccine_interval_puppy)
+  ensureNumber('default_vaccine_interval_adult', DEFAULT_SETTINGS.default_vaccine_interval_adult)
+  ensureNumber('default_deworming_interval_puppy', DEFAULT_SETTINGS.default_deworming_interval_puppy)
+  ensureNumber('default_deworming_interval_adult', DEFAULT_SETTINGS.default_deworming_interval_adult)
+  ensureBoolean('push_enabled', DEFAULT_SETTINGS.push_enabled)
+  ensureBoolean('morning_summary_enabled', DEFAULT_SETTINGS.morning_summary_enabled)
+  ensureBoolean('auto_backup_enabled', DEFAULT_SETTINGS.auto_backup_enabled)
+
+  if (!isValidTimeString(current.morning_summary_time)) {
+    setField('morning_summary_time', DEFAULT_SETTINGS.morning_summary_time)
+  }
+
+  const notificationTypes = current.notification_types && typeof current.notification_types === 'object'
+    ? current.notification_types
+    : {}
+  const nextNotificationTypes = { ...DEFAULT_NOTIFICATION_TYPES, ...notificationTypes, overdue: true }
+  const notificationInvalid = Object.keys(DEFAULT_NOTIFICATION_TYPES).some((key) => (
+    typeof notificationTypes[key] !== 'boolean' || notificationTypes[key] !== nextNotificationTypes[key]
+  ))
+  if (notificationInvalid) {
+    setField('notification_types', nextNotificationTypes)
+  }
+
+  ensureArray('custom_vaccine_types')
+  ensureArray('custom_condition_types')
+  ensureArray('custom_breed_types')
+
+  const deworming = current.custom_deworming_drugs && typeof current.custom_deworming_drugs === 'object'
+    ? current.custom_deworming_drugs
+    : {}
+  const nextDeworming = {
+    internal: Array.isArray(deworming.internal) ? deworming.internal : [],
+    external: Array.isArray(deworming.external) ? deworming.external : [],
+    combo: Array.isArray(deworming.combo) ? deworming.combo : [],
+  }
+  if (
+    !current.custom_deworming_drugs
+    || !Array.isArray(deworming.internal)
+    || !Array.isArray(deworming.external)
+    || !Array.isArray(deworming.combo)
+  ) {
+    setField('custom_deworming_drugs', nextDeworming)
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(current, 'last_backup_date')) {
+    setField('last_backup_date', DEFAULT_SETTINGS.last_backup_date)
+  }
+  if (current.last_backup_date !== null && current.last_backup_date !== undefined && !Number.isFinite(Number(current.last_backup_date))) {
+    setField('last_backup_date', DEFAULT_SETTINGS.last_backup_date)
+  }
+  if (!Object.prototype.hasOwnProperty.call(current, 'last_backup_file_id')) {
+    setField('last_backup_file_id', DEFAULT_SETTINGS.last_backup_file_id)
+  }
+  if (current.last_backup_file_id !== undefined && typeof current.last_backup_file_id !== 'string') {
+    setField('last_backup_file_id', DEFAULT_SETTINGS.last_backup_file_id)
+  }
+  if (!Array.isArray(current.backup_file_ids)) {
+    setField('backup_file_ids', DEFAULT_SETTINGS.backup_file_ids)
+  }
+
+  return { patch, fields }
+}
+
+async function repairFamilySettings(familyId, dryRun, now) {
+  const { data } = await db.collection('families').doc(familyId).get()
+  const family = data?.[0] || data
+  if (!family) throw new Error('家庭不存在')
+
+  const { patch, fields } = getFamilySettingsRepairPatch(family.settings)
+  if (fields.length === 0) {
+    return null
+  }
+
+  if (!dryRun) {
+    await db.collection('families').doc(familyId).update({
+      ...patch,
+      ...buildVersionUpdate(dbCmd, now),
+    })
+  }
+
+  return {
+    collection: 'families',
+    id: familyId,
+    fields: fields.map(field => `settings.${field}`),
+  }
+}
+
+async function repairCollectionTechnicalFields(familyId, collection, dryRun, now) {
+  const { data } = await db.collection(collection).where({ family_id: familyId }).get()
+  const details = []
+
+  for (const row of data || []) {
+    const patch = {}
+    if (row.version === undefined || row.version === null || Number.isNaN(Number(row.version))) {
+      patch.version = 1
+    }
+    if (row.updated_at === undefined || row.updated_at === null) {
+      patch.updated_at = Number(row.created_at) || now
+    }
+    if (SOFT_DELETE_REPAIR_COLLECTIONS.has(collection) && row.deleted_at === undefined) {
+      patch.deleted_at = null
+    }
+    if (Object.keys(patch).length === 0) continue
+    if (patch.updated_at === undefined) {
+      patch.updated_at = Number(row.updated_at) || Number(row.created_at) || now
+    }
+
+    if (!dryRun) {
+      await db.collection(collection).doc(row._id).update(patch)
+    }
+
+    details.push({
+      collection,
+      id: row._id,
+      fields: Object.keys(patch),
+    })
+  }
+
+  return details
+}
+
+async function detectBusinessWarnings(familyId) {
+  const [
+    dogsResult,
+    healthResult,
+    medicationResult,
+    saleResult,
+  ] = await Promise.all([
+    db.collection('dogs').where({ family_id: familyId }).get(),
+    db.collection('health_records').where({ family_id: familyId }).get(),
+    db.collection('medication_tasks').where({ family_id: familyId }).get(),
+    db.collection('sale_records').where({ family_id: familyId }).get(),
+  ])
+  const dogs = dogsResult.data || []
+  const dogIds = new Set(dogs.map(dog => dog._id))
+  const warnings = []
+
+  for (const dog of dogs) {
+    if (dog.gender && !DOG_GENDERS.has(dog.gender)) {
+      warnings.push({ collection: 'dogs', id: dog._id, type: 'invalid_enum', field: 'gender' })
+    }
+    if (dog.role && !DOG_ROLES.has(dog.role)) {
+      warnings.push({ collection: 'dogs', id: dog._id, type: 'invalid_enum', field: 'role' })
+    }
+    if (dog.disposition && !DOG_DISPOSITIONS.has(dog.disposition)) {
+      warnings.push({ collection: 'dogs', id: dog._id, type: 'invalid_enum', field: 'disposition' })
+    }
+  }
+
+  for (const record of healthResult.data || []) {
+    if (record.dog_id && !dogIds.has(record.dog_id)) {
+      warnings.push({ collection: 'health_records', id: record._id, type: 'missing_dog', dog_id: record.dog_id })
+    }
+  }
+
+  const activeMedicationKeys = new Map()
+  for (const task of medicationResult.data || []) {
+    if (task.dog_id && !dogIds.has(task.dog_id)) {
+      warnings.push({ collection: 'medication_tasks', id: task._id, type: 'missing_dog', dog_id: task.dog_id })
+    }
+    if (task.status === '进行中') {
+      const key = `${task.dog_id || ''}::${task.drug_name || task.medication_name || ''}`
+      if (activeMedicationKeys.has(key)) {
+        warnings.push({
+          collection: 'medication_tasks',
+          id: task._id,
+          type: 'duplicate_active_medication',
+          related_id: activeMedicationKeys.get(key),
+        })
+      } else {
+        activeMedicationKeys.set(key, task._id)
+      }
+    }
+  }
+
+  for (const sale of saleResult.data || []) {
+    if (sale.dog_id && !dogIds.has(sale.dog_id)) {
+      warnings.push({ collection: 'sale_records', id: sale._id, type: 'missing_dog', dog_id: sale.dog_id })
+    }
+  }
+
+  return warnings
+}
+
+async function repairFamilyData(familyId, input = {}) {
+  const dryRun = !!input?.dryRun
+  const now = Date.now()
+  const checkedCollections = ['families', ...EXPORT_COLLECTIONS]
+  const details = []
+  const settingsRepair = await repairFamilySettings(familyId, dryRun, now)
+  if (settingsRepair) details.push(settingsRepair)
+
+  for (const collection of EXPORT_COLLECTIONS) {
+    details.push(...await repairCollectionTechnicalFields(familyId, collection, dryRun, now))
+  }
+
+  const warnings = await detectBusinessWarnings(familyId)
+
+  return {
+    checkedCollections,
+    repairedCount: details.length,
+    warnings,
+    details,
+  }
+}
+
 module.exports = {
   _before: async function() {
+    // _timing 方法不需要用户认证
+    const methodName = this.getMethodName()
+    if (methodName && methodName.startsWith('_timing')) return
+
     // createFamily 和 joinFamily 允许无家庭用户调用
     const skipFamilyCheck = ['createFamily', 'joinFamily', 'getFamilyInfo']
     const { uid, familyId, role } = await verifyAndGetFamily(this.getUniIdToken(), this.getClientInfo())
@@ -288,7 +836,6 @@ module.exports = {
     this.familyId = familyId
     this.role = role
 
-    const methodName = this.getMethodName()
     if (!skipFamilyCheck.includes(methodName)) {
       requireFamily(familyId)
     }
@@ -406,7 +953,11 @@ module.exports = {
     const updateData = {}
     for (const key of allowedKeys) {
       if (settings[key] !== undefined) {
-        if (key === 'push_enabled' || key === 'morning_summary_enabled') {
+        if (SYSTEM_MANAGED_SETTING_KEYS.has(key)) {
+          continue
+        }
+
+        if (key === 'push_enabled' || key === 'morning_summary_enabled' || key === 'auto_backup_enabled') {
           if (typeof settings[key] !== 'boolean') {
             throw new Error('设置参数无效')
           }
@@ -1106,13 +1657,109 @@ module.exports = {
       .field({ settings: true, created_at: true })
       .get()
 
-    const family = data[0] || data
+    const family = data?.[0] || data || {}
+    const settings = mergeFamilySettings(family.settings)
+    const lastBackupDate = settings.last_backup_date || null
+    const autoBackupEnabled = !!settings.auto_backup_enabled
     return {
       data: {
-        lastBackupDate: family.settings?.last_backup_date || null,
-        autoBackupEnabled: family.settings?.auto_backup_enabled || false,
+        last_backup: lastBackupDate,
+        auto_backup: autoBackupEnabled,
+        lastBackupDate,
+        autoBackupEnabled,
       }
     }
+  },
+
+  /**
+   * 导出或创建备份文件
+   * @param {{ format?: 'json' | 'csv', mode?: 'backup' | 'export' }} input
+   */
+  async exportData(input = {}) {
+    requireAdmin(this.role)
+    const { format, mode } = normalizeExportInput(input)
+    const result = await createFamilyArchiveFile(this.familyId, { format, mode })
+
+    await safeWriteOperationLog({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'export',
+      domain: 'family',
+      targetType: 'backup',
+      targetId: this.familyId,
+      targetName: mode === 'backup' ? '数据备份' : '数据导出',
+      summary: mode === 'backup' ? '创建了一份数据备份' : `导出了 ${format.toUpperCase()} 数据归档`,
+      meta: {
+        format,
+        mode,
+        size: result.data.size,
+        created_at: result.data.created_at,
+      },
+    })
+
+    return result
+  },
+
+  /**
+   * 安全修复低风险技术一致性问题
+   * @param {{ dryRun?: boolean }} input
+   */
+  async repairData(input = {}) {
+    requireAdmin(this.role)
+    const result = await repairFamilyData(this.familyId, input)
+
+    await safeWriteOperationLog({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'repair',
+      domain: 'family',
+      targetType: 'data',
+      targetId: this.familyId,
+      targetName: '数据修复',
+      summary: `执行了数据修复，修复 ${result.repairedCount} 项`,
+      meta: {
+        repairedCount: result.repairedCount,
+        warningCount: result.warnings.length,
+        dryRun: !!input?.dryRun,
+      },
+    })
+
+    return { data: result }
+  },
+
+  /**
+   * 定时任务：每周自动备份已开启的家庭
+   */
+  async _timing_weeklyBackup() {
+    const { data } = await db.collection('families').get()
+    const now = Date.now()
+    let created = 0
+    let skipped = 0
+    const failures = []
+
+    for (const family of data || []) {
+      const settings = mergeFamilySettings(family.settings)
+      if (!settings.auto_backup_enabled) {
+        skipped++
+        continue
+      }
+      if (settings.last_backup_date && now - Number(settings.last_backup_date) < 7 * 86400000) {
+        skipped++
+        continue
+      }
+
+      try {
+        await createFamilyArchiveFile(family._id, { format: 'json', mode: 'backup', now })
+        created++
+      } catch (error) {
+        failures.push({
+          family_id: family._id,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+
+    return { data: { created, skipped, failures } }
   },
 
   /**

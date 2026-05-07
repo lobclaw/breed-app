@@ -43,6 +43,10 @@ export interface FamilySettings {
   push_enabled: boolean
   morning_summary_enabled: boolean
   morning_summary_time: string
+  auto_backup_enabled: boolean
+  last_backup_date?: number | null
+  last_backup_file_id?: string
+  backup_file_ids?: string[]
   notification_types: NotificationTypes
   custom_vaccine_types: string[]
   custom_deworming_drugs: {

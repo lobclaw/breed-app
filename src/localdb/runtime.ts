@@ -2498,10 +2498,17 @@ class LocalSyncRuntime {
     const breedingRecordId = createStableEntityId('breeding_record')
     const litterId = createStableEntityId('litter')
     const expenseId = data.cost && Number(data.cost) > 0 ? createStableEntityId('expense') : null
+    const existingOlderLitters = await localDb.query<any>('litters', row =>
+      row.family_id === familyId
+      && row.dam_id === cycle.dam_id
+      && Number(row.birth_date || row.created_at || 0) < birthDate,
+    )
+    const litterNumber = existingOlderLitters.length + 1
+    const damDisplayName = cycle.dam_name || '母犬'
 
     const normalizedPuppies = data.puppies.map((puppy: Record<string, any>, index: number) => {
       const alive = puppy.alive !== false
-      const resolvedName = String(puppy.name || '').trim() || `${cycle.dam_name || '母犬'}窝-${index + 1}号`
+      const resolvedName = String(puppy.name || '').trim() || `${damDisplayName}${litterNumber}窝-${index + 1}号`
       return {
         name: resolvedName,
         gender: puppy.gender || '母',
