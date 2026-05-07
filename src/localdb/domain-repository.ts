@@ -624,7 +624,12 @@ export async function listLocalDogsWithStatus(familyId: string, filters: Record<
   if (!familyId) return []
   const now = Date.now()
   const allowedDispositions = ['在养', '待售', '已预定', '自留']
-  const dogDisposition = filters.disposition || null
+  const dogDispositions = Array.isArray(filters.dispositions)
+    ? filters.dispositions.filter(Boolean)
+    : filters.disposition
+      ? [filters.disposition]
+      : null
+  const dogDispositionSet = dogDispositions?.length ? new Set(dogDispositions) : null
 
   const [dogs, cycles, illnesses, medicationTasks, activeLitters] = await Promise.all([
     localDb.query<any>('dogs', (dog) => {
@@ -632,7 +637,7 @@ export async function listLocalDogsWithStatus(familyId: string, filters: Record<
       if (dog.deleted_at) return false
       if (filters.gender && dog.gender !== filters.gender) return false
       if (filters.role && dog.role !== filters.role) return false
-      if (dogDisposition) return dog.disposition === dogDisposition
+      if (dogDispositionSet) return dogDispositionSet.has(dog.disposition)
       return allowedDispositions.includes(dog.disposition)
     }),
     localDb.query<any>('breeding_cycles', cycle =>

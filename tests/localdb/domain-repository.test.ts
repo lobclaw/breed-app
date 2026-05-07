@@ -86,6 +86,67 @@ describe('local domain repository', () => {
     expect(dogs[0].statuses.map(status => status.type)).toEqual(['生病中', '用药中', '怀孕中'])
   })
 
+  it('犬只列表默认只返回当前犬只，多去向筛选可返回历史犬只', async () => {
+    const now = Date.now()
+    await localDb.replaceTable('dogs', [
+      {
+        _id: 'dog_current_keep',
+        family_id: 'fam_dog_history',
+        name: '当前',
+        gender: '母',
+        role: '种狗',
+        disposition: '在养',
+        updated_at: now,
+      },
+      {
+        _id: 'dog_current_sale',
+        family_id: 'fam_dog_history',
+        name: '待售',
+        gender: '公',
+        role: '幼崽',
+        disposition: '待售',
+        updated_at: now,
+      },
+      {
+        _id: 'dog_history_sold',
+        family_id: 'fam_dog_history',
+        name: '已售',
+        gender: '公',
+        role: '幼崽',
+        disposition: '已售',
+        updated_at: now,
+      },
+      {
+        _id: 'dog_history_dead',
+        family_id: 'fam_dog_history',
+        name: '已故',
+        gender: '母',
+        role: '种狗',
+        disposition: '已故',
+        updated_at: now,
+      },
+      {
+        _id: 'dog_other_family_sold',
+        family_id: 'fam_other',
+        name: '别家已售',
+        gender: '公',
+        role: '幼崽',
+        disposition: '已售',
+        updated_at: now,
+      },
+    ])
+    await localDb.replaceTable('breeding_cycles', [])
+    await localDb.replaceTable('health_records', [])
+    await localDb.replaceTable('medication_tasks', [])
+    await localDb.replaceTable('litters', [])
+
+    const currentDogs = await listLocalDogsWithStatus('fam_dog_history')
+    expect(currentDogs.map(dog => dog._id)).toEqual(['dog_current_keep', 'dog_current_sale'])
+
+    const historyDogs = await listLocalDogsWithStatus('fam_dog_history', { dispositions: ['已售', '已故'] })
+    expect(historyDogs.map(dog => dog._id)).toEqual(['dog_history_sold', 'dog_history_dead'])
+  })
+
   it('犬只详情应逐条展示多个未康复疾病，列表仍保留摘要', async () => {
     const now = Date.now()
     await localDb.replaceTable('dogs', [{

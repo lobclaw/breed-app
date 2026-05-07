@@ -40,6 +40,23 @@ page {
   color: var(--text-1);
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+html,
+body,
+uni-page-body {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+page::-webkit-scrollbar,
+body::-webkit-scrollbar,
+uni-page-body::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 /* 隐藏原生 tabBar，使用自定义 BNavBar */

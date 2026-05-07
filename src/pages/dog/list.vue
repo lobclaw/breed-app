@@ -35,7 +35,7 @@
       >close</text>
     </view>
 
-    <BChipFilterStrip v-model="activeFilter" :options="filterOptions" />
+    <BChipFilterStrip v-model="activeFilter" :options="filterOptions" @change="handleQuickFilterChange" />
 
     <view v-if="appliedFilterChips.length" class="dog-list__applied-filters">
       <view
@@ -112,9 +112,9 @@
     <view v-else class="primary-page-empty">
       <BEmpty
         icon="pets"
-        title="暂无犬只"
-        description="点击右上角 + 添加第一只犬"
-        action-text="添加犬只"
+        :title="emptyStateTitle"
+        :description="emptyStateDescription"
+        :action-text="emptyStateActionText"
         @action="goToAdd"
       />
     </view>
@@ -123,6 +123,26 @@
 
     <BSheet v-model:visible="showFilterSheet" title="筛选">
       <view class="filter-panel">
+        <view class="filter-section">
+          <text class="filter-section__label">范围</text>
+          <view class="filter-pills">
+            <view
+              class="filter-pill"
+              :class="{ 'filter-pill--active': !isHistoryView }"
+              @click="setArchiveScope(false)"
+            >
+              <text class="filter-pill__text">当前档案</text>
+            </view>
+            <view
+              class="filter-pill"
+              :class="{ 'filter-pill--active': isHistoryView }"
+              @click="setArchiveScope(true)"
+            >
+              <text class="filter-pill__text">历史档案</text>
+            </view>
+          </view>
+        </view>
+
         <view class="filter-section">
           <text class="filter-section__label">性别</text>
           <view class="filter-pills">
@@ -183,7 +203,7 @@
           </view>
         </view>
 
-        <view class="filter-section">
+        <view v-if="!isHistoryView" class="filter-section">
           <text class="filter-section__label">状态</text>
           <view class="filter-pills">
             <view
@@ -198,6 +218,9 @@
           </view>
         </view>
 
+      </view>
+
+      <template #footer>
         <view class="filter-actions">
           <view class="filter-actions__btn filter-actions__btn--ghost" @click="resetAdvancedFilters">
             <text class="filter-actions__btn-text" style="color: var(--text-2);">重置</text>
@@ -206,7 +229,7 @@
             <text class="filter-actions__btn-text" style="color: #fff;">应用筛选</text>
           </view>
         </view>
-      </view>
+      </template>
     </BSheet>
   </view>
 </template>
@@ -221,15 +244,17 @@ import BEmpty from '@/components/feedback/BEmpty.vue'
 import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
 import BNavBar from '@/components/layout/BNavBar.vue'
 import BSheet from '@/components/layout/BSheet.vue'
+import { useAuth } from '@/composables/useAuth'
 import { usePageSync } from '@/composables/usePageSync'
 import { consumeSubmitFeedback } from '@/composables/useSubmitFeedback'
+import { listLocalDogsWithStatus } from '@/localdb/domain-repository'
 import { localSyncRuntime } from '@/localdb/runtime'
 import { useDogStore } from '@/stores/dogStore'
 import type { DeriveStatus, DeriveStatusType, DogDisposition, DogWithStatus } from '@/types/dog'
 import { buildCompactDeriveStatusTitle } from '@/utils/dogStatusCopy'
 import { getDogStatusTone } from '@/utils/themeSemantics'
 
-type QuickFilterValue = 'all' | 'breeding' | 'puppy' | 'sale' | 'external'
+type QuickFilterValue = 'all' | 'breeding' | 'puppy' | 'sale' | 'external' | 'history'
 type FilterGroup = 'genders' | 'roles' | 'breeds' | 'dispositions' | 'statuses'
 type TagColor = 'red' | 'amber' | 'green' | 'blue' | 'plum' | 'rose' | 'teal'
 usePageSync({ routePath: 'pages/dog/list' })
@@ -265,6 +290,8 @@ interface DogListItem extends DogWithStatus {
 }
 
 const DEFAULT_DISPOSITION: DogDisposition = '在养'
+const CURRENT_DISPOSITIONS: DogDisposition[] = ['在养', '自留', '待售', '已预定']
+const HISTORY_DISPOSITIONS: DogDisposition[] = ['已售', '已领养', '已赠送', '已退休', '已故']
 const MAX_SECONDARY_STATUS_TAGS = 2
 const MAX_STATUS_TAGS = 3
 const BREEDING_STATUS_TYPES = new Set<DeriveStatusType>(['发情中', '怀孕中', '哺乳中'])
@@ -276,10 +303,12 @@ const searchKeyword = ref('')
 const submitBannerMessage = ref('')
 const highlightedDogId = ref('')
 const dogStore = useDogStore()
+const { currentFamily } = useAuth()
 let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
 let highlightTimer: ReturnType<typeof setTimeout> | null = null
 let pendingFeedbackDogId = ''
 let pendingFeedbackHiddenMessage = ''
+let loadRequestId = 0
 
 const filterOptions: Array<{ label: string; value: QuickFilterValue }> = [
   { label: '全部', value: 'all' },
@@ -287,6 +316,7 @@ const filterOptions: Array<{ label: string; value: QuickFilterValue }> = [
   { label: '幼崽', value: 'puppy' },
   { label: '待售', value: 'sale' },
   { label: '外部种公', value: 'external' },
+  { label: '历史', value: 'history' },
 ]
 
 const genderOptions = [
@@ -300,17 +330,15 @@ const roleOptions = [
   { label: '外部种公', value: '外部种公' },
 ]
 
-const dispositionOptions = [
-  { label: '在养', value: '在养' },
-  { label: '自留', value: '自留' },
-  { label: '待售', value: '待售' },
-  { label: '已预定', value: '已预定' },
-  { label: '已售', value: '已售' },
-  { label: '已退休', value: '已退休' },
-  { label: '已领养', value: '已领养' },
-  { label: '已赠送', value: '已赠送' },
-  { label: '已故', value: '已故' },
-]
+const isHistoryView = computed(() => activeFilter.value === 'history')
+
+const currentDispositionOptions = CURRENT_DISPOSITIONS.map(value => ({ label: value, value }))
+
+const historyDispositionOptions = HISTORY_DISPOSITIONS.map(value => ({ label: value, value }))
+
+const dispositionOptions = computed(() => (
+  isHistoryView.value ? historyDispositionOptions : currentDispositionOptions
+))
 
 const statusOptions = [
   { label: '发情中', value: '发情中' },
@@ -334,7 +362,7 @@ const filterLabelMap = computed<Record<FilterGroup, Record<string, string>>>(() 
   genders: Object.fromEntries(genderOptions.map(opt => [opt.value, opt.label])),
   roles: Object.fromEntries(roleOptions.map(opt => [opt.value, opt.label])),
   breeds: Object.fromEntries(breedOptions.value.map(opt => [opt.value, opt.label])),
-  dispositions: Object.fromEntries(dispositionOptions.map(opt => [opt.value, opt.label])),
+  dispositions: Object.fromEntries(dispositionOptions.value.map(opt => [opt.value, opt.label])),
   statuses: Object.fromEntries(statusOptions.map(opt => [opt.value, opt.label])),
 }))
 
@@ -547,6 +575,20 @@ const appliedFilterChips = computed<AppliedFilterChip[]>(() => {
   return chips
 })
 
+const emptyStateTitle = computed(() => (
+  isHistoryView.value ? '暂无历史犬只' : '暂无犬只'
+))
+
+const emptyStateDescription = computed(() => (
+  isHistoryView.value
+    ? '已售、已领养、已赠送、已退休、已故会在这里保留档案'
+    : '点击右上角 + 添加第一只犬'
+))
+
+const emptyStateActionText = computed(() => (
+  isHistoryView.value ? '' : '添加犬只'
+))
+
 const filteredDogs = computed<DogListItem[]>(() => {
   let result = dogs.value.map(buildDogListItem)
 
@@ -609,14 +651,32 @@ function applyAdvancedFilters() {
   showFilterSheet.value = false
 }
 
-function resetAdvancedFilters() {
+function clearAdvancedFilters(closeSheet = false) {
   advFilters.genders = []
   advFilters.roles = []
   advFilters.breeds = []
   advFilters.dispositions = []
   advFilters.statuses = []
   syncAppliedFiltersFromDraft()
-  showFilterSheet.value = false
+  if (closeSheet) showFilterSheet.value = false
+}
+
+function resetAdvancedFilters() {
+  clearAdvancedFilters(true)
+}
+
+function setArchiveScope(history: boolean) {
+  const nextFilter: QuickFilterValue = history ? 'history' : 'all'
+  if (activeFilter.value === nextFilter) return
+  activeFilter.value = nextFilter
+  clearAdvancedFilters(false)
+  void loadDogs()
+}
+
+function handleQuickFilterChange(value: string | number) {
+  activeFilter.value = value as QuickFilterValue
+  clearAdvancedFilters(false)
+  void loadDogs()
 }
 
 function removeAppliedFilter(group: FilterGroup, value: string) {
@@ -795,16 +855,42 @@ async function applyDogListFeedback() {
 }
 
 async function loadDogs() {
+  const requestId = ++loadRequestId
+  const targetFilter = activeFilter.value
+
+  if (targetFilter === 'history') {
+    const familyId = currentFamily.value?._id || ''
+    if (!familyId) {
+      dogs.value = []
+      loading.value = false
+      return
+    }
+    loading.value = true
+    localSyncRuntime.setCurrentFamilyId(familyId)
+    try {
+      await localSyncRuntime.syncScope('dog-list').catch(() => null)
+      const fresh = await listLocalDogsWithStatus(familyId, { dispositions: HISTORY_DISPOSITIONS })
+      if (requestId !== loadRequestId || activeFilter.value !== targetFilter) return
+      dogs.value = fresh
+      await tryRevealPendingDog()
+    } finally {
+      if (requestId === loadRequestId && activeFilter.value === targetFilter) loading.value = false
+    }
+    return
+  }
+
   if (dogStore.list.length > 0) {
     dogs.value = dogStore.list
     loading.value = false
     dogStore.fetchFromServer().then(() => {
+      if (requestId !== loadRequestId || activeFilter.value !== targetFilter) return
       dogs.value = dogStore.list
       void tryRevealPendingDog()
     })
   } else {
     loading.value = true
     await dogStore.ensure()
+    if (requestId !== loadRequestId || activeFilter.value !== targetFilter) return
     dogs.value = dogStore.list
     loading.value = false
     await tryRevealPendingDog()
@@ -881,9 +967,14 @@ onShow(() => {
 }
 
 .dog-list__applied-clear {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--primary);
+  flex-shrink: 0;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-3);
+  white-space: nowrap;
 }
 
 .dog-list__applied-list {
@@ -1221,7 +1312,9 @@ onShow(() => {
 .filter-actions {
   display: flex;
   gap: 10px;
-  margin-top: 8px;
+  padding: 10px var(--space-page) calc(env(safe-area-inset-bottom, 20px) + 12px);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), var(--card) 32%);
+  box-shadow: 0 -8px 18px rgba(45, 27, 20, 0.04);
 }
 
 .filter-actions__btn {

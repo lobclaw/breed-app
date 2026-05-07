@@ -52,6 +52,34 @@ describe('dog list page source contract', () => {
     expect(source).toContain("return dog.role !== '外部种公'")
   })
 
+  it('应通过历史快捷筛选展示历史去向犬只，并切换去向筛选项', () => {
+    expect(source).toContain("type QuickFilterValue = 'all' | 'breeding' | 'puppy' | 'sale' | 'external' | 'history'")
+    expect(source).toContain("{ label: '历史', value: 'history' }")
+    expect(source).toContain("const CURRENT_DISPOSITIONS: DogDisposition[] = ['在养', '自留', '待售', '已预定']")
+    expect(source).toContain("const HISTORY_DISPOSITIONS: DogDisposition[] = ['已售', '已领养', '已赠送', '已退休', '已故']")
+    expect(source).toContain("listLocalDogsWithStatus(familyId, { dispositions: HISTORY_DISPOSITIONS })")
+    expect(source).toContain("isHistoryView.value ? historyDispositionOptions : currentDispositionOptions")
+    expect(source).toContain('<text class="filter-section__label">范围</text>')
+    expect(source).toContain('<text class="filter-pill__text">当前档案</text>')
+    expect(source).toContain('<text class="filter-pill__text">历史档案</text>')
+    expect(source).toContain('<view v-if="!isHistoryView" class="filter-section">')
+    expect(source).toContain('function setArchiveScope(history: boolean)')
+  })
+
+  it('筛选弹层操作按钮应放入固定底部 footer', () => {
+    expect(source).toContain('<template #footer>')
+    expect(source).toContain('class="filter-actions__btn filter-actions__btn--ghost"')
+    expect(source).toContain('class="filter-actions__btn filter-actions__btn--primary"')
+    expect(source).toContain('padding: 10px var(--space-page) calc(env(safe-area-inset-bottom, 20px) + 12px);')
+  })
+
+  it('已应用筛选的清空入口应使用弱灰小号样式', () => {
+    expect(source).toContain('.dog-list__applied-clear')
+    expect(source).toContain('font-size: 11px;')
+    expect(source).toContain('font-weight: 700;')
+    expect(source).toContain('color: var(--text-3);')
+  })
+
   it('应让出生当天的列表年龄最低显示为 1 天', () => {
     expect(source).toContain('const days = Math.max(1, Math.floor((now - birthTs) / 86400000))')
     expect(source).not.toContain('const days = Math.floor((now - birthTs) / 86400000)')

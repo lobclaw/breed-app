@@ -96,9 +96,6 @@
     </view>
 
     <view v-if="activeFilterChips.length" class="active-filters">
-      <view class="active-filters__clear-all" @click="clearAllFilters">
-        <text>清空全部</text>
-      </view>
       <scroll-view scroll-x class="active-filters__scroll" show-scrollbar="false" enhanced>
         <view class="active-filters__track">
           <view
@@ -111,6 +108,9 @@
           </view>
         </view>
       </scroll-view>
+      <view class="active-filters__clear-all" @click="clearAllFilters">
+        <text>清空</text>
+      </view>
     </view>
 
     <view v-if="loading" class="primary-page-loading">
@@ -1634,18 +1634,28 @@ onShow(async () => {
   gap: 8px;
   align-items: center;
   min-width: 0;
+  position: relative;
 
   &__scroll {
     flex: 1;
     min-width: 0;
     white-space: nowrap;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+
+    :deep(::-webkit-scrollbar) {
+      display: none;
+    }
   }
 
   &__track {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    padding-right: 2px;
+    padding-right: 12px;
   }
 
   &__chip-icon {
@@ -1654,15 +1664,30 @@ onShow(async () => {
 
   &__clear-all {
     flex-shrink: 0;
+    width: 32px;
     min-height: 32px;
-    padding: 0 2px 0 0;
+    padding: 0;
     display: inline-flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-end;
     font-size: 11px;
     font-weight: 700;
     color: var(--text-3);
     white-space: nowrap;
+    position: relative;
+    z-index: 2;
+    background: var(--bg);
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      right: 100%;
+      width: 20px;
+      pointer-events: none;
+      background: linear-gradient(90deg, rgba(255, 250, 252, 0), var(--bg));
+    }
   }
 }
 
