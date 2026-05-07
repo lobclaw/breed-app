@@ -333,18 +333,26 @@
 
     <BModal
       v-model:visible="showNameModal"
+      class="save-protocol-modal"
       title="保存为用药方案"
-      confirm-text="保存"
+      :confirm-text="protocolSaving ? '保存中...' : '保存'"
+      :manual-close="true"
       @confirm="doSaveProtocol"
+      @cancel="handleProtocolModalCancel"
     >
       <view class="save-protocol">
-        <text class="save-protocol__desc">将本次用药设置保存为方案，方便下次快速填写。</text>
+        <view class="save-protocol__intro">
+          <view class="save-protocol__icon-wrap">
+            <text class="material-icons-round save-protocol__icon">medication_liquid</text>
+          </view>
+          <text class="save-protocol__desc">保存后可从方案库快速选择。</text>
+        </view>
         <view class="save-protocol__field">
           <text class="save-protocol__label">方案名称</text>
           <input
             v-model="protocolName"
             class="save-protocol__input"
-            placeholder="如：消炎常规方案"
+            placeholder="不填则使用药品名称"
           />
         </view>
       </view>
@@ -372,7 +380,7 @@ import {
 } from '@/localdb/domain-repository'
 import { localSyncRuntime } from '@/localdb/runtime'
 import { resolveMedicationRouteQuery, type MedicationRouteIllnessLink } from '@/utils/recordFormRoutes'
-import { formatMedicationDosage } from '@/utils/medicationDisplay'
+import { formatMedicationDosage, formatMedicationFrequency, formatMedicationMethod } from '@/utils/medicationDisplay'
 import { buildTimestampFromDayOffset, formatDateInputValue, getLocalCalendarDayDiff } from '@/utils/date'
 import { useProtocolStore, type MedicationProtocol } from '@/stores/protocolStore'
 import BCard from '@/components/base/BCard.vue'
@@ -717,8 +725,7 @@ async function submit() {
       return
     }
 
-    await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)
-    uni.navigateBack()
+    await finishAfterMedicationCreated()
   } catch {
     resetSubmitState()
   } finally {
@@ -737,9 +744,19 @@ function protocolDetailText(protocol: MedicationProtocol) {
   const parts = [
     protocol.drug_name,
     formatMedicationDosage(protocol.dosage, protocol.dosage_unit, '毫克'),
+    formatMedicationMethod(protocol.method),
+    formatMedicationFrequency(protocol.frequency),
     protocol.duration_days ? `${protocol.duration_days}天` : '',
   ].filter(Boolean)
   return parts.join(' · ')
+}
+
+function normalizeProtocolFrequency(value: MedicationProtocol['frequency']) {
+  const rawValue = String(value || '').trim()
+  if (rawValue === '2') return 'twice_daily'
+  if (rawValue === '3') return 'three_daily'
+  if (rawValue === 'once_daily' || rawValue === 'twice_daily' || rawValue === 'three_daily') return rawValue
+  return 'once_daily'
 }
 
 async function openProtocolPicker() {
@@ -757,7 +774,7 @@ function applyProtocol(protocol: MedicationProtocol) {
   dosageUnit.value = method.value === 'injection'
     ? 'ml'
     : (protocol.dosage_unit || 'mg')
-  frequency.value = protocol.frequency || 'once_daily'
+  frequency.value = normalizeProtocolFrequency(protocol.frequency)
   notes.value = protocol.notes || ''
   showProtocolPicker.value = false
 }
@@ -769,26 +786,44 @@ function goToNewProtocol() {
 
 const showNameModal = ref(false)
 const protocolName = ref('')
+const protocolSaving = ref(false)
 
-async function doSaveProtocol() {
-  if (!protocolName.value.trim()) {
-    uni.showToast({ title: '请输入方案名称', icon: 'none' })
-    return
-  }
-  await localSyncRuntime.addMedicationProtocolLocally(currentFamily.value?._id || '', {
-    name: protocolName.value.trim(),
-    drug_name: drugName.value.trim(),
-    dosage: dosage.value || null,
-    dosage_unit: dosageUnit.value || null,
-    method: method.value || null,
-    frequency: frequency.value || null,
-    duration_days: parseInt(durationDays.value) || null,
-    notes: notes.value || null,
-  })
-  showNameModal.value = false
-  protocolStore.reload()
+async function finishAfterMedicationCreated() {
   await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)
   uni.navigateBack()
+}
+
+function handleProtocolModalCancel() {
+  void finishAfterMedicationCreated()
+}
+
+async function doSaveProtocol() {
+  if (protocolSaving.value) return
+  protocolSaving.value = true
+  try {
+    const fallbackName = drugName.value.trim() || '未命名用药方案'
+    const finalProtocolName = protocolName.value.trim() || fallbackName
+    await localSyncRuntime.addMedicationProtocolLocally(currentFamily.value?._id || '', {
+      name: finalProtocolName,
+      drug_name: drugName.value.trim(),
+      dosage: dosage.value || null,
+      dosage_unit: dosageUnit.value || null,
+      method: method.value || null,
+      frequency: frequency.value || null,
+      duration_days: parseInt(durationDays.value) || null,
+      notes: notes.value || null,
+    })
+    showNameModal.value = false
+    protocolStore.reload()
+    await finishAfterMedicationCreated()
+  } catch {
+    uni.showToast({
+      title: '方案保存失败，请重试',
+      icon: 'none',
+    })
+  } finally {
+    protocolSaving.value = false
+  }
 }
 
 const showDupModal = ref(false)
@@ -1507,5 +1542,98 @@ async function initFromRoute() {
 .dup-check-box--checked {
   border-color: var(--primary);
   background: var(--primary);
+}
+
+.save-protocol-modal :deep(.b-modal__panel) {
+  box-sizing: border-box;
+  width: calc(100vw - 40px);
+  max-width: 360px;
+  padding: 24px 24px 22px;
+}
+
+.save-protocol-modal :deep(.b-modal__title) {
+  margin-bottom: 14px;
+}
+
+.save-protocol-modal :deep(.b-modal__actions) {
+  margin-top: 24px;
+  gap: 12px;
+}
+
+.save-protocol-modal :deep(.b-modal__btn) {
+  height: 44px;
+}
+
+.save-protocol {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.save-protocol__intro {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255, 240, 242, 0.86), rgba(255, 255, 255, 0.96));
+  border: 1px solid rgba(234, 62, 119, 0.12);
+}
+
+.save-protocol__icon-wrap {
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  background: var(--primary-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.save-protocol__icon {
+  font-size: 19px;
+  line-height: 1;
+  color: var(--primary);
+}
+
+.save-protocol__desc {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+.save-protocol__field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.save-protocol__label {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--text-2);
+}
+
+.save-protocol__input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 48px;
+  border-radius: 14px;
+  border: 1.5px solid var(--text-4);
+  background: var(--bg);
+  padding: 0 14px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--text-1);
+  transition: border-color 0.16s ease, background 0.16s ease;
+}
+
+.save-protocol__input:focus {
+  border-color: rgba(234, 62, 119, 0.42);
+  background: var(--card);
 }
 </style>

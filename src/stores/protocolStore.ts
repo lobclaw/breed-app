@@ -14,7 +14,7 @@ export interface MedicationProtocol {
   dosage?: string
   dosage_unit?: string
   method?: string
-  frequency?: string
+  frequency?: string | number
   duration_days?: number
   notes?: string
 }

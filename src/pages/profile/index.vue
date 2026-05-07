@@ -258,7 +258,16 @@ type DrawerMenuGroup = {
   items: DrawerMenuItem[]
 }
 
-const { currentFamily, currentUser, userRole, isInitialized, logout, setCurrentFamily, refreshFamilyFromLocal } = useAuth()
+const {
+  currentFamily,
+  currentUser,
+  userRole,
+  isInitialized,
+  logout,
+  setCurrentFamily,
+  refreshFamilyFromLocal,
+  ensureFamilyLocalMirror,
+} = useAuth()
 usePageSync({ routePath: 'pages/profile/index' })
 
 const hasFamily = computed(() => !!currentFamily.value)
@@ -496,6 +505,7 @@ async function onNicknameConfirm() {
   updatingNickname.value = true
 
   try {
+    await ensureFamilyLocalMirror(familyId)
     await localSyncRuntime.updateNicknameLocally(familyId, userId, nextNickname)
     await refreshFamilyFromLocal(familyId)
   } catch (e: any) {

@@ -74,6 +74,33 @@ describe('local operation log', () => {
     })
   })
 
+  it('昵称更新日志应使用修改前昵称作为历史操作者快照', async () => {
+    const row = await createPendingLocalOperationLog(
+      LOCAL_MUTATION_TYPES.UPDATE_NICKNAME,
+      'fam_1',
+      {
+        userId: 'user_1',
+        previousNickname: 'mooling',
+        nickname: 'mooling99',
+      },
+      {
+        clientMutationId: 'mutation_nickname',
+        deviceId: 'device_1',
+        clientTimestamp: 1004,
+      },
+    )
+
+    expect(row).toMatchObject({
+      actor_name: 'mooling',
+      action_type: 'update',
+      domain: 'family',
+      target_type: 'family_member',
+      target_id: 'user_1',
+      target_name: 'mooling99',
+      summary: '将昵称从 mooling 更新为 mooling99',
+    })
+  })
+
   it('应按 dogs 数组数量生成批量待办日志文案', async () => {
     const row = await createPendingLocalOperationLog(
       LOCAL_MUTATION_TYPES.BATCH_CREATE_TASKS,

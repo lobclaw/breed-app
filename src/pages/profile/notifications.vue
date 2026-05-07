@@ -87,7 +87,7 @@ const summaryEnabled = ref(true)
 const summaryTime = ref('09:00')
 const saveToken = ref(0)
 const showTimePicker = ref(false)
-const { currentFamily, refreshFamilyFromLocal } = useAuth()
+const { currentFamily, refreshFamilyFromLocal, ensureFamilyLocalMirror } = useAuth()
 usePageSync({ routePath: 'pages/profile/notifications' })
 
 const notifTypes = reactive<NotificationTypeItem[]>([
@@ -176,6 +176,7 @@ async function saveSettings(prevState: NotificationFormState) {
   try {
     const familyId = currentFamily.value?._id || ''
     localSyncRuntime.setCurrentFamilyId(familyId)
+    await ensureFamilyLocalMirror(familyId)
     await localSyncRuntime.updateFamilySettingsLocally(familyId, {
       push_enabled: pushEnabled.value,
       morning_summary_enabled: summaryEnabled.value,

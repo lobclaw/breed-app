@@ -1920,6 +1920,60 @@ describe('health-service', () => {
       expect(protocols[0].version).toBe(2)
     })
 
+    it('updateMedicationProtocol 应支持 _sync 幂等重放', async () => {
+      const now = Date.now()
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      seedCollection('medication_protocols', [{
+        _id: 'protocol_update_1',
+        family_id: familyId,
+        name: '旧方案',
+        drug_name: '旧药',
+        dosage: '1',
+        dosage_unit: 'mg',
+        method: 'oral',
+        frequency: 'once_daily',
+        duration_days: 3,
+        notes: null,
+        deleted_at: null,
+        version: 1,
+        created_at: now - DAY_MS,
+        updated_at: now - DAY_MS,
+      }])
+
+      const payload = {
+        id: 'protocol_update_1',
+        name: '阿莫西林方案',
+        drug_name: '阿莫西林',
+        dosage: '3',
+        dosage_unit: 'mg',
+        method: 'oral',
+        frequency: 'three_daily',
+        duration_days: 5,
+        notes: '饭后服用',
+        _sync: {
+          clientMutationId: 'protocol-sync-update-1',
+          deviceId: 'device_1',
+          clientTimestamp: now,
+          baseVersions: { protocol_update_1: 1 },
+        },
+      }
+
+      const first = await healthService.updateMedicationProtocol.call(ctx, payload)
+      const second = await healthService.updateMedicationProtocol.call(ctx, payload)
+
+      expect(first.ack).toBe('accepted')
+      expect(second).toEqual(first)
+
+      const { data: protocols } = await db.collection('medication_protocols').doc('protocol_update_1').get()
+      expect(protocols[0]).toMatchObject({
+        name: '阿莫西林方案',
+        drug_name: '阿莫西林',
+        dosage: '3',
+        frequency: 'three_daily',
+        version: 2,
+      })
+    })
+
     it('removeMedicationProtocol 在 baseVersion 过期时应返回 conflict', async () => {
       const now = Date.now()
       const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
@@ -1950,6 +2004,46 @@ describe('health-service', () => {
         entityId: 'protocol_conflict_1',
         baseVersion: 2,
         serverVersion: 3,
+      }))
+    })
+
+    it('updateMedicationProtocol 在 baseVersion 过期时应返回 conflict', async () => {
+      const now = Date.now()
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      seedCollection('medication_protocols', [{
+        _id: 'protocol_update_conflict_1',
+        family_id: familyId,
+        name: '冲突方案',
+        drug_name: '甲硝唑',
+        deleted_at: null,
+        version: 4,
+        created_at: now - DAY_MS,
+        updated_at: now - DAY_MS,
+      }])
+
+      const result = await healthService.updateMedicationProtocol.call(ctx, {
+        id: 'protocol_update_conflict_1',
+        name: '新方案',
+        drug_name: '阿莫西林',
+        dosage: '3',
+        dosage_unit: 'mg',
+        method: 'oral',
+        frequency: 'three_daily',
+        duration_days: 5,
+        _sync: {
+          clientMutationId: 'protocol-sync-update-conflict-1',
+          deviceId: 'device_1',
+          clientTimestamp: now,
+          baseVersions: { protocol_update_conflict_1: 3 },
+        },
+      })
+
+      expect(result.ack).toBe('conflict')
+      expect(result.conflict).toEqual(expect.objectContaining({
+        collection: 'medication_protocols',
+        entityId: 'protocol_update_conflict_1',
+        baseVersion: 3,
+        serverVersion: 4,
       }))
     })
   })

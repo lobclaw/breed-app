@@ -128,7 +128,7 @@ import BEmpty from '@/components/feedback/BEmpty.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import BDeleteConfirm from '@/components/layout/BDeleteConfirm.vue'
 
-const { currentFamily, refreshFamilyFromLocal } = useAuth()
+const { currentFamily, refreshFamilyFromLocal, ensureFamilyLocalMirror } = useAuth()
 usePageSync({ routePath: 'pages/profile/care-rules' })
 
 const rules = ref<any[]>([])
@@ -214,6 +214,7 @@ async function onConfirm() {
   try {
     const familyId = currentFamily.value?._id || ''
     localSyncRuntime.setCurrentFamilyId(familyId)
+    await ensureFamilyLocalMirror(familyId)
     await localSyncRuntime.addCareRuleLocally(familyId, newRule)
     await refreshFamilyFromLocal(familyId)
     await loadLocalRules()
@@ -227,6 +228,7 @@ async function enableTemplate(tpl: typeof templates[0]) {
   try {
     const familyId = currentFamily.value?._id || ''
     localSyncRuntime.setCurrentFamilyId(familyId)
+    await ensureFamilyLocalMirror(familyId)
     await localSyncRuntime.addCareRuleLocally(familyId, newRule)
     await refreshFamilyFromLocal(familyId)
     await loadLocalRules()
@@ -247,6 +249,7 @@ async function confirmDelete() {
   try {
     const familyId = currentFamily.value?._id || ''
     localSyncRuntime.setCurrentFamilyId(familyId)
+    await ensureFamilyLocalMirror(familyId)
     await localSyncRuntime.removeCareRuleLocally(familyId, index)
     await refreshFamilyFromLocal(familyId)
     await loadLocalRules()

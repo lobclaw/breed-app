@@ -887,6 +887,7 @@ module.exports = {
     const member = family.members.find(m => m.user_id === this.uid && m.status === 'active')
     if (!member) throw new Error('成员不存在')
 
+    const previousNickname = String(member.nickname || '').trim()
     const nextNickname = nickname.trim()
     member.nickname = nextNickname
     const now = Date.now()
@@ -899,13 +900,15 @@ module.exports = {
     await safeWriteOperationLog({
       familyId: this.familyId,
       actorUserId: this.uid,
-      actorName: nextNickname,
+      actorName: previousNickname || this.uid,
       actionType: 'update',
       domain: 'family',
       targetType: 'family_member',
       targetId: this.uid,
       targetName: nextNickname,
-      summary: `将昵称更新为 ${nextNickname}`,
+      summary: previousNickname
+        ? `将昵称从 ${previousNickname} 更新为 ${nextNickname}`
+        : `将昵称更新为 ${nextNickname}`,
     })
 
     const { data: updatedFamilies } = await db.collection('families')

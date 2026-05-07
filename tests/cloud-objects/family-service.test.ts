@@ -440,6 +440,7 @@ describe('family-service', () => {
         created_at: 1000,
         updated_at: 1000,
       }])
+      seedCollection('operation_logs', [])
 
       const ctx = createCloudObjectContext({ familyId, uid: 'test_uid', role: 'creator' })
       const payload = {
@@ -461,6 +462,19 @@ describe('family-service', () => {
       const { data } = await db.collection('families').doc(familyId).get()
       expect(data[0].members[0].nickname).toBe('新昵称')
       expect(data[0].version).toBe(2)
+
+      const { data: logs } = await db.collection('operation_logs').where({ family_id: familyId }).get()
+      expect(logs).toHaveLength(1)
+      expect(logs[0]).toMatchObject({
+        actor_user_id: 'test_uid',
+        actor_name: '旧昵称',
+        action_type: 'update',
+        domain: 'family',
+        target_type: 'family_member',
+        target_id: 'test_uid',
+        target_name: '新昵称',
+        summary: '将昵称从 旧昵称 更新为 新昵称',
+      })
     })
   })
 

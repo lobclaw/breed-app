@@ -225,7 +225,7 @@ import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
 import { useDogStore } from '@/stores/dogStore'
 
 const dogStore = useDogStore()
-const { currentFamily, refreshFamilyFromLocal } = useAuth()
+const { currentFamily, refreshFamilyFromLocal, ensureFamilyLocalMirror } = useAuth()
 usePageSync({ routePath: 'pages/dog/add' })
 
 const isEdit = ref(false)
@@ -279,6 +279,7 @@ function deleteCustomBreed(val: string) {
     const updated = existing.filter((v: string) => v !== val)
     try {
       const familyId = currentFamily.value?._id || ''
+      await ensureFamilyLocalMirror(familyId)
       await localSyncRuntime.updateFamilySettingsLocally(familyId, { custom_breed_types: updated })
       await refreshFamilyFromLocal(familyId)
       deletedCustomBreeds.value = deletedCustomBreeds.value.filter(v => v !== val)
@@ -306,6 +307,7 @@ async function onBreedConfirm() {
     const existing = currentFamily.value?.settings?.custom_breed_types || []
     if (!existing.includes(val)) {
       const familyId = currentFamily.value?._id || ''
+      await ensureFamilyLocalMirror(familyId)
       await localSyncRuntime.updateFamilySettingsLocally(familyId, { custom_breed_types: [...existing, val] })
       await refreshFamilyFromLocal(familyId)
     }

@@ -589,7 +589,6 @@ async function buildOperationDescriptor(type: LocalMutationType, payload: Record
       }
     }
     case LOCAL_MUTATION_TYPES.UPDATE_FAMILY_SETTINGS:
-    case LOCAL_MUTATION_TYPES.UPDATE_NICKNAME:
     case LOCAL_MUTATION_TYPES.UPDATE_EXPENSE_CATEGORY_GROUP:
     case LOCAL_MUTATION_TYPES.UPDATE_EXPENSE_CATEGORY: {
       return {
@@ -599,6 +598,22 @@ async function buildOperationDescriptor(type: LocalMutationType, payload: Record
         targetId: '',
         targetName: '',
         summary: '更新了设置',
+      }
+    }
+    case LOCAL_MUTATION_TYPES.UPDATE_NICKNAME: {
+      const previousNickname = String(payload.previousNickname || '').trim()
+      const nextNickname = String(payload.nickname || '').trim()
+      const summary = previousNickname
+        ? `将昵称从 ${previousNickname} 更新为 ${nextNickname}`
+        : `将昵称更新为 ${nextNickname}`
+      return {
+        actionType: 'update',
+        domain: 'family',
+        targetType: 'family_member',
+        targetId: String(payload.userId || payload.user_id || ''),
+        targetName: nextNickname,
+        actorName: previousNickname || '',
+        summary,
       }
     }
     case LOCAL_MUTATION_TYPES.ADD_CARE_RULE:
@@ -612,6 +627,16 @@ async function buildOperationDescriptor(type: LocalMutationType, payload: Record
         targetId: '',
         targetName: String(payload.name || payload.label || payload.drug_name || ''),
         summary: '新增了设置项',
+      }
+    }
+    case LOCAL_MUTATION_TYPES.UPDATE_MEDICATION_PROTOCOL: {
+      return {
+        actionType: 'update',
+        domain: 'medication',
+        targetType: 'settings_item',
+        targetId: String(payload.id || ''),
+        targetName: String(payload.name || payload.drug_name || ''),
+        summary: '更新了用药方案',
       }
     }
     case LOCAL_MUTATION_TYPES.REMOVE_CARE_RULE:
@@ -656,7 +681,7 @@ export async function createPendingLocalOperationLog(
     client_mutation_id: syncMeta.clientMutationId,
     mutation_type: type,
     actor_user_id: actor.actorUserId || null,
-    actor_name: actor.actorName || '我',
+    actor_name: (descriptor as any).actorName || actor.actorName || '我',
     action_type: descriptor.actionType,
     domain: descriptor.domain,
     target_type: descriptor.targetType,

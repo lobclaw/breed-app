@@ -151,6 +151,20 @@ export function useAuth() {
     return true
   }
 
+  async function ensureFamilyLocalMirror(familyIdInput?: string): Promise<boolean> {
+    const family = currentFamily.value
+    const familyId = familyIdInput || family?._id || ''
+    if (!familyId) return false
+    const localFamily = await localDb.findById<Family>('families', familyId)
+    if (localFamily) return true
+    if (!family || family._id !== familyId) return false
+    await localDb.upsertRows('families', [{
+      ...family,
+      updated_at: Number(family.updated_at || Date.now()),
+    }])
+    return true
+  }
+
   /**
    * 创建家庭
    */
@@ -188,6 +202,7 @@ export function useAuth() {
     loadFamily,
     setCurrentFamily,
     refreshFamilyFromLocal,
+    ensureFamilyLocalMirror,
     createFamily,
     logout,
     navigateToLogin,

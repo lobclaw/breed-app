@@ -39,28 +39,37 @@
         v-for="(p, idx) in protocols"
         :key="p._id"
         class="proto-card"
+        @click="openEditSheet(p)"
       >
         <view class="proto-card__header">
           <view class="proto-card__icon">
             <text class="material-icons-round" style="font-size: 18px; color: var(--plum);">medication</text>
           </view>
-          <text class="proto-card__name">{{ p.name }}</text>
-          <view class="proto-card__delete" @click="askDelete(idx)">
-            <text class="material-icons-round" style="font-size: 18px; color: var(--red);">delete_outline</text>
+          <view class="proto-card__title-block">
+            <text class="proto-card__name">{{ p.name }}</text>
+            <text class="proto-card__drug">{{ p.drug_name }}</text>
+          </view>
+          <view class="proto-card__actions">
+            <view class="proto-card__action" @click.stop="openEditSheet(p)">
+              <text class="material-icons-round" style="font-size: 17px; color: var(--text-3);">edit</text>
+            </view>
+            <view class="proto-card__action" @click.stop="askDelete(idx)">
+              <text class="material-icons-round" style="font-size: 18px; color: var(--red);">delete_outline</text>
+            </view>
           </view>
         </view>
         <view class="proto-card__tags">
-          <view class="proto-tag proto-tag--plum">{{ p.drug_name }}</view>
-          <view v-if="p.duration_days" class="proto-tag proto-tag--teal">{{ p.duration_days }}天疗程</view>
           <view v-if="protocolDosageText(p)" class="proto-tag proto-tag--dim">{{ protocolDosageText(p) }}</view>
-          <view v-if="p.method" class="proto-tag proto-tag--dim">{{ p.method }}</view>
+          <view v-if="protocolMethodText(p)" class="proto-tag proto-tag--dim">{{ protocolMethodText(p) }}</view>
+          <view v-if="protocolFrequencyText(p)" class="proto-tag proto-tag--teal">{{ protocolFrequencyText(p) }}</view>
+          <view v-if="p.duration_days" class="proto-tag proto-tag--dim">{{ p.duration_days }}天疗程</view>
         </view>
         <text v-if="p.notes" class="proto-card__notes">{{ p.notes }}</text>
       </view>
     </view>
 
     <!-- 新建 BSheet -->
-    <BSheet v-model:visible="showSheet" title="新建方案" height="auto">
+    <BSheet v-model:visible="showSheet" :title="sheetTitle" height="auto">
       <view class="form-sheet">
         <view class="form-sheet__field">
           <text class="form-sheet__label">方案名称</text>
@@ -71,17 +80,65 @@
           <input v-model="form.drug_name" class="form-sheet__input" placeholder="药品名称" />
         </view>
         <view class="form-sheet__field">
+          <text class="form-sheet__label">剂量</text>
+          <view class="protocol-dosage">
+            <input v-model="form.dosage" class="form-sheet__input protocol-dosage__input" type="digit" placeholder="剂量" />
+            <view class="pill-select protocol-dosage__units">
+              <view
+                v-for="unit in dosageUnits"
+                :key="unit.value"
+                class="pill-select__item protocol-pill"
+                :class="{
+                  'pill-select__item--active': form.dosage_unit === unit.value,
+                  'pill-select__item--disabled': isDosageUnitDisabled(unit.value),
+                }"
+                @click="selectDosageUnit(unit.value)"
+              >
+                <text>{{ unit.label }}</text>
+              </view>
+            </view>
+          </view>
+        </view>
+        <view class="form-sheet__field">
+          <text class="form-sheet__label">给药方式</text>
+          <view class="pill-select">
+            <view
+              v-for="item in methods"
+              :key="item.value"
+              class="pill-select__item protocol-pill"
+              :class="{ 'pill-select__item--active': form.method === item.value }"
+              @click="selectMethod(item.value)"
+            >
+              <text>{{ item.label }}</text>
+            </view>
+          </view>
+        </view>
+        <view class="form-sheet__field">
+          <text class="form-sheet__label">频率</text>
+          <view class="pill-select">
+            <view
+              v-for="item in frequencies"
+              :key="item.value"
+              class="pill-select__item protocol-pill"
+              :class="{ 'pill-select__item--active': form.frequency === item.value }"
+              @click="form.frequency = item.value"
+            >
+              <text>{{ item.label }}</text>
+            </view>
+          </view>
+        </view>
+        <view class="form-sheet__field">
           <text class="form-sheet__label">疗程天数（选填）</text>
           <input v-model="form.duration_days" class="form-sheet__input" type="number" placeholder="天数" />
         </view>
         <view class="form-sheet__field">
-          <text class="form-sheet__label">备注（选填）</text>
-          <input v-model="form.notes" class="form-sheet__input" placeholder="用法用量等" />
+          <text class="form-sheet__label">注意事项（选填）</text>
+          <input v-model="form.notes" class="form-sheet__input" placeholder="如：饭后服用、过敏慎用、观察食欲" />
         </view>
       </view>
       <template #footer>
         <view class="form-sheet__footer">
-          <button class="form-sheet__submit" :disabled="!canSave" @click="saveProtocol">保存方案</button>
+          <button class="form-sheet__submit" :disabled="!canSave" @click="saveProtocol">{{ submitText }}</button>
         </view>
       </template>
     </BSheet>
@@ -106,8 +163,8 @@ import BSheet from '@/components/layout/BSheet.vue'
 import BDeleteConfirm from '@/components/layout/BDeleteConfirm.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 import { localSyncRuntime } from '@/localdb/runtime'
-import { useProtocolStore } from '@/stores/protocolStore'
-import { formatMedicationDosage } from '@/utils/medicationDisplay'
+import { useProtocolStore, type MedicationProtocol } from '@/stores/protocolStore'
+import { formatMedicationDosage, formatMedicationFrequency, formatMedicationMethod } from '@/utils/medicationDisplay'
 
 const { currentFamily } = useAuth()
 const protocolStore = useProtocolStore()
@@ -118,20 +175,98 @@ usePageSync({ routePath: 'pages/health/medication-protocols' })
 const showSheet = ref(false)
 const showDeleteConfirm = ref(false)
 const deletingIndex = ref(-1)
-const form = reactive({ name: '', drug_name: '', duration_days: '', notes: '' })
+const editingId = ref('')
+const form = reactive({
+  name: '',
+  drug_name: '',
+  dosage: '',
+  dosage_unit: 'mg',
+  method: 'oral',
+  frequency: 'once_daily',
+  duration_days: '',
+  notes: '',
+})
 
-const canSave = computed(() => !!form.name.trim() && !!form.drug_name.trim())
+const dosageUnits = [
+  { label: '毫升', value: 'ml' },
+  { label: '毫克', value: 'mg' },
+  { label: '片', value: 'tablet' },
+]
+
+const methods = [
+  { label: '口服', value: 'oral' },
+  { label: '注射', value: 'injection' },
+]
+
+const frequencies = [
+  { label: '每日1次', value: 'once_daily' },
+  { label: '每日2次', value: 'twice_daily' },
+  { label: '每日3次', value: 'three_daily' },
+]
+
+const canSave = computed(() => !!form.name.trim() && !!form.drug_name.trim() && !!form.dosage)
+const isEditing = computed(() => !!editingId.value)
+const sheetTitle = computed(() => isEditing.value ? '编辑方案' : '新建方案')
+const submitText = computed(() => isEditing.value ? '保存修改' : '保存方案')
 
 function openSheet() {
+  editingId.value = ''
   form.name = ''
   form.drug_name = ''
+  form.dosage = ''
+  form.dosage_unit = 'mg'
+  form.method = 'oral'
+  form.frequency = 'once_daily'
   form.duration_days = ''
   form.notes = ''
   showSheet.value = true
 }
 
+function normalizeFormFrequency(value: MedicationProtocol['frequency']) {
+  const rawValue = String(value || '').trim()
+  if (rawValue === '2') return 'twice_daily'
+  if (rawValue === '3') return 'three_daily'
+  if (rawValue === 'once_daily' || rawValue === 'twice_daily' || rawValue === 'three_daily') return rawValue
+  return 'once_daily'
+}
+
+function openEditSheet(protocol: MedicationProtocol) {
+  editingId.value = protocol._id
+  form.name = protocol.name || ''
+  form.drug_name = protocol.drug_name || ''
+  form.dosage = protocol.dosage === null || protocol.dosage === undefined ? '' : String(protocol.dosage)
+  form.method = protocol.method || 'oral'
+  form.dosage_unit = protocol.dosage_unit || (form.method === 'injection' ? 'ml' : 'mg')
+  form.frequency = normalizeFormFrequency(protocol.frequency)
+  form.duration_days = protocol.duration_days ? String(protocol.duration_days) : ''
+  form.notes = protocol.notes || ''
+  showSheet.value = true
+}
+
+function isDosageUnitDisabled(unitValue: string) {
+  return form.method === 'injection' && unitValue !== 'ml'
+}
+
+function selectDosageUnit(unitValue: string) {
+  if (isDosageUnitDisabled(unitValue)) return
+  form.dosage_unit = unitValue
+}
+
+function selectMethod(methodValue: string) {
+  form.method = methodValue
+  if (methodValue === 'injection') form.dosage_unit = 'ml'
+}
+
 function protocolDosageText(protocol: { dosage?: string | number | null; dosage_unit?: string | null }) {
   return formatMedicationDosage(protocol.dosage, protocol.dosage_unit)
+}
+
+function protocolFrequencyText(protocol: { frequency?: string | number | null }) {
+  return formatMedicationFrequency(protocol.frequency)
+}
+
+function protocolMethodText(protocol: { method?: string | null }) {
+  return formatMedicationMethod(protocol.method)
 }
 
 async function saveProtocol() {
@@ -141,15 +276,23 @@ async function saveProtocol() {
   const newP = {
     name: form.name.trim(),
     drug_name: form.drug_name.trim(),
+    dosage: form.dosage || null,
+    dosage_unit: form.dosage_unit || null,
+    method: form.method || null,
+    frequency: form.frequency || null,
     duration_days: form.duration_days ? parseInt(form.duration_days) : null,
     notes: form.notes.trim() || null,
   }
 
   try {
-    await localSyncRuntime.addMedicationProtocolLocally(currentFamily.value?._id || '', newP)
+    if (editingId.value) {
+      await localSyncRuntime.updateMedicationProtocolLocally(currentFamily.value?._id || '', editingId.value, newP)
+    } else {
+      await localSyncRuntime.addMedicationProtocolLocally(currentFamily.value?._id || '', newP)
+    }
     await protocolStore.reload()
   } catch {
-    uni.showToast({ title: '添加失败，请重试', icon: 'none' })
+    uni.showToast({ title: isEditing.value ? '保存失败，请重试' : '添加失败，请重试', icon: 'none' })
   }
 }
 
@@ -211,14 +354,36 @@ onShow(async () => {
     flex-shrink: 0;
   }
 
-  &__name {
+  &__title-block {
     flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  &__name {
     font-size: 15px;
     font-weight: 700;
     color: var(--text-1);
+    line-height: 1.25;
   }
 
-  &__delete {
+  &__drug {
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.3;
+    color: var(--text-3);
+  }
+
+  &__actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  &__action {
     width: 28px;
     height: 28px;
     border-radius: 50%;
@@ -324,4 +489,29 @@ onShow(async () => {
 }
 
 .sheet-actions { margin-top: 8px; }
+
+.protocol-dosage {
+  display: flex;
+  gap: 10px;
+}
+
+.protocol-dosage__input {
+  flex: 1;
+  min-width: 0;
+}
+
+.protocol-dosage__units {
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.protocol-pill {
+  min-height: 34px;
+  box-sizing: border-box;
+  padding: 8px 14px;
+}
+
+.pill-select__item--disabled {
+  opacity: 0.4;
+}
 </style>

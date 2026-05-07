@@ -1334,14 +1334,21 @@ export async function findLocalDuplicateMedicationTasks(
     .filter(task => task.status === 'active')
     .filter(task => String(task.drug_name || '').trim().toLowerCase() === normalizedDrugName)
     .sort((left, right) => sortByRecent(left, right))
-    .map(task => ({
-      dog_id: task.dog_id,
-      dog_name: task.dog_name || '',
-      task_id: task._id,
-      task_name: task.drug_name || '',
-      start_date: task.start_date || null,
-      status: task.status,
-    }))
+    .map((task) => {
+      const progress = getMedicationTaskProgress(task)
+
+      return {
+        dog_id: task.dog_id,
+        dog_name: task.dog_name || '',
+        dogName: task.dog_name || '',
+        task_id: task._id,
+        task_name: task.drug_name || '',
+        start_date: task.start_date || null,
+        status: task.status,
+        day: Math.min(progress.currentDay, progress.totalDays),
+        totalDays: progress.totalDays,
+      }
+    })
 }
 
 export async function getLocalNextMatingNumberPreview(

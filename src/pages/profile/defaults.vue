@@ -54,7 +54,7 @@ interface SettingItem {
   inputType?: string
 }
 
-const { currentFamily, refreshFamilyFromLocal } = useAuth()
+const { currentFamily, refreshFamilyFromLocal, ensureFamilyLocalMirror } = useAuth()
 usePageSync({ routePath: 'pages/profile/defaults' })
 
 const editingKey = ref('')
@@ -118,6 +118,7 @@ async function saveAll() {
     }
     const familyId = currentFamily.value?._id || ''
     localSyncRuntime.setCurrentFamilyId(familyId)
+    await ensureFamilyLocalMirror(familyId)
     await localSyncRuntime.updateFamilySettingsLocally(familyId, data)
     await refreshFamilyFromLocal(familyId)
   } finally {

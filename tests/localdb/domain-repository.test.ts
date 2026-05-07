@@ -2997,9 +2997,12 @@ describe('local domain repository', () => {
     expect(medicationDup[0]).toMatchObject({
       dog_id: 'dog_50',
       dog_name: '奶黄',
+      dogName: '奶黄',
       task_id: 'med_50',
       task_name: '头孢',
       status: 'active',
+      day: 2,
+      totalDays: 5,
     })
   })
 

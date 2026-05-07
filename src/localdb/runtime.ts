@@ -4237,6 +4237,7 @@ class LocalSyncRuntime {
     const members = Array.isArray(family.members) ? [...family.members] : []
     const memberIndex = members.findIndex(item => item.user_id === userId && item.status === 'active')
     if (memberIndex < 0) throw new Error('成员不存在')
+    const previousNickname = String(members[memberIndex]?.nickname || '').trim()
     const now = getNow()
     members[memberIndex] = {
       ...members[memberIndex],
@@ -4251,7 +4252,12 @@ class LocalSyncRuntime {
       updated_at: now,
       _local_pending: true,
     }])
-    await this.enqueueMutation(HOME_MUTATION_TYPES.UPDATE_NICKNAME, familyId, { nickname: nextNickname, _sync: syncMeta }, ['families'], syncMeta)
+    await this.enqueueMutation(HOME_MUTATION_TYPES.UPDATE_NICKNAME, familyId, {
+      nickname: nextNickname,
+      previousNickname,
+      userId,
+      _sync: syncMeta,
+    }, ['families'], syncMeta)
     return {
       message: '昵称已更新',
       ...buildLocalAck(syncMeta, [{ collection: 'families', id: familyId, version: Number(family.version || 0), updatedAt: now }]),
@@ -4616,6 +4622,47 @@ class LocalSyncRuntime {
     return {
       message: '已删除',
       ...buildLocalAck(syncMeta, [{ collection: 'medication_protocols', id: protocolId, version: Number(protocol.version || 0), updatedAt: now, deletedAt: now }]),
+    }
+  }
+
+  async updateMedicationProtocolLocally(familyIdInput: string, protocolId: string, data: Record<string, any>) {
+    const familyId = getFamilyId(familyIdInput)
+    const protocol = await findLocalRow<any>('medication_protocols', protocolId)
+    if (!protocol || protocol.family_id !== familyId || protocol.deleted_at) throw new Error('方案不存在')
+    const name = String(data.name || '').trim()
+    const drugName = String(data.drug_name || '').trim()
+    if (!name) throw new Error('请填写方案名称')
+    if (!drugName) throw new Error('请填写药品名称')
+    const now = getNow()
+    const patch = {
+      name,
+      drug_name: drugName,
+      dosage: data.dosage || null,
+      dosage_unit: data.dosage_unit || null,
+      method: data.method || null,
+      frequency: data.frequency || null,
+      duration_days: data.duration_days || null,
+      notes: data.notes || null,
+    }
+    const syncMeta = buildSyncMeta({ [protocolId]: Number(protocol.version || 0) }, {
+      clientMutationId: createClientMutationId(HOME_MUTATION_TYPES.UPDATE_MEDICATION_PROTOCOL),
+    })
+    await upsertLocalRows('medication_protocols', [{
+      ...protocol,
+      ...patch,
+      updated_at: now,
+      _local_pending: true,
+    }])
+    await this.enqueueMutation(
+      HOME_MUTATION_TYPES.UPDATE_MEDICATION_PROTOCOL,
+      familyId,
+      { id: protocolId, ...patch, _sync: syncMeta },
+      ['medication_protocols'],
+      syncMeta,
+    )
+    return {
+      message: '已更新',
+      ...buildLocalAck(syncMeta, [{ collection: 'medication_protocols', id: protocolId, version: Number(protocol.version || 0), updatedAt: now }]),
     }
   }
 

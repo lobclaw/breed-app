@@ -2368,6 +2368,72 @@ module.exports = {
   },
 
   /**
+   * 更新用药方案
+   */
+  async updateMedicationProtocol(input = {}) {
+    const id = getIdArg(input, 'id', 'protocolId', 'protocol_id')
+    if (!id) throw new Error('缺少方案 ID')
+    if (!input.name) throw new Error('请填写方案名称')
+    if (!input.drug_name) throw new Error('请填写药品名称')
+
+    const syncMeta = getSyncMeta(input)
+    const appliedMutation = await findAppliedMutation(db, this.familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
+
+    const { data: protocols } = await db.collection('medication_protocols')
+      .where({ _id: id, family_id: this.familyId, deleted_at: null })
+      .get()
+    if (!protocols || protocols.length === 0) throw new Error('方案不存在')
+    const protocol = protocols[0]
+    const conflict = getEntityConflict(syncMeta, 'medication_protocols', protocol)
+    if (conflict) return conflict
+    const now = Date.now()
+    const patch = {
+      name: input.name,
+      drug_name: input.drug_name,
+      dosage: input.dosage || null,
+      dosage_unit: input.dosage_unit || null,
+      method: input.method || null,
+      frequency: input.frequency || null,
+      duration_days: input.duration_days || null,
+      notes: input.notes || null,
+      ...buildVersionUpdate(dbCmd, now),
+    }
+
+    await db.collection('medication_protocols').doc(id).update(patch)
+
+    await logHealthOperation({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'update',
+      domain: 'medication',
+      targetType: 'medication_protocol',
+      targetId: id,
+      targetName: input.name,
+      summary: `更新了用药方案 ${input.name}`,
+      meta: { drugName: input.drug_name },
+    })
+
+    const response = {
+      message: '已更新',
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: [buildTouchedEntity('medication_protocols', {
+          ...protocol,
+          ...patch,
+          updated_at: now,
+          version: Number(protocol.version || 0) + 1,
+        })],
+        resyncScopes: ['medication_protocols'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, this.familyId, syncMeta.clientMutationId, response)
+    }
+    return response
+  },
+
+  /**
    * 软删除用药方案
    */
   async removeMedicationProtocol(input) {

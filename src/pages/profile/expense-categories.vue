@@ -205,7 +205,7 @@ import {
 import type { ExpenseCategory, ExpenseCategoryGroup } from '@/types/finance'
 import type { ExpenseCategoryGroupOption } from '@/constants/financeCategories'
 
-const { currentFamily, refreshFamilyFromLocal } = useAuth()
+const { currentFamily, refreshFamilyFromLocal, ensureFamilyLocalMirror } = useAuth()
 usePageSync({ routePath: 'pages/profile/expense-categories' })
 
 const groups = ref<ExpenseCategoryGroupOption[]>(buildExpenseCategoryGroups())
@@ -279,6 +279,7 @@ async function saveGroup() {
   groupSubmitting.value = true
   try {
     const familyId = currentFamily.value?._id || ''
+    await ensureFamilyLocalMirror(familyId)
     if (editingGroupKey.value) {
       await localSyncRuntime.updateExpenseCategoryGroupLocally(familyId, editingGroupKey.value, label)
     } else {
@@ -301,6 +302,7 @@ async function saveCategory() {
   categorySubmitting.value = true
   try {
     const familyId = currentFamily.value?._id || ''
+    await ensureFamilyLocalMirror(familyId)
     if (editingCategoryName.value) {
       await localSyncRuntime.updateExpenseCategoryLocally(
         familyId,
@@ -334,6 +336,7 @@ async function confirmDelete() {
   deleteSubmitting.value = true
   try {
     const familyId = currentFamily.value?._id || ''
+    await ensureFamilyLocalMirror(familyId)
     if (deleteTargetType.value === 'group') {
       await localSyncRuntime.removeExpenseCategoryGroupLocally(familyId, deletingKey.value)
     } else {

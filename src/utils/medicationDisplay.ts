@@ -4,6 +4,19 @@ const MEDICATION_DOSAGE_UNIT_LABELS: Record<string, string> = {
   tablet: '片',
 }
 
+const MEDICATION_METHOD_LABELS: Record<string, string> = {
+  oral: '口服',
+  injection: '注射',
+  topical: '外用',
+  other: '其他',
+}
+
+const MEDICATION_FREQUENCY_LABELS: Record<string, string> = {
+  once_daily: '每日1次',
+  twice_daily: '每日2次',
+  three_daily: '每日3次',
+}
+
 export function formatMedicationDosage(
   dosage?: string | number | null,
   dosageUnit?: string | null,
@@ -18,6 +31,12 @@ export function formatMedicationDosage(
   return `${rawDosage}${unit}`
 }
 
+export function formatMedicationMethod(method?: string | null): string {
+  const rawMethod = String(method || '').trim()
+  if (!rawMethod) return ''
+  return MEDICATION_METHOD_LABELS[rawMethod] || rawMethod
+}
+
 export function formatMedicationFrequency(frequency?: string | number | null): string {
   if (frequency === null || frequency === undefined || frequency === '') return ''
 
@@ -28,5 +47,5 @@ export function formatMedicationFrequency(frequency?: string | number | null): s
 
   const rawFrequency = String(frequency).trim()
   if (!rawFrequency) return ''
-  return rawFrequency
+  return MEDICATION_FREQUENCY_LABELS[rawFrequency] || rawFrequency
 }
