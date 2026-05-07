@@ -10,6 +10,7 @@ export interface BreedingTimelineSyntheticItem {
   kind: 'upcoming' | 'current'
   type: 'upcoming' | 'current'
   tone: BreedingTimelineTone
+  label: string
   title: string
   summary: string
   date: number
@@ -74,6 +75,15 @@ export function getBreedingTimelineCurrentStatusTone(
 ): BreedingTimelineTone {
   if (cycle?.status === '已生产' && isNursingLitter(context.litter)) return 'amber'
   return getBreedingTimelineStatusTone(cycle?.status)
+}
+
+export function getBreedingTimelineCurrentLabel(
+  cycle?: BreedingCycle | null,
+  context: BreedingTimelineContext = {},
+) {
+  if (cycle?.status === '已生产' && typeof context.litter?.weaned_at === 'number') return '完成'
+  if (cycle?.status === '失败' || cycle?.status === '放弃') return '终止'
+  return '当前'
 }
 
 export function getBreedingTimelineSortTimestamp(record: BreedingRecord) {
@@ -177,6 +187,7 @@ function getBreedingTimelineUpcomingTitle(
 ) {
   if (!cycle?.status) return ''
 
+  if (cycle.status === '失败' || cycle.status === '放弃') return ''
   if (cycle.status === '怀孕中') return '待产'
   if (cycle.status === '已生产') return isNursingLitter(context.litter) ? '待断奶' : ''
   if (cycle.status !== '发情中') return cycle.status
@@ -265,6 +276,7 @@ export function buildBreedingTimelineSyntheticItems(
       kind: 'upcoming',
       type: 'upcoming',
       tone: 'gray',
+      label: '下一步',
       title: upcomingTitle,
       summary: buildBreedingTimelineUpcomingSummary(cycle, records, now, context),
       date: baseDate + 2,
@@ -277,6 +289,7 @@ export function buildBreedingTimelineSyntheticItems(
       kind: 'current',
       type: 'current',
       tone: getBreedingTimelineCurrentStatusTone(cycle, context),
+      label: getBreedingTimelineCurrentLabel(cycle, context),
       title: currentTitle,
       summary: buildBreedingTimelineCurrentSummary(cycle, records, context),
       date: baseDate + 1,

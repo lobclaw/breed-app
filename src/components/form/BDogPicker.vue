@@ -285,7 +285,7 @@ dogStore.ensure()
 
 watch(() => sheetVisible.value, (val) => {
   if (val) {
-    selectedIds.value = !hasModelValue.value && props.multiple
+    selectedIds.value = !hasModelValue.value
       ? [...(props.selectedIds || [])]
       : []
     searchKeyword.value = ''
@@ -294,7 +294,7 @@ watch(() => sheetVisible.value, (val) => {
 })
 
 watch(() => props.selectedIds, (val) => {
-  if (!hasModelValue.value && props.multiple) {
+  if (!hasModelValue.value) {
     selectedIds.value = [...(val || [])]
   }
 }, { deep: true })

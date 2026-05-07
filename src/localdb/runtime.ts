@@ -5281,7 +5281,7 @@ class LocalSyncRuntime {
     }
   }
 
-  async recoverIllnessesLocally(familyId: string, illnessIds: string[], medicationTaskIds: string[] = []) {
+  async recoverIllnessesLocally(familyId: string, illnessIds: string[], medicationTaskIds: string[] = [], recoveryDate?: number) {
     const illnessRows = await localDb.query<any>('health_records', row => illnessIds.includes(row._id))
     if (!illnessRows.length) return null
     const linkedMedicationRows = await localDb.query<any>('medication_tasks', row =>
@@ -5290,6 +5290,7 @@ class LocalSyncRuntime {
     )
 
     const now = getNow()
+    const resolvedRecoveryDate = Number.isFinite(Number(recoveryDate)) ? Number(recoveryDate) : now
     const baseVersions = {
       ...illnessRows.reduce<Record<string, number>>((acc, row) => {
         acc[row._id] = Number(row.version || 0)
@@ -5310,7 +5311,7 @@ class LocalSyncRuntime {
       tables.health_records = (tables.health_records as any[]).map((row) => illnessIdSet.has(row._id)
         ? {
             ...row,
-            details: { ...(row.details || {}), treatment_status: '已康复' },
+            details: { ...(row.details || {}), treatment_status: '已康复', recovery_date: resolvedRecoveryDate },
             updated_at: now,
           }
         : row)
@@ -5329,6 +5330,7 @@ class LocalSyncRuntime {
       {
         illnessIds: illnessRows.map(row => row._id),
         medicationTaskIds: linkedMedicationRows.map(row => row._id),
+        recoveryDate: resolvedRecoveryDate,
         _sync: syncMeta,
       },
       ['health_records', 'medication_tasks'],

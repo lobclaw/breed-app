@@ -357,11 +357,7 @@ const showDayProgress = computed(() => {
 
 const pageTitle = computed(() => {
   const dogName = task.value?.dog_name
-  const drugName = task.value?.drug_name
-  if (!dogName || !drugName) return '用药任务详情'
-  if (task.value?.status === 'cancelled') return `${dogName} · ${drugName}已取消`
-  if (task.value?.status === 'completed') return `${dogName} · ${drugName}已结束`
-  return `${dogName} · ${drugName}第${currentDay.value}天`
+  return dogName ? `${dogName} · 用药详情` : '用药详情'
 })
 
 const statusText = computed(() => {

@@ -11,7 +11,7 @@
         <view class="dam-context-card__body">
           <text class="dam-context-card__title">{{ hasSelectedDam ? selectedDam.name : '选择种母' }}</text>
           <text class="dam-context-card__meta">
-            {{ hasSelectedDam ? `${selectedDam.breed || '马尔济斯'} · ${selectedDam.gender || '母'}` : '选择一只种母查看累计回报与各窝表现' }}
+            {{ hasSelectedDam ? selectedDamMeta : '选择一只种母查看累计回报与各窝表现' }}
           </text>
         </view>
         <view class="dam-context-card__side">
@@ -25,6 +25,7 @@
       v-model:visible="showDamPickerVisible"
       roleFilter="种狗"
       genderFilter="母"
+      :selected-ids="hasSelectedDam ? [selectedDam._id] : []"
       title="选择种母"
       @select="handleDamSelect"
     />
@@ -60,11 +61,11 @@
             :class="{ 'roi-hero__fact--single': summaryFacts.length === 1 }"
           >
             <view class="roi-hero__fact-main">
-              <text class="roi-hero__fact-value">{{ fact.value }}</text>
-              <view class="roi-hero__fact-copy">
+              <view class="roi-hero__fact-head">
+                <text class="roi-hero__fact-value">{{ fact.value }}</text>
                 <text class="roi-hero__fact-label">{{ fact.label }}</text>
-                <text v-if="fact.helper" class="roi-hero__fact-helper">{{ fact.helper }}</text>
               </view>
+              <text v-if="fact.helper" class="roi-hero__fact-helper">{{ fact.helper }}</text>
             </view>
           </view>
         </view>
@@ -126,7 +127,7 @@
         </view>
 
         <view v-if="litterList.length" class="litter-list">
-          <view v-for="litter in litterList" :key="litter.id" class="litter-item">
+          <view v-for="litter in litterList" :key="litter.id" class="litter-item" @click="goToLitterProfit(litter)">
             <view class="litter-item__top">
               <view class="litter-item__body">
                 <view class="litter-item__title-row">
@@ -139,6 +140,7 @@
                 <text class="litter-item__profit" :class="litter.profitTone">{{ litter.profitText }}</text>
                 <text class="litter-item__subprofit">{{ litter.profitHint }}</text>
               </view>
+              <text class="material-icons-round litter-item__chevron">chevron_right</text>
             </view>
             <view class="litter-bar-track">
               <view
@@ -181,6 +183,7 @@ import { onLoad } from '@dcloudio/uni-app'
 import { useAuth } from '@/composables/useAuth'
 import { usePageSync } from '@/composables/usePageSync'
 import { getLocalDamRoi } from '@/localdb/domain-repository'
+import { localDb } from '@/localdb/db'
 import { localSyncRuntime } from '@/localdb/runtime'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
@@ -210,6 +213,15 @@ interface RoiData {
 const loading = ref(false)
 const roiData = ref<RoiData | null>(null)
 const hasSelectedDam = computed(() => !!selectedDam.value?._id)
+const selectedDamMeta = computed(() => {
+  if (!selectedDam.value) return ''
+  const parts = [
+    selectedDam.value.breed || '马尔济斯',
+    selectedDam.value.gender || '母',
+    selectedDam.value.birth_date ? formatAge(selectedDam.value.birth_date) : '',
+  ].filter(Boolean)
+  return parts.join(' · ')
+})
 
 const roiToneClass = computed(() => {
   const value = roiData.value?.netProfit || 0
@@ -219,8 +231,8 @@ const roiToneClass = computed(() => {
 })
 
 // 当选择犬只变化时自动加载 ROI
-watch(selectedDam, (dog) => {
-  if (dog?._id) void loadRoi(dog._id)
+watch(() => selectedDam.value?._id, (damId) => {
+  if (damId) void loadRoi(damId)
 })
 
 const totalInvestment = computed(() => {
@@ -331,8 +343,49 @@ function formatPercent(val: number): string {
   return `${sign}${Math.abs(val)}%`
 }
 
+function formatAge(birthTs: number) {
+  const days = Math.max(1, Math.floor((Date.now() - birthTs) / 86400000))
+  if (days < 30) return `${days}天`
+  if (days < 365) return `${Math.floor(days / 30)}月龄`
+  const years = Math.floor(days / 365)
+  const months = Math.floor((days % 365) / 30)
+  return months > 0 ? `${years}岁${months}月` : `${years}岁`
+}
+
+function decodeRouteValue(value: unknown) {
+  if (typeof value !== 'string') return ''
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
 function handleDamSelect(dog: any) {
   selectedDam.value = dog
+}
+
+function goToLitterProfit(litter: any) {
+  if (!litter?.id) {
+    uni.showToast({ title: '窝信息缺失', icon: 'none' })
+    return
+  }
+  const litterName = encodeURIComponent(litter.title || '')
+  uni.navigateTo({
+    url: `/pages/finance/litter-profit?litterId=${litter.id}&litterName=${litterName}`,
+    fail() {
+      uni.showToast({ title: '单窝利润打开失败', icon: 'none' })
+    },
+  })
+}
+
+async function hydrateSelectedDam(damId: string) {
+  const localDam = await localDb.findById<any>('dogs', damId)
+  if (!localDam || localDam.deleted_at) return
+  selectedDam.value = {
+    ...selectedDam.value,
+    ...localDam,
+  }
 }
 
 async function loadRoi(damId: string) {
@@ -349,14 +402,16 @@ async function loadRoi(damId: string) {
 }
 
 onLoad((query) => {
-  const damId = query?.damId || ''
+  const damId = decodeRouteValue(query?.damId || query?.dam_id)
   if (damId) {
     selectedDam.value = {
       _id: damId,
-      name: query?.damName || '',
+      name: decodeRouteValue(query?.damName || query?.dam_name),
+      breed: decodeRouteValue(query?.breed),
       gender: '母',
       role: '种狗',
     }
+    void hydrateSelectedDam(damId)
   }
 })
 </script>
@@ -603,11 +658,16 @@ onLoad((query) => {
 
   &__fact-main {
     display: flex;
-    align-items: baseline;
-    gap: 10px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+    min-width: 0;
   }
 
-  &__fact-copy {
+  &__fact-head {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
     min-width: 0;
   }
 
@@ -633,10 +693,10 @@ onLoad((query) => {
 
   &__fact-helper {
     display: block;
-    margin-top: 2px;
     font-size: 10px;
     line-height: 1.35;
     color: var(--text-4);
+    text-align: left;
   }
 }
 
@@ -843,6 +903,12 @@ onLoad((query) => {
   border-radius: 18px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 249, 246, 0.98) 100%);
   border: 1px solid rgba(216, 203, 189, 0.18);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+
+  &:active {
+    transform: scale(0.985);
+    box-shadow: inset 0 0 0 1px rgba(234, 62, 119, 0.12);
+  }
 
   & + & {
     margin-top: 10px;
@@ -851,8 +917,8 @@ onLoad((query) => {
   &__top {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
-    gap: 12px;
+    align-items: center;
+    gap: 8px;
     margin-bottom: 10px;
   }
 
@@ -914,6 +980,13 @@ onLoad((query) => {
     font-family: var(--font-display);
     font-size: 15px;
     font-weight: 800;
+  }
+
+  &__chevron {
+    flex-shrink: 0;
+    font-size: 18px;
+    color: var(--text-4);
+    line-height: 1;
   }
 
   &__subprofit {

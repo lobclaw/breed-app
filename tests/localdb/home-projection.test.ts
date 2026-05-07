@@ -2,6 +2,49 @@ import { describe, expect, it } from 'vitest'
 import { applyTouchedEntityVersions, buildLocalDateCounts, buildLocalHomeCards } from '../../src/localdb/home-projection'
 
 describe('local home projection', () => {
+  it('应将单只犬的疫苗和驱虫提醒也投影为健康批量卡', () => {
+    const now = new Date('2026-04-24T10:00:00+08:00').getTime()
+    const dueDate = new Date('2026-04-24T09:00:00+08:00').getTime()
+
+    const result = buildLocalHomeCards({
+      dogs: [{ _id: 'dog_1', name: '妮蔻' }],
+      tasks: [
+        {
+          _id: 'task_vac_1',
+          family_id: 'family_1',
+          dog_id: 'dog_1',
+          dog_name: '妮蔻',
+          type: 'vaccination',
+          title: '疫苗',
+          status: 'pending',
+          due_date: dueDate,
+          details: { vaccine_type: '卫佳10' },
+        },
+        {
+          _id: 'task_dew_1',
+          family_id: 'family_1',
+          dog_id: 'dog_1',
+          dog_name: '妮蔻',
+          type: 'deworming',
+          title: '驱虫',
+          status: 'pending',
+          due_date: dueDate,
+          details: { deworming_type: 'external', drug_name: '博来恩' },
+        },
+      ],
+      health_records: [],
+      medication_tasks: [],
+    }, now)
+
+    const healthCards = result.cards.filter(card => card.domain === 'health')
+
+    expect(healthCards).toHaveLength(2)
+    expect(healthCards.every(card => card.cardType === 'batch')).toBe(true)
+    expect(healthCards.map(card => card.tasks?.[0]?.type)).toEqual(['vaccination', 'deworming'])
+    expect(healthCards.every(card => card.dogs?.length === 1)).toBe(true)
+    expect(result.cards.some(card => card.cardType === 'dog' && card.domain === 'health')).toBe(false)
+  })
+
   it('应从本地实体投影出今日用药与疾病观察卡', () => {
     const now = new Date('2026-04-24T10:00:00+08:00').getTime()
     const startDate = new Date('2026-04-23T09:00:00+08:00').getTime()

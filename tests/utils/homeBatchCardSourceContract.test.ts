@@ -7,9 +7,10 @@ const batchCardSource = readFileSync(resolve(testDir, '../../src/components/smar
 const homeSource = readFileSync(resolve(testDir, '../../src/pages/home/index.vue'), 'utf8')
 
 describe('home batch card source contract', () => {
-  it('批量健康卡应保留逐只勾选并将底部按钮表达为完成全部', () => {
+  it('批量健康卡应保留逐只勾选，并按犬只数量调整底部主按钮文案', () => {
     expect(batchCardSource).toContain("emit('complete', task._id, allDone ? 'batch-auto' : 'batch-auto-partial')")
-    expect(batchCardSource).toContain('<text class="btn-text btn-text--white">完成全部</text>')
+    expect(batchCardSource).toContain('<text class="btn-text btn-text--white">{{ primaryActionLabel }}</text>')
+    expect(batchCardSource).toContain("const primaryActionLabel = computed(() => totalDogs.value === 1 ? '完成' : '完成全部')")
   })
 
   it('首页应让批量卡部分完成只做局部承接，全部完成后再整卡退场', () => {

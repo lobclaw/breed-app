@@ -70,11 +70,24 @@
       <view class="card-feed">
         <view class="detail-summary" :class="`detail-summary--${cardColor}`">
           <view class="detail-summary__main">
-            <view class="detail-summary__tag">
-              <text class="detail-summary__tag-text">{{ typeLabel }}</text>
+            <view v-if="summaryTagText" class="detail-summary__tag">
+              <text
+                class="detail-summary__tag-text"
+                :class="{ 'detail-summary__tag-text--green': isRecoveredIllness }"
+              >
+                {{ summaryTagText }}
+              </text>
             </view>
             <text class="detail-summary__title">{{ summaryTitle }}</text>
-            <text class="detail-summary__sub">{{ summarySubtitle }}</text>
+            <template v-if="summarySubtitleLines.length > 0">
+              <text
+                v-for="(line, index) in summarySubtitleLines"
+                :key="`summary-sub-${index}`"
+                class="detail-summary__sub"
+              >
+                {{ line }}
+              </text>
+            </template>
             <view v-if="summaryFact" class="detail-summary__facts">
               <view class="detail-summary__fact" :class="summaryFact.tone ? `detail-summary__fact--${summaryFact.tone}` : ''">
                 <text class="material-icons-round detail-summary__fact-icon">{{ summaryFact.icon || 'schedule' }}</text>
@@ -83,7 +96,11 @@
               </view>
             </view>
           </view>
-          <view v-if="summaryMeta" class="detail-summary__meta">
+          <view
+            v-if="summaryMeta"
+            class="detail-summary__meta"
+            :class="{ 'detail-summary__meta--green': isRecoveredIllness }"
+          >
             <text class="detail-summary__meta-value">{{ summaryMeta }}</text>
             <text class="detail-summary__meta-label">{{ summaryMetaLabel }}</text>
           </view>
@@ -159,10 +176,23 @@
                     v-for="symptom in illnessSymptomTags"
                     :key="symptom"
                     class="symptom-chip"
+                    :class="{ 'symptom-chip--recovered': isRecoveredIllness }"
                   >
                     {{ symptom }}
                   </text>
                 </view>
+              </view>
+              <view v-if="record.date" class="info-row">
+                <text class="info-row-label">发病日期</text>
+                <text class="info-row-value">{{ formatDate(record.date) }}</text>
+              </view>
+              <view v-if="isRecoveredIllness && illnessRecoveryDate" class="info-row">
+                <text class="info-row-label">康复日期</text>
+                <text class="info-row-value">{{ formatDate(illnessRecoveryDate) }}</text>
+              </view>
+              <view v-if="illnessDurationDays" class="info-row">
+                <text class="info-row-label">{{ isRecoveredIllness ? '持续时长' : '当前病程' }}</text>
+                <text class="info-row-value">{{ isRecoveredIllness ? `持续${illnessDurationDays}天` : `第${illnessDurationDays}天` }}</text>
               </view>
               <view v-if="record.cost" class="info-row">
                 <text class="info-row-label">费用</text>
@@ -349,16 +379,22 @@ const dewormingTypeMap: Record<string, string> = {
 
 const typeLabel = computed(() => typeMap[record.value?.type]?.label || record.value?.type || '未知')
 const tagColor = computed(() => typeMap[record.value?.type]?.tagColor || 'green')
-const cardColor = computed(() => typeMap[record.value?.type]?.cardColor || 'green')
+const cardColor = computed(() => {
+  if (record.value?.type === 'illness' && isRecoveredIllness.value) return 'green'
+  return typeMap[record.value?.type]?.cardColor || 'green'
+})
 const pageTitle = computed(() => {
   const dogName = record.value?.dog_name
   if (!dogName) return '健康记录详情'
-  if (record.value?.type === 'illness') return `${dogName} · ${illnessTitleText.value}`
+  if (record.value?.type === 'vaccination') return `${dogName} · 疫苗详情`
+  if (record.value?.type === 'deworming') return `${dogName} · 驱虫详情`
+  if (record.value?.type === 'illness') return `${dogName} · 疾病详情`
   return `${dogName} · 健康记录详情`
 })
 const canEdit = computed(() => !loading.value && !!record.value)
 const isIllnessRecord = computed(() => record.value?.type === 'illness')
 const illnessStatus = computed(() => record.value?.details?.treatment_status || '观察中')
+const isRecoveredIllness = computed(() => isIllnessRecord.value && illnessStatus.value === '已康复')
 const canRecoverIllness = computed(() => isIllnessRecord.value && illnessStatus.value !== '已康复')
 const canStartMedication = computed(() => isIllnessRecord.value && illnessStatus.value !== '已康复')
 const canDeleteRecord = computed(() => !loading.value && !!record.value)
@@ -418,36 +454,35 @@ const illnessSymptomTags = computed<string[]>(() => {
 const illnessSymptomCount = computed(() => illnessSymptomTags.value.length)
 const hasIllnessDetailRows = computed(() => illnessSymptomCount.value > 0 || !!record.value?.notes || !!record.value?.cost)
 const detailSectionTitle = computed(() => record.value?.type === 'illness' ? '病情细节' : '核心信息')
+const summaryTagText = computed(() => {
+  if (record.value?.type === 'vaccination') return ''
+  if (record.value?.type === 'illness') return illnessStatus.value
+  return typeLabel.value
+})
 
 const summaryTitle = computed(() => {
   if (record.value?.type === 'vaccination') return record.value?.details?.vaccine_type || record.value?.details?.vaccine_name || '疫苗记录'
   if (record.value?.type === 'deworming') return record.value?.details?.drug_name || dewormingTypeLabel.value || '驱虫记录'
-  if (record.value?.type === 'illness') return illnessStatus.value
+  if (record.value?.type === 'illness') return illnessPrimaryCondition.value || '疾病'
   return '健康记录'
 })
-const summarySubtitle = computed(() => {
+const summarySubtitleLines = computed(() => {
   if (record.value?.type === 'illness') {
-    const parts = [
-      record.value?.details?.severity || '',
-      record.value?.date ? `${formatDate(record.value.date)} 发病` : '',
-      illnessSymptomCount.value > 0 ? `${illnessSymptomCount.value}项症状` : '',
-    ].filter(Boolean)
-    return parts.join(' · ') || (illnessPrimaryCondition.value || '疾病')
+    return []
   }
-  return `${record.value?.dog_name || '未知犬只'} · ${formatDate(record.value?.date)}`
-})
-const illnessTitleText = computed(() => {
-  const condition = illnessPrimaryCondition.value || '疾病'
-  const courseDay = getIllnessCourseDay(record.value?.date)
-  return courseDay ? `${condition}第${courseDay}天` : condition
+  return [`${record.value?.dog_name || '未知犬只'} · ${formatDate(record.value?.date)}`]
 })
 const summaryMeta = computed(() => {
-  if (record.value?.type === 'illness') return ''
+  if (record.value?.type === 'illness') {
+    return record.value?.details?.severity || (illnessSymptomCount.value > 0 ? `${illnessSymptomCount.value}项` : '')
+  }
   if (record.value?.type === 'deworming') return dewormingTypeLabel.value
   return typeLabel.value
 })
 const summaryMetaLabel = computed(() => {
-  if (record.value?.type === 'illness') return ''
+  if (record.value?.type === 'illness') {
+    return record.value?.details?.severity && illnessSymptomCount.value > 0 ? `${illnessSymptomCount.value}项症状` : '症状概况'
+  }
   if (record.value?.type === 'deworming') return '驱虫类型'
   return '当前记录'
 })
@@ -466,6 +501,17 @@ const summaryFact = computed(() => {
   }
 
   return null
+})
+
+const illnessDurationDays = computed(() => {
+  if (!record.value?.date) return null
+  const endTs = isRecoveredIllness.value ? (illnessRecoveryDate.value || Date.now()) : Date.now()
+  return Math.max(1, Math.floor((getBeijingDayStart(endTs) - getBeijingDayStart(record.value.date)) / 86400000) + 1)
+})
+
+const illnessRecoveryDate = computed(() => {
+  if (!isRecoveredIllness.value) return null
+  return record.value?.details?.recovery_date || record.value?.details?.recovered_at || record.value?.recovered_at || record.value?.updated_at || null
 })
 
 const nextReminderText = computed(() => {
@@ -580,6 +626,7 @@ async function markRecovered() {
     currentFamily.value?._id || '',
     [recordId],
     linkedMedicationTasks.value.map((item: any) => item.taskId || item.id).filter(Boolean),
+    Date.now(),
   )
   if (result) {
     showSubmitBanner('已标记康复')
@@ -850,6 +897,7 @@ onShow(() => {
 .detail-summary--blue { background: linear-gradient(135deg, var(--blue-soft), rgba(255, 255, 255, 0.98)); }
 .detail-summary--teal { background: linear-gradient(135deg, rgba(61, 168, 160, 0.12), rgba(255, 255, 255, 0.98)); }
 .detail-summary--red { background: linear-gradient(135deg, var(--red-soft), rgba(255, 255, 255, 0.98)); }
+.detail-summary--green { background: linear-gradient(135deg, var(--green-soft), rgba(255, 255, 255, 0.98)); }
 .detail-summary__main {
   min-width: 0;
   display: flex;
@@ -867,6 +915,9 @@ onShow(() => {
   font-size: 11px;
   font-weight: 700;
   color: var(--text-2);
+}
+.detail-summary__tag-text--green {
+  color: var(--green);
 }
 .detail-summary__title {
   font-size: 18px;
@@ -920,6 +971,12 @@ onShow(() => {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
+}
+.detail-summary__meta--green {
+  background: rgba(255, 255, 255, 0.82);
+}
+.detail-summary__meta--green .detail-summary__meta-value {
+  color: var(--green);
 }
 .detail-summary__meta-value {
   font-family: var(--font-display);
@@ -1026,6 +1083,11 @@ onShow(() => {
   line-height: 1;
 }
 
+.symptom-chip--recovered {
+  background: rgba(50, 186, 120, 0.08);
+  color: var(--green);
+}
+
 .symptom-grid {
   display: flex;
   flex-wrap: wrap;
@@ -1081,6 +1143,7 @@ onShow(() => {
 .section-dot--blue { background: var(--blue); }
 .section-dot--teal { background: var(--teal); }
 .section-dot--red { background: var(--red); }
+.section-dot--green { background: var(--green); }
 .section-dot--plum { background: var(--plum); }
 .section-text {
   font-size: 12px;

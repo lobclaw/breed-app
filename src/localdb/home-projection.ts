@@ -94,6 +94,10 @@ function getTaskDomain(task: GenericRow) {
   return 'health'
 }
 
+function isAlwaysBatchHealthTask(task: GenericRow) {
+  return task?.type === 'vaccination' || task?.type === 'deworming'
+}
+
 function getTaskVariantKey(task: GenericRow) {
   if (!task) return ''
   if (task.type === 'breeding_extra_arrangement') {
@@ -732,7 +736,9 @@ function mergeTasks(tasks: GenericRow[], todayCompleted: GenericRow[] = [], acti
   for (const group of batchGroups.values()) {
     const dogIds = new Set(group.map(task => task.dog_id))
     const pendingInGroup = group.filter(task => !task._completed)
-    if (dogIds.size < 2 || !pendingInGroup.length) continue
+    const shouldBuildBatch = pendingInGroup.length > 0
+      && (dogIds.size >= 2 || isAlwaysBatchHealthTask(group[0]))
+    if (!shouldBuildBatch) continue
     group.forEach((task) => {
       if (task._completed) completedConsumed.add(task._id)
       else consumed.add(task._id)

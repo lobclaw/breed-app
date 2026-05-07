@@ -32,6 +32,9 @@ export interface HistoryCycleSummaryViewModel {
   title: string
   meta: string
   result: string
+  statusText: string
+  statusTone: 'green' | 'red' | 'gray'
+  statusIcon: string
 }
 
 export function isUnweanedProducedCycle(cycle?: BreedingCycle | null, litter?: Litter | null) {
@@ -300,9 +303,27 @@ export function buildHistoryCycleSummaryViewModel(
     resultParts.push('已放弃')
   }
 
+  const statusText = getHistoryCycleStatusText(cycle, litter)
+  const statusTone = getHistoryCycleStatusTone(statusText)
+
   return {
     title,
     meta: metaParts.filter(Boolean).join(' · '),
     result: resultParts.filter(Boolean).join(' · '),
+    statusText,
+    statusTone,
+    statusIcon: statusTone === 'green' ? 'check_circle' : 'close',
   }
+}
+
+function getHistoryCycleStatusText(cycle?: BreedingCycle | null, litter?: Litter | null) {
+  if (cycle?.status === '已生产' && typeof litter?.weaned_at === 'number') return '已完成'
+  if (cycle?.status === '失败' || cycle?.status === '放弃') return '已终止'
+  return cycle?.status || ''
+}
+
+function getHistoryCycleStatusTone(statusText: string): HistoryCycleSummaryViewModel['statusTone'] {
+  if (statusText === '已完成' || statusText === '已生产') return 'green'
+  if (statusText === '已终止') return 'red'
+  return 'gray'
 }

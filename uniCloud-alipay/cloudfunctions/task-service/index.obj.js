@@ -173,6 +173,10 @@ function getTaskDomain(task) {
   return 'health'
 }
 
+function isAlwaysBatchHealthTask(task) {
+  return task?.type === 'vaccination' || task?.type === 'deworming'
+}
+
 function getTaskDisplayTitle(task) {
   if (!task) return ''
   if (task.type === 'breeding_extra_arrangement') {
@@ -972,7 +976,7 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
     }
   }
 
-  // 第 4 轮：批量合并（同 type + 同天 + 2只以上，含今日已完成）
+  // 第 4 轮：批量合并（疫苗/驱虫单只也按事项卡呈现，其它仍需 2 只以上）
   const remaining = tasks.filter(t => !consumed.has(t._id))
   // 将 pending 和今日已完成任务一起分组
   const allForBatch = [
@@ -989,8 +993,8 @@ function mergeTasks(tasks, todayCompleted = [], activeIllnesses = [], medItems =
   for (const [, group] of batchGroups) {
     const dogIds = new Set(group.map(t => t.dog_id))
     const pendingInGroup = group.filter(t => !t._completed)
-    // 总数 >= 2 且至少 1 条 pending 才出批量卡片
-    if (dogIds.size >= 2 && pendingInGroup.length > 0) {
+    const shouldBuildBatch = pendingInGroup.length > 0 && (dogIds.size >= 2 || isAlwaysBatchHealthTask(group[0]))
+    if (shouldBuildBatch) {
       group.forEach(t => {
         if (t._completed) completedConsumed.add(t._id)
         else consumed.add(t._id)

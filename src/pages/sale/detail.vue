@@ -49,15 +49,14 @@
               <text class="stepper-label" :class="getStepperLabelClass(1)">已预定</text>
               <text v-if="sale.deposit_amount" class="stepper-amount" style="color: var(--red);">定金 ¥{{ sale.deposit_amount?.toLocaleString() }}</text>
             </view>
-            <!-- 已成交 -->
+            <!-- 终态 -->
             <view class="stepper-step">
               <view class="stepper-dot" :class="getStepperDotClass(2)">
-                <text v-if="stepIndex >= 2" class="material-icons-round" style="font-size: 16px; color: #fff;">check</text>
+                <text v-if="stepIndex >= 2" class="material-icons-round" style="font-size: 16px; color: #fff;">{{ finalStepIcon }}</text>
                 <text v-else>3</text>
               </view>
-              <text class="stepper-label" :class="getStepperLabelClass(2)">已成交</text>
-              <text v-if="sale.received_amount != null" class="stepper-amount" style="color: var(--red);">到手 ¥{{ sale.received_amount?.toLocaleString() }}</text>
-              <text v-else-if="sale.status === '已成交' && sale.settlement_status" class="stepper-amount" style="color: var(--amber);">{{ sale.settlement_status }}</text>
+              <text class="stepper-label" :class="getStepperLabelClass(2)">{{ finalStepLabel }}</text>
+              <text v-if="finalStepAmountText" class="stepper-amount" :style="{ color: finalStepAmountColor }">{{ finalStepAmountText }}</text>
             </view>
           </view>
         </view>
@@ -78,7 +77,7 @@
             </view>
           </view>
           <view class="detail-row" v-if="sale.agreed_price">
-            <text class="detail-label">成交价</text>
+            <text class="detail-label">{{ agreedPriceLabel }}</text>
             <text class="detail-value detail-value--price">¥{{ sale.agreed_price?.toLocaleString() }}</text>
           </view>
           <view class="detail-row" v-if="sale.received_amount != null">
@@ -94,8 +93,12 @@
             <text class="detail-value" style="color: var(--green);">¥{{ sale.refund_amount?.toLocaleString() }}</text>
           </view>
           <view class="detail-row" v-if="sale.refund_date">
-            <text class="detail-label">退款日期</text>
+            <text class="detail-label">{{ refundDateLabel }}</text>
             <text class="detail-value">{{ formatDate(sale.refund_date) }}</text>
+          </view>
+          <view class="detail-row" v-if="depositRefundAmount != null">
+            <text class="detail-label">退还定金</text>
+            <text class="detail-value">¥{{ depositRefundAmount.toLocaleString() }}</text>
           </view>
           <view class="detail-row" v-if="sale.deposit_kept_amount != null && sale.status === '定金取消'">
             <text class="detail-label">定金保留</text>
@@ -702,8 +705,53 @@ const hasPriceDetails = computed(() => {
 const canRefund = computed(() => Number(sale.value?.received_amount || 0) > 0)
 const canEditSaleMode = computed(() => ['待售', '已预定', '已成交'].includes(String(sale.value?.status || '')))
 const saleModeText = computed(() => formatSaleMode(sale.value?.sale_mode))
+const isDepositCancelled = computed(() => sale.value?.status === '定金取消')
+const agreedPriceLabel = computed(() => isDepositCancelled.value ? '约定成交价' : '成交价')
+const refundDateLabel = computed(() => isDepositCancelled.value ? '取消日期' : '退款日期')
+const depositRefundAmount = computed(() => {
+  const detail = sale.value
+  if (!detail || detail.status !== '定金取消' || detail.deposit_kept_amount == null) return null
+  const depositAmount = Number(detail.deposit_amount || 0)
+  const keptAmount = Number(detail.deposit_kept_amount || 0)
+  if (!Number.isFinite(depositAmount) || !Number.isFinite(keptAmount)) return null
+  return Math.max(0, depositAmount - keptAmount)
+})
+const finalStepLabel = computed(() => {
+  const status = sale.value?.status
+  if (status === '定金取消') return '定金取消'
+  if (status === '已退款') return '已退款'
+  return '已成交'
+})
+const finalStepIcon = computed(() => {
+  const status = sale.value?.status
+  return status === '定金取消' || status === '已退款' ? 'close' : 'check'
+})
+const finalStepAmountText = computed(() => {
+  const detail = sale.value
+  if (!detail) return ''
+  if (detail.status === '定金取消') {
+    if (detail.deposit_kept_amount == null) return ''
+    const keptAmount = Number(detail.deposit_kept_amount || 0)
+    return keptAmount > 0 ? `保留 ¥${keptAmount.toLocaleString()}` : '全额退还'
+  }
+  if (detail.status === '已退款' && detail.refund_amount) {
+    return `退款 ¥${Number(detail.refund_amount).toLocaleString()}`
+  }
+  if (detail.received_amount != null) {
+    return `到手 ¥${Number(detail.received_amount).toLocaleString()}`
+  }
+  if (detail.status === '已成交' && detail.settlement_status) return detail.settlement_status
+  return ''
+})
+const finalStepAmountColor = computed(() => {
+  const status = sale.value?.status
+  if (status === '已退款') return 'var(--green)'
+  if (status === '定金取消') return 'var(--text-3)'
+  if (sale.value?.status === '已成交' && sale.value?.received_amount == null) return 'var(--amber)'
+  return 'var(--red)'
+})
 
-type SaleStatusTone = 'amber' | 'blue' | 'green' | 'red'
+type SaleStatusTone = 'amber' | 'blue' | 'green' | 'red' | 'gray'
 
 function normalizeSaleModeValue(mode?: string | null): SaleMode {
   const normalized = String(mode || '').trim()
@@ -733,7 +781,7 @@ const stepIndex = computed(() => {
     '已预定': 1,
     '已成交': 2,
     '已退款': 2,
-    '定金取消': 1,
+    '定金取消': 2,
   }
   return map[sale.value.status] ?? -1
 })
@@ -746,7 +794,9 @@ const stepperFillWidth = computed(() => {
 
 const stepperFillStyle = computed(() => ({
   width: stepperFillWidth.value,
-  background: `var(--${getSaleStatusTone(sale.value?.status)})`,
+  background: getSaleStatusTone(sale.value?.status) === 'gray'
+    ? 'var(--text-3)'
+    : `var(--${getSaleStatusTone(sale.value?.status)})`,
 }))
 
 function getSaleStatusTone(status?: string): SaleStatusTone {
@@ -755,15 +805,16 @@ function getSaleStatusTone(status?: string): SaleStatusTone {
     '已预定': 'blue',
     '已成交': 'green',
     '已退款': 'red',
-    '定金取消': 'amber',
+    '定金取消': 'gray',
   }
   return map[status || ''] || 'amber'
 }
 
 function getStepperTone(step: number): SaleStatusTone {
   if (sale.value?.status === '已退款' && step === 2) return 'red'
+  if (sale.value?.status === '定金取消' && step === 2) return 'gray'
   if (step === 0) return 'amber'
-  if (step === 1) return sale.value?.status === '定金取消' ? 'amber' : 'blue'
+  if (step === 1) return 'blue'
   return 'green'
 }
 
@@ -783,13 +834,13 @@ function getStepperLabelClass(step: number) {
   }
 }
 
-function getStatusTagColor(status: string): 'red' | 'amber' | 'green' | 'blue' | 'plum' | 'rose' | 'teal' | 'primary' {
+function getStatusTagColor(status: string): 'red' | 'amber' | 'green' | 'blue' | 'plum' | 'rose' | 'teal' | 'primary' | 'gray' {
   const map: Record<string, any> = {
     '待售': 'amber',
     '已预定': 'blue',
     '已成交': 'green',
     '已退款': 'red',
-    '定金取消': 'amber',
+    '定金取消': 'gray',
   }
   return map[status] || 'amber'
 }
@@ -1180,6 +1231,7 @@ onShow(() => {
   &--blue { background: var(--blue); color: #fff; }
   &--green { background: var(--green); color: #fff; }
   &--red { background: var(--red); color: #fff; }
+  &--gray { background: var(--text-3); color: #fff; }
 }
 
 .stepper-label {
@@ -1193,6 +1245,7 @@ onShow(() => {
   &--blue { color: var(--blue); }
   &--green { color: var(--green); }
   &--red { color: var(--red); }
+  &--gray { color: var(--text-3); }
 }
 
 .stepper-amount {

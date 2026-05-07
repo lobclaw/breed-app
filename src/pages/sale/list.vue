@@ -130,22 +130,23 @@ function getSaleIcon(status: string) {
   return map[status] || 'storefront'
 }
 
-function getSaleIconColor(status: string): 'red' | 'amber' | 'green' | 'blue' | 'plum' | 'rose' | 'teal' {
+function getSaleIconColor(status: string): 'red' | 'amber' | 'green' | 'blue' | 'plum' | 'rose' | 'teal' | 'gray' {
   const map: Record<string, any> = {
     '已预定': 'amber',
     '已成交': 'green',
     '已退款': 'red',
+    '定金取消': 'gray',
   }
   return map[status] || 'amber'
 }
 
-function getStatusTagColor(status: string): 'red' | 'amber' | 'green' | 'blue' | 'plum' | 'rose' | 'teal' | 'primary' {
+function getStatusTagColor(status: string): 'red' | 'amber' | 'green' | 'blue' | 'plum' | 'rose' | 'teal' | 'primary' | 'gray' {
   const map: Record<string, any> = {
     '待售': 'amber',
     '已预定': 'amber',
     '已成交': 'green',
     '已退款': 'red',
-    '定金取消': 'amber',
+    '定金取消': 'gray',
   }
   return map[status] || 'amber'
 }
@@ -181,7 +182,7 @@ function getSalePriceStyle(sale: any) {
   if (sale.status === '已成交' && sale.received_amount != null) return 'color: var(--red);'
   if (sale.status === '已成交') return 'color: var(--amber);'
   if (sale.status === '已退款') return 'color: var(--green);'
-  if (sale.status === '定金取消') return 'color: var(--red);'
+  if (sale.status === '定金取消') return 'color: var(--text-3);'
   if (sale.status === '待售' && !sale.floor_price) return 'color: var(--text-3);'
   return ''
 }

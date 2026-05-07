@@ -137,6 +137,39 @@
           </view>
         </BCard>
 
+        <!-- 窝信息 -->
+        <template v-if="litter">
+          <view class="litter-section-head">
+            <BSectionLabel title="窝信息" color="green" />
+            <view class="litter-section-head__action" @click="goToLitter(litter._id)">
+              <text class="litter-section-head__action-text">查看详情</text>
+              <text class="material-icons-round litter-section-head__action-icon">chevron_right</text>
+            </view>
+          </view>
+          <BCard class="litter-link-card" color="green" @click="goToLitter(litter._id)">
+            <view class="info-rows">
+              <view class="info-row">
+                <text class="info-label">生产日期</text>
+                <text class="info-value">{{ formatDate(litter.birth_date) }}</text>
+              </view>
+              <view class="info-row">
+                <text class="info-label">生产方式</text>
+                <text class="info-value">{{ litter.birth_type }}</text>
+              </view>
+              <view class="info-row">
+                <text class="info-label">存活</text>
+                <text class="info-value">{{ litter.born_alive }}/{{ litter.total_born }}</text>
+              </view>
+              <view class="info-row">
+                <text class="info-label">断奶</text>
+                <text class="info-value" :style="{ color: litter.weaned_at ? 'var(--green)' : 'var(--amber)' }">
+                  {{ litter.weaned_at ? '已断奶' : '未断奶' }}
+                </text>
+              </view>
+            </view>
+          </BCard>
+        </template>
+
         <!-- 费用 -->
         <template v-if="totalCost > 0">
           <BSectionLabel title="周期费用" color="amber" />
@@ -184,7 +217,7 @@
                 :class="[
                   item.kind === 'upcoming' ? 'timeline-dot--hollow' : 'timeline-dot--filled',
                   `timeline-dot--${item.tone}`,
-                  item.kind === 'current' ? 'timeline-dot--current' : '',
+                  item.isActive ? 'timeline-dot--current' : '',
                 ]"
               />
               <view
@@ -241,39 +274,6 @@
           title="暂无记录"
           description="点击右上角按钮添加繁育记录"
         />
-
-        <!-- 窝信息 -->
-        <template v-if="litter">
-          <view class="litter-section-head">
-            <BSectionLabel title="窝信息" color="green" />
-            <view class="litter-section-head__action" @click="goToLitter(litter._id)">
-              <text class="litter-section-head__action-text">查看详情</text>
-              <text class="material-icons-round litter-section-head__action-icon">chevron_right</text>
-            </view>
-          </view>
-          <BCard class="litter-link-card" color="green" @click="goToLitter(litter._id)">
-            <view class="info-rows">
-              <view class="info-row">
-                <text class="info-label">生产日期</text>
-                <text class="info-value">{{ formatDate(litter.birth_date) }}</text>
-              </view>
-              <view class="info-row">
-                <text class="info-label">生产方式</text>
-                <text class="info-value">{{ litter.birth_type }}</text>
-              </view>
-              <view class="info-row">
-                <text class="info-label">存活</text>
-                <text class="info-value">{{ litter.born_alive }}/{{ litter.total_born }}</text>
-              </view>
-              <view class="info-row">
-                <text class="info-label">断奶</text>
-                <text class="info-value" :style="{ color: litter.weaned_at ? 'var(--green)' : 'var(--amber)' }">
-                  {{ litter.weaned_at ? '已断奶' : '未断奶' }}
-                </text>
-              </view>
-            </view>
-          </BCard>
-        </template>
       </view>
 
       <BAddRecordSheet
@@ -385,6 +385,7 @@ type CycleTimelineItem = {
   dateLabel: string
   badgeLabel: string
   isFuture: boolean
+  isActive: boolean
   clickable: boolean
   recordId?: string
 }
@@ -403,6 +404,8 @@ const expectedDueDateRelativeText = computed(() => {
 
 const currentStatusText = computed(() => {
   if (!cycle.value?.status) return '-'
+  if (cycle.value.status === '已生产' && typeof litter.value?.weaned_at === 'number') return '已完成'
+  if (cycle.value.status === '失败' || cycle.value.status === '放弃') return '已终止'
   return buildBreedingTimelineCurrentTitle(cycle.value, timelineRecords.value, Date.now(), { litter: litter.value }) || cycle.value.status
 })
 const currentStatusTone = computed(() => {
@@ -536,9 +539,10 @@ const timelineItems = computed<CycleTimelineItem[]>(() => {
     tone: item.tone,
     title: item.title,
     detailLines: item.summary ? [item.summary] : [],
-    dateLabel: item.kind === 'current' ? '当前' : '下一步',
+    dateLabel: item.label,
     badgeLabel: '',
     isFuture: item.kind === 'upcoming',
+    isActive: item.kind === 'current' && item.label === '当前',
     clickable: false,
   }))
 
@@ -552,6 +556,7 @@ const timelineItems = computed<CycleTimelineItem[]>(() => {
     dateLabel: formatShortDate(record.date),
     badgeLabel: '',
     isFuture: !!record._is_future,
+    isActive: false,
     clickable: true,
     recordId: record._id,
   }))

@@ -23,9 +23,13 @@ describe('breeding cycle page source contract', () => {
     expect(source).toContain('background: rgba(216, 203, 189, 0.42);')
   })
 
-  it('应在详情页顶部接入当前状态和下一步合成节点，而不是给第一条记录打最新', () => {
+  it('应在详情页顶部接入状态合成节点并使用合成标签，而不是给第一条记录打最新', () => {
     expect(source).toContain('buildBreedingTimelineSyntheticItems')
-    expect(source).toContain("dateLabel: item.kind === 'current' ? '当前' : '下一步'")
+    expect(source).toContain('dateLabel: item.label')
+    expect(source).toContain("isActive: item.kind === 'current' && item.label === '当前'")
+    expect(source).toContain("item.isActive ? 'timeline-dot--current' : ''")
+    expect(source).toContain("if (cycle.value.status === '已生产' && typeof litter.value?.weaned_at === 'number') return '已完成'")
+    expect(source).toContain("if (cycle.value.status === '失败' || cycle.value.status === '放弃') return '已终止'")
     expect(source).not.toContain('idx === 0')
     expect(source).not.toContain('最新')
   })
@@ -38,11 +42,23 @@ describe('breeding cycle page source contract', () => {
   })
 
   it('应仅在窝信息标题行保留详情入口', () => {
+    expect(source).toContain('BSectionLabel title="窝信息"')
     expect(source).toContain('litter-section-head__action')
     expect(source).toContain('查看详情')
     expect(source).not.toContain('litter-link-card__hint')
     expect(source).not.toContain('进入窝详情')
     expect(source).toContain('@click="goToLitter(litter._id)"')
+  })
+
+  it('应把窝信息放在周期概要之后、费用和时间线之前', () => {
+    const summaryIndex = source.indexOf('<!-- 周期信息卡片 -->')
+    const litterIndex = source.indexOf('<!-- 窝信息 -->')
+    const costIndex = source.indexOf('<!-- 费用 -->')
+    const timelineIndex = source.indexOf('<!-- 时间线 -->')
+    expect(summaryIndex).toBeGreaterThanOrEqual(0)
+    expect(litterIndex).toBeGreaterThan(summaryIndex)
+    expect(costIndex).toBeGreaterThan(litterIndex)
+    expect(timelineIndex).toBeGreaterThan(costIndex)
   })
 
   it('周期费用应优先显示归一化分类而不是备注', () => {

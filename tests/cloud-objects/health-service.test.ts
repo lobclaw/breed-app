@@ -1038,10 +1038,14 @@ describe('health-service', () => {
         { _id: 'recover_daily_2', medication_task_id: 'med_recover_batch', family_id: familyId, status: 'completed' },
       ])
 
-      const result = await healthService.recoverIllnesses.call(ctx, { illnessIds: ['ill_recover_batch'] })
+      const recoveryDate = now
+      const result = await healthService.recoverIllnesses.call(ctx, { illnessIds: ['ill_recover_batch'], recoveryDate })
 
       expect(result.data.recoveredIllnessIds).toEqual(['ill_recover_batch'])
       expect(result.data.cancelledMedicationTaskIds).toEqual(['med_recover_batch'])
+      const { data: illness } = await db.collection('health_records').doc('ill_recover_batch').get()
+      expect(illness[0].details.treatment_status).toBe('已康复')
+      expect(illness[0].details.recovery_date).toBe(recoveryDate)
     })
 
     it('recoverIllnesses 在 baseVersion 过期时应返回 conflict', async () => {

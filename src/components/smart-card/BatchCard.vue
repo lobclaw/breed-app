@@ -49,7 +49,7 @@
     <view v-if="!acting" class="card-actions">
       <view class="btn btn--primary" :class="`btn--primary-${cardTone.color}`" @click="batchComplete">
         <text class="material-icons-round btn-icon btn-icon--white">check_circle</text>
-        <text class="btn-text btn-text--white">完成全部</text>
+        <text class="btn-text btn-text--white">{{ primaryActionLabel }}</text>
       </view>
       <view class="btn btn--secondary" :class="`btn--secondary-${cardTone.color}`" @click="batchPostpone">
         <text class="btn-text" :class="`btn-text--${cardTone.color}`">推迟</text>
@@ -142,6 +142,7 @@ const visibleDogs = computed(() => {
 })
 const totalDogs = computed(() => progressState.value.totalDogs)
 const doneCount = computed(() => progressState.value.doneCount)
+const primaryActionLabel = computed(() => totalDogs.value === 1 ? '完成' : '完成全部')
 const firstTaskType = computed(() => props.card.tasks?.[0]?.type || '')
 const cardTone = computed(() => {
   if (props.card.priority === 'overdue') return getHealthTypeTone(firstTaskType.value, 'overdue')

@@ -240,6 +240,7 @@
 - 疾病记录继续保持“一条记录 = 一个主疾病/病程”
 - `details.primary_condition` 为疾病主字段；为兼容旧逻辑，新写入时继续同步写 `details.condition`
 - `details.symptom_tags` 用于保存症状/表现，可多选，不参与唯一性校验
+- `details.recovery_date` 用于保存疾病标记为 `已康复` 时的康复日期，按业务日期 timestamp 毫秒数保存
 - 同一犬只在未康复期间，不允许存在同主疾病重复疾病记录
 
 ### 3.6 `medication_tasks`

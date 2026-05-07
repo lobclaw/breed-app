@@ -43,6 +43,14 @@ describe('local-first source contract', () => {
     expect(repositorySource).not.toContain('const days = Math.floor((Date.now() - birthTs) / 86400000)')
   })
 
+  it('BDogPicker 的 sheet-only 单选也应支持 selectedIds 默认选中态', () => {
+    const pickerSource = readWorkspaceFile('src/components/form/BDogPicker.vue')
+    expect(pickerSource).toContain('selectedIds.value = !hasModelValue.value')
+    expect(pickerSource).toContain('if (!hasModelValue.value) {')
+    expect(pickerSource).not.toContain('selectedIds.value = !hasModelValue.value && props.multiple')
+    expect(pickerSource).not.toContain('if (!hasModelValue.value && props.multiple) {')
+  })
+
   it('应确保已迁移的页面详情读取不再直接依赖云端 detail 接口', () => {
     const pageReadContracts: Array<{ file: string; forbiddenReads: string[] }> = [
       {

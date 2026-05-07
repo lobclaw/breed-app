@@ -290,6 +290,7 @@ describe('dogBreedingSummary', () => {
         kept: 2,
       },
       birth_type: '顺产',
+      weaned_at: new Date('2026-05-20T00:00:00+08:00').getTime(),
       created_by: 'user-1',
       created_at: new Date('2026-04-20T00:00:00+08:00').getTime(),
       updated_at: new Date('2026-04-20T00:00:00+08:00').getTime(),
@@ -298,6 +299,20 @@ describe('dogBreedingSummary', () => {
     expect(summary.title).toBe('第2次周期')
     expect(summary.meta).toBe('2026-02-18 · 种公: 团团')
     expect(summary.result).toBe('存活 3/4 · 在养 2')
+    expect(summary.statusText).toBe('已完成')
+    expect(summary.statusTone).toBe('green')
+    expect(summary.statusIcon).toBe('check_circle')
+  })
+
+  it('失败和放弃的历史周期摘要应显示已终止', () => {
+    const failed = buildHistoryCycleSummaryViewModel(createCycle({ status: '失败' }), null)
+    const abandoned = buildHistoryCycleSummaryViewModel(createCycle({ status: '放弃' }), null)
+
+    expect(failed.statusText).toBe('已终止')
+    expect(failed.statusTone).toBe('red')
+    expect(failed.statusIcon).toBe('close')
+    expect(abandoned.statusText).toBe('已终止')
+    expect(abandoned.statusTone).toBe('red')
   })
 
   it('已生产但未断奶的周期应归为当前进行中，不进入繁育历史', () => {

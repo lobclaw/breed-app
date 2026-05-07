@@ -1026,7 +1026,7 @@ describe('task-service', () => {
       expect(cards[0].dogs[0].relationType).toBe('standalone')
     })
 
-    it('不同疫苗类型的同日任务不应合并到同一批量卡', () => {
+    it('不同疫苗类型的同日任务应拆成不同批量卡，单只犬也不回落到单犬卡', () => {
       const dueDate = todayStart.getTime() + 1000
       const tasks = [
         {
@@ -1056,8 +1056,45 @@ describe('task-service', () => {
       const cards = mergeTasks(tasks, [], [])
 
       expect(cards).toHaveLength(2)
-      expect(cards.every((c: any) => c.cardType === 'dog')).toBe(true)
+      expect(cards.every((c: any) => c.cardType === 'batch')).toBe(true)
       expect(cards.map((c: any) => c.tasks[0].display_title)).toEqual(['疫苗 · 卫佳5', '疫苗 · 狂犬'])
+      expect(cards.every((c: any) => c.dogs)).toBe(true)
+      expect(cards.every((c: any) => c.dogs.length === 1)).toBe(true)
+    })
+
+    it('同一只犬的疫苗和驱虫同日提醒应拆成两张批量卡', () => {
+      const dueDate = todayStart.getTime() + 1000
+      const tasks = [
+        {
+          _id: 'single_vac',
+          dog_id: 'dog_1',
+          dog_name: '妮蔻',
+          type: 'vaccination',
+          title: '疫苗',
+          due_date: dueDate,
+          priority: 'today',
+          status: 'pending',
+          details: { vaccine_type: '卫佳10' },
+        },
+        {
+          _id: 'single_dew',
+          dog_id: 'dog_1',
+          dog_name: '妮蔻',
+          type: 'deworming',
+          title: '驱虫',
+          due_date: dueDate,
+          priority: 'today',
+          status: 'pending',
+          details: { deworming_type: 'external', drug_name: '博来恩' },
+        },
+      ]
+
+      const cards = mergeTasks(tasks, [], [])
+
+      expect(cards).toHaveLength(2)
+      expect(cards.every((card: any) => card.cardType === 'batch')).toBe(true)
+      expect(cards.map((card: any) => card.tasks[0].type)).toEqual(['vaccination', 'deworming'])
+      expect(cards.every((card: any) => card.dogs.length === 1)).toBe(true)
     })
 
     it('相同疫苗类型的同日任务应合并并显示具体疫苗名', () => {

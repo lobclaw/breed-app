@@ -15,7 +15,7 @@
 <script setup lang="ts">
 const props = withDefaults(defineProps<{
   icon: string
-  color?: 'red' | 'amber' | 'green' | 'blue' | 'plum' | 'rose' | 'teal'
+  color?: 'red' | 'amber' | 'green' | 'blue' | 'plum' | 'rose' | 'teal' | 'gray'
   size?: number
 }>(), {
   color: 'green',
@@ -44,5 +44,6 @@ const iconSize = props.size <= 28 ? 16 : 20
   &--plum { background: var(--icon-plum); .b-icon-box__icon { color: var(--plum); } }
   &--rose { background: var(--icon-rose); .b-icon-box__icon { color: var(--rose); } }
   &--teal { background: var(--icon-teal); .b-icon-box__icon { color: var(--teal); } }
+  &--gray { background: var(--card-dim); .b-icon-box__icon { color: var(--text-3); } }
 }
 </style>

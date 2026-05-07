@@ -63,12 +63,14 @@ describe('breedingTimeline', () => {
     expect(items[0]).toMatchObject({
       kind: 'upcoming',
       tone: 'gray',
+      label: '下一步',
       title: '待产',
       summary: '预产期 2026-05-01 · 还有10天',
     })
     expect(items[1]).toMatchObject({
       kind: 'current',
       tone: 'rose',
+      label: '当前',
       title: '怀孕第52天',
       summary: '预产期 2026-05-01',
     })
@@ -98,12 +100,14 @@ describe('breedingTimeline', () => {
     expect(items[0]).toMatchObject({
       kind: 'upcoming',
       tone: 'gray',
+      label: '下一步',
       title: '待断奶',
       summary: '出生第6天',
     })
     expect(items[1]).toMatchObject({
       kind: 'current',
       tone: 'amber',
+      label: '当前',
       title: '哺乳第6天',
       summary: '生产于 2026-04-16',
     })
@@ -130,5 +134,27 @@ describe('breedingTimeline', () => {
 
     expect(title).toBe('已断奶')
     expect(items.map(item => item.key)).toEqual(['current'])
+    expect(items[0]).toMatchObject({
+      kind: 'current',
+      label: '完成',
+      tone: 'green',
+      title: '已断奶',
+      summary: '断奶于 2026-04-21',
+    })
+  })
+
+  it('失败或放弃的周期应把当前节点标记为终止', () => {
+    const items = buildBreedingTimelineSyntheticItems(createCycle({
+      status: '失败',
+    }), [], now)
+
+    expect(items.map(item => item.key)).toEqual(['current'])
+    expect(items[0]).toMatchObject({
+      kind: 'current',
+      label: '终止',
+      tone: 'red',
+      title: '失败',
+      summary: '失败',
+    })
   })
 })

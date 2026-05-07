@@ -159,7 +159,7 @@
         <!-- 窝利润 -->
         <template v-if="hasProfit">
           <BSectionLabel title="窝利润" color="green" />
-          <BCard color="green" :pressable="false">
+          <BCard color="green" @click="goProfitDetail">
             <view class="profit-row">
               <text class="profit-label">收入</text>
               <text class="profit-value" style="color: var(--red);">¥{{ (litter.income || 0).toLocaleString() }}</text>
@@ -171,7 +171,10 @@
             <view class="profit-divider" />
             <view class="profit-row" style="padding-top: 8px;">
               <text class="profit-label">净利润</text>
-              <text class="profit-net">¥{{ ((litter.income || 0) - (litter.expense || 0)).toLocaleString() }}</text>
+              <view class="profit-net-row">
+                <text class="profit-net">¥{{ ((litter.income || 0) - (litter.expense || 0)).toLocaleString() }}</text>
+                <text class="material-icons-round profit-chevron">chevron_right</text>
+              </view>
             </view>
           </BCard>
         </template>
@@ -390,7 +393,7 @@ function onBirthDateConfirm(value: number | string) {
   editBirthDateValue.value = value
 }
 
-const soldCount = computed(() => puppies.value.filter(p => p.disposition === 'sold').length)
+const soldCount = computed(() => puppies.value.filter(p => normalizeDisposition(p.disposition) === '已售').length)
 const hasProfit = computed(() => litter.value && ((litter.value.income || 0) > 0 || (litter.value.expense || 0) > 0))
 
 function formatDate(ts: number) {
@@ -405,6 +408,14 @@ function goToDog(dogId: string) {
 
 function goWeightEntry() {
   uni.navigateTo({ url: `/pages/health/batch-weight?litterId=${litterId}` })
+}
+
+function goProfitDetail() {
+  const litterName = litter.value?.dam_name
+    ? `${litter.value.dam_name}${litter.value.litter_number ? `第${litter.value.litter_number}窝` : '窝'}`
+    : ''
+  const query = litterName ? `&litterName=${encodeURIComponent(litterName)}` : ''
+  uni.navigateTo({ url: `/pages/finance/litter-profit?litterId=${litterId}${query}` })
 }
 
 function editBirthDate() {
@@ -437,24 +448,39 @@ function editNotes() {
   )
 }
 
+function normalizeDisposition(disposition?: string) {
+  const value = String(disposition || '').trim()
+  const legacyMap: Record<string, string> = {
+    keeping: '在养',
+    for_sale: '待售',
+    reserved: '已预定',
+    sold: '已售',
+    adopted: '已领养',
+    gifted: '已赠送',
+    retained: '自留',
+    retired: '已退休',
+    dead: '已故',
+  }
+  return legacyMap[value] || value || '在养'
+}
+
 function dispClass(disposition: string) {
   const map: Record<string, string> = {
-    keeping: 'disp-keeping',
-    for_sale: 'disp-for-sale',
-    sold: 'disp-sold',
-    gifted: 'disp-gifted',
+    在养: 'disp-keeping',
+    自留: 'disp-retained',
+    待售: 'disp-for-sale',
+    已预定: 'disp-reserved',
+    已售: 'disp-sold',
+    已领养: 'disp-adopted',
+    已赠送: 'disp-gifted',
+    已退休: 'disp-retired',
+    已故: 'disp-dead',
   }
-  return map[disposition] || 'disp-keeping'
+  return map[normalizeDisposition(disposition)] || 'disp-keeping'
 }
 
 function dispLabel(disposition: string) {
-  const map: Record<string, string> = {
-    keeping: '在养',
-    for_sale: '待售',
-    sold: '已售',
-    gifted: '已赠送',
-  }
-  return map[disposition] || '在养'
+  return normalizeDisposition(disposition)
 }
 
 function showSubmitBanner(message: string) {
@@ -1123,9 +1149,14 @@ onShow(() => {
 }
 
 .disp-keeping { background: var(--card-dim); color: var(--text-3); }
+.disp-retained { background: var(--rose-soft); color: var(--rose); }
 .disp-for-sale { background: var(--amber-soft); color: var(--amber); }
-.disp-sold { background: var(--green-soft); color: var(--green); }
-.disp-gifted { background: var(--blue-soft); color: var(--blue); }
+.disp-reserved { background: var(--blue-soft); color: var(--blue); }
+.disp-sold { background: var(--teal-soft); color: var(--teal); }
+.disp-adopted { background: var(--blue-soft); color: var(--blue); }
+.disp-gifted { background: var(--plum-soft); color: var(--plum); }
+.disp-retired { background: var(--rose-soft); color: var(--rose); }
+.disp-dead { background: var(--red-soft); color: var(--red); }
 
 /* 利润 */
 .profit-row {
@@ -1159,6 +1190,18 @@ onShow(() => {
   font-weight: 800;
   color: var(--primary);
   font-family: var(--font-display);
+}
+
+.profit-net-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.profit-chevron {
+  font-size: 18px;
+  color: var(--text-4);
+  line-height: 1;
 }
 
 /* 操作按钮 */

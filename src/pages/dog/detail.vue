@@ -262,7 +262,7 @@
             <text class="dog-detail__sec-link" @click="activeTab = 'health'">查看全部</text>
           </view>
 
-          <view v-if="!healthRecordsLoaded" class="dog-detail__rec-list dog-detail__rec-list--skeleton">
+          <view v-if="!healthTabLoaded" class="dog-detail__rec-list dog-detail__rec-list--skeleton">
             <view v-for="record in 2" :key="record" class="dog-detail__rec-item dog-detail__rec-item--skeleton">
               <view class="dog-detail__rec-icon dog-detail__rec-icon--skeleton dog-detail__skeleton-shimmer" />
               <view class="dog-detail__rec-body">
@@ -273,26 +273,26 @@
               <view class="dog-detail__rec-chevron-skeleton dog-detail__skeleton-shimmer" />
             </view>
           </view>
-          <view v-else-if="healthRecords.length > 0" class="dog-detail__rec-list">
+          <view v-else-if="recentHealthTimeline.length > 0" class="dog-detail__rec-list">
             <view
-              v-for="record in healthRecords.slice(0, 3)"
-              :key="record._id || record.id"
+              v-for="item in recentHealthTimeline"
+              :key="item.key"
               class="dog-detail__rec-item"
-              @click="goToHealthDetail(record._id || record.id)"
+              @click="openHealthTimelineItem(item)"
             >
-              <view class="dog-detail__rec-icon" :class="`dog-detail__rec-icon--${healthIconColor(record.type)}`">
-                <text class="material-icons-round">{{ healthIcon(record.type) }}</text>
+              <view class="dog-detail__rec-icon" :class="`dog-detail__rec-icon--${item.tone}`">
+                <text class="material-icons-round">{{ item.icon }}</text>
               </view>
               <view class="dog-detail__rec-body">
-                <text class="dog-detail__rec-title">{{ recentHealthRecordTitle(record) }}</text>
-                <text class="dog-detail__rec-sub">{{ formatDate(record.date) }}</text>
+                <text class="dog-detail__rec-title">{{ item.title }}</text>
+                <text class="dog-detail__rec-sub">{{ item.subtitle }}</text>
               </view>
               <view
-                v-if="illnessStatusLabel(record)"
+                v-if="item.tagText"
                 class="dog-detail__rec-tag"
-                :class="`dog-detail__rec-tag--${illnessStatusTone(record)}`"
+                :class="`dog-detail__rec-tag--${item.tagTone}`"
               >
-                <text class="dog-detail__rec-tag-text">{{ illnessStatusLabel(record) }}</text>
+                <text class="dog-detail__rec-tag-text">{{ item.tagText }}</text>
               </view>
               <text class="material-icons-round dog-detail__rec-chevron">chevron_right</text>
             </view>
@@ -301,7 +301,7 @@
             v-else
             icon="healing"
             title="暂无健康记录"
-            description="记录疫苗、驱虫、疾病等信息"
+            description="记录疫苗、驱虫、疾病、用药等信息"
           />
         </view>
 
@@ -593,16 +593,16 @@
                 class="dog-detail__cycle-card"
                 @click="goToCycle(cycle._id)"
               >
-                <view class="dog-detail__rec-icon" :class="cycle.status === '已生产' ? 'dog-detail__rec-icon--green' : 'dog-detail__rec-icon--gray'">
-                  <text class="material-icons-round">{{ cycle.status === '已生产' ? 'check_circle' : 'close' }}</text>
+                <view class="dog-detail__rec-icon" :class="`dog-detail__rec-icon--${cycle.statusTone}`">
+                  <text class="material-icons-round">{{ cycle.statusIcon }}</text>
                 </view>
                 <view class="dog-detail__cycle-body">
                   <text class="dog-detail__cycle-title">{{ cycle.summaryTitle }}</text>
                   <text v-if="cycle.summaryMeta" class="dog-detail__cycle-meta">{{ cycle.summaryMeta }}</text>
                   <text v-if="cycle.summaryResult" class="dog-detail__cycle-result">{{ cycle.summaryResult }}</text>
                 </view>
-                <view v-if="cycle.status" class="dog-detail__rec-tag" :class="cycle.status === '已生产' ? 'dog-detail__rec-tag--green' : 'dog-detail__rec-tag--gray'">
-                  <text class="dog-detail__rec-tag-text">{{ cycle.status }}</text>
+                <view v-if="cycle.statusText" class="dog-detail__rec-tag" :class="`dog-detail__rec-tag--${cycle.statusTone}`">
+                  <text class="dog-detail__rec-tag-text">{{ cycle.statusText }}</text>
                 </view>
                 <text class="material-icons-round dog-detail__rec-chevron">chevron_right</text>
               </view>
@@ -1393,7 +1393,7 @@ const isPuppyDetail = computed(() => dog.value?.role === '幼崽')
 const isExternalSireDetail = computed(() => dog.value?.role === '外部种公')
 const displayStatuses = computed(() => isExternalSireDetail.value ? [] : statuses.value.filter((status: any) => status?.type !== '正常'))
 const showTertiaryStatSkeleton = computed(() => !isPuppyDetail.value && !isExternalSireDetail.value && !cyclesLoaded.value)
-const overviewHydrating = computed(() => !!dog.value && !isExternalSireDetail.value && (!healthRecordsLoaded.value || showTertiaryStatSkeleton.value))
+const overviewHydrating = computed(() => !!dog.value && !isExternalSireDetail.value && (!healthTabLoaded.value || showTertiaryStatSkeleton.value))
 const breedingTabLoaded = computed(() => cyclesLoaded.value && littersLoaded.value && (!isExternalSireDetail.value || externalSireMatingRecordsLoaded.value))
 const healthTabLoaded = computed(() => healthRecordsLoaded.value && medicationHistoryLoaded.value)
 
@@ -1565,6 +1565,7 @@ const healthTimeline = computed<UnifiedHealthTimelineItem[]>(() => {
 })
 
 const hasHealthTimeline = computed(() => healthTimeline.value.length > 0)
+const recentHealthTimeline = computed(() => healthTimeline.value.slice(0, 3))
 
 const filteredHealthTimeline = computed(() => {
   if (activeHealthFilter.value === 'all') return healthTimeline.value
@@ -1903,6 +1904,9 @@ const historyCycleCards = computed(() => {
       summaryTitle: summary.title,
       summaryMeta: summary.meta,
       summaryResult: summary.result,
+      statusText: summary.statusText,
+      statusTone: summary.statusTone,
+      statusIcon: summary.statusIcon,
     }
   })
 })
@@ -2696,8 +2700,16 @@ function goToIncomeAdd() {
 }
 
 function goToFinanceList() {
-  const dogName = encodeURIComponent(dog.value?.name || '')
-  uni.navigateTo({ url: `/pages/finance/index?dogId=${dogId}&dogName=${dogName}` })
+  const dogName = dog.value?.name || ''
+  try {
+    uni.setStorageSync(FINANCE_ENTRY_DOG_FILTER_KEY, JSON.stringify({ dogId, dogName }))
+  } catch {}
+  uni.switchTab({
+    url: '/pages/finance/index',
+    fail() {
+      uni.showToast({ title: '财务页打开失败', icon: 'none' })
+    },
+  })
 }
 
 function goToStartSale() {
@@ -2932,7 +2944,7 @@ function openRecoveryConfirm() {
 async function doRecovery() {
   const illnessId = latestActiveIllnessRecord.value?._id
   if (!illnessId) return
-  await localSyncRuntime.recoverIllnessesLocally(currentFamily.value?._id || '', [illnessId])
+  await localSyncRuntime.recoverIllnessesLocally(currentFamily.value?._id || '', [illnessId], [], recoveryDate.value)
   showRecoverySheet.value = false
   await loadData()
 }

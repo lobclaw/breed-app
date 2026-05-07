@@ -1013,6 +1013,8 @@ module.exports = {
       ...(Array.isArray(input?.medicationTaskIds) ? input.medicationTaskIds : []),
       ...(Array.isArray(input?.medication_task_ids) ? input.medication_task_ids : []),
     ])
+    const recoveryDateInput = input?.recoveryDate ?? input?.recovery_date ?? input?.recovered_at
+    const recoveryDate = Number.isFinite(Number(recoveryDateInput)) ? Number(recoveryDateInput) : now
 
     if (illnessIds.length === 0) throw new Error('缺少疾病记录 ID')
 
@@ -1037,6 +1039,7 @@ module.exports = {
       type: 'illness',
     }).update({
       'details.treatment_status': '已康复',
+      'details.recovery_date': recoveryDate,
       ...buildVersionUpdate(dbCmd, now),
     })
 

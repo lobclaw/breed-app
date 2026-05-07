@@ -20,7 +20,7 @@ describe('dog detail loading contract', () => {
     expect(source).toContain(`const pageLoadStage = ref<'bootstrapping' | 'ready'>('bootstrapping')`)
     expect(source).toContain('const healthRecordsLoaded = ref(false)')
     expect(source).toContain('const cyclesLoaded = ref(false)')
-    expect(source).toContain('const overviewHydrating = computed(() => !!dog.value && !isExternalSireDetail.value && (!healthRecordsLoaded.value || showTertiaryStatSkeleton.value))')
+    expect(source).toContain('const overviewHydrating = computed(() => !!dog.value && !isExternalSireDetail.value && (!healthTabLoaded.value || showTertiaryStatSkeleton.value))')
     expect(source).toContain("const showBootstrapSkeleton = !silent && !hasLoadedOnce")
     expect(source).toContain("pageLoadStage.value = 'bootstrapping'")
     expect(source).toContain("pageLoadStage.value = 'ready'")
@@ -44,7 +44,8 @@ describe('dog detail loading contract', () => {
 
   it('应让概览与各 tab 在数据未回齐时使用局部骨架而非提前空态', () => {
     expect(source).toContain('v-if="showTertiaryStatSkeleton" class="dog-detail__stat-value-skeleton dog-detail__skeleton-shimmer"')
-    expect(source).toContain('v-if="!healthRecordsLoaded" class="dog-detail__rec-list dog-detail__rec-list--skeleton"')
+    expect(source).toContain('v-if="!healthTabLoaded" class="dog-detail__rec-list dog-detail__rec-list--skeleton"')
+    expect(source).toContain('const recentHealthTimeline = computed(() => healthTimeline.value.slice(0, 3))')
     expect(source).toContain('v-if="!breedingTabLoaded" class="dog-detail__tab-loading"')
     expect(source).toContain('v-if="!healthTabLoaded" class="dog-detail__tab-loading"')
     expect(source).toContain('v-if="!financeLoaded" class="dog-detail__tab-loading"')
