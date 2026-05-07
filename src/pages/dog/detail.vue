@@ -2115,8 +2115,10 @@ function illnessStatusSummary(record: any) {
 }
 
 function illnessStatusTag(record: any) {
+  const treatmentStatus = illnessTreatmentStatus(record)
+  if (treatmentStatus === '已康复') return treatmentStatus
   return joinDisplayParts([
-    illnessTreatmentStatus(record),
+    treatmentStatus,
     illnessSeverityLabel(record),
   ])
 }
@@ -4251,7 +4253,6 @@ onShow(() => {
 }
 .dog-detail__rec-tag--gray {
   background: var(--card-dim);
-  border: 1px solid var(--text-4);
   .dog-detail__rec-tag-text { color: var(--text-3); }
 }
 .dog-detail__rec-tag--rose {

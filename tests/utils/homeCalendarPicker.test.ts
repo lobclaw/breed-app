@@ -51,6 +51,12 @@ describe('home calendar picker contract', () => {
     expect(source).toContain('return `${formatFullDate(selectedDate.value)} · ${suffix}`')
   })
 
+  it('首页顶部统计应随当前日期模式切换统计来源', () => {
+    expect(source).toContain("const activeSummarySections = computed(() => viewMode.value === 'today' ? todaySections.value : daySections.value)")
+    expect(source).toContain("count: activeSummarySections.value.find(section => section.key === 'breeding')?.cards.length || 0")
+    expect(source).toContain(':id="`section-${section.key}`"')
+  })
+
   it('首页应接住 WeekStrip 的返回今日入口并复用日期切换链路', () => {
     expect(source).toContain('@jump-today="jumpToToday"')
     expect(source).toContain('function jumpToToday() {')

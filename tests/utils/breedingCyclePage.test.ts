@@ -37,11 +37,11 @@ describe('breeding cycle page source contract', () => {
     expect(source).toContain("{{ resolvedSireName || '未知' }}")
   })
 
-  it('应让窝信息卡显式表现为可进入详情', () => {
+  it('应仅在窝信息标题行保留详情入口', () => {
     expect(source).toContain('litter-section-head__action')
     expect(source).toContain('查看详情')
-    expect(source).toContain('litter-link-card__hint')
-    expect(source).toContain('进入窝详情')
+    expect(source).not.toContain('litter-link-card__hint')
+    expect(source).not.toContain('进入窝详情')
     expect(source).toContain('@click="goToLitter(litter._id)"')
   })
 

@@ -2329,6 +2329,214 @@ describe('local domain repository', () => {
     })
   })
 
+  it('单窝利润应保留财务分类并按来源记录展示细事件费用名', async () => {
+    const now = new Date('2026-04-18T10:00:00+08:00').getTime()
+    await localDb.replaceTable('families', [{
+      _id: 'fam_expense_event_display',
+      settings: {
+        custom_expense_categories: [],
+        custom_expense_category_groups: [],
+      },
+      updated_at: now,
+    }])
+    await localDb.replaceTable('dogs', [{
+      _id: 'dam_event_display',
+      family_id: 'fam_expense_event_display',
+      name: '奶糖',
+      role: '种狗',
+      gender: '母',
+      disposition: '在养',
+      updated_at: now,
+    }, {
+      _id: 'puppy_event_display_1',
+      family_id: 'fam_expense_event_display',
+      name: '小圆',
+      role: '幼崽',
+      origin_litter_id: 'litter_event_display',
+      updated_at: now,
+    }, {
+      _id: 'puppy_event_display_2',
+      family_id: 'fam_expense_event_display',
+      name: '小满',
+      role: '幼崽',
+      origin_litter_id: 'litter_event_display',
+      updated_at: now,
+    }])
+    await localDb.replaceTable('litters', [{
+      _id: 'litter_event_display',
+      family_id: 'fam_expense_event_display',
+      cycle_id: 'cycle_event_display',
+      dam_id: 'dam_event_display',
+      dam_name: '奶糖',
+      birth_date: now,
+      total_born: 2,
+      born_alive: 2,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('breeding_records', [{
+      _id: 'breeding_event_pregnancy',
+      family_id: 'fam_expense_event_display',
+      cycle_id: 'cycle_event_display',
+      dog_id: 'dam_event_display',
+      type: 'pregnancy_check',
+      date: now - 4 * 86400000,
+      details: { confirmed: true },
+      updated_at: now,
+      created_by: 'user_1',
+    }, {
+      _id: 'breeding_event_prenatal',
+      family_id: 'fam_expense_event_display',
+      cycle_id: 'cycle_event_display',
+      dog_id: 'dam_event_display',
+      type: 'prenatal_check',
+      date: now - 2 * 86400000,
+      details: { results: 'B超复查' },
+      updated_at: now,
+      created_by: 'user_1',
+    }])
+    await localDb.replaceTable('health_records', [{
+      _id: 'health_event_vaccine',
+      family_id: 'fam_expense_event_display',
+      dog_id: 'puppy_event_display_1',
+      type: 'vaccination',
+      date: now,
+      details: { vaccine_type: '六联' },
+      updated_at: now,
+    }, {
+      _id: 'health_event_deworming',
+      family_id: 'fam_expense_event_display',
+      dog_id: 'puppy_event_display_2',
+      type: 'deworming',
+      date: now,
+      details: { drug_name: '拜宠清' },
+      updated_at: now,
+    }])
+    await localDb.replaceTable('expenses', [{
+      _id: 'expense_event_pregnancy',
+      family_id: 'fam_expense_event_display',
+      total_amount: 100,
+      category: '孕检产检',
+      linked_cycle_id: 'cycle_event_display',
+      source_type: 'auto',
+      source_record_id: 'breeding_event_pregnancy',
+      date: now,
+      deleted_at: null,
+      updated_at: now,
+    }, {
+      _id: 'expense_event_prenatal',
+      family_id: 'fam_expense_event_display',
+      total_amount: 120,
+      category: '孕检产检',
+      linked_cycle_id: 'cycle_event_display',
+      source_type: 'auto',
+      source_record_id: 'breeding_event_prenatal',
+      date: now,
+      deleted_at: null,
+      updated_at: now,
+    }, {
+      _id: 'expense_event_vaccine',
+      family_id: 'fam_expense_event_display',
+      total_amount: 50,
+      category: '疫苗驱虫',
+      linked_dog_ids: ['puppy_event_display_1'],
+      source_type: 'auto',
+      source_record_id: 'health_event_vaccine',
+      date: now,
+      deleted_at: null,
+      updated_at: now,
+    }, {
+      _id: 'expense_event_deworming',
+      family_id: 'fam_expense_event_display',
+      total_amount: 60,
+      category: '疫苗驱虫',
+      linked_dog_ids: ['puppy_event_display_2'],
+      source_type: 'auto',
+      source_record_id: 'health_event_deworming',
+      date: now,
+      deleted_at: null,
+      updated_at: now,
+    }, {
+      _id: 'expense_event_note_fallback',
+      family_id: 'fam_expense_event_display',
+      total_amount: 70,
+      category: '检查化验',
+      linked_litter_id: 'litter_event_display',
+      source_type: 'auto',
+      source_record_id: 'missing_note_record',
+      notes: '血检复查',
+      date: now,
+      deleted_at: null,
+      updated_at: now,
+    }, {
+      _id: 'expense_event_split_note_fallback',
+      family_id: 'fam_expense_event_display',
+      total_amount: 2200,
+      category: '生产育幼',
+      linked_litter_id: 'litter_event_display',
+      source_type: 'auto',
+      source_record_id: 'missing_birth_record',
+      notes: '生产 · 多喂，量体温',
+      date: now,
+      deleted_at: null,
+      updated_at: now,
+    }, {
+      _id: 'expense_event_category_fallback',
+      family_id: 'fam_expense_event_display',
+      total_amount: 80,
+      category: '孕检',
+      linked_litter_id: 'litter_event_display',
+      source_type: 'auto',
+      source_record_id: 'missing_category_record',
+      date: now,
+      deleted_at: null,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('incomes', [])
+    await localDb.replaceTable('sale_records', [])
+
+    const rawExpenses = await localDb.getTable<any>('expenses')
+    expect(rawExpenses.find(item => item._id === 'expense_event_pregnancy')?.category).toBe('孕检产检')
+    expect(rawExpenses.find(item => item._id === 'expense_event_vaccine')?.category).toBe('疫苗驱虫')
+
+    const litterProfit = await getLocalLitterProfit('fam_expense_event_display', 'litter_event_display')
+    expect(litterProfit?.breedingCosts.map(item => ({ title: item.title, subtitle: item.subtitle }))).toEqual([
+      { title: '孕检', subtitle: '确认怀孕' },
+      { title: '产检', subtitle: 'B超复查' },
+    ])
+    expect(litterProfit?.breedingCosts.map(item => item.name)).toEqual([
+      '孕检 · 确认怀孕',
+      '产检 · B超复查',
+    ])
+    expect(litterProfit?.litterCosts.map(item => ({ title: item.title, subtitle: item.subtitle }))).toEqual([
+      { title: '血检复查', subtitle: '' },
+      { title: '生产', subtitle: '多喂，量体温' },
+      { title: '孕检产检', subtitle: '' },
+    ])
+    expect(litterProfit?.litterCosts.map(item => item.name)).toEqual([
+      '血检复查',
+      '生产 · 多喂，量体温',
+      '孕检产检',
+    ])
+    expect(litterProfit?.puppyCosts.map(item => ({ title: item.title, subtitle: item.subtitle }))).toEqual([
+      { title: '疫苗', subtitle: '六联' },
+      { title: '驱虫', subtitle: '拜宠清' },
+    ])
+    expect(litterProfit?.puppyCosts.map(item => item.name)).toEqual([
+      '疫苗 · 六联',
+      '驱虫 · 拜宠清',
+    ])
+
+    const summary = await getLocalFinancialSummary('fam_expense_event_display', {
+      period: 'monthly',
+      month: 4,
+      year: 2026,
+    })
+    expect(summary.categoryBreakdown).toEqual({
+      繁育投入: 2500,
+      医疗健康: 180,
+    })
+  })
+
   it('应为犬只详情页提供本地详情、历史、窝统计与体重投影', async () => {
     const now = new Date('2026-04-24T10:00:00+08:00').getTime()
     const runtimeNow = Date.now()

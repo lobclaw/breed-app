@@ -134,6 +134,7 @@
               v-if="section.cards.length > 0"
               class="home-section"
               :class="`home-section--${section.key}`"
+              :id="`section-${section.key}`"
             >
               <view class="section-label section-label--nested">
                 <view class="section-dot" :style="{ background: section.dotColor }" />
@@ -672,32 +673,33 @@ const todaySections = computed(() => [
     cards: cards.value.filter(card => card.sectionType === 'reminders' && card.priority !== 'overdue'),
   },
 ])
+const activeSummarySections = computed(() => viewMode.value === 'today' ? todaySections.value : daySections.value)
 const summaryPills = computed(() => [
   {
     key: 'overdue',
     label: '逾期',
-    count: todaySections.value.find(section => section.key === 'overdue')?.cards.length || 0,
+    count: activeSummarySections.value.find(section => section.key === 'overdue')?.cards.length || 0,
     dotColor: 'var(--red)',
     pillClass: 'pill-red',
   },
   {
     key: 'breeding',
     label: '繁育',
-    count: breedingCardsCount.value,
+    count: activeSummarySections.value.find(section => section.key === 'breeding')?.cards.length || 0,
     dotColor: 'var(--amber)',
     pillClass: 'pill-amber',
   },
   {
     key: 'reminders',
     label: '健康',
-    count: todaySections.value.find(section => section.key === 'reminders')?.cards.length || 0,
+    count: activeSummarySections.value.find(section => section.key === 'reminders')?.cards.length || 0,
     dotColor: 'var(--blue)',
     pillClass: 'pill-blue',
   },
   {
     key: 'therapy',
     label: '用药',
-    count: todaySections.value.find(section => section.key === 'therapy')?.cards.length || 0,
+    count: activeSummarySections.value.find(section => section.key === 'therapy')?.cards.length || 0,
     dotColor: 'var(--plum)',
     pillClass: 'pill-plum',
   },
@@ -1707,6 +1709,7 @@ const completedCards = ref(new Set<string>())
 const pendingCardExitPromises = new Set<Promise<void>>()
 const CARD_COMPLETE_CONFIRM_MS = 280
 const CARD_EXIT_MS = 220
+const SICK_ROW_EXIT_MS = 350
 
 function trackCardExit(promise: Promise<void>) {
   pendingCardExitPromises.add(promise)
@@ -2185,30 +2188,50 @@ function removeSickDogLocally(dogId: string, illnessId?: string) {
   const idx = list.value.findIndex(c => c.cardType === 'sick_observation')
   if (idx < 0) return
   const card = list.value[idx]
-  const dog = (card.dogs || []).find((d: any) => (illnessId ? d.illnessId === illnessId : d.dogId === dogId))
-  if (!dog) return
+  const currentDogs = Array.isArray(card.dogs) ? card.dogs : []
+  let touched = false
+  const nextDogs = currentDogs.map((dog: any) => {
+    if (!(illnessId ? dog.illnessId === illnessId : dog.dogId === dogId)) return dog
+    touched = true
+    return { ...dog, _removing: true }
+  })
+  if (!touched) return
 
   // 标记淡出动画
-  dog._removing = true
+  list.value[idx] = { ...card, dogs: nextDogs }
 
-  setTimeout(() => {
-    const remaining = (card.dogs || []).filter((d: any) => (illnessId ? d.illnessId !== illnessId : d.dogId !== dogId))
-    if (remaining.length === 0) {
-      // 最后一只：整张卡片滑出
-      markCardCompleting(card.id)
-      setTimeout(() => {
-        const ci = list.value.findIndex(c => c.id === card.id)
-        if (ci >= 0) {
-          list.value.splice(ci, 1)
-          counts.today = Math.max(0, counts.today - 1)
-          syncTodayDayCountFromVisibleCards()
-        }
-        clearCardCompleting(card.id)
-      }, 450)
-    } else {
-      card.dogs = remaining
-    }
-  }, 350)
+  trackCardExit(new Promise((resolve) => {
+    setTimeout(() => {
+      const currentIdx = list.value.findIndex(c => c.id === card.id)
+      if (currentIdx < 0) {
+        resolve()
+        return
+      }
+      const currentCard = list.value[currentIdx]
+      const remaining = (currentCard.dogs || []).filter((dog: any) => (
+        illnessId ? dog.illnessId !== illnessId : dog.dogId !== dogId
+      ))
+      if (remaining.length === 0) {
+        // 最后一只：整张卡片滑出
+        markCardCompleting(currentCard.id)
+        setTimeout(() => {
+          const ci = list.value.findIndex(c => c.id === currentCard.id)
+          if (ci >= 0) {
+            list.value.splice(ci, 1)
+            counts.today = Math.max(0, counts.today - 1)
+            syncTodayDayCountFromVisibleCards()
+            syncTaskStoreHomeCache()
+          }
+          clearCardCompleting(currentCard.id)
+          resolve()
+        }, CARD_EXIT_MS)
+      } else {
+        list.value[currentIdx] = { ...currentCard, dogs: remaining }
+        syncTaskStoreHomeCache()
+        resolve()
+      }
+    }, SICK_ROW_EXIT_MS)
+  }))
 }
 
 // 健康关注卡：操作菜单状态

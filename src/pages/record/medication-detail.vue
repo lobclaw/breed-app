@@ -90,7 +90,7 @@
       <view class="card-feed">
         <view class="detail-summary detail-summary--plum">
           <view class="detail-summary__main">
-            <view class="detail-summary__tag">
+            <view class="detail-summary__tag" :class="`detail-summary__tag--${statusTagTone}`">
               <text class="detail-summary__tag-text">{{ statusText }}</text>
             </view>
             <text class="detail-summary__title">{{ task.drug_name || '用药任务' }}</text>
@@ -370,6 +370,11 @@ const statusText = computed(() => {
   if (task.value.status === 'cancelled') return '已取消'
   return '进行中'
 })
+const statusTagTone = computed<'plum' | 'green' | 'gray'>(() => {
+  if (task.value?.status === 'completed') return 'green'
+  if (task.value?.status === 'cancelled') return 'gray'
+  return 'plum'
+})
 
 const dosageText = computed(() => formatMedicationDosage(task.value?.dosage, task.value?.dosage_unit))
 const frequencyText = computed(() => formatMedicationFrequency(task.value?.frequency))
@@ -419,13 +424,13 @@ const medicationMethodSummary = computed(() => {
 
 const statusBannerBg = computed(() => {
   if (task.value?.status === 'completed') return 'var(--green-soft)'
-  if (task.value?.status === 'cancelled') return 'var(--red-soft)'
+  if (task.value?.status === 'cancelled') return 'var(--card-dim)'
   return 'var(--plum-soft)'
 })
 
 const statusBannerColor = computed(() => {
   if (task.value?.status === 'completed') return 'var(--green)'
-  if (task.value?.status === 'cancelled') return 'var(--red)'
+  if (task.value?.status === 'cancelled') return 'var(--text-3)'
   return 'var(--plum)'
 })
 const statusBannerText = computed(() => {
@@ -920,6 +925,14 @@ onShow(() => {
   font-size: 11px;
   font-weight: 700;
   color: var(--plum);
+}
+.detail-summary__tag--green {
+  background: var(--green-soft);
+  .detail-summary__tag-text { color: var(--green); }
+}
+.detail-summary__tag--gray {
+  background: var(--card-dim);
+  .detail-summary__tag-text { color: var(--text-3); }
 }
 .detail-summary__title {
   font-size: 18px;

@@ -70,6 +70,35 @@ const LEGACY_LOCAL_INCOME_TYPE_MAP: Record<string, string> = {
   配种费收入: '其他',
 }
 
+type ExpenseSourceRecord = Partial<BreedingRecord | HealthRecord> & Record<string, any>
+type ExpenseDisplayInfo = {
+  title: string
+  subtitle: string
+  name: string
+}
+
+const EXPENSE_SOURCE_TYPE_LABELS: Record<string, string> = {
+  vaccination: '疫苗',
+  deworming: '驱虫',
+  illness: '治疗',
+  heat: '发情',
+  heat_observation: '发情观察',
+  follicle_check: '卵泡检查',
+  mating: '配种',
+  pregnancy_check: '孕检',
+  prenatal_check: '产检',
+  pre_labor: '临产监测',
+  birth: '生产',
+  abnormal_termination: '异常终止',
+}
+const EXPENSE_SOURCE_LABEL_SET = new Set(Object.values(EXPENSE_SOURCE_TYPE_LABELS))
+
+const DEWORMING_TYPE_LABELS: Record<string, string> = {
+  internal: '内驱',
+  external: '外驱',
+  combo: '内外同驱',
+}
+
 function startOfDay(ts: number) {
   const offsetMs = 8 * 60 * 60 * 1000
   const sourceTs = Number.isFinite(Number(ts)) ? Number(ts) : Date.now()
@@ -1422,8 +1451,87 @@ function buildExpenseLinkedRef(expense: Expense & Record<string, any>, linkedDog
   return ''
 }
 
-function buildExpenseName(expense: Partial<Expense> & Record<string, any>, fallback = '费用') {
+function buildExpenseName(expense: Record<string, any>, fallback = '费用') {
   return expense.notes || normalizeExpenseCategoryName(expense.category) || fallback
+}
+
+function splitExpenseFallbackDisplayInfo(name: string): ExpenseDisplayInfo {
+  const normalized = normalizeExpenseDisplayPart(name)
+  const [head, ...tailParts] = normalized.split(' · ')
+  const title = normalizeExpenseDisplayPart(head)
+  const subtitle = normalizeExpenseDisplayPart(tailParts.join(' · '))
+  if (title && subtitle && EXPENSE_SOURCE_LABEL_SET.has(title)) {
+    return { title, subtitle, name: normalized }
+  }
+  return { title: normalized, subtitle: '', name: normalized }
+}
+
+function normalizeExpenseDisplayPart(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : ''
+}
+
+function getPregnancyCheckResultText(details: Record<string, any> = {}) {
+  if (normalizeExpenseDisplayPart(details.result)) return normalizeExpenseDisplayPart(details.result)
+  if (details.confirmed === '是' || details.confirmed === true) return '确认怀孕'
+  if (details.confirmed === '否' || details.confirmed === false) return '未怀孕'
+  return ''
+}
+
+function getExpenseSourceDetailText(record: ExpenseSourceRecord) {
+  const details = record.details || {}
+  if (record.type === 'vaccination') {
+    return normalizeExpenseDisplayPart(details.vaccine_type || details.vaccine_name || record.notes)
+  }
+  if (record.type === 'deworming') {
+    const drugName = normalizeExpenseDisplayPart(details.drug_name)
+    if (drugName) return drugName
+    const dewormingType = normalizeExpenseDisplayPart(details.deworming_type)
+    return DEWORMING_TYPE_LABELS[dewormingType] || dewormingType || normalizeExpenseDisplayPart(record.notes)
+  }
+  if (record.type === 'pregnancy_check') {
+    return getPregnancyCheckResultText(details) || normalizeExpenseDisplayPart(record.notes)
+  }
+  if (record.type === 'prenatal_check') {
+    return normalizeExpenseDisplayPart(details.results || details.result || record.notes)
+  }
+  if (record.type === 'follicle_check') {
+    return normalizeExpenseDisplayPart(details.result || record.notes)
+  }
+  if (record.type === 'mating') {
+    return normalizeExpenseDisplayPart(details.sire_name || details.male_name || record.notes)
+  }
+  if (record.type === 'birth') {
+    return normalizeExpenseDisplayPart(details.birth_type || record.notes)
+  }
+  return normalizeExpenseDisplayPart(record.notes)
+}
+
+export function buildExpenseDisplayName(
+  expense: Record<string, any>,
+  sourceRecordMap: Map<string, ExpenseSourceRecord> = new Map(),
+  fallback = '费用',
+) {
+  return buildExpenseDisplayInfo(expense, sourceRecordMap, fallback).name
+}
+
+export function buildExpenseDisplayInfo(
+  expense: Record<string, any>,
+  sourceRecordMap: Map<string, ExpenseSourceRecord> = new Map(),
+  fallback = '费用',
+): ExpenseDisplayInfo {
+  const sourceRecordId = normalizeExpenseDisplayPart(expense.source_record_id)
+  const sourceRecord = sourceRecordId ? sourceRecordMap.get(sourceRecordId) : null
+  const sourceLabel = sourceRecord?.type ? EXPENSE_SOURCE_TYPE_LABELS[sourceRecord.type] : ''
+  if (sourceRecord && sourceLabel) {
+    const detailText = getExpenseSourceDetailText(sourceRecord)
+    return {
+      title: sourceLabel,
+      subtitle: detailText,
+      name: detailText ? `${sourceLabel} · ${detailText}` : sourceLabel,
+    }
+  }
+  const fallbackName = buildExpenseName(expense, fallback)
+  return splitExpenseFallbackDisplayInfo(fallbackName)
 }
 
 export async function getLocalExpenseDetail(familyId: string, expenseId: string) {
@@ -1837,12 +1945,14 @@ export async function getLocalProjectionParams(familyId: string) {
 export async function getLocalLitterProfit(familyId: string, litterId: string) {
   if (!familyId || !litterId) return null
 
-  const [litter, puppies, incomes, sales, expenses] = await Promise.all([
+  const [litter, puppies, incomes, sales, expenses, breedingRecords, healthRecords] = await Promise.all([
     localDb.findById<Litter>('litters', litterId),
     localDb.query<any>('dogs', row => row.family_id === familyId && row.origin_litter_id === litterId && !row.deleted_at),
     localDb.query<Income>('incomes', row => row.family_id === familyId && !row.deleted_at),
     localDb.query<SaleRecord>('sale_records', row => row.family_id === familyId && !row.deleted_at),
     localDb.query<Expense>('expenses', row => row.family_id === familyId && !row.deleted_at),
+    localDb.query<BreedingRecord & { deleted_at?: number | null }>('breeding_records', row => row.family_id === familyId && !row.deleted_at),
+    localDb.query<HealthRecord & { deleted_at?: number | null }>('health_records', row => row.family_id === familyId && !row.deleted_at),
   ])
 
   if (!litter || litter.family_id !== familyId) return null
@@ -1872,23 +1982,33 @@ export async function getLocalLitterProfit(familyId: string, litterId: string) {
 
   const litterExpenseIds = new Set(litterExpenses.map(item => item._id))
   const exclusiveCycleExpenses = cycleExpenses.filter(expense => !litterExpenseIds.has(expense._id))
+  const sourceRecordMap = new Map<string, ExpenseSourceRecord>([
+    ...breedingRecords.map(record => [record._id, record] as [string, ExpenseSourceRecord]),
+    ...healthRecords.map(record => [record._id, record] as [string, ExpenseSourceRecord]),
+  ])
 
-  const breedingCosts = exclusiveCycleExpenses.map(expense => ({
-    id: expense._id,
-    name: buildExpenseName(expense, '繁育费用'),
-    amount: Number(expense.total_amount || 0),
-  }))
-  const litterCosts = litterExpenses.map(expense => ({
-    id: expense._id,
-    name: buildExpenseName(expense, '窝费用'),
-    amount: Number(expense.total_amount || 0),
-  }))
+  const breedingCosts = exclusiveCycleExpenses.map((expense) => {
+    const display = buildExpenseDisplayInfo(expense, sourceRecordMap, '繁育费用')
+    return {
+      id: expense._id,
+      ...display,
+      amount: Number(expense.total_amount || 0),
+    }
+  })
+  const litterCosts = litterExpenses.map((expense) => {
+    const display = buildExpenseDisplayInfo(expense, sourceRecordMap, '窝费用')
+    return {
+      id: expense._id,
+      ...display,
+      amount: Number(expense.total_amount || 0),
+    }
+  })
 
   const countedExpenseIds = new Set([
     ...exclusiveCycleExpenses.map(item => item._id),
     ...litterExpenses.map(item => item._id),
   ])
-  const puppyCosts: Array<{ id: string; name: string; amount: number }> = []
+  const puppyCosts: Array<{ id: string; title: string; subtitle: string; name: string; amount: number }> = []
 
   for (const expense of expenses) {
     if (countedExpenseIds.has(expense._id)) continue
@@ -1896,9 +2016,10 @@ export async function getLocalLitterProfit(familyId: string, litterId: string) {
     const matchedCount = expense.linked_dog_ids.filter(id => puppyIds.includes(id)).length
     if (!matchedCount) continue
     const shareAmount = Number(expense.total_amount || 0) * matchedCount / expense.linked_dog_ids.length
+    const display = buildExpenseDisplayInfo(expense, sourceRecordMap, '幼崽费用')
     puppyCosts.push({
       id: expense._id,
-      name: buildExpenseName(expense, '幼崽费用'),
+      ...display,
       amount: Math.round(shareAmount * 100) / 100,
     })
   }

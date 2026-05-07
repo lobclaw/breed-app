@@ -151,6 +151,16 @@
               <text class="cost-total">¥{{ totalCost.toLocaleString() }}</text>
             </view>
           </BCard>
+          <BSectionLabel v-if="expenseDetailItems.length" title="费用明细" color="green" />
+          <BCard v-if="expenseDetailItems.length" color="green" :pressable="false">
+            <view v-for="item in expenseDetailItems" :key="item.id" class="cost-row">
+              <view class="cost-detail-main">
+                <text class="cost-label">{{ item.label }}</text>
+                <text class="cost-detail-date">{{ item.subtitle ? `${item.subtitle} · ${item.dateText}` : item.dateText }}</text>
+              </view>
+              <text class="cost-value">¥{{ item.amount.toLocaleString() }}</text>
+            </view>
+          </BCard>
         </template>
 
         <!-- 时间线 -->
@@ -262,10 +272,6 @@
                 </text>
               </view>
             </view>
-            <view class="litter-link-card__hint">
-              <text class="litter-link-card__hint-text">进入窝详情</text>
-              <text class="material-icons-round litter-link-card__hint-icon">arrow_forward</text>
-            </view>
           </BCard>
         </template>
       </view>
@@ -300,7 +306,7 @@ import { ref, computed } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useAuth } from '@/composables/useAuth'
 import { usePageSync } from '@/composables/usePageSync'
-import { getLocalBreedingCycleDetail } from '@/localdb/domain-repository'
+import { buildExpenseDisplayInfo, getLocalBreedingCycleDetail } from '@/localdb/domain-repository'
 import { localSyncRuntime } from '@/localdb/runtime'
 import type { BreedingCycleDetailResponse, BreedingCycleExpense } from '@/types/breeding'
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
@@ -439,6 +445,22 @@ const costItems = computed(() => {
     label,
     amount,
   }))
+})
+
+const expenseDetailItems = computed(() => {
+  const sourceRecordMap = new Map(records.value.map(record => [record._id, record]))
+  return expenses.value
+    .filter(item => Number(item.total_amount) > 0)
+    .map((item) => {
+      const display = buildExpenseDisplayInfo(item, sourceRecordMap, '周期费用')
+      return {
+        id: item._id,
+        label: display.title,
+        subtitle: display.subtitle,
+        dateText: formatShortDate(item.date),
+        amount: Number(item.total_amount || 0),
+      }
+    })
 })
 
 const totalCost = computed(() => costItems.value.reduce((s, i) => s + i.amount, 0))
@@ -951,27 +973,6 @@ onShow(() => {
   border-right: 1px solid rgba(61, 168, 160, 0.18);
 }
 
-.litter-link-card__hint {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid rgba(216, 203, 189, 0.32);
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 4px;
-}
-
-.litter-link-card__hint-text {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--green);
-}
-
-.litter-link-card__hint-icon {
-  font-size: 15px;
-  color: var(--green);
-}
-
 /* 母犬信息行 */
 .dam-row {
   display: flex;
@@ -1269,6 +1270,18 @@ onShow(() => {
   font-size: 13px;
   font-weight: 500;
   color: var(--text-2);
+}
+
+.cost-detail-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cost-detail-date {
+  font-size: 11px;
+  color: var(--text-3);
 }
 
 .cost-value {

@@ -14,7 +14,7 @@
 <script setup lang="ts">
 withDefaults(defineProps<{
   label: string
-  color?: 'red' | 'amber' | 'green' | 'blue' | 'plum' | 'rose' | 'teal' | 'primary'
+  color?: 'red' | 'amber' | 'green' | 'blue' | 'plum' | 'rose' | 'teal' | 'primary' | 'gray'
 }>(), {
   color: 'green',
 })
@@ -41,5 +41,6 @@ withDefaults(defineProps<{
   &--rose { background: var(--rose-soft); .b-tag__text { color: var(--rose); } }
   &--teal { background: var(--teal-soft); .b-tag__text { color: var(--teal); } }
   &--primary { background: var(--primary-soft); .b-tag__text { color: var(--primary); } }
+  &--gray { background: var(--card-dim); .b-tag__text { color: var(--text-3); } }
 }
 </style>

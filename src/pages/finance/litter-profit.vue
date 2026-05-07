@@ -88,7 +88,10 @@
         <text class="expense-group-title">繁育周期费用</text>
         <view class="expense-items">
           <view v-for="item in breedingCosts" :key="item.name" class="expense-item">
-            <text class="expense-item-name">{{ item.name }}</text>
+            <view class="expense-item-main">
+              <text class="expense-item-name">{{ item.title || item.name }}</text>
+              <text v-if="item.subtitle" class="expense-item-subtitle">{{ item.subtitle }}</text>
+            </view>
             <text class="expense-item-amount">{{ formatFinanceAmount(-item.amount, { scene: 'report' }) }}</text>
           </view>
         </view>
@@ -99,7 +102,10 @@
         <text class="expense-group-title">窝级别费用</text>
         <view class="expense-items">
           <view v-for="item in litterCosts" :key="item.name" class="expense-item">
-            <text class="expense-item-name">{{ item.name }}</text>
+            <view class="expense-item-main">
+              <text class="expense-item-name">{{ item.title || item.name }}</text>
+              <text v-if="item.subtitle" class="expense-item-subtitle">{{ item.subtitle }}</text>
+            </view>
             <text class="expense-item-amount">{{ formatFinanceAmount(-item.amount, { scene: 'report' }) }}</text>
           </view>
         </view>
@@ -110,7 +116,10 @@
         <text class="expense-group-title">幼崽个体费用</text>
         <view class="expense-items">
           <view v-for="item in puppyCosts" :key="item.name" class="expense-item">
-            <text class="expense-item-name">{{ item.name }}</text>
+            <view class="expense-item-main">
+              <text class="expense-item-name">{{ item.title || item.name }}</text>
+              <text v-if="item.subtitle" class="expense-item-subtitle">{{ item.subtitle }}</text>
+            </view>
             <text class="expense-item-amount">{{ formatFinanceAmount(-item.amount, { scene: 'report' }) }}</text>
           </view>
         </view>
@@ -634,9 +643,17 @@ onLoad((query) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
   background: linear-gradient(180deg, rgba(255, 243, 236, 0.72) 0%, rgba(255, 247, 242, 0.9) 100%);
   border-radius: 14px;
   padding: 12px 14px;
+}
+
+.expense-item-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .expense-item-name {
@@ -645,11 +662,18 @@ onLoad((query) => {
   color: var(--text-1);
 }
 
+.expense-item-subtitle {
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--text-3);
+}
+
 .expense-item-amount {
   font-family: var(--font-display);
   font-size: 13px;
   font-weight: 800;
   color: var(--green);
+  flex-shrink: 0;
 }
 
 /* ---- Empty State ---- */

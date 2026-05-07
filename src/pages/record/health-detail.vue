@@ -513,9 +513,9 @@ function linkedMedicationStatusLabel(taskItem: any) {
   return '进行中'
 }
 
-function linkedMedicationStatusColor(taskItem: any): 'plum' | 'green' | 'red' {
+function linkedMedicationStatusColor(taskItem: any): 'plum' | 'green' | 'gray' {
   if (taskItem?.status === 'completed') return 'green'
-  if (taskItem?.status === 'cancelled') return 'red'
+  if (taskItem?.status === 'cancelled') return 'gray'
   return 'plum'
 }
 
