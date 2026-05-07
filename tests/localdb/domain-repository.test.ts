@@ -1757,7 +1757,7 @@ describe('local domain repository', () => {
     expect(cycles[0]).toMatchObject({
       statusLabel: '怀孕中',
       damName: '奶酪',
-      cycleNumber: 3,
+      cycleNumber: 1,
     })
 
     const detail = await getLocalBreedingCycleDetail('fam_2', 'cycle_active')
@@ -1767,6 +1767,38 @@ describe('local domain repository', () => {
     })
     expect(detail?.records).toHaveLength(1)
     expect(detail?.expenses).toHaveLength(1)
+  })
+
+  it('周期列表应按母犬历史动态补齐繁育次数', async () => {
+    const now = new Date('2026-05-07T10:00:00+08:00').getTime()
+    await localDb.replaceTable('breeding_cycles', [{
+      _id: 'cycle_number_1',
+      family_id: 'fam_cycle_number',
+      dam_id: 'dam_cycle_number',
+      dam_name: '肉肉',
+      status: '失败',
+      start_date: now - (30 * 86400000),
+      created_at: now - (30 * 86400000),
+      updated_at: now - (30 * 86400000),
+    }, {
+      _id: 'cycle_number_2',
+      family_id: 'fam_cycle_number',
+      dam_id: 'dam_cycle_number',
+      dam_name: '肉肉',
+      status: '怀孕中',
+      start_date: now,
+      mated_at: now,
+      updated_at: now,
+    }])
+
+    const cycles = await listLocalBreedingCycles('fam_cycle_number')
+
+    expect(cycles).toHaveLength(1)
+    expect(cycles[0]).toMatchObject({
+      _id: 'cycle_number_2',
+      cycleNumber: 2,
+      statusLabel: '怀孕中',
+    })
   })
 
   it('销售候选犬只应只包含可开始销售的幼崽', async () => {

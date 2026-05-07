@@ -901,25 +901,37 @@ export async function listLocalBreedingCycles(
   const normalizedSireId = String(options.sireId || '').trim()
   const normalizedSireName = normalizeSireLookupName(options.sireName)
   const sireCycleIds = await collectLocalSireCycleIds(familyId, normalizedSireId, normalizedSireName)
-  const rows = await localDb.query<any>('breeding_cycles', (row) => {
-    if (row.family_id !== familyId) return false
-    if (row.deleted_at) return false
-    if (options.damId && row.dam_id !== options.damId) return false
-    if (normalizedSireId || normalizedSireName) {
-      const matchedByCycle = doesSireRefMatch(row, normalizedSireId, normalizedSireName)
-      const matchedByRecord = sireCycleIds.has(row._id)
-      if (!matchedByCycle && !matchedByRecord) return false
-    }
-    if (!options.includeClosed && ['失败', '放弃'].includes(row.status)) return false
-    return true
-  }, {
-    sort: (left, right) => {
-      const orderDiff = getCycleStatusOrder(left.status) - getCycleStatusOrder(right.status)
-      if (orderDiff !== 0) return orderDiff
-      return sortByRecent(left, right)
-    },
-  })
-  return rows.map(row => buildCycleProjection(row)) as Array<BreedingCycle & ReturnType<typeof buildCycleProjection>>
+  const [rows, familyCycles] = await Promise.all([
+    localDb.query<any>('breeding_cycles', (row) => {
+      if (row.family_id !== familyId) return false
+      if (row.deleted_at) return false
+      if (options.damId && row.dam_id !== options.damId) return false
+      if (normalizedSireId || normalizedSireName) {
+        const matchedByCycle = doesSireRefMatch(row, normalizedSireId, normalizedSireName)
+        const matchedByRecord = sireCycleIds.has(row._id)
+        if (!matchedByCycle && !matchedByRecord) return false
+      }
+      if (!options.includeClosed && ['失败', '放弃'].includes(row.status)) return false
+      return true
+    }, {
+      sort: (left, right) => {
+        const orderDiff = getCycleStatusOrder(left.status) - getCycleStatusOrder(right.status)
+        if (orderDiff !== 0) return orderDiff
+        return sortByRecent(left, right)
+      },
+    }),
+    localDb.query<any>('breeding_cycles', (row) => {
+      if (row.family_id !== familyId) return false
+      if (row.deleted_at) return false
+      if (options.damId && row.dam_id !== options.damId) return false
+      return true
+    }),
+  ])
+  const cycleNumberById = new Map(attachCycleNumbers(familyCycles.map(row => ({ ...row }))).map(row => [row._id, row.cycle_number]))
+  return rows.map(row => buildCycleProjection({
+    ...row,
+    cycle_number: cycleNumberById.get(row._id) || row.cycle_number,
+  })) as Array<BreedingCycle & ReturnType<typeof buildCycleProjection>>
 }
 
 export async function listLocalMatingRecordsBySire(familyId: string, input: { sireId?: string; sireName?: string } = {}) {
@@ -2437,7 +2449,13 @@ function attachCycleNumbers(cycles: Array<Record<string, any>>) {
 
   groups.forEach((bucket) => {
     bucket
-      .sort((left, right) => Number(left.start_date || left.created_at || 0) - Number(right.start_date || right.created_at || 0))
+      .sort((left, right) => {
+        const startDiff = Number(left.start_date || left.created_at || 0) - Number(right.start_date || right.created_at || 0)
+        if (startDiff !== 0) return startDiff
+        const createdDiff = Number(left.created_at || 0) - Number(right.created_at || 0)
+        if (createdDiff !== 0) return createdDiff
+        return String(left._id || '').localeCompare(String(right._id || ''))
+      })
       .forEach((cycle, index) => {
         cycle.cycle_number = index + 1
       })

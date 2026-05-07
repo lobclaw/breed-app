@@ -36,7 +36,7 @@
         <view class="b-cycle-selector__info">
           <text class="b-cycle-selector__title">{{ cycle.damName || '未知母犬' }}</text>
           <text class="b-cycle-selector__meta">
-            第{{ cycle.cycleNumber || '?' }}次繁育 · {{ cycle.statusLabel }} · {{ cycle.detail }}
+            {{ formatCycleMeta(cycle) }}
           </text>
         </view>
         <view class="b-cycle-selector__tag" :class="getTagClass(cycle.status)">
@@ -69,7 +69,7 @@
         <view class="b-cycle-selector__info">
           <text class="b-cycle-selector__title">{{ cycle.damName || '未知母犬' }}</text>
           <text class="b-cycle-selector__meta">
-            第{{ cycle.cycleNumber || '?' }}次繁育 · {{ cycle.detail }}
+            {{ formatCycleMeta(cycle) }}
           </text>
         </view>
         <view class="b-cycle-selector__tag" :class="getTagClass(cycle.status)">
@@ -176,6 +176,15 @@ function getTagClass(status?: string): string {
   if (status === '怀孕中') return 'b-cycle-selector__tag--rose'
   if (status === '已生产') return 'b-cycle-selector__tag--green'
   return 'b-cycle-selector__tag--gray'
+}
+
+function formatCycleMeta(cycle: Cycle): string {
+  const cycleNumber = Number(cycle.cycleNumber || cycle.cycle_number || 0)
+  const parts = [
+    cycleNumber > 0 ? `第${cycleNumber}次繁育` : '繁育周期',
+    String(cycle.detail || '').trim(),
+  ].filter(Boolean)
+  return parts.join(' · ')
 }
 
 function handleSelect(cycle: Cycle) {
