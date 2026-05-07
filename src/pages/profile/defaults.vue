@@ -54,7 +54,7 @@ interface SettingItem {
   inputType?: string
 }
 
-const { currentFamily, loadFamily } = useAuth()
+const { currentFamily, refreshFamilyFromLocal } = useAuth()
 usePageSync({ routePath: 'pages/profile/defaults' })
 
 const editingKey = ref('')
@@ -119,8 +119,7 @@ async function saveAll() {
     const familyId = currentFamily.value?._id || ''
     localSyncRuntime.setCurrentFamilyId(familyId)
     await localSyncRuntime.updateFamilySettingsLocally(familyId, data)
-    // 保存后同步内存缓存
-    await loadFamily()
+    await refreshFamilyFromLocal(familyId)
   } finally {
     saving.value = false
   }

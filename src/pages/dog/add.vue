@@ -225,7 +225,7 @@ import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
 import { useDogStore } from '@/stores/dogStore'
 
 const dogStore = useDogStore()
-const { currentFamily, loadFamily } = useAuth()
+const { currentFamily, refreshFamilyFromLocal } = useAuth()
 usePageSync({ routePath: 'pages/dog/add' })
 
 const isEdit = ref(false)
@@ -278,8 +278,9 @@ function deleteCustomBreed(val: string) {
     const existing = currentFamily.value?.settings?.custom_breed_types || []
     const updated = existing.filter((v: string) => v !== val)
     try {
-      await localSyncRuntime.updateFamilySettingsLocally(currentFamily.value?._id || '', { custom_breed_types: updated })
-      await loadFamily()
+      const familyId = currentFamily.value?._id || ''
+      await localSyncRuntime.updateFamilySettingsLocally(familyId, { custom_breed_types: updated })
+      await refreshFamilyFromLocal(familyId)
       deletedCustomBreeds.value = deletedCustomBreeds.value.filter(v => v !== val)
     } catch {
       deletedCustomBreeds.value = deletedCustomBreeds.value.filter(v => v !== val)
@@ -304,8 +305,9 @@ async function onBreedConfirm() {
   if (!PRESET_BREEDS.includes(val)) {
     const existing = currentFamily.value?.settings?.custom_breed_types || []
     if (!existing.includes(val)) {
-      await localSyncRuntime.updateFamilySettingsLocally(currentFamily.value?._id || '', { custom_breed_types: [...existing, val] })
-      await loadFamily()
+      const familyId = currentFamily.value?._id || ''
+      await localSyncRuntime.updateFamilySettingsLocally(familyId, { custom_breed_types: [...existing, val] })
+      await refreshFamilyFromLocal(familyId)
     }
   }
 }

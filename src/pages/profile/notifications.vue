@@ -87,7 +87,7 @@ const summaryEnabled = ref(true)
 const summaryTime = ref('09:00')
 const saveToken = ref(0)
 const showTimePicker = ref(false)
-const { currentFamily } = useAuth()
+const { currentFamily, refreshFamilyFromLocal } = useAuth()
 usePageSync({ routePath: 'pages/profile/notifications' })
 
 const notifTypes = reactive<NotificationTypeItem[]>([
@@ -182,6 +182,7 @@ async function saveSettings(prevState: NotificationFormState) {
       morning_summary_time: summaryTime.value,
       notification_types: buildNotificationTypes(),
     })
+    await refreshFamilyFromLocal(familyId)
   } catch {
     if (requestToken === saveToken.value) {
       applyState(prevState)

@@ -205,7 +205,7 @@ import {
 import type { ExpenseCategory, ExpenseCategoryGroup } from '@/types/finance'
 import type { ExpenseCategoryGroupOption } from '@/constants/financeCategories'
 
-const { currentFamily } = useAuth()
+const { currentFamily, refreshFamilyFromLocal } = useAuth()
 usePageSync({ routePath: 'pages/profile/expense-categories' })
 
 const groups = ref<ExpenseCategoryGroupOption[]>(buildExpenseCategoryGroups())
@@ -278,11 +278,13 @@ async function saveGroup() {
 
   groupSubmitting.value = true
   try {
+    const familyId = currentFamily.value?._id || ''
     if (editingGroupKey.value) {
-      await localSyncRuntime.updateExpenseCategoryGroupLocally(currentFamily.value?._id || '', editingGroupKey.value, label)
+      await localSyncRuntime.updateExpenseCategoryGroupLocally(familyId, editingGroupKey.value, label)
     } else {
-      await localSyncRuntime.addExpenseCategoryGroupLocally(currentFamily.value?._id || '', label)
+      await localSyncRuntime.addExpenseCategoryGroupLocally(familyId, label)
     }
+    await refreshFamilyFromLocal(familyId)
     await load()
     showGroupSheet.value = false
   } catch (error: any) {
@@ -298,16 +300,18 @@ async function saveCategory() {
 
   categorySubmitting.value = true
   try {
+    const familyId = currentFamily.value?._id || ''
     if (editingCategoryName.value) {
       await localSyncRuntime.updateExpenseCategoryLocally(
-        currentFamily.value?._id || '',
+        familyId,
         editingCategoryName.value,
         name,
         categoryFormParentGroup.value,
       )
     } else {
-      await localSyncRuntime.addExpenseCategoryLocally(currentFamily.value?._id || '', name, categoryFormParentGroup.value)
+      await localSyncRuntime.addExpenseCategoryLocally(familyId, name, categoryFormParentGroup.value)
     }
+    await refreshFamilyFromLocal(familyId)
     await load()
     showCategorySheet.value = false
   } catch (error: any) {
@@ -329,11 +333,13 @@ async function confirmDelete() {
 
   deleteSubmitting.value = true
   try {
+    const familyId = currentFamily.value?._id || ''
     if (deleteTargetType.value === 'group') {
-      await localSyncRuntime.removeExpenseCategoryGroupLocally(currentFamily.value?._id || '', deletingKey.value)
+      await localSyncRuntime.removeExpenseCategoryGroupLocally(familyId, deletingKey.value)
     } else {
-      await localSyncRuntime.removeExpenseCategoryLocally(currentFamily.value?._id || '', deletingKey.value)
+      await localSyncRuntime.removeExpenseCategoryLocally(familyId, deletingKey.value)
     }
+    await refreshFamilyFromLocal(familyId)
     await load()
     showDeleteConfirm.value = false
   } catch (error: any) {

@@ -7,6 +7,7 @@ import { ref, computed } from 'vue'
 import { cloudCall } from './useCloudCall'
 import type { Family, MemberRole } from '@/types/family'
 import { getCloudErrorCode, isCloudConnectTimeout } from '@/utils/cloudError'
+import { localDb } from '@/localdb/db'
 
 // 全局响应式状态（跨组件共享）
 const currentUser = ref<{ uid: string; token: string } | null>(null)
@@ -141,6 +142,15 @@ export function useAuth() {
     cacheFamily(family)
   }
 
+  async function refreshFamilyFromLocal(familyIdInput?: string): Promise<boolean> {
+    const familyId = familyIdInput || currentFamily.value?._id || ''
+    if (!familyId) return false
+    const localFamily = await localDb.findById<Family>('families', familyId)
+    if (!localFamily) return false
+    setCurrentFamily(localFamily)
+    return true
+  }
+
   /**
    * 创建家庭
    */
@@ -177,6 +187,7 @@ export function useAuth() {
     init,
     loadFamily,
     setCurrentFamily,
+    refreshFamilyFromLocal,
     createFamily,
     logout,
     navigateToLogin,

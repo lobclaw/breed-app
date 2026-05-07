@@ -128,7 +128,7 @@ import BEmpty from '@/components/feedback/BEmpty.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import BDeleteConfirm from '@/components/layout/BDeleteConfirm.vue'
 
-const { currentFamily } = useAuth()
+const { currentFamily, refreshFamilyFromLocal } = useAuth()
 usePageSync({ routePath: 'pages/profile/care-rules' })
 
 const rules = ref<any[]>([])
@@ -215,6 +215,7 @@ async function onConfirm() {
     const familyId = currentFamily.value?._id || ''
     localSyncRuntime.setCurrentFamilyId(familyId)
     await localSyncRuntime.addCareRuleLocally(familyId, newRule)
+    await refreshFamilyFromLocal(familyId)
     await loadLocalRules()
   } catch {
     uni.showToast({ title: '添加失败，请重试', icon: 'none' })
@@ -227,6 +228,7 @@ async function enableTemplate(tpl: typeof templates[0]) {
     const familyId = currentFamily.value?._id || ''
     localSyncRuntime.setCurrentFamilyId(familyId)
     await localSyncRuntime.addCareRuleLocally(familyId, newRule)
+    await refreshFamilyFromLocal(familyId)
     await loadLocalRules()
   } catch {
     uni.showToast({ title: '启用失败，请重试', icon: 'none' })
@@ -246,6 +248,7 @@ async function confirmDelete() {
     const familyId = currentFamily.value?._id || ''
     localSyncRuntime.setCurrentFamilyId(familyId)
     await localSyncRuntime.removeCareRuleLocally(familyId, index)
+    await refreshFamilyFromLocal(familyId)
     await loadLocalRules()
   } catch {
     uni.showToast({ title: '删除失败，请重试', icon: 'none' })

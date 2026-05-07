@@ -156,23 +156,23 @@ describe('local-first source contract', () => {
       },
       {
         file: 'src/pages/profile/index.vue',
-        forbiddenReads: ['useCloudCall', 'cloudCall('],
+        forbiddenReads: ['useCloudCall', 'cloudCall(', 'loadFamily'],
       },
       {
         file: 'src/pages/profile/notifications.vue',
-        forbiddenReads: ['useCloudCall', 'cloudCall(', 'uniCloud.database('],
+        forbiddenReads: ['useCloudCall', 'cloudCall(', 'uniCloud.database(', 'loadFamily'],
       },
       {
         file: 'src/pages/profile/defaults.vue',
-        forbiddenReads: ['useCloudCall', 'cloudCall(', 'uniCloud.database('],
+        forbiddenReads: ['useCloudCall', 'cloudCall(', 'uniCloud.database(', 'loadFamily'],
       },
       {
         file: 'src/pages/profile/care-rules.vue',
-        forbiddenReads: ['useCloudCall', 'cloudCall(', 'uniCloud.database('],
+        forbiddenReads: ['useCloudCall', 'cloudCall(', 'uniCloud.database(', 'loadFamily'],
       },
       {
         file: 'src/pages/profile/expense-categories.vue',
-        forbiddenReads: ['useCloudCall', 'cloudCall(', 'uniCloud.database('],
+        forbiddenReads: ['useCloudCall', 'cloudCall(', 'uniCloud.database(', 'loadFamily'],
       },
       {
         file: 'src/pages/health/medication-protocols.vue',
@@ -224,7 +224,7 @@ describe('local-first source contract', () => {
       },
       {
         file: 'src/pages/dog/add.vue',
-        forbiddenReads: ['useCloudCall', 'cloudCall('],
+        forbiddenReads: ['useCloudCall', 'cloudCall(', 'loadFamily'],
       },
       {
         file: 'src/pages/breeding/birth-wizard.vue',

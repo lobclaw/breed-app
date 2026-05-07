@@ -258,7 +258,7 @@ type DrawerMenuGroup = {
   items: DrawerMenuItem[]
 }
 
-const { currentFamily, currentUser, userRole, isInitialized, logout, setCurrentFamily } = useAuth()
+const { currentFamily, currentUser, userRole, isInitialized, logout, setCurrentFamily, refreshFamilyFromLocal } = useAuth()
 usePageSync({ routePath: 'pages/profile/index' })
 
 const hasFamily = computed(() => !!currentFamily.value)
@@ -497,6 +497,7 @@ async function onNicknameConfirm() {
 
   try {
     await localSyncRuntime.updateNicknameLocally(familyId, userId, nextNickname)
+    await refreshFamilyFromLocal(familyId)
   } catch (e: any) {
     setCurrentFamily(previousFamily)
     uni.showToast({ title: e?.message || '昵称保存失败', icon: 'none' })
