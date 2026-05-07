@@ -801,6 +801,56 @@ describe('family-service', () => {
       nowSpy.mockRestore()
     })
 
+    it('getBackupHistory 应返回最近备份，restoreBackup 应先创建恢复前备份再恢复业务集合', async () => {
+      const nowSpy = vi.spyOn(Date, 'now')
+      nowSpy.mockReturnValueOnce(1700000006000).mockReturnValue(1700000007000)
+      seedCollection('families', [{
+        _id: familyId,
+        name: '测试犬舍',
+        settings: {},
+        created_at: 1000,
+        updated_at: 1000,
+      }])
+      seedCollection('dogs', [
+        { _id: 'dog_1', family_id: familyId, name: '奶盖', updated_at: 1000, version: 1 },
+        { _id: 'dog_other', family_id: 'other_family', name: '别家犬只', updated_at: 1000, version: 1 },
+      ])
+      seedCollection('expenses', [
+        { _id: 'expense_1', family_id: familyId, category: '医疗', total_amount: 200, updated_at: 1000, version: 1 },
+      ])
+
+      const ctx = createCloudObjectContext({ familyId, role: 'creator' })
+      const backupResult = await familyService.exportData.call(ctx, { format: 'json', mode: 'backup' })
+      const backupFileID = backupResult.data.fileID
+      const historyResult = await familyService.getBackupHistory.call(ctx)
+      expect(historyResult.data.files[0]).toMatchObject({
+        fileID: backupFileID,
+        created_at: 1700000006000,
+        name: 'backup-1700000006000.json',
+      })
+
+      seedCollection('dogs', [
+        { _id: 'dog_changed', family_id: familyId, name: '应被恢复覆盖', updated_at: 2000, version: 2 },
+        { _id: 'dog_other', family_id: 'other_family', name: '别家犬只', updated_at: 1000, version: 1 },
+      ])
+      seedCollection('expenses', [])
+
+      const restoreResult = await familyService.restoreBackup.call(ctx, { fileID: backupFileID })
+      expect(restoreResult.data).toMatchObject({
+        restored: true,
+        restored_file_id: backupFileID,
+      })
+      expect(restoreResult.data.pre_restore_file_id).toBeTruthy()
+
+      const { data: dogs } = await db.collection('dogs').get()
+      expect(dogs.map((dog: any) => dog._id).sort()).toEqual(['dog_1', 'dog_other'])
+      expect(dogs.find((dog: any) => dog._id === 'dog_1')?.name).toBe('奶盖')
+      const { data: expenses } = await db.collection('expenses').get()
+      expect(expenses.map((expense: any) => expense._id)).toEqual(['expense_1'])
+
+      nowSpy.mockRestore()
+    })
+
     it('exportData 普通导出不应更新上次备份，CSV 应生成 zip', async () => {
       const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1700000001000)
       seedCollection('families', [{

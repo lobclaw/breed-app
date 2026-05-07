@@ -545,6 +545,91 @@ function buildRetainedBackupFileIds(previousFileIds = [], currentFileId = '') {
   return { retainedFileIds, deletedFileIds }
 }
 
+function getBackupCreatedAt(fileID = '') {
+  const match = String(fileID || '').match(/backup-(\d+)\.json(?:$|\?)/)
+  return match ? Number(match[1]) : 0
+}
+
+async function getFamilyBackupFileIds(familyId) {
+  const { data } = await db.collection('families')
+    .doc(familyId)
+    .field({ settings: true })
+    .get()
+  const family = data?.[0] || data || {}
+  const settings = mergeFamilySettings(family.settings)
+  return normalizeBackupFileIds([
+    ...normalizeBackupFileIds(settings.backup_file_ids),
+    settings.last_backup_file_id,
+  ]).slice(-BACKUP_FILE_RETENTION_LIMIT)
+}
+
+async function buildBackupHistory(familyId) {
+  const fileIds = await getFamilyBackupFileIds(familyId)
+  const files = []
+  for (const fileID of fileIds.slice().reverse()) {
+    const { url } = await resolveUploadedFileUrl({ fileID })
+    const createdAt = getBackupCreatedAt(fileID)
+    files.push({
+      fileID,
+      url,
+      created_at: createdAt,
+      name: createdAt ? `backup-${createdAt}.json` : 'backup.json',
+    })
+  }
+  return files
+}
+
+async function readBackupArchive(fileID) {
+  if (!fileID) throw new Error('缺少备份文件')
+  if (typeof uniCloud.downloadFile !== 'function') {
+    throw new Error('当前云环境不支持读取备份文件')
+  }
+  const result = await uniCloud.downloadFile({ fileID })
+  const content = result?.fileContent || result?.data || result?.buffer || ''
+  const text = Buffer.isBuffer(content) ? content.toString('utf8') : String(content || '')
+  if (!text) throw new Error('备份文件为空')
+  try {
+    return JSON.parse(text)
+  } catch {
+    throw new Error('备份文件格式无效')
+  }
+}
+
+function validateRestoreArchive(archive, familyId) {
+  if (!archive || typeof archive !== 'object') throw new Error('备份文件格式无效')
+  if (Number(archive.schemaVersion) !== EXPORT_SCHEMA_VERSION) throw new Error('备份版本不支持')
+  if (archive.familyId !== familyId) throw new Error('备份文件不属于当前家庭')
+  if (!archive.collections || typeof archive.collections !== 'object') throw new Error('备份文件缺少业务数据')
+
+  const collections = {}
+  for (const collection of EXPORT_COLLECTIONS) {
+    const rows = Array.isArray(archive.collections[collection]) ? archive.collections[collection] : []
+    for (const row of rows) {
+      if (!row || typeof row !== 'object' || row.family_id !== familyId) {
+        throw new Error(`备份文件包含无效的 ${collection} 数据`)
+      }
+    }
+    collections[collection] = rows
+  }
+  return collections
+}
+
+async function restoreArchiveCollections(familyId, archive) {
+  const collections = validateRestoreArchive(archive, familyId)
+  const restoredCollections = []
+
+  for (const collection of EXPORT_COLLECTIONS) {
+    await db.collection(collection).where({ family_id: familyId }).remove()
+    const rows = collections[collection]
+    for (const row of rows) {
+      await db.collection(collection).add({ ...row, family_id: familyId })
+    }
+    restoredCollections.push(collection)
+  }
+
+  return restoredCollections
+}
+
 async function createFamilyArchiveFile(familyId, options = {}) {
   const { format, mode } = normalizeExportInput(options)
   const now = Number(options.now) || Date.now()
@@ -1698,6 +1783,56 @@ module.exports = {
     })
 
     return result
+  },
+
+  /**
+   * 获取最近备份历史
+   */
+  async getBackupHistory() {
+    requireAdmin(this.role)
+    const files = await buildBackupHistory(this.familyId)
+    return { data: { files } }
+  },
+
+  /**
+   * 从最近备份恢复业务数据
+   * @param {{ fileID?: string }} input
+   */
+  async restoreBackup(input = {}) {
+    requireAdmin(this.role)
+    const allowedFileIds = await getFamilyBackupFileIds(this.familyId)
+    const fileID = String(input.fileID || allowedFileIds[allowedFileIds.length - 1] || '').trim()
+    if (!fileID) throw new Error('暂无可恢复的备份')
+    if (!allowedFileIds.includes(fileID)) throw new Error('备份文件不在最近备份列表中')
+
+    const archive = await readBackupArchive(fileID)
+    const preRestore = await createFamilyArchiveFile(this.familyId, { format: 'json', mode: 'backup' })
+    const restoredCollections = await restoreArchiveCollections(this.familyId, archive)
+
+    await safeWriteOperationLog({
+      familyId: this.familyId,
+      actorUserId: this.uid,
+      actionType: 'restore',
+      domain: 'family',
+      targetType: 'backup',
+      targetId: this.familyId,
+      targetName: '数据恢复',
+      summary: '从备份恢复了业务数据',
+      meta: {
+        restored_file_id: fileID,
+        pre_restore_file_id: preRestore.data.fileID,
+        restored_collections: restoredCollections,
+      },
+    })
+
+    return {
+      data: {
+        restored: true,
+        restored_file_id: fileID,
+        pre_restore_file_id: preRestore.data.fileID,
+        restored_collections: restoredCollections,
+      },
+    }
   },
 
   /**

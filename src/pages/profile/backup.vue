@@ -59,17 +59,17 @@
 
     <!-- 操作按钮 -->
     <view class="backup-actions">
-      <BSubmitButton :loading="backingUp" :disabled="exporting || repairing" @click="startBackup">
+      <BSubmitButton :loading="backingUp" :disabled="exporting || repairing || restoringBackup" @click="startBackup">
         <text v-if="!backingUp" class="material-icons-round" style="font-size: 18px; color: #fff; margin-right: 6px;">backup</text>
         立即备份
       </BSubmitButton>
 
-      <button class="action-btn-ghost" :disabled="backingUp || exporting || repairing" @click="startExport">
+      <button class="action-btn-ghost" :disabled="backingUp || exporting || repairing || restoringBackup" @click="startExport">
         <text class="material-icons-round" style="font-size: 18px; color: var(--text-1); margin-right: 6px;">download</text>
         {{ exporting ? '导出中' : '导出到本地' }}
       </button>
 
-      <button class="action-btn-dim" :disabled="backingUp || exporting || repairing" @click="startRepair">
+      <button class="action-btn-dim" :disabled="backingUp || exporting || repairing || restoringBackup" @click="startRepair">
         <text class="material-icons-round" style="font-size: 18px; color: var(--text-3); margin-right: 6px;">build</text>
         {{ repairing ? '修复中' : '数据修复' }}
       </button>
@@ -83,6 +83,49 @@
         </view>
         <text class="export-progress__label">{{ backingUp ? '备份中' : '导出中' }}</text>
         <text class="export-progress__text">{{ exportProgress }}%</text>
+      </view>
+    </view>
+
+    <!-- 备份历史 -->
+    <view class="backup-history-section">
+      <view class="backup-history-section__header">
+        <text class="backup-history-section__title">备份历史</text>
+        <text class="backup-history-section__count">{{ backupHistory.length }}/4</text>
+      </view>
+      <view v-if="backupHistoryLoading" class="backup-history-section__empty">
+        <text>正在读取备份历史</text>
+      </view>
+      <view v-else-if="!backupHistory.length" class="backup-history-section__empty">
+        <text>暂无备份</text>
+      </view>
+      <view v-else class="backup-history-section__list">
+        <view v-for="(file, index) in backupHistory" :key="file.fileID" class="backup-history-item">
+          <view class="backup-history-item__icon-wrap">
+            <text class="material-icons-round backup-history-item__icon">cloud_done</text>
+          </view>
+          <view class="backup-history-item__main">
+            <view class="backup-history-item__title-row">
+              <text class="backup-history-item__title">{{ formatBackupHistoryTime(file.created_at) }}</text>
+              <text v-if="index === 0" class="backup-history-item__badge">最新</text>
+            </view>
+            <text class="backup-history-item__desc">{{ file.name }}</text>
+            <view class="backup-history-item__actions">
+              <button class="backup-history-item__action" :disabled="exportResultDownloading || restoringBackup" @click="downloadBackupHistory(file)">
+                <text class="material-icons-round backup-history-item__action-icon">download</text>
+                <text>下载</text>
+              </button>
+              <button
+                v-if="index === 0"
+                class="backup-history-item__action backup-history-item__action--danger"
+                :disabled="restoringBackup"
+                @click="confirmRestoreBackup(file)"
+              >
+                <text class="material-icons-round backup-history-item__action-icon">settings_backup_restore</text>
+                <text>{{ restoringBackup ? '恢复中' : '恢复' }}</text>
+              </button>
+            </view>
+          </view>
+        </view>
       </view>
     </view>
 
@@ -102,6 +145,16 @@
       content="将检查并修复数据不一致问题，是否继续？"
       confirmText="开始修复"
       @confirm="handleRepairConfirm"
+    />
+
+    <BModal
+      v-model:visible="showRestoreConfirm"
+      title="恢复备份"
+      content="恢复会用最近备份覆盖当前业务数据。系统会先自动创建一份恢复前备份，是否继续？"
+      confirmText="恢复"
+      :danger="true"
+      :manualClose="true"
+      @confirm="handleRestoreConfirm"
     />
 
     <BModal
@@ -198,7 +251,9 @@ import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BModal from '@/components/layout/BModal.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import { localSyncRuntime } from '@/localdb/runtime'
+import { localDb } from '@/localdb/db'
 import { isAuthTokenError } from '@/utils/cloudError'
+import type { BusinessCollectionName } from '@/localdb/types'
 
 const backingUp = ref(false)
 const exporting = ref(false)
@@ -211,12 +266,28 @@ const showRepairConfirm = ref(false)
 const showRepairResult = ref(false)
 const showExportSheet = ref(false)
 const showExportResultSheet = ref(false)
+const showRestoreConfirm = ref(false)
 const repairResult = ref({
   checkedCount: 0,
   repairedCount: 0,
   warningCount: 0,
 })
 const BACKUP_INFO_CACHE_PREFIX = 'breed_backup_info:'
+const RESTORE_SYNC_COLLECTIONS: BusinessCollectionName[] = [
+  'dogs',
+  'breeding_cycles',
+  'litters',
+  'breeding_records',
+  'health_records',
+  'medication_tasks',
+  'tasks',
+  'expenses',
+  'incomes',
+  'sale_records',
+  'agents',
+  'dog_weights',
+  'medication_protocols',
+]
 type ExportFormat = 'json' | 'csv'
 type ExportMode = 'backup' | 'export'
 
@@ -242,6 +313,13 @@ interface ExportFileResult {
   created_at?: number
 }
 
+interface BackupHistoryFile {
+  fileID: string
+  url: string
+  name: string
+  created_at: number
+}
+
 interface SyncIssue {
   _id: string
   type: string
@@ -251,6 +329,10 @@ interface SyncIssue {
 
 const exportResult = ref<ExportFileResult | null>(null)
 const exportResultDownloading = ref(false)
+const backupHistory = ref<BackupHistoryFile[]>([])
+const backupHistoryLoading = ref(false)
+const restoreTarget = ref<BackupHistoryFile | null>(null)
+const restoringBackup = ref(false)
 const syncIssues = ref<SyncIssue[]>([])
 const syncStatus = ref({
   pending: 0,
@@ -262,7 +344,13 @@ const syncStatus = ref({
 
 const { currentFamily, navigateToLogin } = useAuth()
 const { run: getBackupInfo } = useCloudCall<{ data: BackupInfoResponse }>('family-service', 'getBackupInfo')
+const { run: getBackupHistory } = useCloudCall<{ data: { files: BackupHistoryFile[] } }>('family-service', 'getBackupHistory', {
+  showLoading: false,
+})
 const { run: exportData } = useCloudCall<{ data: ExportFileResult }>('family-service', 'exportData', {
+  showLoading: false,
+})
+const { run: restoreBackup } = useCloudCall<{ data: { restored: boolean; restored_file_id: string; pre_restore_file_id: string; restored_collections: string[] } }>('family-service', 'restoreBackup', {
   showLoading: false,
 })
 const { run: repairData } = useCloudCall<{ data: { checkedCollections: string[]; repairedCount: number; warnings: unknown[]; details: unknown[] } }>('family-service', 'repairData', {
@@ -343,6 +431,10 @@ function formatDate(ts: number): string {
   if (!ts) return ''
   const d = new Date(ts)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+function formatBackupHistoryTime(ts: number): string {
+  return ts ? formatDate(ts) : '未知时间'
 }
 
 function getBackupInfoCacheKey() {
@@ -442,6 +534,19 @@ async function loadInfo() {
   syncIssues.value = normalizeSyncIssues(currentIssues as Array<Record<string, any>>)
 }
 
+async function loadBackupHistory() {
+  backupHistoryLoading.value = true
+  try {
+    const res = await getBackupHistory()
+    const files = res?.data?.files
+    backupHistory.value = Array.isArray(files) ? files : []
+  } catch {
+    backupHistory.value = []
+  } finally {
+    backupHistoryLoading.value = false
+  }
+}
+
 async function toggleAutoBackup() {
   autoBackup.value = !autoBackup.value
   const cached = readCachedBackupInfo()
@@ -451,6 +556,14 @@ async function toggleAutoBackup() {
     cachedAt: Date.now(),
   })
   await updateSettings({ auto_backup_enabled: autoBackup.value })
+}
+
+async function clearLocalRestoredCollections(familyId: string) {
+  if (!familyId) return
+  for (const collection of RESTORE_SYNC_COLLECTIONS) {
+    const rows = await localDb.getTable<any>(collection)
+    await localDb.replaceTable(collection, rows.filter(row => row?.family_id !== familyId))
+  }
 }
 
 async function ensureBackupReady() {
@@ -528,19 +641,25 @@ function saveTempFile(tempFilePath: string): Promise<string> {
   })
 }
 
-async function saveExportFile(result: ExportFileResult) {
+async function saveExportFile(
+  result: ExportFileResult,
+  successToast: { h5: string, saved: string } = {
+    h5: '导出成功，已开始下载',
+    saved: '已保存备份文件',
+  },
+) {
   const url = getExportUrl(result)
   if (!url) throw new Error('缺少下载链接')
 
   const fileName = getExportFileName(result)
   if (triggerH5Download(url, fileName)) {
-    uni.showToast({ title: '导出成功，已开始下载', icon: 'success' })
+    uni.showToast({ title: successToast.h5, icon: 'success' })
     return true
   }
 
   const tempFilePath = await downloadToTempFile(url)
   await saveTempFile(tempFilePath)
-  uni.showToast({ title: '已保存备份文件', icon: 'success' })
+  uni.showToast({ title: successToast.saved, icon: 'success' })
   return true
 }
 
@@ -573,6 +692,27 @@ async function downloadExportResult() {
   }
 }
 
+async function downloadBackupHistory(file: BackupHistoryFile) {
+  if (!file?.fileID || exportResultDownloading.value) return
+  exportResultDownloading.value = true
+  try {
+    await saveExportFile({
+      fileID: file.fileID,
+      url: file.url,
+      format: 'json',
+      mode: 'backup',
+      created_at: file.created_at,
+    }, {
+      h5: '备份文件已开始下载',
+      saved: '备份文件已保存',
+    })
+  } catch {
+    uni.showToast({ title: '下载失败', icon: 'none' })
+  } finally {
+    exportResultDownloading.value = false
+  }
+}
+
 function copyExportResultLink() {
   const url = getExportUrl(exportResult.value)
   if (!url) {
@@ -585,6 +725,46 @@ function copyExportResultLink() {
       uni.showToast({ title: '链接已复制', icon: 'success' })
     },
   })
+}
+
+function confirmRestoreBackup(file: BackupHistoryFile) {
+  if (restoringBackup.value) return
+  restoreTarget.value = file
+  showRestoreConfirm.value = true
+}
+
+async function handleRestoreConfirm() {
+  if (restoringBackup.value) return
+  const target = restoreTarget.value || backupHistory.value[0]
+  if (!target?.fileID) {
+    uni.showToast({ title: '暂无可恢复的备份', icon: 'none' })
+    showRestoreConfirm.value = false
+    return
+  }
+  const ready = await ensureBackupReady()
+  if (!ready) return
+  const familyId = currentFamily.value?._id || ''
+  if (!familyId) {
+    uni.showToast({ title: '缺少家庭信息，无法恢复', icon: 'none' })
+    return
+  }
+
+  restoringBackup.value = true
+  try {
+    await restoreBackup({ fileID: target.fileID })
+    await clearLocalRestoredCollections(familyId)
+    await localSyncRuntime.pullCollections(familyId, RESTORE_SYNC_COLLECTIONS, true)
+    await Promise.all([loadInfo(), loadBackupHistory()])
+    showRestoreConfirm.value = false
+    uni.showToast({ title: '已恢复备份', icon: 'success' })
+  } catch (error) {
+    uni.showToast({
+      title: error instanceof Error ? error.message : '恢复失败',
+      icon: 'none',
+    })
+  } finally {
+    restoringBackup.value = false
+  }
 }
 
 async function retrySyncNow() {
@@ -620,7 +800,7 @@ async function retrySyncNow() {
 }
 
 async function runExport(format: ExportFormat, mode: ExportMode) {
-  if (backingUp.value || exporting.value || repairing.value) return
+  if (backingUp.value || exporting.value || repairing.value || restoringBackup.value) return
   const ready = await ensureBackupReady()
   if (!ready) return
 
@@ -651,6 +831,9 @@ async function runExport(format: ExportFormat, mode: ExportMode) {
       uni.showToast({ title: '导出已完成', icon: 'success' })
     }
     loadInfo()
+    if (mode === 'backup') {
+      loadBackupHistory()
+    }
   } catch {
     clearInterval(timer)
     uni.showToast({ title: '操作失败', icon: 'none' })
@@ -668,7 +851,7 @@ function startBackup() {
 }
 
 function startExport() {
-  if (backingUp.value || exporting.value || repairing.value) return
+  if (backingUp.value || exporting.value || repairing.value || restoringBackup.value) return
   showExportSheet.value = true
 }
 
@@ -678,6 +861,7 @@ function chooseExportFormat(format: 'json' | 'csv') {
 }
 
 function startRepair() {
+  if (restoringBackup.value) return
   showRepairConfirm.value = true
 }
 
@@ -716,6 +900,7 @@ function goToSyncStatus() {
 onShow(() => {
   hydrateBackupInfoFromCache()
   loadInfo()
+  loadBackupHistory()
 })
 </script>
 
@@ -1117,6 +1302,159 @@ onShow(() => {
     color: var(--primary);
     min-width: 40px;
     text-align: right;
+  }
+}
+
+/* ==================== BACKUP HISTORY ==================== */
+.backup-history-section {
+  margin: 0 var(--space-page) 16px;
+  padding: 16px;
+  border-radius: var(--radius-card);
+  background: var(--card);
+  box-shadow: var(--shadow);
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  &__title {
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--text-1);
+  }
+
+  &__count {
+    padding: 3px 8px;
+    border-radius: var(--radius-badge);
+    background: var(--card-dim);
+    color: var(--text-3);
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  &__empty {
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 14px;
+    background: var(--card-dim);
+    color: var(--text-3);
+    font-size: 13px;
+  }
+
+  &__list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+}
+
+.backup-history-item {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--card-dim);
+
+  &__icon-wrap {
+    width: 38px;
+    height: 38px;
+    border-radius: 14px;
+    background: rgba(61, 174, 111, 0.14);
+    color: var(--green);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  &__icon {
+    font-size: 19px;
+  }
+
+  &__main {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  &__title {
+    flex: 1;
+    min-width: 0;
+    font-size: 14px;
+    line-height: 1.35;
+    font-weight: 800;
+    color: var(--text-1);
+  }
+
+  &__badge {
+    padding: 2px 7px;
+    border-radius: var(--radius-badge);
+    background: rgba(61, 174, 111, 0.12);
+    color: var(--green);
+    font-size: 10px;
+    font-weight: 800;
+    flex-shrink: 0;
+  }
+
+  &__desc {
+    display: block;
+    margin-top: 3px;
+    font-size: 11px;
+    line-height: 1.35;
+    color: var(--text-3);
+    word-break: break-all;
+  }
+
+  &__actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  &__action {
+    flex: 1;
+    min-width: 0;
+    height: 34px;
+    border: 0;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.78);
+    color: var(--text-2);
+    font-size: 12px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    box-shadow: inset 0 0 0 1px rgba(216, 203, 189, 0.4);
+
+    &::after {
+      border: 0;
+    }
+
+    &[disabled] {
+      opacity: 0.56;
+    }
+
+    &--danger {
+      color: var(--red);
+      background: rgba(224, 82, 82, 0.08);
+      box-shadow: inset 0 0 0 1px rgba(224, 82, 82, 0.12);
+    }
+  }
+
+  &__action-icon {
+    font-size: 15px;
+    line-height: 1;
   }
 }
 

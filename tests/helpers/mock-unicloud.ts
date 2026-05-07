@@ -184,12 +184,23 @@ function createQueryChain(collectionName: string) {
     },
     async remove() {
       const col = getCollection(collectionName)
-      const idx = docId ? col.findIndex(d => d._id === docId) : -1
-      if (idx >= 0) {
-        col.splice(idx, 1)
-        return { deleted: 1 }
+      if (docId) {
+        const idx = col.findIndex(d => d._id === docId)
+        if (idx >= 0) {
+          col.splice(idx, 1)
+          return { deleted: 1 }
+        }
+        return { deleted: 0 }
       }
-      return { deleted: 0 }
+      if (!filterFn) return { deleted: 0 }
+      let deleted = 0
+      for (let i = col.length - 1; i >= 0; i--) {
+        if (filterFn(col[i])) {
+          col.splice(i, 1)
+          deleted++
+        }
+      }
+      return { deleted }
     },
   }
 
@@ -243,6 +254,11 @@ export function createMockUniCloud() {
       tempFileURL: String(fileID).replace('mock://', 'https://mock-cloud.local/'),
     })),
   }))
+  const downloadFile = vi.fn().mockImplementation(async ({ fileID }: { fileID: string }) => {
+    const uploaded = uploadedFiles.find(file => file.fileID === fileID)
+    if (!uploaded) throw new Error('file not found')
+    return { fileContent: uploaded.fileContent }
+  })
   const deleteFile = vi.fn().mockImplementation(async ({ fileList }: { fileList: string[] }) => {
     deletedFiles.push(...fileList)
     return {
@@ -261,6 +277,7 @@ export function createMockUniCloud() {
     }),
     uploadFile,
     getTempFileURL,
+    downloadFile,
     deleteFile,
     request: vi.fn(),
     __getUploadedFiles: () => uploadedFiles,
@@ -270,6 +287,7 @@ export function createMockUniCloud() {
       deletedFiles.splice(0, deletedFiles.length)
       uploadFile.mockClear()
       getTempFileURL.mockClear()
+      downloadFile.mockClear()
       deleteFile.mockClear()
     },
   }
