@@ -967,6 +967,7 @@ class LocalSyncRuntime {
   private started = false
   private processing = false
   private online = true
+  private deferOutboxFlushDepth = 0
   private currentFamilyId = ''
   private activeScopeKey = ''
   private scopeSyncPromises = new Map<string, Promise<SyncScopeResult>>()
@@ -1883,7 +1884,7 @@ class LocalSyncRuntime {
     if (localOperationLog) {
       await localDb.upsertRows('local_operation_logs', [localOperationLog])
     }
-    if (this.online) {
+    if (this.online && this.deferOutboxFlushDepth === 0) {
       void this.flushOutbox(familyId)
     }
   }
@@ -3086,6 +3087,11 @@ class LocalSyncRuntime {
     if (!litterId) throw new Error('缺少窝 ID')
     const litter = await findLocalRow<any>('litters', litterId)
     if (!litter || litter.family_id !== familyId) throw new Error('窝不存在')
+    const existingPuppyCount = (await localDb.query<any>('dogs', row =>
+      row.family_id === familyId
+      && row.origin_litter_id === litterId
+      && !row.deleted_at,
+    )).length
     const now = getNow()
     const puppyId = createStableEntityId('dog')
     const puppy = buildLocalDog(familyId, {
@@ -3097,11 +3103,21 @@ class LocalSyncRuntime {
       latest_weight: puppyData.weight || null,
       origin_litter_id: litterId,
     }, puppyId, now)
+    const nextTotalBorn = Math.max(Number(litter.total_born || 0), existingPuppyCount) + 1
+    const nextBornAlive = Math.max(Number(litter.born_alive || 0), existingPuppyCount) + 1
+    const nextLitter = {
+      ...litter,
+      total_born: nextTotalBorn,
+      born_alive: nextBornAlive,
+      updated_at: now,
+      _local_pending: true,
+    }
     const syncMeta = buildSyncMeta({ [litterId]: Number(litter.version || 0) }, {
       clientMutationId: createClientMutationId(LOCAL_MUTATION_TYPES.ADD_PUPPY_TO_LITTER),
       clientEntityIds: { dogs: puppyId },
     })
     await upsertLocalRows('dogs', [puppy])
+    await upsertLocalRows('litters', [nextLitter])
     await this.enqueueMutation(
       LOCAL_MUTATION_TYPES.ADD_PUPPY_TO_LITTER,
       familyId,
@@ -3111,7 +3127,10 @@ class LocalSyncRuntime {
     )
     return {
       data: { puppyId },
-      ...buildLocalAck(syncMeta, [{ collection: 'dogs', id: puppyId, version: 0, updatedAt: now }]),
+      ...buildLocalAck(syncMeta, [
+        { collection: 'dogs', id: puppyId, version: 0, updatedAt: now },
+        { collection: 'litters', id: litterId, version: Number(litter.version || 0), updatedAt: now },
+      ]),
     }
   }
 
@@ -3554,6 +3573,52 @@ class LocalSyncRuntime {
         { collection: 'sale_records', id: saleId, version: 0, updatedAt: now },
         { collection: 'dogs', id: dogId, version: Number(dog.version || 0), updatedAt: now },
       ]),
+    }
+  }
+
+  async directCompleteSaleLocally(familyIdInput: string, data: Record<string, any>) {
+    const familyId = getFamilyId(familyIdInput)
+    const hasReceivedAmount = data.received_amount !== '' && data.received_amount != null
+    const receivedAmount = hasReceivedAmount ? Number(data.received_amount) : null
+    if (hasReceivedAmount && (!Number.isFinite(receivedAmount) || Number(receivedAmount) <= 0)) {
+      throw new Error('请填写有效的到手价')
+    }
+
+    this.deferOutboxFlushDepth += 1
+    try {
+      const createResult = await this.createSaleRecordLocally(familyId, {
+        dog_id: data.dog_id,
+        sale_mode: data.sale_mode,
+        floor_price: data.floor_price ?? null,
+        buyer_info: data.buyer_info || null,
+        notes: data.notes || null,
+      })
+      const saleId = createResult?.data?.saleId
+      if (!saleId) throw new Error('销售记录创建失败')
+
+      const completeResult = await this.completeSaleLocally(familyId, saleId, {
+        received_amount: receivedAmount,
+        agreed_price: data.agreed_price ?? null,
+        buyer_info: data.buyer_info || null,
+        sale_mode: data.sale_mode,
+        platform: data.platform || null,
+        seller_agent_id: data.seller_agent_id || data.agent_id || null,
+        seller_agent_name: data.seller_agent_name || data.agent_name || null,
+        agent_id: data.agent_id || null,
+        agent_name: data.agent_name || null,
+        delivery_date: data.delivery_date || null,
+        date: data.date || getNow(),
+      })
+
+      return {
+        ...completeResult,
+        data: { saleId },
+      }
+    } finally {
+      this.deferOutboxFlushDepth = Math.max(0, this.deferOutboxFlushDepth - 1)
+      if (this.online && this.deferOutboxFlushDepth === 0) {
+        void this.flushOutbox(familyId)
+      }
     }
   }
 

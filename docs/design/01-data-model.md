@@ -152,6 +152,8 @@
 - `sire_id` / `sire_name`
 - `birth_date`
 - `birth_type`
+- `total_born`
+- `born_alive`
 - `birth_notes`
 - `weaned_at`
 - `family_id`
@@ -160,6 +162,9 @@
 规则：
 
 - 生产记录创建时同步创建
+- 窝详情后续“添加幼崽”视为补录生产事实，需同时递增 `total_born` 与 `born_alive`
+- 读取展示时若当前非删除 `origin_litter_id` 幼崽数大于 `total_born` / `born_alive`，按当前幼崽数纠偏展示
+- 删除或移出幼崽不自动反向减少出生事实
 - 断奶由 `weaned_at` 表示
 - 幼崽犬只通过 `origin_litter_id` 关联
 

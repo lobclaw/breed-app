@@ -1565,6 +1565,65 @@ describe('breeding-service', () => {
     })
   })
 
+  describe('后补幼崽', () => {
+    it('addPuppyToLitter 应递增窝出生与存活数并支持 _sync 幂等重放', async () => {
+      const birthDate = Date.now()
+      seedCollection('litters', [{
+        _id: 'litter_add_puppy_sync',
+        family_id: familyId,
+        dam_name: '花花',
+        birth_date: birthDate,
+        total_born: 3,
+        born_alive: 3,
+        version: 0,
+        deleted_at: null,
+      }])
+      seedCollection('dogs', [
+        { _id: 'existing_puppy_1', family_id: familyId, origin_litter_id: 'litter_add_puppy_sync', role: '幼崽', disposition: '在养', deleted_at: null },
+        { _id: 'existing_puppy_2', family_id: familyId, origin_litter_id: 'litter_add_puppy_sync', role: '幼崽', disposition: '在养', deleted_at: null },
+        { _id: 'existing_puppy_3', family_id: familyId, origin_litter_id: 'litter_add_puppy_sync', role: '幼崽', disposition: '在养', deleted_at: null },
+        { _id: 'existing_puppy_4', family_id: familyId, origin_litter_id: 'litter_add_puppy_sync', role: '幼崽', disposition: '在养', deleted_at: null },
+      ])
+      seedCollection('sync_mutations', [])
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      const payload = {
+        litterId: 'litter_add_puppy_sync',
+        puppyData: {
+          name: '幼崽4',
+          gender: '母',
+          weight: 126,
+        },
+        _sync: {
+          clientMutationId: 'add-puppy-sync-1',
+          deviceId: 'device_1',
+          clientTimestamp: birthDate,
+          baseVersions: { litter_add_puppy_sync: 0 },
+          clientEntityIds: { dogs: 'puppy_added_4' },
+        },
+      }
+
+      const first = await breedingService.addPuppyToLitter.call(ctx, payload)
+      const second = await breedingService.addPuppyToLitter.call(ctx, payload)
+
+      expect(first.ack).toBe('accepted')
+      expect(second).toEqual(first)
+      expect(first.touchedEntities).toEqual(expect.arrayContaining([
+        expect.objectContaining({ collection: 'dogs', id: 'puppy_added_4' }),
+        expect.objectContaining({ collection: 'litters', id: 'litter_add_puppy_sync' }),
+      ]))
+
+      const { data: litters } = await db.collection('litters').where({ _id: 'litter_add_puppy_sync' }).get()
+      expect(litters[0]).toMatchObject({
+        total_born: 5,
+        born_alive: 5,
+        version: 1,
+      })
+      const { data: dogs } = await db.collection('dogs').where({ origin_litter_id: 'litter_add_puppy_sync' }).get()
+      expect(dogs).toHaveLength(5)
+      expect(dogs.some(item => item._id === 'puppy_added_4' && item.name === '幼崽4')).toBe(true)
+    })
+  })
+
   describe('确认断奶', () => {
     it('应设置 weaned_at 并完成相关任务', async () => {
       const now = Date.now()

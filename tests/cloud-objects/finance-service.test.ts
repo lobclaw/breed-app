@@ -985,7 +985,7 @@ describe('finance-service', () => {
     })
   })
 
-  it('单窝利润应避免同一笔生产费用在周期和窝级别重复统计', async () => {
+	  it('单窝利润应避免同一笔生产费用在周期和窝级别重复统计', async () => {
     const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
 
     seedCollection('litters', [{
@@ -1021,10 +1021,46 @@ describe('finance-service', () => {
         amount: 1500,
       }),
     ])
-    expect(result.data.incomeItems).toEqual([
-      expect.objectContaining({ id: 'puppy_1', gender: '公', status: 'pending' }),
-      expect.objectContaining({ id: 'puppy_2', gender: '母', status: 'pending' }),
+	    expect(result.data.incomeItems).toEqual([
+	      expect.objectContaining({ id: 'puppy_1', gender: '公', status: 'pending' }),
+	      expect.objectContaining({ id: 'puppy_2', gender: '母', status: 'pending' }),
+	    ])
+	  })
+
+  it('单窝利润应按后补幼崽纠偏窝出生与存活统计', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+    seedCollection('litters', [{
+      _id: 'litter_count_fix',
+      family_id: familyId,
+      cycle_id: 'cycle_count_fix',
+      dam_name: '肉肉',
+      total_born: 3,
+      born_alive: 3,
+    }])
+    seedCollection('dogs', [
+      { _id: 'puppy_count_fix_1', name: '幼崽1', family_id: familyId, origin_litter_id: 'litter_count_fix', gender: '公', disposition: '正常', deleted_at: null },
+      { _id: 'puppy_count_fix_2', name: '幼崽2', family_id: familyId, origin_litter_id: 'litter_count_fix', gender: '母', disposition: '正常', deleted_at: null },
+      { _id: 'puppy_count_fix_3', name: '幼崽3', family_id: familyId, origin_litter_id: 'litter_count_fix', gender: '母', disposition: '正常', deleted_at: null },
+      { _id: 'puppy_count_fix_4', name: '幼崽4', family_id: familyId, origin_litter_id: 'litter_count_fix', gender: '母', disposition: '正常', deleted_at: null },
+      { _id: 'puppy_count_fix_deleted', name: '已删除幼崽', family_id: familyId, origin_litter_id: 'litter_count_fix', gender: '母', disposition: '正常', deleted_at: Date.now() },
     ])
+    seedCollection('sale_records', [])
+    seedCollection('incomes', [])
+    seedCollection('expenses', [])
+
+    const result = await financeService.getLitterProfit.call(ctx, { litter_id: 'litter_count_fix' })
+
+    expect(result.data).toMatchObject({
+      puppyCount: 4,
+      totalPuppyCount: 4,
+      aliveCount: 4,
+      litter: {
+        total_born: 4,
+        born_alive: 4,
+      },
+    })
+    expect(result.data.incomeItems).toHaveLength(4)
   })
 
   it('getDamRoi 别名调用应兼容 dog_id 入参', async () => {

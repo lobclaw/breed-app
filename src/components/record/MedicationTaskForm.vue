@@ -235,8 +235,11 @@
           </view>
         </view>
         <view v-else-if="protocols.length === 0" class="protocol-picker__empty">
-          <text class="material-icons-round" style="font-size: 36px; color: var(--text-4);">medication</text>
+          <view class="protocol-picker__empty-icon">
+            <text class="material-icons-round" style="font-size: 26px; color: var(--plum);">medication</text>
+          </view>
           <text class="protocol-picker__empty-text">暂无已保存的方案</text>
+          <text class="protocol-picker__empty-sub">常用药品、剂量和频率可保存成方案，下次一键带入。</text>
         </view>
         <view v-else class="protocol-picker__list">
           <view
@@ -257,9 +260,9 @@
             <text class="material-icons-round" style="font-size: 18px; color: var(--text-4);">chevron_right</text>
           </view>
         </view>
-        <view class="protocol-picker__footer">
+        <view class="protocol-picker__footer" :class="{ 'protocol-picker__footer--empty': protocols.length === 0 && !protocolLoading }">
           <view class="protocol-picker__new-link" @click="goToNewProtocol">
-            <text class="material-icons-round" style="font-size: 16px; color: var(--primary);">add</text>
+            <text class="material-icons-round" style="font-size: 18px; color: var(--primary);">add</text>
             <text class="protocol-picker__new-text">新建方案</text>
           </view>
         </view>
@@ -1181,6 +1184,175 @@ async function initFromRoute() {
 .save-check__label {
   font-size: 14px;
   color: var(--text-2);
+}
+
+.protocol-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 2px;
+  padding-bottom: 12px;
+  min-height: 206px;
+}
+
+.protocol-picker__skeleton,
+.protocol-picker__list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.protocol-picker__empty {
+  min-height: 138px;
+  padding: 22px 18px 20px;
+  border: 1px dashed rgba(134, 104, 176, 0.22);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(245, 240, 255, 0.76), rgba(255, 255, 255, 0.94));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 8px;
+  text-align: center;
+}
+
+.protocol-picker__empty-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 15px;
+  background: var(--icon-plum);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.protocol-picker__empty-text {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--text-1);
+}
+
+.protocol-picker__empty-sub {
+  max-width: 230px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-3);
+}
+
+.protocol-picker__item,
+.skeleton-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 68px;
+  padding: 12px;
+  border: 1px solid rgba(216, 203, 189, 0.42);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.protocol-picker__item {
+  transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+
+  &:active {
+    transform: scale(0.985);
+    border-color: rgba(134, 104, 176, 0.22);
+    background: var(--plum-soft);
+  }
+}
+
+.protocol-picker__item-icon,
+.skeleton-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 13px;
+  background: var(--plum-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.protocol-picker__item-body,
+.skeleton-body {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.protocol-picker__item-name {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--text-1);
+}
+
+.protocol-picker__item-detail {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.protocol-picker__footer {
+  padding-top: 2px;
+}
+
+.protocol-picker__footer--empty {
+  margin-top: 0;
+}
+
+.protocol-picker__new-link {
+  height: 46px;
+  border-radius: var(--radius-btn);
+  border: 1.5px solid rgba(234, 62, 119, 0.2);
+  background: var(--primary-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: transform 0.12s ease, background 0.12s ease;
+
+  &:active {
+    transform: scale(0.97);
+    background: var(--icon-rose);
+  }
+}
+
+.protocol-picker__new-text {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.skeleton-icon,
+.skeleton-line {
+  background: linear-gradient(90deg, var(--card-dim) 25%, rgba(255, 255, 255, 0.88) 50%, var(--card-dim) 75%);
+  background-size: 180% 100%;
+  animation: protocolSkeleton 1.2s ease-in-out infinite;
+}
+
+.skeleton-line {
+  height: 12px;
+  border-radius: 999px;
+}
+
+.skeleton-line--title {
+  width: 42%;
+}
+
+.skeleton-line--sub {
+  width: 72%;
+}
+
+@keyframes protocolSkeleton {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
 }
 
 .dup-dialog {

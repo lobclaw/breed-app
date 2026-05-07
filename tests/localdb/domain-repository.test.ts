@@ -1834,6 +1834,129 @@ describe('local domain repository', () => {
     }
   })
 
+  it('本地直接成交应一步落为已成交并写入自动收入', async () => {
+    const now = new Date('2026-05-07T10:00:00+08:00').getTime()
+    await localDb.replaceTable('dogs', [{
+      _id: 'direct_sale_dog_1',
+      family_id: 'fam_direct_sale',
+      name: '奶油',
+      gender: '母',
+      role: '幼崽',
+      disposition: '在养',
+      deleted_at: null,
+      version: 0,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('sale_records', [])
+    await localDb.replaceTable('incomes', [])
+    await localDb.replaceTable('outbox_mutations', [])
+    await localDb.replaceTable('local_operation_logs', [])
+    ;(localSyncRuntime as any).online = false
+
+    try {
+      const result = await localSyncRuntime.directCompleteSaleLocally('fam_direct_sale', {
+        dog_id: 'direct_sale_dog_1',
+        sale_mode: '自售',
+        received_amount: 8800,
+        agreed_price: 9000,
+        buyer_info: '张三',
+        platform: '微信',
+        agent_id: 'agent_direct_sale_1',
+        agent_name: '代理小王',
+        delivery_date: now + 86400000,
+        notes: '现场成交',
+        date: now,
+      })
+      const saleId = result.data.saleId
+      const sale = await localDb.findById<any>('sale_records', saleId)
+      const dog = await localDb.findById<any>('dogs', 'direct_sale_dog_1')
+      const incomes = await localDb.getTable<any>('incomes')
+      const outbox = await localDb.getOutbox()
+
+      expect(sale).toMatchObject({
+        dog_id: 'direct_sale_dog_1',
+        status: '已成交',
+        sale_mode: '自售',
+        settlement_status: '已结算',
+        received_amount: 8800,
+        agreed_price: 9000,
+        buyer_info: '张三',
+        platform: '微信',
+        seller_agent_id: 'agent_direct_sale_1',
+        seller_agent_name: '代理小王',
+        notes: '现场成交',
+      })
+      expect(dog).toMatchObject({
+        disposition: '已售',
+        disposition_date: now,
+      })
+      expect(incomes).toHaveLength(1)
+      expect(incomes[0]).toMatchObject({
+        dog_id: 'direct_sale_dog_1',
+        type: '销售',
+        amount: 8800,
+        source_sale_id: saleId,
+        source_type: 'auto',
+      })
+      expect(outbox.map(item => item.type)).toEqual(['finance.createSaleRecord', 'finance.completeSale'])
+      expect(outbox[0].payload._sync.clientEntityIds.sale_records).toBe(saleId)
+      expect(outbox[1].payload).toMatchObject({
+        id: saleId,
+        saleId,
+        received_amount: 8800,
+        agent_id: 'agent_direct_sale_1',
+        agent_name: '代理小王',
+      })
+    } finally {
+      ;(localSyncRuntime as any).online = true
+    }
+  })
+
+  it('本地直接成交可留空到手价并保持未结算', async () => {
+    const now = new Date('2026-05-07T11:00:00+08:00').getTime()
+    await localDb.replaceTable('dogs', [{
+      _id: 'direct_sale_dog_unsettled',
+      family_id: 'fam_direct_sale_unsettled',
+      name: '奶糖',
+      gender: '母',
+      role: '幼崽',
+      disposition: '自留',
+      deleted_at: null,
+      version: 0,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('sale_records', [])
+    await localDb.replaceTable('incomes', [])
+    await localDb.replaceTable('outbox_mutations', [])
+    await localDb.replaceTable('local_operation_logs', [])
+    ;(localSyncRuntime as any).online = false
+
+    try {
+      const result = await localSyncRuntime.directCompleteSaleLocally('fam_direct_sale_unsettled', {
+        dog_id: 'direct_sale_dog_unsettled',
+        sale_mode: null,
+        received_amount: null,
+        buyer_info: '李四',
+        date: now,
+      })
+      const sale = await localDb.findById<any>('sale_records', result.data.saleId)
+      const dog = await localDb.findById<any>('dogs', 'direct_sale_dog_unsettled')
+      const incomes = await localDb.getTable<any>('incomes')
+
+      expect(sale).toMatchObject({
+        status: '已成交',
+        sale_mode: null,
+        settlement_status: '未结算',
+        received_amount: null,
+        buyer_info: '李四',
+      })
+      expect(dog.disposition).toBe('已售')
+      expect(incomes).toHaveLength(0)
+    } finally {
+      ;(localSyncRuntime as any).online = true
+    }
+  })
+
   it('本地销售方式可单独更新并写入 outbox', async () => {
     const now = Date.now()
     await localDb.replaceTable('sale_records', [{
@@ -2054,6 +2177,109 @@ describe('local domain repository', () => {
       _id: 'litter_history_2',
       sire_name: '弟弟',
     })
+  })
+
+  it('后补幼崽应按当前关联犬只纠偏窝出生与存活统计', async () => {
+    const now = new Date('2026-05-06T10:00:00+08:00').getTime()
+    await localDb.replaceTable('litters', [{
+      _id: 'litter_count_fix',
+      family_id: 'fam_litter_count_fix',
+      cycle_id: 'cycle_count_fix',
+      dam_id: 'dam_count_fix',
+      dam_name: '肉肉',
+      birth_date: now,
+      total_born: 3,
+      born_alive: 3,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('breeding_cycles', [{
+      _id: 'cycle_count_fix',
+      family_id: 'fam_litter_count_fix',
+      dam_id: 'dam_count_fix',
+      dam_name: '肉肉',
+      status: '已生产',
+      updated_at: now,
+    }])
+    await localDb.replaceTable('dogs', [
+      { _id: 'puppy_count_fix_1', family_id: 'fam_litter_count_fix', origin_litter_id: 'litter_count_fix', name: '肉肉窝-1号', role: '幼崽', disposition: '在养', deleted_at: null },
+      { _id: 'puppy_count_fix_2', family_id: 'fam_litter_count_fix', origin_litter_id: 'litter_count_fix', name: '肉肉窝-2号', role: '幼崽', disposition: '在养', deleted_at: null },
+      { _id: 'puppy_count_fix_3', family_id: 'fam_litter_count_fix', origin_litter_id: 'litter_count_fix', name: '肉肉窝-3号', role: '幼崽', disposition: '在养', deleted_at: null },
+      { _id: 'puppy_count_fix_4', family_id: 'fam_litter_count_fix', origin_litter_id: 'litter_count_fix', name: '幼崽4', role: '幼崽', disposition: '在养', deleted_at: null },
+      { _id: 'puppy_count_fix_deleted', family_id: 'fam_litter_count_fix', origin_litter_id: 'litter_count_fix', name: '已删除幼崽', role: '幼崽', disposition: '在养', deleted_at: now },
+    ])
+    await localDb.replaceTable('breeding_records', [])
+    await localDb.replaceTable('dog_weights', [])
+    await localDb.replaceTable('expenses', [])
+    await localDb.replaceTable('incomes', [])
+    await localDb.replaceTable('sale_records', [])
+    await localDb.replaceTable('health_records', [])
+
+    const litters = await listLocalLitters('fam_litter_count_fix')
+    expect(litters[0]).toMatchObject({
+      _id: 'litter_count_fix',
+      total_born: 4,
+      born_alive: 4,
+      totalCount: 4,
+      aliveCount: 4,
+    })
+
+    const cycleDetail = await getLocalBreedingCycleDetail('fam_litter_count_fix', 'cycle_count_fix')
+    expect(cycleDetail?.litter).toMatchObject({ total_born: 4, born_alive: 4 })
+
+    const litterDetail = await getLocalLitterDetail('fam_litter_count_fix', 'litter_count_fix')
+    expect(litterDetail?.litter).toMatchObject({ total_born: 4, born_alive: 4 })
+    expect(litterDetail?.puppies).toHaveLength(4)
+
+    const profit = await getLocalLitterProfit('fam_litter_count_fix', 'litter_count_fix')
+    expect(profit).toMatchObject({
+      puppyCount: 4,
+      totalPuppyCount: 4,
+      aliveCount: 4,
+      litter: { total_born: 4, born_alive: 4 },
+    })
+    expect(profit?.incomeItems).toHaveLength(4)
+  })
+
+  it('本地后补幼崽应同步递增窝出生与存活数', async () => {
+    const birthDate = new Date('2026-05-06T10:00:00+08:00').getTime()
+    await localDb.replaceTable('litters', [{
+      _id: 'litter_add_puppy_count',
+      family_id: 'fam_add_puppy_count',
+      birth_date: birthDate,
+      total_born: 3,
+      born_alive: 3,
+      version: 2,
+      updated_at: birthDate,
+    }])
+    await localDb.replaceTable('dogs', [
+      { _id: 'existing_add_puppy_1', family_id: 'fam_add_puppy_count', origin_litter_id: 'litter_add_puppy_count', role: '幼崽', disposition: '在养', deleted_at: null },
+      { _id: 'existing_add_puppy_2', family_id: 'fam_add_puppy_count', origin_litter_id: 'litter_add_puppy_count', role: '幼崽', disposition: '在养', deleted_at: null },
+      { _id: 'existing_add_puppy_3', family_id: 'fam_add_puppy_count', origin_litter_id: 'litter_add_puppy_count', role: '幼崽', disposition: '在养', deleted_at: null },
+      { _id: 'existing_add_puppy_4', family_id: 'fam_add_puppy_count', origin_litter_id: 'litter_add_puppy_count', role: '幼崽', disposition: '在养', deleted_at: null },
+    ])
+    await localDb.replaceTable('outbox_mutations', [])
+
+    const result = await localSyncRuntime.addPuppyToLitterLocally('fam_add_puppy_count', 'litter_add_puppy_count', {
+      name: '幼崽4',
+      gender: '母',
+      weight: 126,
+    })
+
+    const puppy = await localDb.findById<any>('dogs', result.data.puppyId)
+    expect(puppy).toMatchObject({
+      name: '幼崽4',
+      origin_litter_id: 'litter_add_puppy_count',
+      latest_weight: 126,
+    })
+    await expect(localDb.findById<any>('litters', 'litter_add_puppy_count')).resolves.toMatchObject({
+      total_born: 5,
+      born_alive: 5,
+      _local_pending: true,
+    })
+    expect(result.touchedEntities).toEqual(expect.arrayContaining([
+      expect.objectContaining({ collection: 'dogs', id: result.data.puppyId }),
+      expect.objectContaining({ collection: 'litters', id: 'litter_add_puppy_count' }),
+    ]))
   })
 
   it('外部种公使用记录应能从配种记录 details 反查周期与产窝', async () => {

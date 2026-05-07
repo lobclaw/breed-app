@@ -285,6 +285,7 @@ V1 保持三级角色：
 - 自定义支出分类必须带 `parent_group`
 - 财务统计页底部模块固定命名为 `专项报表`，不跟随上方时间维度切换
 - `未来预估` 禁止先展示硬编码默认值再异步覆盖；合法 `0` 值必须能覆盖默认值
+- 窝详情后续添加幼崽按补录生产事实处理，单窝统计与利润读取按当前非删除关联幼崽数纠偏出生/存活展示
 - `单窝利润` 中若同一笔 expense 同时关联 `linked_cycle_id` 与 `linked_litter_id`，只统计一次，并优先归入“窝级别费用”
 
 ### 7.7 销售流程
@@ -292,12 +293,13 @@ V1 保持三级角色：
 - 顶层销售状态保持 `待售 / 已预定 / 已成交 / 已退款 / 定金取消`
 - `已成交` 与 `settlement_status` 分离，后者当前使用 `未结算 / 部分结算 / 已结算`
 - `待售` 表示已手动纳入销售池，不要求先填写 `floor_price`；`floor_price` 仅表示内部参考底价，可为空
-- “开始销售”提交走 `finance-service.createSaleRecord`
+- “开始销售”提交走 `finance-service.createSaleRecord`；“直接成交”是销售创建页的一步式入口，底层仍先创建 `待售` 销售记录，再立即走 `finance-service.completeSale`
 - 仅 `幼崽` 且 `disposition` 属于 `在养 / 自留` 可开始销售；同一犬只同一时刻只允许一条进行中的销售记录
 - 销售创建页的犬只候选必须来自本地投影过滤：`role=幼崽`、`disposition in 在养/自留`，并排除已有 `待售 / 已预定` 销售记录的犬只；锁定来源入口仍显示来源犬只，但提交必须由本地事务和云对象继续兜底校验
 - 开始销售必须同时创建 `sale_records.status=待售`，并将犬只 `disposition` 切到 `待售`
-- 销售创建页 `/pages/sale/create` 当前正式语义是“开始销售”，支持来源页透传 `dogId + dogName` 锁定犬只
-- 销售创建页字段固定为：犬只、`sale_mode`（默认待定，落库为 `null`）、`floor_price`（选填）、`buyer_info`（选填）、`notes`（选填）
+- 销售创建页 `/pages/sale/create` 支持“开始销售 / 直接成交”模式切换，并支持来源页透传 `dogId + dogName` 锁定犬只
+- “开始销售”字段固定为：犬只、`sale_mode`（默认待定，落库为 `null`）、`floor_price`（选填）、`buyer_info`（选填）、`notes`（选填）
+- “直接成交”字段固定为：犬只、`sale_mode`（不展示待定，默认 `自售`）、`received_amount`（选填）、`agreed_price`（选填）、`buyer_info`（选填）、`platform`（选填）、`seller_agent_id/name`（仅 `代理 / 代卖` 时选填）、`delivery_date`（选填）、`notes`（选填）
 - `sale_mode=null` 表示销售方式待定；待售、已预定、已成交阶段允许在详情页单独修改，收定金与完成交易时也可顺手确认或继续保留待定
 - 销售列表与详情按新语义展示：`待售` 无底价时显示“未定价”；`已成交` 且无 `received_amount` 时显示“未结算”，不要渲染 `¥0`
 - 完成交易走 `finance-service.completeSale`，允许 `received_amount` 为空；为空时写入 `status=已成交`、`settlement_status=未结算`，且不自动生成销售收入

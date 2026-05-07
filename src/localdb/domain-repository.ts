@@ -732,15 +732,36 @@ function sortByRecent(left: Record<string, any>, right: Record<string, any>) {
   return Number(right.updated_at || right.date || right.created_at || 0) - Number(left.updated_at || left.date || left.created_at || 0)
 }
 
-function formatLitterProjection(row: Record<string, any>) {
+function getRowPuppyCount(row: Record<string, any>) {
+  if (Array.isArray(row.puppies)) {
+    return row.puppies.filter((puppy: Record<string, any>) => !puppy?.deleted_at).length
+  }
+  return 0
+}
+
+function normalizeLitterBirthCounts<T extends Record<string, any>>(litter: T, puppyCountInput?: number): T {
+  const resolvedPuppyCount = Number(puppyCountInput ?? getRowPuppyCount(litter) ?? 0)
+  const puppyCount = Number.isFinite(resolvedPuppyCount) ? Math.max(0, resolvedPuppyCount) : 0
+  const totalBorn = Math.max(Number(litter.total_born || 0), puppyCount)
+  const bornAlive = Math.max(Number(litter.born_alive || 0), puppyCount)
   return {
-    ...row,
-    damName: row.dam_name,
-    litterNumber: row.litter_number,
-    birthDate: row.birth_date,
-    puppyCount: Array.isArray(row.puppies) && row.puppies.length ? row.puppies.length : Number(row.born_alive || row.total_born || 0),
-    aliveCount: Number(row.born_alive || (Array.isArray(row.puppies) ? row.puppies.length : 0) || row.total_born || 0),
-    totalCount: Number(row.total_born || row.born_alive || (Array.isArray(row.puppies) ? row.puppies.length : 0) || 0),
+    ...litter,
+    total_born: totalBorn,
+    born_alive: bornAlive,
+  }
+}
+
+function formatLitterProjection(row: Record<string, any>) {
+  const puppyCount = Number(row._puppy_count ?? getRowPuppyCount(row) ?? 0)
+  const normalized = normalizeLitterBirthCounts(row, puppyCount)
+  return {
+    ...normalized,
+    damName: normalized.dam_name,
+    litterNumber: normalized.litter_number,
+    birthDate: normalized.birth_date,
+    puppyCount: puppyCount || Number(normalized.born_alive || normalized.total_born || 0),
+    aliveCount: Number(normalized.born_alive || normalized.total_born || 0),
+    totalCount: Number(normalized.total_born || normalized.born_alive || 0),
   }
 }
 
@@ -843,7 +864,23 @@ export async function listLocalLitters(
       return computedNumber > 0 ? { ...row, litter_number: computedNumber } : row
     })
   }
-  return normalizedRows.map(row => formatLitterProjection(row)) as Array<Litter & ReturnType<typeof formatLitterProjection>>
+  const litterIds = normalizedRows.map(row => row._id).filter(Boolean)
+  const puppies = litterIds.length
+    ? await localDb.query<any>('dogs', row =>
+      row.family_id === familyId
+      && !row.deleted_at
+      && litterIds.includes(row.origin_litter_id),
+    )
+    : []
+  const puppyCountByLitter = puppies.reduce<Record<string, number>>((map, puppy) => {
+    const sourceLitterId = String(puppy.origin_litter_id || '')
+    map[sourceLitterId] = (map[sourceLitterId] || 0) + 1
+    return map
+  }, {})
+  return normalizedRows.map(row => formatLitterProjection({
+    ...row,
+    _puppy_count: puppyCountByLitter[row._id] || 0,
+  })) as Array<Litter & ReturnType<typeof formatLitterProjection>>
 }
 
 export async function listLocalBreedingCycles(
@@ -896,7 +933,7 @@ export async function listLocalMatingRecordsBySire(familyId: string, input: { si
 
 export async function getLocalBreedingCycleDetail(familyId: string, cycleId: string): Promise<BreedingCycleDetailResponse | null> {
   if (!familyId || !cycleId) return null
-  const [cycle, records, litter, expenses, cycleSiblings, litterSiblings] = await Promise.all([
+  const [cycle, records, litter, expenses, cycleSiblings, litterSiblings, puppies] = await Promise.all([
     localDb.findById<BreedingCycle & { deleted_at?: number | null }>('breeding_cycles', cycleId),
     localDb.query<BreedingRecord & { deleted_at?: number | null }>('breeding_records', row =>
       row.family_id === familyId && row.cycle_id === cycleId && !row.deleted_at,
@@ -912,6 +949,7 @@ export async function getLocalBreedingCycleDetail(familyId: string, cycleId: str
     ),
     localDb.query<any>('breeding_cycles', row => row.family_id === familyId && !row.deleted_at),
     localDb.query<any>('litters', row => row.family_id === familyId && !row.deleted_at),
+    localDb.query<any>('dogs', row => row.family_id === familyId && !row.deleted_at && !!row.origin_litter_id),
   ])
 
   if (!cycle || cycle.family_id !== familyId || cycle.deleted_at) return null
@@ -919,7 +957,10 @@ export async function getLocalBreedingCycleDetail(familyId: string, cycleId: str
   const numberedLitters = attachLitterNumbers(litterSiblings)
   const currentCycle = (numberedCycles.find(item => item._id === cycleId) || cycle) as BreedingCycle
   const currentLitter = litter[0]
-    ? ((numberedLitters.find(item => item._id === litter[0]._id) || litter[0]) as Litter)
+    ? (normalizeLitterBirthCounts(
+      (numberedLitters.find(item => item._id === litter[0]._id) || litter[0]) as Litter,
+      puppies.filter(item => item.origin_litter_id === litter[0]._id).length,
+    ) as Litter)
     : null
 
   return {
@@ -2029,6 +2070,7 @@ export async function getLocalLitterProfit(familyId: string, litterId: string) {
     .reduce((sum, item) => sum + Number(item.amount || 0), 0)
   const alivePuppies = puppies.filter(item => item.disposition !== '已故')
   const avgCostPerPuppy = alivePuppies.length > 0 ? totalExpense / alivePuppies.length : 0
+  const normalizedLitter = normalizeLitterBirthCounts(litter as unknown as Record<string, any>, puppies.length) as Litter
   const incomeItems = puppies.map((puppy, index) => {
     const actualIncome = incomeByDog[puppy._id] || 0
     const sale = saleByDog[puppy._id]
@@ -2077,7 +2119,7 @@ export async function getLocalLitterProfit(familyId: string, litterId: string) {
   })
 
   return {
-    litter,
+    litter: normalizedLitter,
     puppies,
     totalIncome,
     totalExpense,
@@ -2471,7 +2513,7 @@ export async function getLocalLitterDetail(familyId: string, litterId: string) {
 
   return {
     litter: {
-      ...numberedLitter,
+      ...normalizeLitterBirthCounts(numberedLitter, normalizedPuppies.length),
       sire_name: sireName || numberedLitter.sire_name || null,
       expense: expenseTotal,
       income: incomeTotal,

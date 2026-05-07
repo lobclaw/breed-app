@@ -1780,6 +1780,9 @@ module.exports = {
     const conflict = getEntityConflict(syncMeta, 'litters', litter)
     if (conflict) return conflict
     const clientDogId = typeof syncMeta?.clientEntityIds?.dogs === 'string' ? syncMeta.clientEntityIds.dogs : null
+    const { total: existingPuppyCount } = await db.collection('dogs')
+      .where({ origin_litter_id: litterId, family_id: this.familyId, deleted_at: null })
+      .count()
 
     const dogData = buildVersionedCreate({
       ...(clientDogId ? { _id: clientDogId } : {}),
@@ -1803,6 +1806,13 @@ module.exports = {
 
     const { id } = await db.collection('dogs').add(dogData)
     const puppyId = clientDogId || id
+    const nextTotalBorn = Math.max(Number(litter.total_born || 0), Number(existingPuppyCount || 0)) + 1
+    const nextBornAlive = Math.max(Number(litter.born_alive || 0), Number(existingPuppyCount || 0)) + 1
+    await db.collection('litters').doc(litterId).update({
+      total_born: nextTotalBorn,
+      born_alive: nextBornAlive,
+      ...buildVersionUpdate(dbCmd, now),
+    })
 
     await logBreedingOperation({
       familyId: this.familyId,
@@ -1815,11 +1825,18 @@ module.exports = {
       meta: { litterId },
     })
 
+    const { data: updatedLitters } = await db.collection('litters')
+      .where({ _id: litterId, family_id: this.familyId })
+      .limit(1)
+      .get()
     const response = {
       data: { puppyId },
       ...buildSyncAck(syncMeta, {
         ack: 'accepted',
-        touchedEntities: [buildTouchedEntity('dogs', { ...dogData, _id: puppyId })],
+        touchedEntities: [
+          buildTouchedEntity('dogs', { ...dogData, _id: puppyId }),
+          ...(updatedLitters?.[0] ? [buildTouchedEntity('litters', updatedLitters[0])] : []),
+        ],
         resyncScopes: ['dogs', 'litters'],
       }),
     }

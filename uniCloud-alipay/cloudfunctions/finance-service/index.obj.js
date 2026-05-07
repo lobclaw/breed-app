@@ -524,6 +524,11 @@ async function calculateLitterProfit(familyId, litterId) {
 
   const alivePuppies = puppies.filter(item => item.disposition !== '已故')
   const avgCostPerPuppy = alivePuppies.length > 0 ? totalExpense / alivePuppies.length : 0
+  const normalizedLitter = {
+    ...litter,
+    total_born: Math.max(Number(litter.total_born || 0), puppies.length),
+    born_alive: Math.max(Number(litter.born_alive || 0), puppies.length),
+  }
 
   const incomeItems = puppies.map((puppy, index) => {
     const actualIncome = incomeByDog[puppy._id] || 0
@@ -577,7 +582,7 @@ async function calculateLitterProfit(familyId, litterId) {
   })
 
   return {
-    litter,
+    litter: normalizedLitter,
     puppies,
     totalIncome,
     totalExpense,
