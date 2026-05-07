@@ -115,9 +115,16 @@
             <text class="detail-label">创建日期</text>
             <text class="detail-value">{{ formatDate(sale.created_at) }}</text>
           </view>
-          <view class="detail-row" v-if="sale.sale_mode">
+          <view
+            class="detail-row"
+            :class="{ 'detail-row--action': canEditSaleMode }"
+            @click="openSaleModeSheet"
+          >
             <text class="detail-label">销售方式</text>
-            <text class="detail-value">{{ sale.sale_mode }}</text>
+            <view class="detail-action-value">
+              <text class="detail-value">{{ saleModeText }}</text>
+              <text v-if="canEditSaleMode" class="material-icons-round detail-action-icon">chevron_right</text>
+            </view>
           </view>
           <view class="detail-row" v-if="sale.status === '已成交' && sale.settlement_status">
             <text class="detail-label">结算状态</text>
@@ -156,12 +163,12 @@
 
       <!-- 操作按钮 -->
       <view class="sale-action-area" v-if="sale.status === '待售'">
-        <button class="action-btn action-btn--ghost" @click="showDepositModal = true">收定金</button>
-        <button class="action-btn action-btn--primary" @click="showCompleteModal = true">直接成交</button>
+        <button class="action-btn action-btn--ghost" @click="openDepositModal">收定金</button>
+        <button class="action-btn action-btn--primary" @click="openCompleteModal">直接成交</button>
       </view>
 
       <view class="sale-action-area" v-if="sale.status === '已预定'">
-        <button class="action-btn action-btn--primary" @click="showCompleteModal = true">完成交易</button>
+        <button class="action-btn action-btn--primary" @click="openCompleteModal">完成交易</button>
         <button class="action-btn action-btn--ghost-red" @click="openCancelSheet">取消预定</button>
       </view>
 
@@ -195,6 +202,20 @@
         <view class="sale-flow-field">
           <text class="sale-flow-label">买家信息（选填）</text>
           <input v-model="depositForm.buyer_info" placeholder="填写姓名、微信或备注" class="sale-flow-input" />
+        </view>
+        <view class="sale-flow-field">
+          <text class="sale-flow-label">销售方式</text>
+          <view class="sale-flow-pills">
+            <view
+              v-for="option in saleModeOptions"
+              :key="option.label"
+              class="sale-flow-pill"
+              :class="{ 'sale-flow-pill--active': depositForm.sale_mode === option.value }"
+              @click="depositForm.sale_mode = option.value"
+            >
+              <text>{{ option.label }}</text>
+            </view>
+          </view>
         </view>
         <view class="sale-flow-field">
           <text class="sale-flow-label">平台（选填）</text>
@@ -247,6 +268,20 @@
         <view class="sale-flow-field">
           <text class="sale-flow-label">买家信息（选填）</text>
           <input v-model="completeForm.buyer_info" placeholder="填写姓名、微信或备注" class="sale-flow-input" />
+        </view>
+        <view class="sale-flow-field">
+          <text class="sale-flow-label">销售方式</text>
+          <view class="sale-flow-pills">
+            <view
+              v-for="option in saleModeOptions"
+              :key="option.label"
+              class="sale-flow-pill"
+              :class="{ 'sale-flow-pill--active': completeForm.sale_mode === option.value }"
+              @click="completeForm.sale_mode = option.value"
+            >
+              <text>{{ option.label }}</text>
+            </view>
+          </view>
         </view>
         <view class="sale-flow-field">
           <text class="sale-flow-label">平台（选填）</text>
@@ -314,6 +349,31 @@
       <template #footer>
         <view class="sale-flow-footer">
           <button class="sale-flow-submit sale-flow-submit--primary" :disabled="!settleForm.received_amount" @click="doSettle">确认结算</button>
+        </view>
+      </template>
+    </BSheet>
+
+    <!-- 修改销售方式 Sheet -->
+    <BSheet :visible="showSaleModeSheet" title="修改销售方式" @update:visible="showSaleModeSheet = $event">
+      <view class="sale-flow-form">
+        <view class="sale-flow-field">
+          <text class="sale-flow-label">销售方式</text>
+          <view class="sale-flow-pills">
+            <view
+              v-for="option in saleModeOptions"
+              :key="option.label"
+              class="sale-flow-pill"
+              :class="{ 'sale-flow-pill--active': saleModeForm.sale_mode === option.value }"
+              @click="saleModeForm.sale_mode = option.value"
+            >
+              <text>{{ option.label }}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+      <template #footer>
+        <view class="sale-flow-footer">
+          <button class="sale-flow-submit sale-flow-submit--primary" @click="doUpdateSaleMode">保存</button>
         </view>
       </template>
     </BSheet>
@@ -517,12 +577,22 @@ import { formatDateInputValue } from '@/utils/date'
 const { currentFamily } = useAuth()
 usePageSync({ routePath: 'pages/sale/detail' })
 
+type SaleMode = '自售' | '代理' | '代卖' | null
+
+const saleModeOptions: Array<{ label: string; value: SaleMode }> = [
+  { label: '待定', value: null },
+  { label: '自售', value: '自售' },
+  { label: '代理', value: '代理' },
+  { label: '代卖', value: '代卖' },
+]
+
 const sale = ref<any>(null)
 const saleId = ref('')
 
 const showDepositModal = ref(false)
 const showCompleteModal = ref(false)
 const showSettleModal = ref(false)
+const showSaleModeSheet = ref(false)
 const showDeliveryDatePicker = ref(false)
 const showRefundDatePicker = ref(false)
 
@@ -587,6 +657,7 @@ const depositForm = reactive({
   deposit_amount: '',
   agreed_price: '',
   buyer_info: '',
+  sale_mode: null as SaleMode,
   platform: '',
   agent_id: '',
   agent_name: '',
@@ -596,6 +667,7 @@ const completeForm = reactive({
   received_amount: '',
   agreed_price: '',
   buyer_info: '',
+  sale_mode: null as SaleMode,
   platform: '',
   delivery_date: null as number | null,
 })
@@ -604,6 +676,10 @@ const settleForm = reactive({
   received_amount: '',
   agreed_price: '',
   settlement_status: '已结算' as '已结算' | '部分结算',
+})
+
+const saleModeForm = reactive({
+  sale_mode: null as SaleMode,
 })
 
 const deliveryDateText = computed(() => formatDateInputValue(completeForm.delivery_date))
@@ -624,8 +700,19 @@ const hasPriceDetails = computed(() => {
 })
 
 const canRefund = computed(() => Number(sale.value?.received_amount || 0) > 0)
+const canEditSaleMode = computed(() => ['待售', '已预定', '已成交'].includes(String(sale.value?.status || '')))
+const saleModeText = computed(() => formatSaleMode(sale.value?.sale_mode))
 
 type SaleStatusTone = 'amber' | 'blue' | 'green' | 'red'
+
+function normalizeSaleModeValue(mode?: string | null): SaleMode {
+  const normalized = String(mode || '').trim()
+  return normalized === '自售' || normalized === '代理' || normalized === '代卖' ? normalized : null
+}
+
+function formatSaleMode(mode?: string | null) {
+  return normalizeSaleModeValue(mode) || '待定'
+}
 
 function onDeliveryDateConfirm(value: number | string) {
   if (typeof value !== 'number') return
@@ -737,6 +824,7 @@ async function load() {
   completeForm.received_amount = ''
   completeForm.agreed_price = detail.agreed_price != null ? String(detail.agreed_price) : ''
   completeForm.buyer_info = detail.buyer_info || ''
+  completeForm.sale_mode = normalizeSaleModeValue(detail.sale_mode)
   completeForm.platform = detail.platform || ''
   completeForm.delivery_date = null
 }
@@ -752,6 +840,33 @@ function openSettleModal() {
   showSettleModal.value = true
 }
 
+function openDepositModal() {
+  depositForm.deposit_amount = ''
+  depositForm.agreed_price = sale.value?.agreed_price != null ? String(sale.value.agreed_price) : ''
+  depositForm.buyer_info = sale.value?.buyer_info || ''
+  depositForm.sale_mode = normalizeSaleModeValue(sale.value?.sale_mode)
+  depositForm.platform = sale.value?.platform || ''
+  depositForm.agent_id = sale.value?.seller_agent_id || ''
+  depositForm.agent_name = sale.value?.seller_agent_name || sale.value?.agent_name || ''
+  showDepositModal.value = true
+}
+
+function openCompleteModal() {
+  completeForm.received_amount = ''
+  completeForm.agreed_price = sale.value?.agreed_price != null ? String(sale.value.agreed_price) : ''
+  completeForm.buyer_info = sale.value?.buyer_info || ''
+  completeForm.sale_mode = normalizeSaleModeValue(sale.value?.sale_mode)
+  completeForm.platform = sale.value?.platform || ''
+  completeForm.delivery_date = null
+  showCompleteModal.value = true
+}
+
+function openSaleModeSheet() {
+  if (!canEditSaleMode.value) return
+  saleModeForm.sale_mode = normalizeSaleModeValue(sale.value?.sale_mode)
+  showSaleModeSheet.value = true
+}
+
 async function doDeposit() {
   const familyId = currentFamily.value?._id || ''
   localSyncRuntime.setCurrentFamilyId(familyId)
@@ -759,6 +874,7 @@ async function doDeposit() {
     deposit_amount: parseFloat(depositForm.deposit_amount),
     agreed_price: depositForm.agreed_price ? parseFloat(depositForm.agreed_price) : null,
     buyer_info: depositForm.buyer_info || null,
+    sale_mode: depositForm.sale_mode,
     platform: depositForm.platform || null,
     agent_id: depositForm.agent_id || null,
     agent_name: depositForm.agent_name || null,
@@ -785,6 +901,7 @@ async function doComplete() {
         received_amount: receivedAmount,
         agreed_price: completeForm.agreed_price ? parseFloat(completeForm.agreed_price) : null,
         buyer_info: completeForm.buyer_info || null,
+        sale_mode: completeForm.sale_mode,
         platform: completeForm.platform || null,
         delivery_date: deliveryDate,
         date: Date.now(),
@@ -803,6 +920,7 @@ async function doComplete() {
     received_amount: receivedAmount,
     agreed_price: completeForm.agreed_price ? parseFloat(completeForm.agreed_price) : null,
     buyer_info: completeForm.buyer_info || null,
+    sale_mode: completeForm.sale_mode,
     platform: completeForm.platform || null,
     delivery_date: deliveryDate,
     date: Date.now(),
@@ -826,6 +944,18 @@ async function doSettle() {
   })
   if (res) {
     showSettleModal.value = false
+    await refreshSale()
+  }
+}
+
+async function doUpdateSaleMode() {
+  const familyId = currentFamily.value?._id || ''
+  localSyncRuntime.setCurrentFamilyId(familyId)
+  const res = await localSyncRuntime.updateSaleModeLocally(familyId, saleId.value, {
+    sale_mode: saleModeForm.sale_mode,
+  })
+  if (res) {
+    showSaleModeSheet.value = false
     await refreshSale()
   }
 }
@@ -1094,6 +1224,10 @@ onShow(() => {
   border-bottom: 1px solid var(--card-dim);
 
   &:last-child { border-bottom: none; }
+
+  &--action {
+    cursor: pointer;
+  }
 }
 
 .detail-label {
@@ -1113,6 +1247,17 @@ onShow(() => {
     font-weight: 800;
     color: var(--red);
   }
+}
+
+.detail-action-value {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.detail-action-icon {
+  font-size: 18px;
+  color: var(--text-3);
 }
 
 .platform-pill {

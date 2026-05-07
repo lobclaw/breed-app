@@ -1353,7 +1353,7 @@ function formatDogAgeText(birthTs?: number | null) {
 
 function normalizeSaleMode(mode?: string | null): SaleRecord['sale_mode'] {
   const normalized = String(mode || '').trim()
-  return normalized === '代理' || normalized === '代卖' || normalized === '自售' ? normalized : '自售'
+  return normalized === '代理' || normalized === '代卖' || normalized === '自售' ? normalized : null
 }
 
 function deriveSaleSettlementStatus(sale: Partial<SaleRecord> & Record<string, any>): SaleRecord['settlement_status'] {

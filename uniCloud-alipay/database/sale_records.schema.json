@@ -28,7 +28,7 @@
     "sale_mode": {
       "bsonType": ["string", "null"],
       "enum": ["自售", "代理", "代卖", null],
-      "description": "销售方式"
+      "description": "销售方式，null 表示待定"
     },
     "settlement_status": {
       "bsonType": ["string", "null"],

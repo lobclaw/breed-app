@@ -297,7 +297,8 @@ V1 保持三级角色：
 - 销售创建页的犬只候选必须来自本地投影过滤：`role=幼崽`、`disposition in 在养/自留`，并排除已有 `待售 / 已预定` 销售记录的犬只；锁定来源入口仍显示来源犬只，但提交必须由本地事务和云对象继续兜底校验
 - 开始销售必须同时创建 `sale_records.status=待售`，并将犬只 `disposition` 切到 `待售`
 - 销售创建页 `/pages/sale/create` 当前正式语义是“开始销售”，支持来源页透传 `dogId + dogName` 锁定犬只
-- 销售创建页字段固定为：犬只、`sale_mode`（默认 `自售`）、`floor_price`（选填）、`buyer_info`（选填）、`notes`（选填）
+- 销售创建页字段固定为：犬只、`sale_mode`（默认待定，落库为 `null`）、`floor_price`（选填）、`buyer_info`（选填）、`notes`（选填）
+- `sale_mode=null` 表示销售方式待定；待售、已预定、已成交阶段允许在详情页单独修改，收定金与完成交易时也可顺手确认或继续保留待定
 - 销售列表与详情按新语义展示：`待售` 无底价时显示“未定价”；`已成交` 且无 `received_amount` 时显示“未结算”，不要渲染 `¥0`
 - 完成交易走 `finance-service.completeSale`，允许 `received_amount` 为空；为空时写入 `status=已成交`、`settlement_status=未结算`，且不自动生成销售收入
 - 成交后补结算统一走 `finance-service.settleSale`；补录 `received_amount` 后再创建或更新自动收入

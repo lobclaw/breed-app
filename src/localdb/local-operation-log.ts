@@ -538,6 +538,7 @@ async function buildOperationDescriptor(type: LocalMutationType, payload: Record
     case LOCAL_MUTATION_TYPES.RECEIVE_SALE_DEPOSIT:
     case LOCAL_MUTATION_TYPES.CANCEL_SALE:
     case LOCAL_MUTATION_TYPES.SETTLE_SALE:
+    case LOCAL_MUTATION_TYPES.UPDATE_SALE_MODE:
     case LOCAL_MUTATION_TYPES.COMPLETE_SALE: {
       return {
         actionType: type === LOCAL_MUTATION_TYPES.COMPLETE_SALE ? 'complete' : 'update',
@@ -551,7 +552,9 @@ async function buildOperationDescriptor(type: LocalMutationType, payload: Record
             ? '登记了销售定金'
             : type === LOCAL_MUTATION_TYPES.SETTLE_SALE
               ? '补录了销售结算'
-              : '取消了销售记录',
+              : type === LOCAL_MUTATION_TYPES.UPDATE_SALE_MODE
+                ? '修改了销售方式'
+                : '取消了销售记录',
       }
     }
     case LOCAL_MUTATION_TYPES.CREATE_AGENT: {

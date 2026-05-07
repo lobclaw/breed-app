@@ -428,7 +428,7 @@
 - `待售` 由显式“开始销售”动作创建，不要求先写 `floor_price`
 - `floor_price` 表示内部约束价，可为空
 - `received_amount` 表示最终到手价，允许在 `已成交` 后补录
-- `sale_mode` 当前使用 `自售 / 代理 / 代卖`
+- `sale_mode` 当前使用 `自售 / 代理 / 代卖 / null`；`null` 表示销售方式待定，界面展示为“待定”
 - `settlement_status` 当前使用 `未结算 / 部分结算 / 已结算`
 - `status` 负责表达销售进度，`settlement_status` 负责表达成交后的结算进度
 - `refund_amount` 仅对已结算成交有效，必须大于 `0` 且不超过 `received_amount`；未结算成交不得进入退款

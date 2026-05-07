@@ -57,7 +57,7 @@ export interface SaleRecord extends BaseDocument, SoftDeletable {
   dog_name: string            // 冗余
   family_id: string
   status: '待售' | '已预定' | '已成交' | '已退款' | '定金取消'
-  sale_mode?: '自售' | '代理' | '代卖' | null
+  sale_mode?: '自售' | '代理' | '代卖' | null // null 表示待定
   settlement_status?: '未结算' | '部分结算' | '已结算' | null
   floor_price?: number | null
   deposit_amount?: number | null

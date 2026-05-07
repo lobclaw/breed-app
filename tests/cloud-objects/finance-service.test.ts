@@ -1094,7 +1094,6 @@ describe('finance-service', () => {
 
     const payload = {
       dog_id: 'puppy_sale_1',
-      sale_mode: '自售',
       floor_price: 2888,
       buyer_info: '张三',
       _sync: {
@@ -1120,11 +1119,142 @@ describe('finance-service', () => {
     expect(sales[0]).toMatchObject({
       dog_id: 'puppy_sale_1',
       status: '待售',
+      sale_mode: null,
       floor_price: 2888,
     })
 
     const { data: dogs } = await db.collection('dogs').doc('puppy_sale_1').get()
     expect(dogs[0].disposition).toBe('待售')
+  })
+
+  it('updateSaleMode 应支持 _sync 幂等、冲突与非法值校验', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+    seedCollection('sale_records', [{
+      _id: 'sale_mode_1',
+      family_id: familyId,
+      dog_id: 'puppy_sale_mode_1',
+      dog_name: '奶油',
+      status: '待售',
+      sale_mode: null,
+      deleted_at: null,
+      version: 1,
+    }, {
+      _id: 'sale_mode_refunded',
+      family_id: familyId,
+      dog_id: 'puppy_sale_mode_2',
+      dog_name: '奶糖',
+      status: '已退款',
+      sale_mode: '自售',
+      deleted_at: null,
+      version: 0,
+    }])
+
+    const payload = {
+      saleId: 'sale_mode_1',
+      sale_mode: '代理',
+      _sync: {
+        clientMutationId: 'sale-mode-sync-1',
+        deviceId: 'device_1',
+        clientTimestamp: aprilTs,
+        baseVersions: { sale_mode_1: 1 },
+      },
+    }
+    const first = await financeService.updateSaleMode.call(ctx, payload)
+    const second = await financeService.updateSaleMode.call(ctx, payload)
+
+    expect(first.ack).toBe('accepted')
+    expect(second).toEqual(first)
+    const { data: sales } = await db.collection('sale_records').doc('sale_mode_1').get()
+    expect(sales[0]).toMatchObject({
+      sale_mode: '代理',
+      version: 2,
+    })
+
+    await expect(financeService.updateSaleMode.call(ctx, {
+      saleId: 'sale_mode_1',
+      sale_mode: '未知',
+    })).rejects.toThrow('销售方式不合法')
+    await expect(financeService.updateSaleMode.call(ctx, {
+      saleId: 'sale_mode_refunded',
+      sale_mode: '代卖',
+    })).rejects.toThrow('当前状态不可修改销售方式')
+
+    const conflict = await financeService.updateSaleMode.call(ctx, {
+      saleId: 'sale_mode_1',
+      sale_mode: null,
+      _sync: {
+        clientMutationId: 'sale-mode-sync-conflict',
+        deviceId: 'device_1',
+        clientTimestamp: aprilTs,
+        baseVersions: { sale_mode_1: 1 },
+      },
+    })
+    expect(conflict).toMatchObject({
+      ack: 'conflict',
+      conflict: {
+        collection: 'sale_records',
+        entityId: 'sale_mode_1',
+        baseVersion: 1,
+        serverVersion: 2,
+      },
+    })
+  })
+
+  it('receiveSaleDeposit 和 completeSale 应支持更新或保留销售方式', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+    seedCollection('dogs', [{
+      _id: 'puppy_sale_mode_flow_1',
+      name: '奶油',
+      role: '幼崽',
+      disposition: '待售',
+      family_id: familyId,
+      deleted_at: null,
+      version: 0,
+    }, {
+      _id: 'puppy_sale_mode_flow_2',
+      name: '奶糖',
+      role: '幼崽',
+      disposition: '待售',
+      family_id: familyId,
+      deleted_at: null,
+      version: 0,
+    }])
+    seedCollection('sale_records', [{
+      _id: 'sale_mode_deposit_cloud',
+      family_id: familyId,
+      dog_id: 'puppy_sale_mode_flow_1',
+      dog_name: '奶油',
+      status: '待售',
+      sale_mode: null,
+      deleted_at: null,
+      version: 0,
+    }, {
+      _id: 'sale_mode_complete_cloud',
+      family_id: familyId,
+      dog_id: 'puppy_sale_mode_flow_2',
+      dog_name: '奶糖',
+      status: '待售',
+      sale_mode: '自售',
+      deleted_at: null,
+      version: 0,
+    }])
+
+    await financeService.receiveSaleDeposit.call(ctx, {
+      saleId: 'sale_mode_deposit_cloud',
+      deposit_amount: 500,
+      sale_mode: '代卖',
+    })
+    await financeService.completeSale.call(ctx, {
+      saleId: 'sale_mode_complete_cloud',
+      received_amount: '',
+    })
+
+    await expect(db.collection('sale_records').doc('sale_mode_deposit_cloud').get()).resolves.toMatchObject({
+      data: [expect.objectContaining({ sale_mode: '代卖', status: '已预定' })],
+    })
+    await expect(db.collection('sale_records').doc('sale_mode_complete_cloud').get()).resolves.toMatchObject({
+      data: [expect.objectContaining({ sale_mode: '自售', status: '已成交' })],
+    })
   })
 
   it('cancelSale 应校验退款金额不超过已结算到手价', async () => {

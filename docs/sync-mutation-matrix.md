@@ -70,6 +70,7 @@
 - `finance.deleteExpense` → `finance-service.deleteExpense`
 - `finance.deleteIncome` → `finance-service.deleteIncome`
 - `finance.createSaleRecord` → `finance-service.createSaleRecord`
+- `finance.updateSaleMode` → `finance-service.updateSaleMode`
 - `finance.receiveSaleDeposit` → `finance-service.receiveSaleDeposit`
 - `finance.completeSale` → `finance-service.completeSale`
 - `finance.settleSale` → `finance-service.settleSale`

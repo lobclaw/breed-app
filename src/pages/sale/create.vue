@@ -20,12 +20,12 @@
           <view class="sale-mode-pills">
             <view
               v-for="mode in saleModeOptions"
-              :key="mode"
+              :key="mode.label"
               class="sale-mode-pill"
-              :class="{ 'sale-mode-pill--active': form.sale_mode === mode }"
-              @click="form.sale_mode = mode"
+              :class="{ 'sale-mode-pill--active': form.sale_mode === mode.value }"
+              @click="form.sale_mode = mode.value"
             >
-              <text>{{ mode }}</text>
+              <text>{{ mode.label }}</text>
             </view>
           </view>
           <text class="form-helper">{{ saleModeDescription }}</text>
@@ -84,7 +84,7 @@ import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 
-type SaleMode = '自售' | '代理' | '代卖'
+type SaleMode = '自售' | '代理' | '代卖' | null
 type SelectedDog = {
   _id: string
   name: string
@@ -93,7 +93,12 @@ type SelectedDog = {
   breed?: string
 }
 
-const saleModeOptions: SaleMode[] = ['自售', '代理', '代卖']
+const saleModeOptions: Array<{ label: string; value: SaleMode }> = [
+  { label: '待定', value: null },
+  { label: '自售', value: '自售' },
+  { label: '代理', value: '代理' },
+  { label: '代卖', value: '代卖' },
+]
 
 const selectedDog = ref<SelectedDog | null>(null)
 const saleCandidateDogs = ref<SelectedDog[]>([])
@@ -104,7 +109,7 @@ const { currentFamily } = useAuth()
 usePageSync({ routePath: 'pages/sale/create' })
 
 const form = reactive({
-  sale_mode: '自售' as SaleMode,
+  sale_mode: null as SaleMode,
   buyer_info: '',
   notes: '',
 })
@@ -117,7 +122,8 @@ const lockedDogCandidates = computed(() => {
 const dogPickerCandidates = computed(() => lockedDogCandidates.value ?? saleCandidateDogs.value)
 
 const saleModeDescription = computed(() => {
-  const map: Record<SaleMode, string> = {
+  if (!form.sale_mode) return '先进入销售池，成交路径确定后可在详情页或成交表单中补选。'
+  const map: Record<Exclude<SaleMode, null>, string> = {
     自售: '自己对接买家，后续可直接收定金或完成交易。',
     代理: '由代理人协助介绍买家，适合需要记录代理人或平台来源的销售。',
     代卖: '交给合作方代为销售，成交后再按实际回款补录结算。',

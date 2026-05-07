@@ -1790,11 +1790,157 @@ describe('local domain repository', () => {
     const sales = await listLocalSales('fam_sale_list')
 
     expect(sales[0]).toMatchObject({
+      sale_mode: null,
       agent_name: '代理小王',
       settlement_status: '未结算',
       sex: '母',
       age_text: '1月龄',
     })
+  })
+
+  it('本地开始销售默认应将销售方式保持为待定', async () => {
+    const now = Date.now()
+    await localDb.replaceTable('dogs', [{
+      _id: 'sale_mode_create_dog_1',
+      family_id: 'fam_sale_mode',
+      name: '奶油',
+      gender: '母',
+      role: '幼崽',
+      disposition: '在养',
+      deleted_at: null,
+      version: 0,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('sale_records', [])
+    await localDb.replaceTable('outbox_mutations', [])
+    await localDb.replaceTable('local_operation_logs', [])
+    ;(localSyncRuntime as any).online = false
+
+    try {
+      const res = await localSyncRuntime.createSaleRecordLocally('fam_sale_mode', {
+        dog_id: 'sale_mode_create_dog_1',
+      })
+      const saleId = res.data.saleId
+      const sale = await localDb.findById<any>('sale_records', saleId)
+      const dog = await localDb.findById<any>('dogs', 'sale_mode_create_dog_1')
+
+      expect(sale).toMatchObject({
+        sale_mode: null,
+        status: '待售',
+      })
+      expect(dog.disposition).toBe('待售')
+    } finally {
+      ;(localSyncRuntime as any).online = true
+    }
+  })
+
+  it('本地销售方式可单独更新并写入 outbox', async () => {
+    const now = Date.now()
+    await localDb.replaceTable('sale_records', [{
+      _id: 'sale_mode_update_1',
+      family_id: 'fam_sale_mode',
+      dog_id: 'sale_mode_update_dog_1',
+      dog_name: '奶油',
+      status: '待售',
+      sale_mode: null,
+      deleted_at: null,
+      version: 2,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('outbox_mutations', [])
+    await localDb.replaceTable('local_operation_logs', [])
+    ;(localSyncRuntime as any).online = false
+
+    try {
+      await localSyncRuntime.updateSaleModeLocally('fam_sale_mode', 'sale_mode_update_1', {
+        sale_mode: '代理',
+      })
+      const sale = await localDb.findById<any>('sale_records', 'sale_mode_update_1')
+      const outbox = await localDb.getTable<any>('outbox_mutations')
+
+      expect(sale.sale_mode).toBe('代理')
+      expect(outbox[0]).toMatchObject({
+        type: 'finance.updateSaleMode',
+        collection_scope: ['sale_records'],
+        payload: {
+          id: 'sale_mode_update_1',
+          sale_mode: '代理',
+        },
+      })
+    } finally {
+      ;(localSyncRuntime as any).online = true
+    }
+  })
+
+  it('本地收定金和成交应支持传入销售方式，未传入时保留原值', async () => {
+    const now = Date.now()
+    await localDb.replaceTable('dogs', [{
+      _id: 'sale_mode_flow_dog_1',
+      family_id: 'fam_sale_mode_flow',
+      name: '奶油',
+      gender: '母',
+      role: '幼崽',
+      disposition: '待售',
+      deleted_at: null,
+      version: 0,
+      updated_at: now,
+    }, {
+      _id: 'sale_mode_flow_dog_2',
+      family_id: 'fam_sale_mode_flow',
+      name: '奶糖',
+      gender: '母',
+      role: '幼崽',
+      disposition: '待售',
+      deleted_at: null,
+      version: 0,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('sale_records', [{
+      _id: 'sale_mode_deposit_1',
+      family_id: 'fam_sale_mode_flow',
+      dog_id: 'sale_mode_flow_dog_1',
+      dog_name: '奶油',
+      status: '待售',
+      sale_mode: null,
+      deleted_at: null,
+      version: 1,
+      updated_at: now,
+    }, {
+      _id: 'sale_mode_complete_1',
+      family_id: 'fam_sale_mode_flow',
+      dog_id: 'sale_mode_flow_dog_2',
+      dog_name: '奶糖',
+      status: '待售',
+      sale_mode: '自售',
+      deleted_at: null,
+      version: 1,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('incomes', [])
+    await localDb.replaceTable('outbox_mutations', [])
+    await localDb.replaceTable('local_operation_logs', [])
+    ;(localSyncRuntime as any).online = false
+
+    try {
+      await localSyncRuntime.receiveSaleDepositLocally('fam_sale_mode_flow', 'sale_mode_deposit_1', {
+        deposit_amount: 500,
+        sale_mode: '代卖',
+      })
+      await localSyncRuntime.completeSaleLocally('fam_sale_mode_flow', 'sale_mode_complete_1', {
+        received_amount: null,
+      })
+
+      await expect(localDb.findById<any>('sale_records', 'sale_mode_deposit_1')).resolves.toMatchObject({
+        sale_mode: '代卖',
+        status: '已预定',
+      })
+      await expect(localDb.findById<any>('sale_records', 'sale_mode_complete_1')).resolves.toMatchObject({
+        sale_mode: '自售',
+        status: '已成交',
+      })
+    } finally {
+      ;(localSyncRuntime as any).online = true
+    }
   })
 
   it('本地销售取消应校验退款与保留定金边界', async () => {
@@ -2097,7 +2243,7 @@ describe('local domain repository', () => {
 
     const sale = await getLocalSaleDetail('fam_3', 'sale_30')
     expect(sale).toMatchObject({
-      sale_mode: '自售',
+      sale_mode: null,
       settlement_status: '已结算',
       agent_name: '阿琳',
       breed: '马尔济斯',

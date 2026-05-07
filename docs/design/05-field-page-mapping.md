@@ -199,6 +199,7 @@
 写入口：
 
 - 开始销售、预定、成交、补录结算、退款、定金取消
+- 销售方式可在开始销售时保留待定（`sale_mode=null`），也可在详情页、收定金、完成交易时确认或修改
 - 开始销售候选由本地 `dogs + sale_records` 投影过滤，不直接使用未筛选犬只列表
 - 退款写入前必须确认 `received_amount > 0`，且 `refund_amount <= received_amount`
 - 定金取消写入的是 `deposit_kept_amount`，必须由退还金额换算并限制在 `0..deposit_amount`

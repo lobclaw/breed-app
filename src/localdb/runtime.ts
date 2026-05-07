@@ -129,6 +129,27 @@ function getNow() {
   return Date.now()
 }
 
+type SaleModeValue = '自售' | '代理' | '代卖' | null
+
+function hasOwnField(data: Record<string, any>, key: string) {
+  return Object.prototype.hasOwnProperty.call(data, key)
+}
+
+function parseSaleModePatch(data: Record<string, any>): { provided: boolean; value: SaleModeValue } {
+  const hasSnakeKey = hasOwnField(data, 'sale_mode')
+  const hasCamelKey = hasOwnField(data, 'saleMode')
+  if (!hasSnakeKey && !hasCamelKey) return { provided: false, value: null }
+
+  const raw = hasSnakeKey ? data.sale_mode : data.saleMode
+  if (raw == null) return { provided: true, value: null }
+  const mode = String(raw).trim()
+  if (!mode || mode === '待定') return { provided: true, value: null }
+  if (mode === '自售' || mode === '代理' || mode === '代卖') {
+    return { provided: true, value: mode }
+  }
+  throw new Error('销售方式不合法')
+}
+
 function getScopeRouteKey(scopeKey: string) {
   return scopeKey.split(':')[0] || scopeKey
 }
@@ -3456,6 +3477,7 @@ class LocalSyncRuntime {
     const familyId = getFamilyId(familyIdInput)
     const dogId = String(data.dog_id || data.dogId || '').trim()
     if (!dogId) throw new Error('请选择犬只')
+    const saleModePatch = parseSaleModePatch(data)
 
     const dog = await findLocalRow<any>('dogs', dogId)
     if (!dog || dog.family_id !== familyId || dog.deleted_at) throw new Error('犬只未同步到本地，请联网刷新一次')
@@ -3478,7 +3500,7 @@ class LocalSyncRuntime {
       dog_name: dog.name || '',
       family_id: familyId,
       status: '待售',
-      sale_mode: data.sale_mode || '自售',
+      sale_mode: saleModePatch.value,
       settlement_status: null,
       floor_price: data.floor_price ?? null,
       deposit_amount: null,
@@ -3535,6 +3557,46 @@ class LocalSyncRuntime {
     }
   }
 
+  async updateSaleModeLocally(familyIdInput: string, saleId: string, data: Record<string, any>) {
+    const familyId = getFamilyId(familyIdInput)
+    const sale = await findLocalRow<any>('sale_records', saleId)
+    if (!sale || sale.family_id !== familyId || sale.deleted_at) throw new Error('记录不存在')
+    if (!['待售', '已预定', '已成交'].includes(String(sale.status || ''))) {
+      throw new Error('当前状态不可修改销售方式')
+    }
+    const saleModePatch = parseSaleModePatch(data)
+    if (!saleModePatch.provided) throw new Error('请选择销售方式')
+
+    const now = getNow()
+    const syncMeta = buildSyncMeta({ [saleId]: Number(sale.version || 0) }, {
+      clientMutationId: createClientMutationId(HOME_MUTATION_TYPES.UPDATE_SALE_MODE),
+    })
+
+    await runLocalMutation(['sale_records'], (tables) => {
+      tables.sale_records = (tables.sale_records as any[]).map(row => row._id === saleId
+        ? {
+            ...row,
+            sale_mode: saleModePatch.value,
+            updated_at: now,
+            _local_pending: true,
+          }
+        : row)
+    })
+    await this.enqueueMutation(
+      HOME_MUTATION_TYPES.UPDATE_SALE_MODE,
+      familyId,
+      { id: saleId, saleId, sale_mode: saleModePatch.value, _sync: syncMeta },
+      ['sale_records'],
+      syncMeta,
+    )
+    return {
+      message: '已修改销售方式',
+      ...buildLocalAck(syncMeta, [
+        { collection: 'sale_records', id: saleId, version: Number(sale.version || 0), updatedAt: now },
+      ]),
+    }
+  }
+
   async receiveSaleDepositLocally(familyIdInput: string, saleId: string, data: Record<string, any>) {
     const familyId = getFamilyId(familyIdInput)
     const sale = await findLocalRow<any>('sale_records', saleId)
@@ -3544,6 +3606,7 @@ class LocalSyncRuntime {
     if (!dog) throw new Error('犬只未同步到本地，请联网刷新一次')
     const amount = Number(data.deposit_amount)
     if (!Number.isFinite(amount) || amount <= 0) throw new Error('请填写定金金额')
+    const saleModePatch = parseSaleModePatch(data)
 
     const now = getNow()
     const baseVersions = {
@@ -3559,6 +3622,7 @@ class LocalSyncRuntime {
         ? {
             ...row,
             status: '已预定',
+            ...(saleModePatch.provided ? { sale_mode: saleModePatch.value } : {}),
             deposit_amount: amount,
             deposit_date: data.deposit_date || now,
             agreed_price: data.agreed_price ?? null,
@@ -3607,6 +3671,7 @@ class LocalSyncRuntime {
     if (hasReceivedAmount && (!Number.isFinite(receivedAmount) || Number(receivedAmount) <= 0)) {
       throw new Error('请填写有效的到手价')
     }
+    const saleModePatch = parseSaleModePatch(data)
 
     const incomes = await localDb.query<any>('incomes', row =>
       row.family_id === familyId
@@ -3634,6 +3699,7 @@ class LocalSyncRuntime {
         ? {
             ...row,
             status: '已成交',
+            ...(saleModePatch.provided ? { sale_mode: saleModePatch.value } : {}),
             settlement_status: settlementStatus,
             received_amount: receivedAmount,
             agreed_price: data.agreed_price != null ? data.agreed_price : row.agreed_price || null,

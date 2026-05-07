@@ -233,7 +233,24 @@ function normalizeManualIncomeType(type) {
 }
 
 function normalizeSaleMode(mode) {
-  return SALE_MODES.includes(mode) ? mode : '自售'
+  return SALE_MODES.includes(mode) ? mode : null
+}
+
+function hasOwnField(data, key) {
+  return Object.prototype.hasOwnProperty.call(data || {}, key)
+}
+
+function parseSaleModePatch(data = {}) {
+  const hasSnakeKey = hasOwnField(data, 'sale_mode')
+  const hasCamelKey = hasOwnField(data, 'saleMode')
+  if (!hasSnakeKey && !hasCamelKey) return { provided: false, value: null }
+
+  const raw = hasSnakeKey ? data.sale_mode : data.saleMode
+  if (raw == null) return { provided: true, value: null }
+  const mode = String(raw).trim()
+  if (!mode || mode === '待定') return { provided: true, value: null }
+  if (SALE_MODES.includes(mode)) return { provided: true, value: mode }
+  throw new Error('销售方式不合法')
 }
 
 function normalizeSettlementStatus(status) {
@@ -1475,7 +1492,7 @@ module.exports = {
     familyId,
     now,
     saleId = null,
-    saleMode = '自售',
+    saleMode = null,
     floorPrice = null,
     buyerInfo = null,
     sellerAgentId = null,
@@ -1570,6 +1587,7 @@ module.exports = {
     const syncMeta = getSyncMeta(data)
     const appliedMutation = await findAppliedMutation(db, familyId, syncMeta?.clientMutationId)
     if (appliedMutation?.response) return appliedMutation.response
+    const saleModePatch = parseSaleModePatch(data)
 
     const dog = await (this.getDogSaleRecord
       ? this.getDogSaleRecord(data.dog_id, familyId)
@@ -1593,7 +1611,7 @@ module.exports = {
           familyId,
           now,
           saleId: clientSaleId,
-          saleMode: data.sale_mode,
+          saleMode: saleModePatch.value,
           floorPrice: data.floor_price ?? null,
           buyerInfo: data.buyer_info || null,
           notes: data.notes || null,
@@ -1603,7 +1621,7 @@ module.exports = {
         familyId,
         now,
         saleId: clientSaleId,
-        saleMode: data.sale_mode,
+        saleMode: saleModePatch.value,
         floorPrice: data.floor_price ?? null,
         buyerInfo: data.buyer_info || null,
         notes: data.notes || null,
@@ -1626,7 +1644,7 @@ module.exports = {
       targetName: dog.name || '未命名犬只',
       summary: `将 ${dog.name || '未命名犬只'} 纳入销售池`,
       meta: {
-        saleMode: normalizeSaleMode(data.sale_mode),
+        saleMode: saleModePatch.value,
         floorPrice: data.floor_price ?? null,
       },
     })
@@ -1653,6 +1671,70 @@ module.exports = {
   },
 
   /**
+   * 修改销售方式
+   */
+  async updateSaleMode(input, data = null) {
+    const saleId = typeof input === 'object' ? (input.saleId || input.sale_id || input.id) : input
+    data = typeof input === 'object' ? input : (data || {})
+    if (!saleId) throw new Error('缺少销售记录 ID')
+    const saleModePatch = parseSaleModePatch(data)
+    if (!saleModePatch.provided) throw new Error('请选择销售方式')
+
+    const now = Date.now()
+    const familyId = this.familyId
+    const syncMeta = getSyncMeta(data)
+    const appliedMutation = await findAppliedMutation(db, familyId, syncMeta?.clientMutationId)
+    if (appliedMutation?.response) return appliedMutation.response
+
+    const { data: sales } = await db.collection('sale_records')
+      .where({ _id: saleId, family_id: familyId })
+      .get()
+    if (!sales || sales.length === 0) throw new Error('记录不存在')
+    const sale = sales[0]
+    const saleConflict = getEntityConflict(syncMeta, 'sale_records', sale)
+    if (saleConflict) return saleConflict
+    if (!['待售', '已预定', '已成交'].includes(sale.status)) {
+      throw new Error('当前状态不可修改销售方式')
+    }
+
+    await db.collection('sale_records').doc(saleId).update({
+      sale_mode: saleModePatch.value,
+      ...buildVersionUpdate(dbCmd, now),
+    })
+
+    await logFinanceOperation({
+      familyId,
+      actorUserId: this.uid,
+      actionType: 'update',
+      domain: 'sale',
+      targetType: 'sale_record',
+      targetId: saleId,
+      targetName: sale.dog_name || saleId,
+      summary: `修改了 ${sale.dog_name || '未命名犬只'} 的销售方式`,
+      meta: { saleMode: saleModePatch.value },
+    })
+
+    const { data: updatedSales } = await db.collection('sale_records')
+      .where({ _id: saleId, family_id: familyId })
+      .limit(1)
+      .get()
+    const response = {
+      message: '已修改销售方式',
+      ...buildSyncAck(syncMeta, {
+        ack: 'accepted',
+        touchedEntities: [
+          ...(updatedSales?.[0] ? [buildTouchedEntity('sale_records', updatedSales[0])] : []),
+        ],
+        resyncScopes: ['sale_records'],
+      }),
+    }
+    if (syncMeta?.clientMutationId) {
+      await markMutationApplied(db, familyId, syncMeta.clientMutationId, response)
+    }
+    return response
+  },
+
+  /**
    * 收定金 → 已预定
    */
   async receiveSaleDeposit(input, data = null) {
@@ -1666,6 +1748,7 @@ module.exports = {
     const syncMeta = getSyncMeta(data)
     const appliedMutation = await findAppliedMutation(db, familyId, syncMeta?.clientMutationId)
     if (appliedMutation?.response) return appliedMutation.response
+    const saleModePatch = parseSaleModePatch(data)
 
     const { data: sales } = await db.collection('sale_records')
       .where({ _id: saleId, family_id: familyId })
@@ -1686,6 +1769,7 @@ module.exports = {
 
     await db.collection('sale_records').doc(saleId).update({
       status: '已预定',
+      ...(saleModePatch.provided ? { sale_mode: saleModePatch.value } : {}),
       deposit_amount: data.deposit_amount,
       deposit_date: data.deposit_date || now,
       agreed_price: data.agreed_price || null,
@@ -1748,6 +1832,7 @@ module.exports = {
     const syncMeta = getSyncMeta(data)
     const appliedMutation = await findAppliedMutation(db, familyId, syncMeta?.clientMutationId)
     if (appliedMutation?.response) return appliedMutation.response
+    const saleModePatch = parseSaleModePatch(data)
 
     const { data: sales } = await db.collection('sale_records')
       .where({ _id: saleId, family_id: familyId })
@@ -1776,6 +1861,7 @@ module.exports = {
 
     await db.collection('sale_records').doc(saleId).update({
       status: '已成交',
+      ...(saleModePatch.provided ? { sale_mode: saleModePatch.value } : {}),
       settlement_status: settlementStatus,
       received_amount: receivedAmount,
       agreed_price: data.agreed_price != null ? data.agreed_price : sale.agreed_price || null,

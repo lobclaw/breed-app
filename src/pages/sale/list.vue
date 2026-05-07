@@ -152,7 +152,7 @@ function getStatusTagColor(status: string): 'red' | 'amber' | 'green' | 'blue' |
 
 function getSaleSubtitle(sale: any) {
   const parts = [
-    sale.sale_mode || '',
+    sale.sale_mode || '待定',
     sale.breed || '马尔济斯',
     sale.sex || sale.gender || '',
   ].filter(Boolean)
