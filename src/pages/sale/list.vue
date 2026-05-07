@@ -40,6 +40,12 @@
           <text class="sale-agent">{{ sale.agent_name ? '代理人：' + sale.agent_name : '' }}</text>
           <text v-if="sale.platform" class="platform-badge">{{ sale.platform }}</text>
         </view>
+        <view v-if="sale.can_restart_sale" class="sale-card-actions">
+          <view class="sale-card-action sale-card-action--primary" @click.stop="goToRestartSale(sale)">
+            <text class="material-icons-round sale-card-action__icon">restart_alt</text>
+            <text class="sale-card-action__text">再次销售</text>
+          </view>
+        </view>
       </view>
     </view>
 
@@ -106,6 +112,13 @@ function goToDetail(id: string) {
 
 function goToCreate() {
   uni.navigateTo({ url: '/pages/sale/create' })
+}
+
+function goToRestartSale(sale: any) {
+  if (!sale?.dog_id) return
+  uni.navigateTo({
+    url: `/pages/sale/create?dogId=${sale.dog_id}&dogName=${encodeURIComponent(sale.dog_name || '')}`,
+  })
 }
 
 function getSaleCardColor(status: string) {
@@ -316,6 +329,37 @@ onShow(() => load())
   margin-top: 12px;
   padding-left: 40px;
   flex-wrap: wrap;
+}
+
+.sale-card-actions {
+  margin-top: 12px;
+  padding-left: 40px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.sale-card-action {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 700;
+
+  &--primary {
+    color: var(--primary);
+    background: var(--primary-soft);
+  }
+}
+
+.sale-card-action__icon {
+  font-size: 16px;
+}
+
+.sale-card-action__text {
+  font-size: 12px;
 }
 
 .sale-agent {

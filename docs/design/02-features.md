@@ -306,9 +306,10 @@ V1 保持三级角色：
 - `已成交` 与 `settlement_status` 分离，后者当前使用 `未结算 / 部分结算 / 已结算`
 - `待售` 表示已手动纳入销售池，不要求先填写 `floor_price`；`floor_price` 仅表示内部参考底价，可为空
 - “开始销售”提交走 `finance-service.createSaleRecord`；“直接成交”是销售创建页的一步式入口，底层仍先创建 `待售` 销售记录，再立即走 `finance-service.completeSale`
-- 仅 `幼崽` 且 `disposition` 属于 `在养 / 自留` 可开始销售；同一犬只同一时刻只允许一条进行中的销售记录
-- 销售创建页的犬只候选必须来自本地投影过滤：`role=幼崽`、`disposition in 在养/自留`，并排除已有 `待售 / 已预定` 销售记录的犬只；锁定来源入口仍显示来源犬只，但提交必须由本地事务和云对象继续兜底校验
+- 仅 `幼崽` 且 `disposition` 属于 `在养 / 自留 / 待售` 可开始销售；同一犬只同一时刻只允许一条进行中的销售记录
+- 销售创建页的犬只候选必须来自本地投影过滤：`role=幼崽`、`disposition in 在养/自留/待售`，并排除已有 `待售 / 已预定` 销售记录的犬只；锁定来源入口仍显示来源犬只，但提交必须由本地事务和云对象继续兜底校验
 - 开始销售必须同时创建 `sale_records.status=待售`，并将犬只 `disposition` 切到 `待售`
+- `定金取消` 后旧销售记录作为终态历史保留，犬只回到 `在养`；同犬多条取消历史只在最新一条可重启记录上展示“再次销售”，底层创建新的 `待售` 销售记录，不复用或覆盖旧取消记录
 - 销售创建页 `/pages/sale/create` 支持“开始销售 / 直接成交”模式切换，并支持来源页透传 `dogId + dogName` 锁定犬只
 - “开始销售”字段固定为：犬只、`sale_mode`（默认待定，落库为 `null`）、`floor_price`（选填）、`buyer_info`（选填）、`notes`（选填）
 - “直接成交”字段固定为：犬只、`sale_mode`（不展示待定，默认 `自售`）、`received_amount`（选填）、`agreed_price`（选填）、`buyer_info`（选填）、`platform`（选填）、`seller_agent_id/name`（仅 `代理 / 代卖` 时选填）、`delivery_date`（选填）、`notes`（选填）
@@ -317,7 +318,7 @@ V1 保持三级角色：
 - 完成交易走 `finance-service.completeSale`，允许 `received_amount` 为空；为空时写入 `status=已成交`、`settlement_status=未结算`，且不自动生成销售收入
 - 成交后补结算统一走 `finance-service.settleSale`；补录 `received_amount` 后再创建或更新自动收入
 - 销售详情页需提供“补录结算”入口；未结算成交不得展示或提交退款
-- 退款只允许已结算成交，且 `refund_amount` 必须 `> 0` 且不超过 `received_amount`；全额退款后犬只回到 `待售`
+- 退款只允许已结算成交，且 `refund_amount` 必须 `> 0` 且不超过 `received_amount`；全额退款后犬只回到 `在养`
 - 定金取消以 `deposit_kept_amount` 表达保留金额，必须在 `0..deposit_amount` 内；用户输入退还定金时需先换算为保留金额再提交
 - `finance-service.getSaleList/getSaleDetail` 返回值必须走销售归一化口径，稳定包含 `sale_mode`、`settlement_status`、`agent_name`
 - 本地 `listLocalSales/getLocalSaleDetail` 也必须走同一销售归一化口径，列表和详情不得出现代理人、结算状态、犬只性别/月龄不一致

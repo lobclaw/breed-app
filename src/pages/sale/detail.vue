@@ -183,6 +183,10 @@
         >补录结算</button>
         <button v-if="canRefund" class="action-btn action-btn--ghost-red" @click="openRefundSheet">退款</button>
       </view>
+
+      <view class="sale-action-area" v-if="sale.can_restart_sale">
+        <button class="action-btn action-btn--primary" @click="goToRestartSale">再次销售</button>
+      </view>
     </template>
 
     <!-- 收定金 Sheet -->
@@ -916,6 +920,13 @@ function openSaleModeSheet() {
   if (!canEditSaleMode.value) return
   saleModeForm.sale_mode = normalizeSaleModeValue(sale.value?.sale_mode)
   showSaleModeSheet.value = true
+}
+
+function goToRestartSale() {
+  if (!sale.value?.dog_id) return
+  uni.navigateTo({
+    url: `/pages/sale/create?dogId=${sale.value.dog_id}&dogName=${encodeURIComponent(sale.value.dog_name || '')}`,
+  })
 }
 
 async function doDeposit() {

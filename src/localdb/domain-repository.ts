@@ -1043,20 +1043,40 @@ export async function listLocalSales(
   })
   const dogIds = [...new Set(sales.map(row => row.dog_id).filter(Boolean))]
   const agentIds = [...new Set(sales.map(row => row.seller_agent_id).filter(Boolean))]
-  const [dogs, agents] = await Promise.all([
+  const [dogs, agents, activeSales, cancelledSales] = await Promise.all([
     dogIds.length
       ? localDb.query<any>('dogs', row => row.family_id === familyId && dogIds.includes(row._id))
       : Promise.resolve([]),
     agentIds.length
       ? localDb.query<any>('agents', row => row.family_id === familyId && agentIds.includes(row._id) && !row.deleted_at)
       : Promise.resolve([]),
+    dogIds.length
+      ? localDb.query<any>('sale_records', row =>
+          row.family_id === familyId
+          && dogIds.includes(row.dog_id)
+          && !row.deleted_at
+          && ['待售', '已预定'].includes(String(row.status || '')),
+        )
+      : Promise.resolve([]),
+    dogIds.length
+      ? localDb.query<SaleRecord>('sale_records', row =>
+          row.family_id === familyId
+          && dogIds.includes(row.dog_id)
+          && !row.deleted_at
+          && row.status === '定金取消',
+        )
+      : Promise.resolve([]),
   ])
   const dogById = new Map(dogs.map(row => [row._id, row]))
   const agentById = new Map(agents.map(row => [row._id, row]))
+  const activeSaleDogIds = new Set(activeSales.map(row => row.dog_id).filter(Boolean))
+  const latestRestartSaleIds = buildLatestRestartSaleIds(cancelledSales)
   return sales.map(sale => normalizeSaleRecordProjection(
     sale as SaleRecord & Record<string, any>,
     dogById.get(sale.dog_id),
     sale.seller_agent_id ? agentById.get(sale.seller_agent_id) : null,
+    activeSaleDogIds,
+    latestRestartSaleIds,
   ))
 }
 
@@ -1072,8 +1092,7 @@ export async function listLocalSaleCandidateDogs(familyId: string): Promise<DogW
   ])
   const activeSaleDogIds = new Set(activeSales.map(row => row.dog_id).filter(Boolean))
   return dogs.filter(dog =>
-    dog.role === '幼崽'
-    && ['在养', '自留'].includes(String(dog.disposition || ''))
+    canDogEnterSaleFlow(dog)
     && !activeSaleDogIds.has(dog._id),
   )
 }
@@ -1433,6 +1452,44 @@ function normalizeSaleMode(mode?: string | null): SaleRecord['sale_mode'] {
   return normalized === '代理' || normalized === '代卖' || normalized === '自售' ? normalized : null
 }
 
+function canDogEnterSaleFlow(dog?: Record<string, any> | null) {
+  return dog?.role === '幼崽' && ['在养', '自留', '待售'].includes(String(dog.disposition || ''))
+}
+
+function getSaleRestartActivityTs(sale: Partial<SaleRecord> & Record<string, any>) {
+  return Number(sale.refund_date || sale.updated_at || sale.date || sale.created_at || 0)
+}
+
+function compareRestartSale(left: Partial<SaleRecord> & Record<string, any>, right: Partial<SaleRecord> & Record<string, any>) {
+  const tsDiff = getSaleRestartActivityTs(left) - getSaleRestartActivityTs(right)
+  if (tsDiff !== 0) return tsDiff
+  return String(left._id || '').localeCompare(String(right._id || ''))
+}
+
+function buildLatestRestartSaleIds(cancelledSales: Array<SaleRecord & Record<string, any>> = []) {
+  const latestByDog = new Map<string, SaleRecord & Record<string, any>>()
+  for (const sale of cancelledSales) {
+    if (sale.status !== '定金取消' || !sale.dog_id || !sale._id) continue
+    const existing = latestByDog.get(sale.dog_id)
+    if (!existing || compareRestartSale(sale, existing) > 0) {
+      latestByDog.set(sale.dog_id, sale)
+    }
+  }
+  return new Set([...latestByDog.values()].map(sale => sale._id))
+}
+
+function canRestartSaleRecord(
+  sale: SaleRecord & Record<string, any>,
+  dog?: Record<string, any> | null,
+  activeSaleDogIds = new Set<string>(),
+  latestRestartSaleIds = new Set<string>(),
+) {
+  return sale.status === '定金取消'
+    && canDogEnterSaleFlow(dog)
+    && !activeSaleDogIds.has(sale.dog_id)
+    && latestRestartSaleIds.has(sale._id)
+}
+
 function deriveSaleSettlementStatus(sale: Partial<SaleRecord> & Record<string, any>): SaleRecord['settlement_status'] {
   const normalized = String(sale.settlement_status || '').trim()
   if (normalized === '未结算' || normalized === '部分结算' || normalized === '已结算') return normalized
@@ -1446,6 +1503,8 @@ function normalizeSaleRecordProjection(
   sale: SaleRecord & Record<string, any>,
   dog?: Record<string, any> | null,
   agent?: Record<string, any> | null,
+  activeSaleDogIds = new Set<string>(),
+  latestRestartSaleIds = new Set<string>(),
 ) {
   return {
     ...sale,
@@ -1455,6 +1514,7 @@ function normalizeSaleRecordProjection(
     breed: dog?.breed || '马尔济斯',
     sex: dog?.gender || dog?.sex || '',
     age_text: formatDogAgeText(dog?.birth_date),
+    can_restart_sale: canRestartSaleRecord(sale, dog, activeSaleDogIds, latestRestartSaleIds),
   }
 }
 
@@ -1463,12 +1523,30 @@ export async function getLocalSaleDetail(familyId: string, saleId: string) {
   const sale = await localDb.findById<SaleRecord>('sale_records', saleId)
   if (!sale || sale.family_id !== familyId || sale.deleted_at) return null
 
-  const [dog, agent] = await Promise.all([
+  const [dog, agent, activeSales, cancelledSales] = await Promise.all([
     sale.dog_id ? localDb.findById<any>('dogs', sale.dog_id) : Promise.resolve(null),
     sale.seller_agent_id ? localDb.findById<any>('agents', sale.seller_agent_id) : Promise.resolve(null),
+    sale.dog_id
+      ? localDb.query<any>('sale_records', row =>
+          row.family_id === familyId
+          && row.dog_id === sale.dog_id
+          && !row.deleted_at
+          && ['待售', '已预定'].includes(String(row.status || '')),
+        )
+      : Promise.resolve([]),
+    sale.dog_id
+      ? localDb.query<SaleRecord>('sale_records', row =>
+          row.family_id === familyId
+          && row.dog_id === sale.dog_id
+          && !row.deleted_at
+          && row.status === '定金取消',
+        )
+      : Promise.resolve([]),
   ])
+  const activeSaleDogIds = new Set(activeSales.map(row => row.dog_id).filter(Boolean))
+  const latestRestartSaleIds = buildLatestRestartSaleIds(cancelledSales as Array<SaleRecord & Record<string, any>>)
 
-  return normalizeSaleRecordProjection(sale as SaleRecord & Record<string, any>, dog, agent)
+  return normalizeSaleRecordProjection(sale as SaleRecord & Record<string, any>, dog, agent, activeSaleDogIds, latestRestartSaleIds)
 }
 
 function getCreatorDisplayName(members: Array<Record<string, any>> = [], createdBy?: string | null) {

@@ -96,6 +96,7 @@ const SALE_ACTIVE_STATUSES = ['待售', '已预定']
 const SALE_RECORD_STATUSES = ['待售', '已预定', '已成交', '已退款', '定金取消']
 const SALE_MODES = ['自售', '代理', '代卖']
 const SALE_SETTLEMENT_STATUSES = ['未结算', '部分结算', '已结算']
+const SALE_ENTRY_DISPOSITIONS = ['在养', '自留', '待售']
 
 function getEntityConflict(syncMeta, collection, entity) {
   const baseVersion = getBaseVersion(syncMeta, entity?._id)
@@ -1600,7 +1601,7 @@ module.exports = {
     const dogConflict = getEntityConflict(syncMeta, 'dogs', dog)
     if (dogConflict) return dogConflict
     if (dog.role !== '幼崽') throw new Error('只有幼崽可以开始销售')
-    if (!['在养', '自留'].includes(dog.disposition)) throw new Error('当前犬只状态不可开始销售')
+    if (!SALE_ENTRY_DISPOSITIONS.includes(dog.disposition)) throw new Error('当前犬只状态不可开始销售')
 
     const activeSale = await (this.getActiveSaleRecordForDog
       ? this.getActiveSaleRecordForDog(data.dog_id, familyId)
@@ -2113,10 +2114,10 @@ module.exports = {
       const { id } = await db.collection('incomes').add(refundIncomeData)
       touchedIncomeId = createdIncomeId || id
 
-      // 全额退款时犬只回到待售
+      // 全额退款时犬只回到在养
       if (isFullRefund) {
         await db.collection('dogs').doc(sale.dog_id).update({
-          disposition: '待售',
+          disposition: '在养',
           disposition_date: null,
           ...buildVersionUpdate(dbCmd, now),
         })
@@ -2162,9 +2163,9 @@ module.exports = {
         touchedIncomeId = createdIncomeId || id
       }
 
-      // 犬只回到待售
+      // 犬只回到在养
       await db.collection('dogs').doc(sale.dog_id).update({
-        disposition: '待售',
+        disposition: '在养',
         ...buildVersionUpdate(dbCmd, now),
       })
     } else {

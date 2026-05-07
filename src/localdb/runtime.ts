@@ -3508,7 +3508,7 @@ class LocalSyncRuntime {
     const dog = await findLocalRow<any>('dogs', dogId)
     if (!dog || dog.family_id !== familyId || dog.deleted_at) throw new Error('犬只未同步到本地，请联网刷新一次')
     if (dog.role !== '幼崽') throw new Error('只有幼崽可以开始销售')
-    if (!['在养', '自留'].includes(String(dog.disposition || ''))) throw new Error('当前犬只状态不可开始销售')
+    if (!['在养', '自留', '待售'].includes(String(dog.disposition || ''))) throw new Error('当前犬只状态不可开始销售')
 
     const activeSale = await localDb.query<any>('sale_records', row =>
       row.family_id === familyId
@@ -3997,7 +3997,7 @@ class LocalSyncRuntime {
           tables.dogs = (tables.dogs as any[]).map(row => row._id === sale.dog_id
             ? {
                 ...row,
-                disposition: '待售',
+                disposition: '在养',
                 disposition_date: null,
                 updated_at: now,
               }
@@ -4048,7 +4048,7 @@ class LocalSyncRuntime {
         tables.dogs = (tables.dogs as any[]).map(row => row._id === sale.dog_id
           ? {
               ...row,
-              disposition: '待售',
+              disposition: '在养',
               updated_at: now,
             }
           : row)

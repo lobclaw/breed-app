@@ -1742,6 +1742,22 @@ describe('local domain repository', () => {
       role: '种狗',
       disposition: '在养',
       updated_at: now,
+    }, {
+      _id: 'sale_candidate_5',
+      family_id: 'fam_sale_candidates',
+      name: '取消后待售幼崽',
+      gender: '母',
+      role: '幼崽',
+      disposition: '待售',
+      updated_at: now,
+    }, {
+      _id: 'sale_candidate_6',
+      family_id: 'fam_sale_candidates',
+      name: '已有待售记录幼崽',
+      gender: '母',
+      role: '幼崽',
+      disposition: '待售',
+      updated_at: now,
     }])
     await localDb.replaceTable('sale_records', [{
       _id: 'sale_candidate_active_1',
@@ -1750,11 +1766,25 @@ describe('local domain repository', () => {
       dog_name: '已在售幼崽',
       status: '待售',
       updated_at: now,
+    }, {
+      _id: 'sale_candidate_cancelled_1',
+      family_id: 'fam_sale_candidates',
+      dog_id: 'sale_candidate_5',
+      dog_name: '取消后待售幼崽',
+      status: '定金取消',
+      updated_at: now,
+    }, {
+      _id: 'sale_candidate_active_2',
+      family_id: 'fam_sale_candidates',
+      dog_id: 'sale_candidate_6',
+      dog_name: '已有待售记录幼崽',
+      status: '待售',
+      updated_at: now,
     }])
 
     const candidates = await listLocalSaleCandidateDogs('fam_sale_candidates')
 
-    expect(candidates.map(item => item._id)).toEqual(['sale_candidate_1', 'sale_candidate_2'])
+    expect(candidates.map(item => item._id)).toEqual(['sale_candidate_1', 'sale_candidate_2', 'sale_candidate_5'])
   })
 
   it('销售列表应使用详情一致的归一化投影', async () => {
@@ -1798,6 +1828,67 @@ describe('local domain repository', () => {
     })
   })
 
+  it('同犬多条定金取消记录只应在最新一条展示再次销售入口', async () => {
+    const now = Date.now()
+    await localDb.replaceTable('dogs', [{
+      _id: 'sale_restart_multi_dog_1',
+      family_id: 'fam_sale_restart_multi',
+      name: '幼崽4',
+      gender: '母',
+      role: '幼崽',
+      disposition: '待售',
+      deleted_at: null,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('sale_records', [{
+      _id: 'sale_restart_multi_old',
+      family_id: 'fam_sale_restart_multi',
+      dog_id: 'sale_restart_multi_dog_1',
+      dog_name: '幼崽4',
+      status: '定金取消',
+      refund_date: now - 2000,
+      deposit_kept_amount: 2000,
+      deleted_at: null,
+      updated_at: now,
+    }, {
+      _id: 'sale_restart_multi_new',
+      family_id: 'fam_sale_restart_multi',
+      dog_id: 'sale_restart_multi_dog_1',
+      dog_name: '幼崽4',
+      status: '定金取消',
+      refund_date: now - 1000,
+      deposit_kept_amount: 1000,
+      deleted_at: null,
+      updated_at: now - 5000,
+    }])
+
+    const sales = await listLocalSales('fam_sale_restart_multi')
+    const oldDetail = await getLocalSaleDetail('fam_sale_restart_multi', 'sale_restart_multi_old')
+    const newDetail = await getLocalSaleDetail('fam_sale_restart_multi', 'sale_restart_multi_new')
+
+    expect(sales.find(item => item._id === 'sale_restart_multi_old')?.can_restart_sale).toBe(false)
+    expect(sales.find(item => item._id === 'sale_restart_multi_new')?.can_restart_sale).toBe(true)
+    expect(oldDetail?.can_restart_sale).toBe(false)
+    expect(newDetail?.can_restart_sale).toBe(true)
+
+    await localDb.replaceTable('sale_records', [
+      ...(await localDb.getTable<any>('sale_records')),
+      {
+        _id: 'sale_restart_multi_active',
+        family_id: 'fam_sale_restart_multi',
+        dog_id: 'sale_restart_multi_dog_1',
+        dog_name: '幼崽4',
+        status: '待售',
+        deleted_at: null,
+        updated_at: now,
+      },
+    ])
+
+    const salesWithActive = await listLocalSales('fam_sale_restart_multi')
+    expect(salesWithActive.find(item => item._id === 'sale_restart_multi_old')?.can_restart_sale).toBe(false)
+    expect(salesWithActive.find(item => item._id === 'sale_restart_multi_new')?.can_restart_sale).toBe(false)
+  })
+
   it('本地开始销售默认应将销售方式保持为待定', async () => {
     const now = Date.now()
     await localDb.replaceTable('dogs', [{
@@ -1829,6 +1920,66 @@ describe('local domain repository', () => {
         status: '待售',
       })
       expect(dog.disposition).toBe('待售')
+    } finally {
+      ;(localSyncRuntime as any).online = true
+    }
+  })
+
+  it('本地定金取消后应保留旧记录并允许在养犬只再次创建销售记录', async () => {
+    const now = Date.now()
+    await localDb.replaceTable('dogs', [{
+      _id: 'sale_restart_dog_1',
+      family_id: 'fam_sale_restart',
+      name: '奶糕',
+      gender: '母',
+      role: '幼崽',
+      disposition: '在养',
+      deleted_at: null,
+      version: 3,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('sale_records', [{
+      _id: 'sale_restart_cancelled_1',
+      family_id: 'fam_sale_restart',
+      dog_id: 'sale_restart_dog_1',
+      dog_name: '奶糕',
+      status: '定金取消',
+      deposit_amount: 2000,
+      deposit_kept_amount: 500,
+      deleted_at: null,
+      version: 2,
+      updated_at: now - 1000,
+    }])
+    await localDb.replaceTable('outbox_mutations', [])
+    await localDb.replaceTable('local_operation_logs', [])
+    ;(localSyncRuntime as any).online = false
+
+    try {
+      const beforeDetail = await getLocalSaleDetail('fam_sale_restart', 'sale_restart_cancelled_1')
+      expect(beforeDetail).toMatchObject({
+        status: '定金取消',
+        can_restart_sale: true,
+      })
+
+      const res = await localSyncRuntime.createSaleRecordLocally('fam_sale_restart', {
+        dog_id: 'sale_restart_dog_1',
+        sale_mode: null,
+      })
+      const sales = await localDb.query<any>('sale_records', row => row.family_id === 'fam_sale_restart')
+      const oldSale = await localDb.findById<any>('sale_records', 'sale_restart_cancelled_1')
+      const newSale = await localDb.findById<any>('sale_records', res.data.saleId)
+      const afterDetail = await getLocalSaleDetail('fam_sale_restart', 'sale_restart_cancelled_1')
+
+      expect(sales).toHaveLength(2)
+      expect(oldSale).toMatchObject({
+        status: '定金取消',
+        deposit_kept_amount: 500,
+      })
+      expect(newSale).toMatchObject({
+        dog_id: 'sale_restart_dog_1',
+        status: '待售',
+      })
+      expect(afterDetail?.can_restart_sale).toBe(false)
     } finally {
       ;(localSyncRuntime as any).online = true
     }
@@ -2102,6 +2253,71 @@ describe('local domain repository', () => {
     await expect(localSyncRuntime.cancelSaleLocally('fam_sale_cancel', 'sale_cancel_reserved', {
       deposit_kept_amount: 600,
     })).rejects.toThrow('保留定金不能超过定金总额')
+  })
+
+  it('本地定金取消与全额退款后应将犬只改回在养', async () => {
+    const now = Date.now()
+    await localDb.replaceTable('dogs', [{
+      _id: 'sale_cancel_full_refund_dog',
+      family_id: 'fam_sale_cancel_status',
+      name: '奶油',
+      gender: '母',
+      role: '幼崽',
+      disposition: '已售',
+      version: 1,
+      updated_at: now,
+    }, {
+      _id: 'sale_cancel_deposit_dog',
+      family_id: 'fam_sale_cancel_status',
+      name: '布丁',
+      gender: '公',
+      role: '幼崽',
+      disposition: '已预定',
+      version: 1,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('sale_records', [{
+      _id: 'sale_cancel_full_refund',
+      family_id: 'fam_sale_cancel_status',
+      dog_id: 'sale_cancel_full_refund_dog',
+      dog_name: '奶油',
+      status: '已成交',
+      received_amount: 1000,
+      version: 1,
+      updated_at: now,
+    }, {
+      _id: 'sale_cancel_deposit',
+      family_id: 'fam_sale_cancel_status',
+      dog_id: 'sale_cancel_deposit_dog',
+      dog_name: '布丁',
+      status: '已预定',
+      deposit_amount: 500,
+      version: 1,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('incomes', [])
+    await localDb.replaceTable('outbox_mutations', [])
+    await localDb.replaceTable('local_operation_logs', [])
+    ;(localSyncRuntime as any).online = false
+
+    try {
+      await localSyncRuntime.cancelSaleLocally('fam_sale_cancel_status', 'sale_cancel_full_refund', {
+        refund_amount: 1000,
+      })
+      await localSyncRuntime.cancelSaleLocally('fam_sale_cancel_status', 'sale_cancel_deposit', {
+        deposit_kept_amount: 0,
+      })
+
+      await expect(localDb.findById<any>('dogs', 'sale_cancel_full_refund_dog')).resolves.toMatchObject({
+        disposition: '在养',
+        disposition_date: null,
+      })
+      await expect(localDb.findById<any>('dogs', 'sale_cancel_deposit_dog')).resolves.toMatchObject({
+        disposition: '在养',
+      })
+    } finally {
+      ;(localSyncRuntime as any).online = true
+    }
   })
 
   it('窝详情应按母犬历史窝记录计算窝号并从配种记录回填种公名', async () => {

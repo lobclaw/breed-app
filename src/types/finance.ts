@@ -74,6 +74,7 @@ export interface SaleRecord extends BaseDocument, SoftDeletable {
   refund_reason?: string | null
   refund_date?: number | null
   deposit_kept_amount?: number | null
+  can_restart_sale?: boolean
   notes?: string | null
   created_by: string
 }

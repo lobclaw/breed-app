@@ -43,20 +43,6 @@
       </view>
       <view class="group-actions">
         <view
-          v-if="canOpenHomePrenatal(item.card)"
-          class="group-action group-action--weak"
-          @click.stop="openWeakAction(item.card, 'prenatal')"
-        >
-          <text class="group-action__text">产检</text>
-        </view>
-        <view
-          v-if="canOpenHomePreLabor(item.card)"
-          class="group-action group-action--weak"
-          @click.stop="openWeakAction(item.card, 'pre_labor')"
-        >
-          <text class="group-action__text">临产</text>
-        </view>
-        <view
           class="group-action"
           :class="{ 'group-action--passed': item.milestone.suggestionStatus === 'window_passed' }"
           @click.stop="goProcess(item.card)"
@@ -87,7 +73,6 @@ import {
   openHomeBreedingAction,
   openHomeBreedingDetail,
 } from '@/utils/homeBreedingActions'
-import { canOpenHomePreLabor, canOpenHomePrenatal } from '@/utils/homeHeatObservation'
 
 const props = defineProps<{ group: any }>()
 const emit = defineEmits<{
@@ -148,10 +133,6 @@ function goProcess(card: any) {
   }
 
   openHomeBreedingAction(card, 'process')
-}
-
-function openWeakAction(card: any, action: 'prenatal' | 'pre_labor') {
-  openHomeBreedingAction(card, action)
 }
 </script>
 

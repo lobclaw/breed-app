@@ -1163,6 +1163,51 @@ describe('finance-service', () => {
     expect(dogs[0].disposition).toBe('待售')
   })
 
+  it('createSaleRecord 应允许定金取消后的在养犬只再次开始销售', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+    seedCollection('dogs', [{
+      _id: 'puppy_sale_restart_1',
+      name: '奶糕',
+      role: '幼崽',
+      disposition: '在养',
+      family_id: familyId,
+      deleted_at: null,
+    }])
+    seedCollection('sale_records', [{
+      _id: 'sale_restart_cancelled_cloud',
+      family_id: familyId,
+      dog_id: 'puppy_sale_restart_1',
+      dog_name: '奶糕',
+      status: '定金取消',
+      deposit_amount: 2000,
+      deposit_kept_amount: 500,
+      deleted_at: null,
+    }])
+
+    const result = await financeService.createSaleRecord.call(ctx, {
+      dog_id: 'puppy_sale_restart_1',
+      floor_price: 6000,
+    })
+
+    expect(result.data.saleId).toBeTruthy()
+    const { data: sales } = await db.collection('sale_records')
+      .where({ dog_id: 'puppy_sale_restart_1', family_id: familyId })
+      .get()
+    expect(sales).toHaveLength(2)
+    expect(sales.find((item: any) => item._id === 'sale_restart_cancelled_cloud')).toMatchObject({
+      status: '定金取消',
+      deposit_kept_amount: 500,
+    })
+    expect(sales.find((item: any) => item._id === result.data.saleId)).toMatchObject({
+      status: '待售',
+      floor_price: 6000,
+    })
+
+    await expect(financeService.createSaleRecord.call(ctx, {
+      dog_id: 'puppy_sale_restart_1',
+    })).rejects.toThrow('该犬只已有进行中的销售记录')
+  })
+
   it('updateSaleMode 应支持 _sync 幂等、冲突与非法值校验', async () => {
     const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
     seedCollection('sale_records', [{
@@ -1358,6 +1403,63 @@ describe('finance-service', () => {
       saleId: 'sale_deposit_cancel_1',
       deposit_kept_amount: 600,
     })).rejects.toThrow('保留定金不能超过定金总额')
+  })
+
+  it('cancelSale 定金取消与全额退款后应将犬只改回在养', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+    seedCollection('dogs', [{
+      _id: 'puppy_full_refund_status',
+      name: '奶油',
+      role: '幼崽',
+      disposition: '已售',
+      family_id: familyId,
+      deleted_at: null,
+      version: 0,
+    }, {
+      _id: 'puppy_deposit_cancel_status',
+      name: '布丁',
+      role: '幼崽',
+      disposition: '已预定',
+      family_id: familyId,
+      deleted_at: null,
+      version: 0,
+    }])
+    seedCollection('sale_records', [{
+      _id: 'sale_full_refund_status',
+      family_id: familyId,
+      dog_id: 'puppy_full_refund_status',
+      dog_name: '奶油',
+      status: '已成交',
+      received_amount: 1000,
+      deleted_at: null,
+      version: 0,
+    }, {
+      _id: 'sale_deposit_cancel_status',
+      family_id: familyId,
+      dog_id: 'puppy_deposit_cancel_status',
+      dog_name: '布丁',
+      status: '已预定',
+      deposit_amount: 500,
+      deleted_at: null,
+      version: 0,
+    }])
+    seedCollection('incomes', [])
+
+    await financeService.cancelSale.call(ctx, {
+      saleId: 'sale_full_refund_status',
+      refund_amount: 1000,
+    })
+    await financeService.cancelSale.call(ctx, {
+      saleId: 'sale_deposit_cancel_status',
+      deposit_kept_amount: 0,
+    })
+
+    await expect(db.collection('dogs').doc('puppy_full_refund_status').get()).resolves.toMatchObject({
+      data: [expect.objectContaining({ disposition: '在养', disposition_date: null })],
+    })
+    await expect(db.collection('dogs').doc('puppy_deposit_cancel_status').get()).resolves.toMatchObject({
+      data: [expect.objectContaining({ disposition: '在养' })],
+    })
   })
 
   it('addAgent 与 removeAgent 应支持 _sync 幂等重放', async () => {

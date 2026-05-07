@@ -31,12 +31,6 @@
     </view>
 
     <view class="card-actions">
-      <view v-if="canOpenHomePrenatal(props.card)" class="btn btn--weak" @click.stop="openWeakAction('prenatal')">
-        <text class="btn-text">产检</text>
-      </view>
-      <view v-if="canOpenHomePreLabor(props.card)" class="btn btn--weak" @click.stop="openWeakAction('pre_labor')">
-        <text class="btn-text">临产</text>
-      </view>
       <view class="btn btn--primary btn--primary-amber" @click.stop="onPrimaryActionTap">
         <text class="material-icons-round btn-icon btn-icon--white">arrow_forward</text>
         <text class="btn-text btn-text--white">处理</text>
@@ -56,7 +50,6 @@ import {
   openHomeBreedingAction,
   openHomeBreedingDetail,
 } from '@/utils/homeBreedingActions'
-import { canOpenHomePreLabor, canOpenHomePrenatal } from '@/utils/homeHeatObservation'
 
 const props = defineProps<{ card: any }>()
 const emit = defineEmits<{
@@ -87,10 +80,6 @@ function onPrimaryActionTap() {
   }
 
   openHomeBreedingAction(props.card, 'process')
-}
-
-function openWeakAction(action: 'prenatal' | 'pre_labor') {
-  openHomeBreedingAction(props.card, action)
 }
 </script>
 
