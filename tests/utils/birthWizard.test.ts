@@ -20,6 +20,7 @@ describe('birth-wizard source contract', () => {
   it('自由入口应通过种母选择解析怀孕周期，不在加载时直接提示缺少周期', () => {
     expect(source).toContain('<BDogPicker')
     expect(source).toContain(":candidate-dogs=\"birthCandidateDogs\"")
+    expect(source).toContain(':show-breeding-stage="true"')
     expect(source).toContain("getEligibleBreedingDogs(dogStore.list, 'birth')")
     expect(source).toContain('getBirthCycleIdFromDog(dog)')
     expect(source).toContain('cycleId.value = birthCycleId')

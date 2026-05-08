@@ -41,9 +41,21 @@ describe('dog list page source contract', () => {
     expect(source).toContain('const MAX_STATUS_TAGS = 3')
     expect(source).toContain("const BREEDING_STATUS_TYPES = new Set<DeriveStatusType>(['发情中', '怀孕中', '哺乳中'])")
     expect(source).toContain('function pickVisibleStatusTags(activeStatuses: DeriveStatus[])')
-    expect(source).toContain('const breedingStatus = activeStatuses.find(isBreedingStatus)')
+    expect(source).toContain('const displayStatuses = aggregateMedicationStatusTags(activeStatuses)')
+    expect(source).toContain('const breedingStatus = displayStatuses.find(isBreedingStatus)')
     expect(source).toContain('visibleStatuses[visibleStatuses.length - 1] = breedingStatus')
     expect(source).toContain('return pickVisibleStatusTags(activeStatuses).map((status, index) => ({')
+  })
+
+  it('列表状态标签只聚合多用药，并使用首个药名等 N 项', () => {
+    expect(source).toContain('function aggregateMedicationStatusTags(activeStatuses: DeriveStatus[])')
+    expect(source).toContain("status.type === '用药中' && Number(status.count || 0) >= 2")
+    expect(source).toContain('return `${medicationStatusName(status)}等${Number(status.count)}项`')
+    expect(source).toContain("const medicationStatuses = activeStatuses.filter(status => status.type === '用药中')")
+    expect(source).toContain('if (medicationStatuses.length < 2) return activeStatuses')
+    expect(source).toContain('label: `${medicationStatusName(medicationStatuses[0])}等${medicationStatuses.length}项`')
+    expect(source).not.toContain('疾病${statuses.length}项')
+    expect(source).not.toContain('buildAggregateStatus(illnessStatuses')
   })
 
   it('外部种公列表卡片不展示在养这类去向标签', () => {

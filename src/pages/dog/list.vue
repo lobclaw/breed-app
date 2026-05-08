@@ -494,6 +494,10 @@ function buildSecondaryStatusInlineText(activeStatuses: DeriveStatus[]) {
 }
 
 function statusTagLabel(status: DeriveStatus) {
+  if (status.type === '用药中' && Number(status.count || 0) >= 2) {
+    return `${medicationStatusName(status)}等${Number(status.count)}项`
+  }
+
   return buildCompactDeriveStatusTitle(status, {
     nameOverride: status.type === '用药中' ? splitStatusDetail(status.detail).primary : undefined,
   })
@@ -508,13 +512,42 @@ function isBreedingStatus(status: DeriveStatus) {
   return BREEDING_STATUS_TYPES.has(status.type)
 }
 
+function medicationStatusName(status: DeriveStatus) {
+  return splitStatusDetail(status.detail).primary || status.label || '用药'
+}
+
+function aggregateMedicationStatusTags(activeStatuses: DeriveStatus[]) {
+  const medicationStatuses = activeStatuses.filter(status => status.type === '用药中')
+  if (medicationStatuses.length < 2) return activeStatuses
+
+  let medicationInserted = false
+  return activeStatuses.flatMap((status) => {
+    if (status.type !== '用药中') return [status]
+    if (medicationInserted) return []
+    medicationInserted = true
+
+    const latestActivityTs = Math.max(...medicationStatuses.map(item => Number(item.activityTs || 0)))
+    return [{
+      type: '用药中',
+      label: `${medicationStatusName(medicationStatuses[0])}等${medicationStatuses.length}项`,
+      count: medicationStatuses.length,
+      activityTs: Number.isFinite(latestActivityTs) ? latestActivityTs : 0,
+    } as DeriveStatus]
+  })
+}
+
 function pickVisibleStatusTags(activeStatuses: DeriveStatus[]) {
-  const visibleStatuses = activeStatuses.slice(0, MAX_STATUS_TAGS)
-  const breedingStatus = activeStatuses.find(isBreedingStatus)
+  const displayStatuses = aggregateMedicationStatusTags(activeStatuses)
+  const visibleStatuses = displayStatuses.slice(0, MAX_STATUS_TAGS)
+  const breedingStatus = displayStatuses.find(isBreedingStatus)
   if (!breedingStatus || visibleStatuses.some(isBreedingStatus)) return visibleStatuses
 
   visibleStatuses[visibleStatuses.length - 1] = breedingStatus
   return visibleStatuses
+}
+
+function getDisplayStatusTagCount(activeStatuses: DeriveStatus[]) {
+  return aggregateMedicationStatusTags(activeStatuses).length
 }
 
 function buildStatusTags(activeStatuses: DeriveStatus[]) {
@@ -533,7 +566,7 @@ function buildDogListItem(dog: DogWithStatus): DogListItem {
   const displayDisposition = normalizeDisposition(dog)
   const hasHighlightedDisposition = !isWeakDisposition(displayDisposition)
   const statusTags = buildStatusTags(activeStatuses)
-  const statusOverflowCount = Math.max(0, activeStatuses.length - MAX_STATUS_TAGS)
+  const statusOverflowCount = Math.max(0, getDisplayStatusTagCount(activeStatuses) - MAX_STATUS_TAGS)
   const sortBucket = isInactiveDisposition(displayDisposition)
     ? 4
     : dog.role === '种狗'

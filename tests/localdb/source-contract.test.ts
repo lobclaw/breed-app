@@ -60,6 +60,52 @@ describe('local-first source contract', () => {
     expect(pickerSource).toContain('scroll-x')
   })
 
+  it('BDogPicker 应在候选犬名字后展示繁育阶段天数', () => {
+    const pickerSource = readWorkspaceFile('src/components/form/BDogPicker.vue')
+    const breedingFormSource = readWorkspaceFile('src/components/record/BreedingRecordForm.vue')
+    expect(pickerSource).toContain('class="b-dog-picker__stage-tag"')
+    expect(pickerSource).toContain('showBreedingStage?: boolean')
+    expect(pickerSource).toContain('showBreedingStage: false')
+    expect(pickerSource).toContain('props.showBreedingStage && dogBreedingStageTag(dog)')
+    expect(pickerSource).toContain('function dogBreedingStageTag')
+    expect(pickerSource).toContain('发情第${day}天')
+    expect(pickerSource).toContain('怀孕第${day}天')
+    expect(breedingFormSource).toContain(':show-breeding-stage="true"')
+  })
+
+  it('发情、卵检、配种候选应通过本地记录展示上次发情日期', () => {
+    const formSource = readWorkspaceFile('src/components/record/BreedingRecordForm.vue')
+    const pickerSource = readWorkspaceFile('src/components/form/BDogPicker.vue')
+    const repositorySource = readWorkspaceFile('src/localdb/domain-repository.ts')
+
+    expect(formSource).toContain('listLocalLatestHeatDatesByDogIds')
+    expect(formSource).toContain(':extra-meta-map="latestHeatMetaMap"')
+    expect(formSource.match(/:extra-meta-map="latestHeatMetaMap"/g)?.length).toBe(2)
+    expect(formSource).toContain("&& ['heat', 'follicle_check', 'mating'].includes(breedingType.value)")
+    expect(formSource).toContain('function hasCurrentHeatStatus')
+    expect(formSource).toContain('if (currentHeatDogIds.has(dogId)) return map')
+    expect(formSource).toContain('`上次发情：${text}`')
+    expect(pickerSource).toContain('extraMetaMap?: Record<string, string>')
+    expect(pickerSource).toContain('class="b-dog-picker__extra-meta"')
+    expect(repositorySource).toContain('export async function listLocalLatestHeatDatesByDogIds')
+    expect(repositorySource).toContain("row.type === 'heat'")
+    expect(repositorySource).toContain('!row.deleted_at')
+  })
+
+  it('疫苗候选应通过本地记录展示上次疫苗日期，且不展示繁育阶段', () => {
+    const formSource = readWorkspaceFile('src/components/record/HealthRecordForm.vue')
+    const repositorySource = readWorkspaceFile('src/localdb/domain-repository.ts')
+
+    expect(formSource).toContain('listLocalLatestVaccinationDatesByDogIds')
+    expect(formSource).toContain(':extra-meta-map="latestVaccinationMetaMap"')
+    expect(formSource).toContain('resolvedType.value === \'vaccination\'')
+    expect(formSource).toContain('`上次疫苗：${text}`')
+    expect(formSource).not.toContain(':show-breeding-stage="true"')
+    expect(repositorySource).toContain('export async function listLocalLatestVaccinationDatesByDogIds')
+    expect(repositorySource).toContain("row.type === 'vaccination'")
+    expect(repositorySource).toContain('!row.deleted_at')
+  })
+
   it('应确保已迁移的页面详情读取不再直接依赖云端 detail 接口', () => {
     const pageReadContracts: Array<{ file: string; forbiddenReads: string[] }> = [
       {

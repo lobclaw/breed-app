@@ -9,7 +9,7 @@
 
     <!-- 犬只选择 -->
     <view class="prelabor-monitor__dog-picker">
-      <BDogPicker v-model="selectedDog" roleFilter="种狗" genderFilter="母" title="选择种母" />
+      <BDogPicker v-model="selectedDog" roleFilter="种狗" genderFilter="母" title="选择种母" :show-breeding-stage="true" />
     </view>
 
     <view class="prelabor-monitor__datetime-field">

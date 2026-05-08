@@ -25,7 +25,7 @@ describe('breedingDogEligibility', () => {
     expect(getEligibleBreedingDogs(dogs as any, 'heat').map(dog => dog._id)).toEqual(['dam_idle'])
   })
 
-  it('发情、卵泡检查、配种的自由入口候选应完全一致', () => {
+  it('卵泡检查、配种候选应显示尚未配种的空闲与发情中种母', () => {
     const dogs = [
       createDog({ _id: 'dam_idle' }),
       createDog({ _id: 'dam_heat', statuses: [{ type: '发情中', cycleId: 'cycle_heat' }] }),
@@ -34,8 +34,8 @@ describe('breedingDogEligibility', () => {
     ]
 
     expect(getEligibleBreedingDogs(dogs as any, 'heat').map(dog => dog._id)).toEqual(['dam_idle'])
-    expect(getEligibleBreedingDogs(dogs as any, 'follicle_check').map(dog => dog._id)).toEqual(['dam_idle'])
-    expect(getEligibleBreedingDogs(dogs as any, 'mating').map(dog => dog._id)).toEqual(['dam_idle'])
+    expect(getEligibleBreedingDogs(dogs as any, 'follicle_check').map(dog => dog._id)).toEqual(['dam_idle', 'dam_heat'])
+    expect(getEligibleBreedingDogs(dogs as any, 'mating').map(dog => dog._id)).toEqual(['dam_idle', 'dam_heat'])
   })
 
   it('严格步骤候选应只保留带当前周期的怀孕中种母', () => {
@@ -78,12 +78,12 @@ describe('breedingDogEligibility', () => {
 
     expect(getBreedingDogPickerEmptyState('follicle_check', dams as any, [])).toEqual({
       title: '暂无可检查的种母',
-      description: '发情中、怀孕中、哺乳中的犬只已自动隐藏',
+      description: '怀孕中、哺乳中的犬只已自动隐藏',
     })
 
     expect(getBreedingDogPickerEmptyState('mating', dams as any, [])).toEqual({
       title: '暂无可配种的种母',
-      description: '发情中、怀孕中、哺乳中的犬只已自动隐藏',
+      description: '怀孕中、哺乳中的犬只已自动隐藏',
     })
 
     expect(getBreedingDogPickerEmptyState('abnormal_termination', dams as any, [])).toEqual({

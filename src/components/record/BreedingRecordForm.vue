@@ -96,6 +96,7 @@
             :readonly="dogLocked"
             :empty-title="breedingPickerEmptyState.title"
             :empty-description="breedingPickerEmptyState.description"
+            :show-breeding-stage="true"
           />
         </view>
 
@@ -193,6 +194,8 @@
             placeholder="点击选择种母"
             :empty-title="breedingPickerEmptyState.title"
             :empty-description="breedingPickerEmptyState.description"
+            :extra-meta-map="latestHeatMetaMap"
+            :show-breeding-stage="true"
           />
           <BDogPicker
             v-else
@@ -202,6 +205,8 @@
             :readonly="dogLocked"
             :empty-title="breedingPickerEmptyState.title"
             :empty-description="breedingPickerEmptyState.description"
+            :extra-meta-map="latestHeatMetaMap"
+            :show-breeding-stage="true"
           />
         </view>
 
@@ -262,7 +267,7 @@
         <template v-if="breedingType === 'mating'">
           <view class="field-group">
             <view class="field-label"><text>选择种公</text></view>
-            <BDogPicker v-model="selectedSire" genderFilter="公" :includeExternalSires="true" title="选择种公" />
+            <BDogPicker v-model="selectedSire" genderFilter="公" :includeExternalSires="true" title="选择种公" :show-breeding-stage="true" />
           </view>
 
           <view class="field-group">
@@ -480,6 +485,7 @@ import { useRecordSubmitState } from '@/composables/useRecordSubmitState'
 import { buildRecordFeedbackMessage, queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
 import {
   getLocalBreedingRecordDetail,
+  listLocalLatestHeatDatesByDogIds,
   getLocalNextMatingNumberPreview,
   getLocalTaskById,
 } from '@/localdb/domain-repository'
@@ -574,6 +580,8 @@ const vulvaStatus = ref('')
 const dischargeStatus = ref('')
 const selectedSymptoms = ref<string[]>([])
 const matingPreviewRequestToken = ref(0)
+const latestHeatRequestToken = ref(0)
+const latestHeatDates = ref<Record<string, number>>({})
 
 const matingMethods = ['人工授精', '自然交配']
 const follicleResults = ['发育中', '已成熟', '发育不良', '其他']
@@ -604,6 +612,11 @@ function roleDisplayText(role?: string | null) {
 }
 
 const isHeatMultiCreate = computed(() => !isEdit.value && breedingType.value === 'heat' && !dogLocked.value)
+const shouldShowLatestHeatMeta = computed(() => {
+  return !isEdit.value
+    && !dogLocked.value
+    && ['heat', 'follicle_check', 'mating'].includes(breedingType.value)
+})
 
 const breedingCandidateDogs = computed(() => {
   if (!breedingType.value) return []
@@ -615,6 +628,21 @@ const breedingPickerEmptyState = computed(() => {
     return { title: '暂无犬只', description: '没有符合条件的犬只' }
   }
   return getBreedingDogPickerEmptyState(breedingType.value, dogStore.list, breedingCandidateDogs.value)
+})
+
+const latestHeatMetaMap = computed(() => {
+  if (!shouldShowLatestHeatMeta.value) return {}
+  const currentHeatDogIds = new Set(
+    breedingCandidateDogs.value
+      .filter((dog: any) => hasCurrentHeatStatus(dog))
+      .map((dog: any) => dog._id),
+  )
+  return Object.entries(latestHeatDates.value).reduce<Record<string, string>>((map, [dogId, ts]) => {
+    if (currentHeatDogIds.has(dogId)) return map
+    const text = formatDateOnly(ts)
+    if (text) map[dogId] = `上次发情：${text}`
+    return map
+  }, {})
 })
 
 const submitIdleLabel = computed(() => isEdit.value ? '保存修改' : '保存记录')
@@ -829,6 +857,36 @@ function resetDetails() {
   if (props.type === 'pre_labor') {
     details.nesting_behavior = false
   }
+}
+
+function formatDateOnly(ts?: number | null) {
+  if (!ts) return ''
+  const targetDate = new Date(ts + 8 * 60 * 60 * 1000)
+  return `${targetDate.getUTCFullYear()}-${String(targetDate.getUTCMonth() + 1).padStart(2, '0')}-${String(targetDate.getUTCDate()).padStart(2, '0')}`
+}
+
+function hasCurrentHeatStatus(dog: Record<string, any>) {
+  const statuses = Array.isArray(dog?.statuses) ? dog.statuses : []
+  return statuses.some((status: any) => status?.type === '发情中')
+}
+
+async function refreshLatestHeatDates() {
+  const requestToken = ++latestHeatRequestToken.value
+  const familyId = currentFamily.value?._id || ''
+  if (!shouldShowLatestHeatMeta.value || !familyId) {
+    latestHeatDates.value = {}
+    return
+  }
+
+  const dogIds = breedingCandidateDogs.value.map((dog: any) => dog._id).filter(Boolean)
+  if (dogIds.length === 0) {
+    latestHeatDates.value = {}
+    return
+  }
+
+  const dates = await listLocalLatestHeatDatesByDogIds(familyId, dogIds)
+  if (requestToken !== latestHeatRequestToken.value) return
+  latestHeatDates.value = dates
 }
 
 function setDateChip(chip: 'today' | 'yesterday' | 'dayBefore') {
@@ -1223,6 +1281,14 @@ watch(
   async ([type, editing]) => {
     if (type !== 'mating' || editing) return
     await refreshMatingNumberPreview()
+  },
+  { immediate: true }
+)
+
+watch(
+  [shouldShowLatestHeatMeta, () => currentFamily.value?._id || '', () => breedingCandidateDogs.value.map((dog: any) => dog._id).join(',')],
+  () => {
+    void refreshLatestHeatDates()
   },
   { immediate: true }
 )

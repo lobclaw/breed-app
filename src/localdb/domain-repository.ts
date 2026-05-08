@@ -970,6 +970,28 @@ export async function listLocalMatingRecordsBySire(familyId: string, input: { si
   )
 }
 
+export async function listLocalLatestHeatDatesByDogIds(familyId: string, dogIds: string[]) {
+  const dogIdSet = new Set((dogIds || []).map(id => String(id || '').trim()).filter(Boolean))
+  if (!familyId || dogIdSet.size === 0) return {} as Record<string, number>
+
+  const records = await localDb.query<BreedingRecord & { deleted_at?: number | null }>('breeding_records', row =>
+    row.family_id === familyId
+    && row.type === 'heat'
+    && dogIdSet.has(row.dog_id)
+    && !row.deleted_at,
+  )
+
+  return records.reduce<Record<string, number>>((map, record) => {
+    const dogId = String(record.dog_id || '')
+    const date = Number(record.date || record.details?.start_date || 0)
+    if (!dogId || !Number.isFinite(date) || date <= 0) return map
+    if (!map[dogId] || date > map[dogId]) {
+      map[dogId] = date
+    }
+    return map
+  }, {})
+}
+
 export async function getLocalBreedingCycleDetail(familyId: string, cycleId: string): Promise<BreedingCycleDetailResponse | null> {
   if (!familyId || !cycleId) return null
   const [cycle, records, litter, expenses, cycleSiblings, litterSiblings, puppies] = await Promise.all([
@@ -1150,6 +1172,28 @@ export async function listLocalDogHealthHistory(familyId: string, dogId: string,
   }, {
     sort: (left, right) => Number(right.date || 0) - Number(left.date || 0),
   })
+}
+
+export async function listLocalLatestVaccinationDatesByDogIds(familyId: string, dogIds: string[]) {
+  const dogIdSet = new Set((dogIds || []).map(id => String(id || '').trim()).filter(Boolean))
+  if (!familyId || dogIdSet.size === 0) return {} as Record<string, number>
+
+  const records = await localDb.query<HealthRecord & { deleted_at?: number | null }>('health_records', row =>
+    row.family_id === familyId
+    && row.type === 'vaccination'
+    && dogIdSet.has(row.dog_id)
+    && !row.deleted_at,
+  )
+
+  return records.reduce<Record<string, number>>((map, record) => {
+    const dogId = String(record.dog_id || '')
+    const date = Number(record.date || record.created_at || 0)
+    if (!dogId || !Number.isFinite(date) || date <= 0) return map
+    if (!map[dogId] || date > map[dogId]) {
+      map[dogId] = date
+    }
+    return map
+  }, {})
 }
 
 function getMedicationHistorySortTs(task: Record<string, any>) {

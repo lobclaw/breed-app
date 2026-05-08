@@ -53,7 +53,12 @@
     <view v-else class="form-body">
       <view v-if="!isEdit" class="field-group">
         <view class="field-label"><text>选择犬只</text></view>
-        <BDogPicker v-model="selectedDogs" :multiple="true" title="选择犬只" />
+        <BDogPicker
+          v-model="selectedDogs"
+          :multiple="true"
+          title="选择犬只"
+          :extra-meta-map="latestVaccinationMetaMap"
+        />
       </view>
 
       <view v-else class="field-group">
@@ -333,7 +338,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import { useRecordSubmitState } from '@/composables/useRecordSubmitState'
 import { buildRecordFeedbackMessage, buildTaskFeedbackMessage, queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
@@ -341,9 +346,11 @@ import {
   findLocalDuplicateIllnesses,
   getLocalHealthRecordDetail,
   getLocalTaskById,
+  listLocalLatestVaccinationDatesByDogIds,
 } from '@/localdb/domain-repository'
 import { localSyncRuntime } from '@/localdb/runtime'
 import { resolveHealthCreateRouteQuery, type MedicationRouteIllnessLink } from '@/utils/recordFormRoutes'
+import { useDogStore } from '@/stores/dogStore'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 import BFormOptions from '@/components/form/BFormOptions.vue'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
@@ -366,6 +373,7 @@ const props = withDefaults(defineProps<{
 })
 
 const { currentFamily, loadFamily } = useAuth()
+const dogStore = useDogStore()
 
 const isEdit = computed(() => props.mode === 'edit')
 const loading = ref(false)
@@ -383,6 +391,8 @@ const reminderDate = ref<number | null>(null)
 const showMedPrompt = ref(false)
 const savedRecordId = ref('')
 const savedIllnessLinks = ref<MedicationRouteIllnessLink[]>([])
+const latestVaccinationRequestToken = ref(0)
+const latestVaccinationDates = ref<Record<string, number>>({})
 
 const resolvedType = computed<HealthRecordType | ''>(() => {
   return (isEdit.value ? currentRecord.value?.type : props.type) || ''
@@ -461,6 +471,19 @@ const reminderHint = computed(() => {
 
 const hideTodo = computed(() => {
   return isEdit.value || fromTask.value || resolvedType.value === 'illness'
+})
+
+const latestVaccinationMetaMap = computed(() => {
+  if (!shouldShowLatestVaccinationMeta.value) return {}
+  return Object.entries(latestVaccinationDates.value).reduce<Record<string, string>>((map, [dogId, ts]) => {
+    const text = formatDateOnly(ts)
+    if (text) map[dogId] = `上次疫苗：${text}`
+    return map
+  }, {})
+})
+
+const shouldShowLatestVaccinationMeta = computed(() => {
+  return !isEdit.value && resolvedType.value === 'vaccination'
 })
 
 const PRESET_VACCINE_TYPES = ['卫佳5', '卫佳8', '卫佳10', '狂犬']
@@ -667,6 +690,32 @@ function applyTaskDog(task: any) {
   }]
 }
 
+function formatDateOnly(ts?: number | null) {
+  if (!ts) return ''
+  const targetDate = new Date(ts + 8 * 60 * 60 * 1000)
+  return `${targetDate.getUTCFullYear()}-${String(targetDate.getUTCMonth() + 1).padStart(2, '0')}-${String(targetDate.getUTCDate()).padStart(2, '0')}`
+}
+
+async function refreshLatestVaccinationDates() {
+  const requestToken = ++latestVaccinationRequestToken.value
+  const familyId = currentFamily.value?._id || ''
+  if (!shouldShowLatestVaccinationMeta.value || !familyId) {
+    latestVaccinationDates.value = {}
+    return
+  }
+
+  await dogStore.ensure().catch(() => {})
+  const dogIds = dogStore.list.map((dog: any) => dog._id).filter(Boolean)
+  if (dogIds.length === 0) {
+    latestVaccinationDates.value = {}
+    return
+  }
+
+  const dates = await listLocalLatestVaccinationDatesByDogIds(familyId, dogIds)
+  if (requestToken !== latestVaccinationRequestToken.value) return
+  latestVaccinationDates.value = dates
+}
+
 async function loadCreateQuery() {
   resetFormState()
   const routeQuery = resolveHealthCreateRouteQuery(props.query)
@@ -682,6 +731,8 @@ async function loadCreateQuery() {
       applyPrefillDetails((task as any).details || {})
     }
   }
+
+  void refreshLatestVaccinationDates()
 }
 
 async function loadEditRecord() {
@@ -1248,6 +1299,14 @@ onMounted(async () => {
     loading.value = false
   }
 })
+
+watch(
+  [shouldShowLatestVaccinationMeta, () => currentFamily.value?._id || '', () => dogStore.list.map((dog: any) => dog._id).join(',')],
+  () => {
+    void refreshLatestVaccinationDates()
+  },
+  { immediate: true },
+)
 </script>
 
 <style lang="scss" scoped>

@@ -110,7 +110,19 @@
           <BEntityIcon :role="dog.role" :size="18" color="#fff" />
         </view>
         <view class="b-dog-picker__info">
-          <text class="b-dog-picker__name">{{ dog.name || '未命名' }}</text>
+          <view class="b-dog-picker__title-row">
+            <text class="b-dog-picker__name">{{ dog.name || '未命名' }}</text>
+            <text v-if="dogExtraMetaText(dog)" class="b-dog-picker__extra-meta">
+              {{ dogExtraMetaText(dog) }}
+            </text>
+            <text
+              v-if="props.showBreedingStage && dogBreedingStageTag(dog)"
+              class="b-dog-picker__stage-tag"
+              :class="`b-dog-picker__stage-tag--${dogBreedingStageTag(dog)?.tone}`"
+            >
+              {{ dogBreedingStageTag(dog)?.text }}
+            </text>
+          </view>
           <text class="b-dog-picker__meta">
             {{ dogMetaText(dog) }}
           </text>
@@ -177,6 +189,10 @@ const props = withDefaults(defineProps<{
   emptyTitle?: string
   /** 空态描述 */
   emptyDescription?: string
+  /** 按犬只 ID 展示的额外副信息 */
+  extraMetaMap?: Record<string, string>
+  /** 是否展示繁育阶段标签 */
+  showBreedingStage?: boolean
 }>(), {
   modelValue: undefined,
   visible: undefined,
@@ -192,6 +208,8 @@ const props = withDefaults(defineProps<{
   candidateDogs: undefined,
   emptyTitle: '暂无犬只',
   emptyDescription: '没有符合条件的犬只',
+  extraMetaMap: () => ({}),
+  showBreedingStage: false,
 })
 
 const emit = defineEmits<{
@@ -492,6 +510,45 @@ function dogMetaText(dog: Dog) {
   return parts.join(' · ')
 }
 
+function dogExtraMetaText(dog: Dog) {
+  return props.extraMetaMap?.[dog._id] || ''
+}
+
+function dogBreedingStageTag(dog: Dog) {
+  const statuses = Array.isArray(dog.statuses) ? dog.statuses : []
+  const heatStatus = statuses.find(status => status?.type === '发情中')
+  if (heatStatus) {
+    const day = getStatusDayCount(heatStatus)
+    return {
+      text: day ? `发情第${day}天` : '发情中',
+      tone: 'heat',
+    }
+  }
+
+  const pregnantStatus = statuses.find(status => status?.type === '怀孕中')
+  if (pregnantStatus) {
+    const day = getStatusDayCount(pregnantStatus)
+    return {
+      text: day ? `怀孕第${day}天` : '怀孕中',
+      tone: 'pregnant',
+    }
+  }
+
+  return null
+}
+
+function getStatusDayCount(status: Record<string, any>) {
+  const progressDay = Number(status?.progress?.current)
+  if (Number.isFinite(progressDay) && progressDay > 0) return Math.floor(progressDay)
+
+  const texts = Array.isArray(status?.meta)
+    ? status.meta.map((item: any) => `${item?.text || ''}`)
+    : []
+  const dayText = texts.find(text => /^第\s*\d+\s*天$/.test(text))
+  const matched = dayText?.match(/^第\s*(\d+)\s*天$/)
+  return matched ? Number(matched[1]) : null
+}
+
 function normalizeBreed(dog: Pick<Dog, 'breed'>) {
   return dog.breed?.trim() || '马尔济斯'
 }
@@ -773,16 +830,46 @@ function formatAge(birthTs?: number | null) {
   min-width: 0;
 }
 
+.b-dog-picker__title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-bottom: 2px;
+}
+
 .b-dog-picker__name {
   font-family: var(--font-display);
   font-size: 14px;
   font-weight: 700;
   color: var(--text-1);
-  display: block;
-  margin-bottom: 2px;
+  display: inline-block;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.b-dog-picker__stage-tag {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 18px;
+
+  &--heat {
+    color: #e89b3e;
+    background: rgba(245, 179, 65, 0.12);
+  }
+
+  &--pregnant {
+    color: var(--primary);
+    background: rgba(234, 62, 119, 0.1);
+  }
 }
 
 .b-dog-picker__meta {
@@ -790,6 +877,18 @@ function formatAge(birthTs?: number | null) {
   font-weight: 500;
   color: var(--text-3);
   display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.b-dog-picker__extra-meta {
+  display: inline-block;
+  flex-shrink: 0;
+  max-width: 150px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

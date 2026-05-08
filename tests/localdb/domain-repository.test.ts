@@ -26,6 +26,8 @@ import {
   listLocalDogMedicationHistory,
   listLocalDogWeights,
   listLocalDogsWithStatus,
+  listLocalLatestHeatDatesByDogIds,
+  listLocalLatestVaccinationDatesByDogIds,
   listLocalLittersByDam,
   listLocalLittersBySire,
   listLocalLitters,
@@ -3480,6 +3482,120 @@ describe('local domain repository', () => {
       status: 'active',
       day: 2,
       totalDays: 5,
+    })
+  })
+
+  it('应按犬只返回本地最新发情日期，并忽略删除和非发情记录', async () => {
+    const olderHeat = new Date('2026-02-08T09:00:00+08:00').getTime()
+    const latestHeat = new Date('2026-04-18T09:00:00+08:00').getTime()
+    const otherDogHeat = new Date('2026-03-03T09:00:00+08:00').getTime()
+    await localDb.replaceTable('breeding_records', [
+      {
+        _id: 'heat_old',
+        family_id: 'fam_latest_heat',
+        dog_id: 'dog_heat_1',
+        type: 'heat',
+        date: olderHeat,
+      },
+      {
+        _id: 'heat_latest',
+        family_id: 'fam_latest_heat',
+        dog_id: 'dog_heat_1',
+        type: 'heat',
+        date: latestHeat,
+      },
+      {
+        _id: 'heat_deleted',
+        family_id: 'fam_latest_heat',
+        dog_id: 'dog_heat_1',
+        type: 'heat',
+        date: latestHeat + 86400000,
+        deleted_at: latestHeat + 86400000,
+      },
+      {
+        _id: 'mating_ignored',
+        family_id: 'fam_latest_heat',
+        dog_id: 'dog_heat_1',
+        type: 'mating',
+        date: latestHeat + 2 * 86400000,
+      },
+      {
+        _id: 'heat_other_dog',
+        family_id: 'fam_latest_heat',
+        dog_id: 'dog_heat_2',
+        type: 'heat',
+        date: otherDogHeat,
+      },
+      {
+        _id: 'heat_other_family',
+        family_id: 'fam_other',
+        dog_id: 'dog_heat_1',
+        type: 'heat',
+        date: latestHeat + 3 * 86400000,
+      },
+    ])
+
+    await expect(listLocalLatestHeatDatesByDogIds('fam_latest_heat', [])).resolves.toEqual({})
+    await expect(listLocalLatestHeatDatesByDogIds('fam_latest_heat', ['dog_heat_1', 'dog_heat_2'])).resolves.toEqual({
+      dog_heat_1: latestHeat,
+      dog_heat_2: otherDogHeat,
+    })
+  })
+
+  it('应按犬只返回本地最新疫苗日期，并忽略删除和非疫苗记录', async () => {
+    const olderVaccination = new Date('2026-01-08T09:00:00+08:00').getTime()
+    const latestVaccination = new Date('2026-04-08T09:00:00+08:00').getTime()
+    const otherDogVaccination = new Date('2026-03-08T09:00:00+08:00').getTime()
+    await localDb.replaceTable('health_records', [
+      {
+        _id: 'vaccination_old',
+        family_id: 'fam_latest_vaccination',
+        dog_id: 'dog_vaccination_1',
+        type: 'vaccination',
+        date: olderVaccination,
+      },
+      {
+        _id: 'vaccination_latest',
+        family_id: 'fam_latest_vaccination',
+        dog_id: 'dog_vaccination_1',
+        type: 'vaccination',
+        date: latestVaccination,
+      },
+      {
+        _id: 'vaccination_deleted',
+        family_id: 'fam_latest_vaccination',
+        dog_id: 'dog_vaccination_1',
+        type: 'vaccination',
+        date: latestVaccination + 86400000,
+        deleted_at: latestVaccination + 86400000,
+      },
+      {
+        _id: 'deworming_ignored',
+        family_id: 'fam_latest_vaccination',
+        dog_id: 'dog_vaccination_1',
+        type: 'deworming',
+        date: latestVaccination + 2 * 86400000,
+      },
+      {
+        _id: 'vaccination_other_dog',
+        family_id: 'fam_latest_vaccination',
+        dog_id: 'dog_vaccination_2',
+        type: 'vaccination',
+        date: otherDogVaccination,
+      },
+      {
+        _id: 'vaccination_other_family',
+        family_id: 'fam_other',
+        dog_id: 'dog_vaccination_1',
+        type: 'vaccination',
+        date: latestVaccination + 3 * 86400000,
+      },
+    ])
+
+    await expect(listLocalLatestVaccinationDatesByDogIds('fam_latest_vaccination', [])).resolves.toEqual({})
+    await expect(listLocalLatestVaccinationDatesByDogIds('fam_latest_vaccination', ['dog_vaccination_1', 'dog_vaccination_2'])).resolves.toEqual({
+      dog_vaccination_1: latestVaccination,
+      dog_vaccination_2: otherDogVaccination,
     })
   })
 

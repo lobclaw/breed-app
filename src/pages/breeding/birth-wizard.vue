@@ -35,6 +35,7 @@
           placeholder="点击选择种母"
           :empty-title="birthPickerEmptyState.title"
           :empty-description="birthPickerEmptyState.description"
+          :show-breeding-stage="true"
         />
       </view>
 

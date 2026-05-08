@@ -8,6 +8,7 @@ type PickerCopy = {
 
 const BREEDING_STATUS_TYPES = new Set<DeriveStatus['type']>(['发情中', '怀孕中', '哺乳中'])
 const BLOCKED_HEAT_STATUSES = new Set<DeriveStatus['type']>(['发情中', '怀孕中', '哺乳中'])
+const BLOCKED_UNMATED_STATUSES = new Set<DeriveStatus['type']>(['怀孕中', '哺乳中'])
 
 function isBreedingDam(dog: DogWithStatus) {
   return dog.role === '种狗' && dog.gender === '母'
@@ -53,11 +54,11 @@ export function isEligibleBreedingDog(dog: DogWithStatus, type: BreedingRecordTy
   }
 
   if (type === 'follicle_check') {
-    return !hasBlockedBreedingStatus(dog, BLOCKED_HEAT_STATUSES)
+    return !hasBlockedBreedingStatus(dog, BLOCKED_UNMATED_STATUSES)
   }
 
   if (type === 'mating') {
-    return !hasBlockedBreedingStatus(dog, BLOCKED_HEAT_STATUSES)
+    return !hasBlockedBreedingStatus(dog, BLOCKED_UNMATED_STATUSES)
   }
 
   if (type === 'pregnancy_check' || type === 'prenatal_check' || type === 'pre_labor' || type === 'birth') {
@@ -105,14 +106,14 @@ export function getBreedingDogPickerEmptyState(
   if (type === 'follicle_check') {
     return {
       title: '暂无可检查的种母',
-      description: '发情中、怀孕中、哺乳中的犬只已自动隐藏',
+      description: '怀孕中、哺乳中的犬只已自动隐藏',
     }
   }
 
   if (type === 'mating') {
     return {
       title: '暂无可配种的种母',
-      description: '发情中、怀孕中、哺乳中的犬只已自动隐藏',
+      description: '怀孕中、哺乳中的犬只已自动隐藏',
     }
   }
 
