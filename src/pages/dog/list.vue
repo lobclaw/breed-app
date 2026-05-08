@@ -251,6 +251,7 @@ import { listLocalDogsWithStatus } from '@/localdb/domain-repository'
 import { localSyncRuntime } from '@/localdb/runtime'
 import { useDogStore } from '@/stores/dogStore'
 import type { DeriveStatus, DeriveStatusType, DogDisposition, DogWithStatus } from '@/types/dog'
+import { getBeijingOrdinalDay } from '@/utils/date'
 import { buildCompactDeriveStatusTitle } from '@/utils/dogStatusCopy'
 import { getDogStatusTone } from '@/utils/themeSemantics'
 
@@ -770,8 +771,7 @@ function roleLabel(dog: DogWithStatus) {
 }
 
 function formatAge(birthTs: number) {
-  const now = Date.now()
-  const days = Math.max(1, Math.floor((now - birthTs) / 86400000))
+  const days = getBeijingOrdinalDay(birthTs) || 1
   if (days < 30) return `${days}天`
   if (days < 365) return `${Math.floor(days / 30)}月龄`
   const years = Math.floor(days / 365)

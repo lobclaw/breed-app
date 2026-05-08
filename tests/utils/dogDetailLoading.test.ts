@@ -30,7 +30,7 @@ describe('dog detail loading contract', () => {
   })
 
   it('应让出生当天的详情页年龄最低显示为 1 天', () => {
-    expect(source).toContain('const days = Math.max(1, Math.floor((Date.now() - birthTs) / 86400000))')
+    expect(source).toContain('const days = getBeijingOrdinalDay(birthTs) || 1')
     expect(source).not.toContain('const days = Math.floor((Date.now() - birthTs) / 86400000)')
   })
 

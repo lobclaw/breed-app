@@ -1,4 +1,4 @@
-import { getBeijingDayStart } from '@/utils/date'
+import { getBeijingDayDiff, getBeijingDayStart } from '@/utils/date'
 
 const DAY_MS = 86400000
 
@@ -47,7 +47,7 @@ export function getMedicationDurationDays(task: MedicationStateTask | null | und
 export function getMedicationDayIndex(task: MedicationStateTask | null | undefined, dayTs: number): number | null {
   const startTs = getMedicationStartDate(task)
   if (startTs === null) return null
-  return Math.floor((startOfMedicationDay(dayTs) - startTs) / DAY_MS) + 1
+  return getBeijingDayDiff(dayTs, startTs) + 1
 }
 
 function getMedicationDoseForDay(

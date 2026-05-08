@@ -1,5 +1,5 @@
 import type { BreedingCycle, BreedingRecord, Litter } from '@/types/breeding'
-import { getBeijingDayStart } from '@/utils/date'
+import { getBeijingDayDiff, getBeijingOrdinalDay } from '@/utils/date'
 import { buildCompactBreedingCycleStatusTitle, getBreedingCycleCurrentDayCount } from '@/utils/dogStatusCopy'
 
 export type BreedingTimelineKind = 'upcoming' | 'current' | 'record'
@@ -20,10 +20,6 @@ const DAY_MS = 86400000
 
 type BreedingTimelineContext = {
   litter?: Pick<Litter, 'birth_date' | 'weaned_at'> | null
-}
-
-function startOfDay(ts: number) {
-  return getBeijingDayStart(ts)
 }
 
 function formatDate(ts?: number | null) {
@@ -60,8 +56,7 @@ function isNursingLitter(litter?: Pick<Litter, 'birth_date' | 'weaned_at'> | nul
 }
 
 function getNursingDayCount(litter?: Pick<Litter, 'birth_date'> | null, now = Date.now()) {
-  if (typeof litter?.birth_date !== 'number') return null
-  return Math.max(1, Math.floor((startOfDay(now) - startOfDay(litter.birth_date)) / DAY_MS) + 1)
+  return getBeijingOrdinalDay(litter?.birth_date, now)
 }
 
 function formatNursingTitle(litter?: Pick<Litter, 'birth_date'> | null, now = Date.now()) {
@@ -203,7 +198,7 @@ function getBreedingTimelineUpcomingTitle(
 }
 
 export function formatRelativeDayLabel(targetTs: number, now = Date.now()) {
-  const diffDays = Math.floor((startOfDay(targetTs) - startOfDay(now)) / DAY_MS)
+  const diffDays = getBeijingDayDiff(targetTs, now)
   if (diffDays > 0) return `还有${diffDays}天`
   if (diffDays === 0) return '就在今天'
   return `已过${Math.abs(diffDays)}天`
@@ -237,7 +232,7 @@ function buildBreedingTimelineUpcomingSummary(
   if (upcomingTitle === '建议配种') {
     const follicleRecord = getLatestBreedingRecord(records, 'follicle_check')
     if (typeof follicleRecord?.date === 'number') {
-      const delta = Math.max(1, Math.floor((startOfDay(now) - startOfDay(follicleRecord.date)) / DAY_MS) + 1)
+      const delta = getBeijingOrdinalDay(follicleRecord.date, now) || 1
       return `卵检后第${delta}天`
     }
     return '建议尽快配种'
@@ -246,7 +241,7 @@ function buildBreedingTimelineUpcomingSummary(
   if (upcomingTitle === '建议孕检') {
     const latestMating = getLatestBreedingRecord(records, 'mating')
     if (typeof latestMating?.date === 'number') {
-      const delta = Math.max(1, Math.floor((startOfDay(now) - startOfDay(latestMating.date)) / DAY_MS) + 1)
+      const delta = getBeijingOrdinalDay(latestMating.date, now) || 1
       const matingNumber = Number(latestMating.details?.mating_number)
       if (matingNumber > 0) return `距第${matingNumber}脚配种第${delta}天`
       return `距最近配种第${delta}天`

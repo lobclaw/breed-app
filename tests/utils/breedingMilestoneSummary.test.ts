@@ -143,7 +143,7 @@ describe('breedingMilestoneSummary 卵泡检查摘要', () => {
       },
     }, now)
 
-    expect(summary.primaryLabel).toBe('配种第 3 天')
+    expect(summary.primaryLabel).toBe('配种第 4 天')
     expect(summary.secondaryLabel).toBe('建议 5月13日孕检')
     expect(summary.alertLabel).toBe('')
   })

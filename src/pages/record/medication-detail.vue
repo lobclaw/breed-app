@@ -315,7 +315,7 @@ import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import BModal from '@/components/layout/BModal.vue'
 import { buildHealthDetailUrl, resolveMedicationDetailId } from '@/utils/dogDetailNavigation'
-import { getBeijingDayStart } from '@/utils/date'
+import { getBeijingDayDiff, getBeijingDayStart, getBeijingOrdinalDay } from '@/utils/date'
 import { formatMedicationDosage, formatMedicationFrequency } from '@/utils/medicationDisplay'
 import { getMedicationDayState, getMedicationTodayProgress, getMedicationFrequency } from '@/utils/medicationState'
 
@@ -342,7 +342,7 @@ const todayTs = computed(() => startOfDay(Date.now()))
 
 const currentDay = computed(() => {
   if (!task.value) return 0
-  const elapsed = Math.floor((todayTs.value - task.value.start_date) / DAY_MS) + 1
+  const elapsed = getBeijingOrdinalDay(task.value.start_date, todayTs.value) || 1
   return Math.max(1, Math.min(elapsed, task.value.duration_days))
 })
 
@@ -487,7 +487,7 @@ const actionNoteText = computed(() => {
 
 const endDateRelativeText = computed(() => {
   if (!task.value?.end_date) return '结束时间待定'
-  const diffDays = Math.floor((startOfDay(task.value.end_date) - todayTs.value) / DAY_MS)
+  const diffDays = getBeijingDayDiff(task.value.end_date, todayTs.value)
   if (diffDays > 0) return `还有${diffDays}天`
   if (diffDays === 0) return '今天结束'
   return `已结束${Math.abs(diffDays)}天`

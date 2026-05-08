@@ -1,4 +1,8 @@
-import { getBeijingDayStart } from '@/utils/date'
+import {
+  getBeijingDayDiff,
+  getBeijingElapsedDays,
+  getBeijingOrdinalDay,
+} from '@/utils/date'
 
 const DAY_MS = 86400000
 
@@ -105,7 +109,7 @@ export function deriveBreedingMilestoneViewModel(
   const dueDate = typeof task.due_date === 'number' ? task.due_date : null
   const anchorDate = meta ? meta.getAnchorDate(task) : null
   const daysFromAnchor = typeof anchorDate === 'number'
-    ? Math.max(1, Math.floor((startOfDay(now) - startOfDay(anchorDate)) / DAY_MS))
+    ? getBeijingOrdinalDay(anchorDate, now)
     : null
   const suggestionStatus = getSuggestionStatus(dueDate, now)
   const actionLabel = meta?.actionLabel || '处理'
@@ -140,7 +144,7 @@ function getStepType(task: BreedingMilestoneTaskLike): string {
 
 function getSuggestionStatus(dueDate: number | null, now: number): BreedingMilestoneSuggestionStatus {
   if (!dueDate) return 'normal'
-  const diffDays = Math.floor((startOfDay(now) - startOfDay(dueDate)) / DAY_MS)
+  const diffDays = getBeijingDayDiff(now, dueDate)
   if (diffDays > 0) return 'window_passed'
   if (diffDays === 0) return 'window_due'
   return 'normal'
@@ -162,7 +166,7 @@ function buildSuggestionLabel(
   if (stepType === 'birth') {
     if (status === 'window_due') return '预产期就在今天'
     if (status === 'window_passed') {
-      const passedDays = Math.max(1, Math.floor((startOfDay(now) - startOfDay(dueDate)) / DAY_MS))
+      const passedDays = Math.max(1, getBeijingElapsedDays(dueDate, now))
       return `预产期已过 ${passedDays} 天`
     }
 
@@ -171,7 +175,7 @@ function buildSuggestionLabel(
 
   if (status === 'window_due') return `建议今日${actionLabel}`
   if (status === 'window_passed') {
-    const passedDays = Math.max(1, Math.floor((startOfDay(now) - startOfDay(dueDate)) / DAY_MS))
+    const passedDays = Math.max(1, getBeijingElapsedDays(dueDate, now))
     return `建议日期已过 ${passedDays} 天`
   }
 
@@ -198,7 +202,7 @@ function buildHeatDayLabel(task: BreedingMilestoneTaskLike, now: number): string
   const heatDate = getNumber(task.details?.heat_date)
   if (!heatDate) return ''
 
-  const heatDay = Math.max(1, Math.floor((startOfDay(now) - startOfDay(heatDate)) / DAY_MS) + 1)
+  const heatDay = getBeijingOrdinalDay(heatDate, now) || 1
   return `发情第 ${heatDay} 天`
 }
 
@@ -211,7 +215,7 @@ function buildStageDayLabel(
   if (stepType === 'mating') {
     const follicleDate = getNumber(task.details?.follicle_check_date)
     const delta = typeof follicleDate === 'number'
-      ? Math.max(1, Math.floor((startOfDay(now) - startOfDay(follicleDate)) / DAY_MS) + 1)
+      ? getBeijingOrdinalDay(follicleDate, now)
       : daysFromAnchor
     if (!delta) return ''
     return `卵泡检查后第 ${delta} 天`
@@ -240,7 +244,7 @@ function buildPassedWindowLabel(
 ): string {
   if (suggestionStatus !== 'window_passed' || !dueDate) return ''
 
-  const passedDays = Math.max(1, Math.floor((startOfDay(now) - startOfDay(dueDate)) / DAY_MS))
+  const passedDays = Math.max(1, getBeijingElapsedDays(dueDate, now))
   if (stepType === 'mating') return `建议配种窗已过 ${passedDays} 天`
   if (stepType === 'birth') return `预产期已过 ${passedDays} 天`
   if (stepType === 'weaning_confirm') return `预计断奶日已过 ${passedDays} 天`
@@ -287,10 +291,6 @@ function getFallbackStageTitle(title?: string): string {
 function formatMonthDay(ts: number): string {
   const date = new Date(ts)
   return `${date.getMonth() + 1}月${date.getDate()}日`
-}
-
-function startOfDay(ts: number): number {
-  return getBeijingDayStart(ts)
 }
 
 function getNumber(value: unknown): number | null {

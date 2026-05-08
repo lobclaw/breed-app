@@ -1,17 +1,11 @@
 import type { BreedingCycle, BreedingRecord } from '@/types/breeding'
 import type { DeriveStatus } from '@/types/dog'
-import { getBeijingDayStart } from '@/utils/date'
-
-const DAY_MS = 86400000
+import { getBeijingOrdinalDay } from '@/utils/date'
 
 const BREEDING_STATUS_BASE_TITLE: Record<string, string> = {
   发情中: '发情',
   怀孕中: '怀孕',
   哺乳中: '哺乳',
-}
-
-function startOfDay(ts: number) {
-  return getBeijingDayStart(ts)
 }
 
 function normalizeDayCount(dayCount?: number | null) {
@@ -93,15 +87,13 @@ export function getBreedingCycleCurrentDayCount(
 
   if (cycle.status === '发情中') {
     const startTs = cycle.start_date || cycle.created_at
-    if (typeof startTs !== 'number') return null
-    return Math.max(1, Math.floor((startOfDay(now) - startOfDay(startTs)) / DAY_MS) + 1)
+    return getBeijingOrdinalDay(startTs, now)
   }
 
   if (cycle.status === '怀孕中') {
     const latestMating = getLatestMatingRecord(records)
     const startTs = cycle.mated_at || latestMating?.date
-    if (typeof startTs !== 'number') return null
-    return Math.max(1, Math.floor((startOfDay(now) - startOfDay(startTs)) / DAY_MS) + 1)
+    return getBeijingOrdinalDay(startTs, now)
   }
 
   return null

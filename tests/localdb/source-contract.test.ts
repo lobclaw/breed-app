@@ -37,9 +37,9 @@ describe('local-first source contract', () => {
     const pickerSource = readWorkspaceFile('src/components/form/BDogPicker.vue')
     const repositorySource = readWorkspaceFile('src/localdb/domain-repository.ts')
 
-    expect(pickerSource).toContain('const days = Math.max(1, Math.floor((Date.now() - birthTs) / 86400000))')
+    expect(pickerSource).toContain('const days = getBeijingOrdinalDay(birthTs) || 1')
     expect(pickerSource).not.toContain('const days = Math.floor((Date.now() - birthTs) / 86400000)')
-    expect(repositorySource).toContain('const days = Math.max(1, Math.floor((Date.now() - birthTs) / 86400000))')
+    expect(repositorySource).toContain('const days = getBeijingOrdinalDay(birthTs) || 1')
     expect(repositorySource).not.toContain('const days = Math.floor((Date.now() - birthTs) / 86400000)')
   })
 

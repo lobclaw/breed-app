@@ -328,7 +328,7 @@ describe('local domain repository', () => {
     expect(pregnancyStatus).toMatchObject({
       cycleId: 'cycle_detail_status_1',
       detail: '种公: 小王子 · 配种1次',
-      progress: { current: 1, total: 63 },
+      progress: { current: 2, total: 63 },
       meta: [
         { icon: 'event', text: '预产期 7月7日' },
         { icon: 'schedule', text: '还有62天' },
@@ -2591,6 +2591,112 @@ describe('local domain repository', () => {
       litter: { total_born: 4, born_alive: 4 },
     })
     expect(profit?.incomeItems).toHaveLength(4)
+  })
+
+  it('单窝利润应区分已收款和真实已售', async () => {
+    const now = new Date('2026-05-08T10:00:00+08:00').getTime()
+    await localDb.replaceTable('dogs', [
+      {
+        _id: 'dam_litter_income_status',
+        family_id: 'fam_litter_income_status',
+        name: '肉肉',
+        role: '种狗',
+        gender: '母',
+        disposition: '在养',
+        deleted_at: null,
+        updated_at: now,
+      },
+      {
+        _id: 'puppy_litter_income_status_sold',
+        family_id: 'fam_litter_income_status',
+        origin_litter_id: 'litter_income_status',
+        name: '肉肉窝-1号',
+        role: '幼崽',
+        gender: '母',
+        disposition: '已售',
+        deleted_at: null,
+        updated_at: now,
+      },
+      {
+        _id: 'puppy_litter_income_status_received',
+        family_id: 'fam_litter_income_status',
+        origin_litter_id: 'litter_income_status',
+        name: '幼崽4',
+        role: '幼崽',
+        gender: '母',
+        disposition: '在养',
+        deleted_at: null,
+        updated_at: now,
+      },
+    ])
+    await localDb.replaceTable('litters', [{
+      _id: 'litter_income_status',
+      family_id: 'fam_litter_income_status',
+      cycle_id: 'cycle_income_status',
+      dam_id: 'dam_litter_income_status',
+      dam_name: '肉肉',
+      birth_date: now,
+      total_born: 2,
+      born_alive: 2,
+      deleted_at: null,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('breeding_cycles', [{
+      _id: 'cycle_income_status',
+      family_id: 'fam_litter_income_status',
+      dam_id: 'dam_litter_income_status',
+      dam_name: '肉肉',
+      status: '已生产',
+      deleted_at: null,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('sale_records', [{
+      _id: 'sale_income_status_sold',
+      family_id: 'fam_litter_income_status',
+      dog_id: 'puppy_litter_income_status_sold',
+      dog_name: '肉肉窝-1号',
+      status: '已成交',
+      received_amount: 8000,
+      deleted_at: null,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('incomes', [
+      {
+        _id: 'income_status_sold',
+        family_id: 'fam_litter_income_status',
+        dog_id: 'puppy_litter_income_status_sold',
+        dog_name: '肉肉窝-1号',
+        type: '销售',
+        amount: 8000,
+        deleted_at: null,
+        updated_at: now,
+      },
+      {
+        _id: 'income_status_received',
+        family_id: 'fam_litter_income_status',
+        dog_id: 'puppy_litter_income_status_received',
+        dog_name: '幼崽4',
+        type: '销售',
+        amount: 5000,
+        deleted_at: null,
+        updated_at: now,
+      },
+    ])
+    await localDb.replaceTable('expenses', [])
+    await localDb.replaceTable('breeding_records', [])
+    await localDb.replaceTable('health_records', [])
+
+    const profit = await getLocalLitterProfit('fam_litter_income_status', 'litter_income_status')
+    expect(profit?.incomeItems.map(item => ({ name: item.name, status: item.status, amount: item.amount }))).toEqual([
+      { name: '肉肉窝-1号', status: 'sold', amount: 8000 },
+      { name: '幼崽4', status: 'received', amount: 5000 },
+    ])
+
+    const damRoi = await getLocalDamRoi('fam_litter_income_status', 'dam_litter_income_status')
+    expect(damRoi?.litters[0]).toMatchObject({
+      id: 'litter_income_status',
+      status: 'in_progress',
+    })
   })
 
   it('本地后补幼崽应同步递增窝出生与存活数', async () => {

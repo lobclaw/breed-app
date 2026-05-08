@@ -351,7 +351,7 @@ import BSheet from '@/components/layout/BSheet.vue'
 import BModal from '@/components/layout/BModal.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 import { buildMedicationDetailUrl } from '@/utils/dogDetailNavigation'
-import { getBeijingDayStart } from '@/utils/date'
+import { getBeijingDayDiff, getBeijingOrdinalDay } from '@/utils/date'
 
 const record = ref<any>(null)
 const loading = ref(true)
@@ -506,7 +506,7 @@ const summaryFact = computed(() => {
 const illnessDurationDays = computed(() => {
   if (!record.value?.date) return null
   const endTs = isRecoveredIllness.value ? (illnessRecoveryDate.value || Date.now()) : Date.now()
-  return Math.max(1, Math.floor((getBeijingDayStart(endTs) - getBeijingDayStart(record.value.date)) / 86400000) + 1)
+  return getBeijingOrdinalDay(record.value.date, endTs)
 })
 
 const illnessRecoveryDate = computed(() => {
@@ -517,7 +517,7 @@ const illnessRecoveryDate = computed(() => {
 const nextReminderText = computed(() => {
   const ts = record.value?.details?.next_reminder_date
   if (!ts) return ''
-  const days = Math.ceil((ts - Date.now()) / 86400000)
+  const days = getBeijingDayDiff(ts, Date.now())
   if (days < 0) return `下次提醒日期已过 ${Math.abs(days)} 天`
   if (days === 0) return '今天需要进行下次接种'
   return `距下次提醒还有 ${days} 天（${formatDate(ts)}）`
@@ -526,7 +526,7 @@ const nextReminderText = computed(() => {
 const nextReminderShortText = computed(() => {
   const ts = record.value?.details?.next_reminder_date
   if (!ts) return ''
-  const days = Math.ceil((ts - Date.now()) / 86400000)
+  const days = getBeijingDayDiff(ts, Date.now())
   if (days < 0) return `已过 ${Math.abs(days)} 天`
   if (days === 0) return '今天'
   return `${days}天后`
@@ -546,7 +546,7 @@ function formatDateTime(ts: number | undefined): string {
 
 function getIllnessCourseDay(ts: number | undefined): number | null {
   if (!ts) return null
-  return Math.max(1, Math.floor((getBeijingDayStart(Date.now()) - getBeijingDayStart(ts)) / 86400000) + 1)
+  return getBeijingOrdinalDay(ts)
 }
 
 function formatAmount(n: number): string {

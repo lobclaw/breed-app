@@ -45,6 +45,7 @@ import type {
   SyncMetadata,
   SyncStateRow,
 } from '@/localdb/types'
+import { getBeijingDayStart, getBeijingOrdinalDay } from '@/utils/date'
 
 interface StoredScopeFreshness {
   scopeKey: string
@@ -84,17 +85,7 @@ function buildScopeMetaKey(scopeKey: string) {
 }
 
 function startOfDay(ts: number) {
-  const offsetMs = 8 * 60 * 60 * 1000
-  const beijingNow = new Date(ts + offsetMs)
-  return Date.UTC(
-    beijingNow.getUTCFullYear(),
-    beijingNow.getUTCMonth(),
-    beijingNow.getUTCDate(),
-    0,
-    0,
-    0,
-    0,
-  ) - offsetMs
+  return getBeijingDayStart(ts)
 }
 
 function createLocalExpenseCategoryGroupKey() {
@@ -4991,7 +4982,7 @@ class LocalSyncRuntime {
     const now = getNow()
     const today = startOfDay(now)
     const startDate = startOfDay(task.actual_start_date || task.start_date || task.created_at || now)
-    const currentDay = Math.floor((today - startDate) / 86400000) + 1
+    const currentDay = getBeijingOrdinalDay(startDate, today) || 0
     if (currentDay < 1 || currentDay > (task.duration_days || 1)) return null
 
     const nextDailyDoses = {
@@ -5051,7 +5042,7 @@ class LocalSyncRuntime {
     const medicationPatches = activeRows.map((row) => {
       const today = startOfDay(now)
       const startDate = startOfDay(row.actual_start_date || row.start_date || row.created_at || now)
-      const currentDay = Math.floor((today - startDate) / 86400000) + 1
+      const currentDay = getBeijingOrdinalDay(startDate, today) || 0
       if (currentDay < 1 || currentDay > Number(row.duration_days || 1)) return null
 
       const frequency = Number(row.frequency || 1)

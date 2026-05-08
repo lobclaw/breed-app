@@ -159,7 +159,7 @@ import { localSyncRuntime } from '@/localdb/runtime'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
-import { formatDateInputValue, formatTimeInputValue } from '@/utils/date'
+import { formatDateInputValue, formatTimeInputValue, getBeijingDayDiff } from '@/utils/date'
 
 interface TempRecord {
   temp: number
@@ -250,7 +250,7 @@ async function loadTempHistory(id: string) {
 function formatTimeLabel(ts: number): string {
   const now = new Date()
   const d = new Date(ts)
-  const diffDays = Math.floor((now.getTime() - d.getTime()) / 86400000)
+  const diffDays = getBeijingDayDiff(now.getTime(), ts)
   const h = d.getHours()
   const period = h < 12 ? '早' : h < 18 ? '午' : '晚'
 

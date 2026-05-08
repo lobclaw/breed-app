@@ -16,8 +16,8 @@ describe('deriveBreedingMilestoneViewModel', () => {
 
     expect(viewModel.stageTitle).toBe('建议卵泡检查')
     expect(viewModel.anchorLabel).toBe('发情')
-    expect(viewModel.daysFromAnchor).toBe(9)
-    expect(viewModel.dayLabel).toBe('发情第 9 天')
+    expect(viewModel.daysFromAnchor).toBe(10)
+    expect(viewModel.dayLabel).toBe('发情第 10 天')
     expect(viewModel.suggestionStatus).toBe('normal')
     expect(viewModel.suggestionLabel).toBe('建议日期 4月18日')
   })
@@ -40,7 +40,7 @@ describe('deriveBreedingMilestoneViewModel', () => {
 
     expect(viewModel.stageTitle).toBe('建议卵泡检查')
     expect(viewModel.heatDayLabel).toBe('发情第 8 天')
-    expect(viewModel.stageDayLabel).toBe('发情第 7 天')
+    expect(viewModel.stageDayLabel).toBe('发情第 8 天')
     expect(viewModel.referenceDateLabel).toBe('建议日期 · 4月17日')
     expect(viewModel.alertLabel).toBe('')
   })
@@ -76,8 +76,8 @@ describe('deriveBreedingMilestoneViewModel', () => {
     }, now)
 
     expect(viewModel.anchorLabel).toBe('配种')
-    expect(viewModel.daysFromAnchor).toBe(25)
-    expect(viewModel.dayLabel).toBe('配种第 25 天')
+    expect(viewModel.daysFromAnchor).toBe(26)
+    expect(viewModel.dayLabel).toBe('配种第 26 天')
   })
 
   it('配种节点应显示为卵泡检查后的当日推进', () => {

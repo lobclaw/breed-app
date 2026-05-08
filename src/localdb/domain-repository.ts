@@ -7,6 +7,7 @@ import type { HealthRecord, MedicationTask } from '@/types/health'
 import type { RecycleBinItem } from '@/types/recycle'
 import type { DeriveStatus, DogWithStatus } from '@/types/dog'
 import type { Task } from '@/types/task'
+import { getBeijingDayStart, getBeijingElapsedDays, getBeijingOrdinalDay } from '@/utils/date'
 import {
   buildExpenseCategoryGroups,
   getExpenseCategoryGroupKey,
@@ -100,18 +101,7 @@ const DEWORMING_TYPE_LABELS: Record<string, string> = {
 }
 
 function startOfDay(ts: number) {
-  const offsetMs = 8 * 60 * 60 * 1000
-  const sourceTs = Number.isFinite(Number(ts)) ? Number(ts) : Date.now()
-  const beijingNow = new Date(sourceTs + offsetMs)
-  return Date.UTC(
-    beijingNow.getUTCFullYear(),
-    beijingNow.getUTCMonth(),
-    beijingNow.getUTCDate(),
-    0,
-    0,
-    0,
-    0,
-  ) - offsetMs
+  return getBeijingDayStart(Number.isFinite(Number(ts)) ? Number(ts) : Date.now())
 }
 
 function normalizeIllnessLabel(label: unknown) {
@@ -123,13 +113,7 @@ function getIllnessPrimaryCondition(source: Record<string, any> = {}) {
 }
 
 function getIllnessDayCount(startTs: number, nowTs = Date.now()) {
-  if (!startTs) return null
-  return Math.max(1, Math.floor((startOfDay(nowTs) - startOfDay(startTs)) / 86400000) + 1)
-}
-
-function getBeijingElapsedDays(startTs: number, nowTs = Date.now()) {
-  if (!startTs) return 0
-  return Math.max(0, Math.floor((startOfDay(nowTs) - startOfDay(startTs)) / 86400000))
+  return getBeijingOrdinalDay(startTs, nowTs)
 }
 
 function isTreatingIllness(illness: any) {
@@ -225,7 +209,7 @@ function getMedicationTaskProgress(task: any, nowTs = Date.now()) {
   const startTs = startOfDay(task?.actual_start_date || task?.start_date || task?.created_at || nowTs)
   const todayTs = startOfDay(nowTs)
   const totalDays = Math.max(1, Number(task?.duration_days) || 1)
-  const currentDay = Math.floor((todayTs - startTs) / 86400000) + 1
+  const currentDay = getBeijingOrdinalDay(startTs, todayTs) || 0
 
   return {
     currentDay,
@@ -476,7 +460,7 @@ function buildDetailBreedingStatuses(cycles: any[] = [], activeLitters: any[] = 
     const latestFollicle = getLatestBreedingRecordByType(activeCycle._id, breedingRecords, 'follicle_check')
     const latestMating = getLatestMatingRecord(activeCycle._id, breedingRecords)
     const follicleDay = latestFollicle?.date && !latestMating
-      ? Math.max(1, getBeijingElapsedDays(Number(latestFollicle.date), now) + 1)
+      ? getBeijingOrdinalDay(Number(latestFollicle.date), now)
       : null
     return [{
       type: '发情中',
@@ -492,7 +476,7 @@ function buildDetailBreedingStatuses(cycles: any[] = [], activeLitters: any[] = 
     const sireName = activeCycle.sire_name || getMatingSireName(latestMating)
     const matingNumberText = getMatingNumberText(latestMating)
     const totalDays = 63
-    const daysPassed = Math.max(1, getBeijingElapsedDays(startTs, now))
+    const currentDay = getBeijingOrdinalDay(startTs, now) || 1
     const dueTs = startTs + totalDays * 86400000
     const dueDate = new Date(dueTs)
     const dueMd = `${dueDate.getMonth() + 1}月${dueDate.getDate()}日`
@@ -504,11 +488,11 @@ function buildDetailBreedingStatuses(cycles: any[] = [], activeLitters: any[] = 
         sireName ? `种公: ${sireName}` : '',
         matingNumberText,
       ].filter(Boolean).join(' · '),
-      progress: { current: Math.min(daysPassed, totalDays), total: totalDays },
+      progress: { current: Math.min(currentDay, totalDays), total: totalDays },
       activityTs: activeCycle.updated_at || activeCycle.created_at || 0,
       meta: [
         { icon: 'event', text: `预产期 ${dueMd}` },
-        { icon: 'schedule', text: `还有${Math.max(0, totalDays - daysPassed)}天` },
+        { icon: 'schedule', text: `还有${getBeijingElapsedDays(now, dueTs)}天` },
       ],
     }]
   }
@@ -521,7 +505,7 @@ function buildDetailBreedingStatuses(cycles: any[] = [], activeLitters: any[] = 
     return rightTs - leftTs
   })[0]
   const birthTs = latestLitter?.birth_date || latestLitter?.created_at || 0
-  const nursingDay = birthTs ? getBeijingElapsedDays(birthTs, now) + 1 : null
+  const nursingDay = getBeijingOrdinalDay(birthTs, now)
   const totalBorn = Number(latestLitter?.total_born)
   const bornAlive = Number(latestLitter?.born_alive)
   const aliveSummary = Number.isFinite(totalBorn) && totalBorn > 0 && Number.isFinite(bornAlive)
@@ -554,7 +538,7 @@ function buildBreedingStatusMap(cycles: any[] = [], activeLitters: any[] = [], n
     if (!damId) continue
     if (cycle.status === '发情中') {
       const startTs = cycle.start_date || cycle.created_at || now
-      const day = Math.max(1, Math.floor((now - startTs) / 86400000) + 1)
+      const day = getBeijingOrdinalDay(startTs, now) || 1
       breedingStatusMap.set(damId, [{
         type: '发情中',
         cycleId: cycle._id,
@@ -565,11 +549,11 @@ function buildBreedingStatusMap(cycles: any[] = [], activeLitters: any[] = [], n
     }
     if (cycle.status === '怀孕中') {
       const startTs = cycle.mated_at || cycle.updated_at || cycle.created_at || now
-      const daysPassed = Math.max(1, Math.floor((now - startTs) / 86400000))
+      const currentDay = getBeijingOrdinalDay(startTs, now) || 1
       breedingStatusMap.set(damId, [{
         type: '怀孕中',
         cycleId: cycle._id,
-        progress: { current: Math.min(daysPassed, 63), total: 63 },
+        progress: { current: Math.min(currentDay, 63), total: 63 },
         activityTs: cycle.updated_at || cycle.created_at || 0,
       }])
       continue
@@ -580,7 +564,7 @@ function buildBreedingStatusMap(cycles: any[] = [], activeLitters: any[] = [], n
         .sort((left, right) => (right.birth_date || right.created_at || 0) - (left.birth_date || left.created_at || 0))[0]
       if (!latestLitter) continue
       const startTs = latestLitter.birth_date || latestLitter.created_at || now
-      const day = Math.max(1, Math.floor((now - startTs) / 86400000) + 1)
+      const day = getBeijingOrdinalDay(startTs, now) || 1
       breedingStatusMap.set(damId, [{
         type: '哺乳中',
         cycleId: cycle._id,
@@ -794,13 +778,13 @@ function getCycleStatusOrder(status?: string) {
 
 function buildCycleProjection(row: Record<string, any>, linkedLitter?: Record<string, any> | null) {
   const referenceTs = Number(row.mated_at || row.start_date || row.updated_at || row.created_at || 0)
-  const daysPassed = referenceTs ? Math.max(1, getBeijingElapsedDays(referenceTs) + (row.status === '怀孕中' ? 0 : 1)) : 0
+  const currentDay = getBeijingOrdinalDay(referenceTs) || 0
   let detail = row.start_date ? formatDate(row.start_date) : `${Number(row.record_count || 0)}条记录`
 
   if (row.status === '发情中' && row.start_date) {
-    detail = `发情第${Math.max(1, getBeijingElapsedDays(Number(row.start_date)) + 1)}天`
+    detail = `发情第${getBeijingOrdinalDay(Number(row.start_date)) || 1}天`
   } else if (row.status === '怀孕中' && referenceTs) {
-    detail = `怀孕第${daysPassed}天`
+    detail = `怀孕第${currentDay || 1}天`
   } else if (row.status === '已生产' && linkedLitter) {
     const aliveCount = Number(linkedLitter.born_alive || linkedLitter.total_born || 0)
     const totalCount = Number(linkedLitter.total_born || linkedLitter.born_alive || 0)
@@ -1494,7 +1478,7 @@ export async function listLocalPreLaborTemperatureHistory(familyId: string, dogI
 
 function formatDogAgeText(birthTs?: number | null) {
   if (!birthTs) return ''
-  const days = Math.max(1, Math.floor((Date.now() - birthTs) / 86400000))
+  const days = getBeijingOrdinalDay(birthTs) || 1
   if (days < 30) return `${days}天`
   if (days < 365) return `${Math.floor(days / 30)}月龄`
   const years = Math.floor(days / 365)
@@ -2214,13 +2198,14 @@ export async function getLocalLitterProfit(familyId: string, litterId: string) {
   const incomeItems = puppies.map((puppy, index) => {
     const actualIncome = incomeByDog[puppy._id] || 0
     const sale = saleByDog[puppy._id]
+    const isCompletedSale = sale?.status === '已成交' || puppy.disposition === '已售'
     if (actualIncome !== 0) {
       return {
         id: puppy._id,
         name: puppy.name || `幼崽${index + 1}`,
         gender: puppy.gender || '',
         disposition: puppy.disposition || '',
-        status: 'sold',
+        status: isCompletedSale ? 'sold' : 'received',
         amount: actualIncome,
         estimated_amount: 0,
       }
@@ -2298,9 +2283,9 @@ export async function getLocalDamRoi(familyId: string, damId: string) {
   const litterIds = litters.map(item => item._id)
 
   const litterList = litterSummaries.map((summary, index) => {
-    const hasPending = (summary.incomeItems || []).some(item => item.status === 'pending')
+    const hasUnsettledPuppy = (summary.incomeItems || []).some(item => item.status !== 'sold')
     let status = 'income'
-    if (hasPending) status = 'in_progress'
+    if (hasUnsettledPuppy) status = 'in_progress'
     else if (summary.netProfit < 0) status = 'failed'
     return {
       id: summary.litter._id,
@@ -2738,7 +2723,7 @@ function buildRecycleItem(type: RecycleBinItem['type'], row: Record<string, any>
     ),
     summary: buildRecycleSummary(type, row),
     deleted_at: deletedAt,
-    days_remaining: Math.max(0, 30 - Math.floor((Date.now() - deletedAt) / 86400000)),
+    days_remaining: Math.max(0, 30 - getBeijingElapsedDays(deletedAt)),
   }
 }
 

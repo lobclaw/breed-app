@@ -1,4 +1,5 @@
 import type { SyncTouchedEntity } from '@/localdb/types'
+import { getBeijingElapsedDays, getBeijingOrdinalDay } from '@/utils/date'
 
 const DAY_MS = 86400000
 const BREEDING_EXTRA_TYPES = new Set([
@@ -44,10 +45,6 @@ function startOfDay(ts: number) {
   return getBeijingDayContext(ts).dayStart
 }
 
-function getBeijingDayDiff(laterTs: number, earlierTs: number) {
-  return Math.floor((startOfDay(laterTs) - startOfDay(earlierTs)) / DAY_MS)
-}
-
 function getMaxTimestamp(...values: Array<number | null | undefined>) {
   return values.reduce<number>((max, value) => {
     const next = Number(value || 0)
@@ -57,7 +54,7 @@ function getMaxTimestamp(...values: Array<number | null | undefined>) {
 
 function getOverdueDays(dueDate?: number | null, now = Date.now()) {
   if (!dueDate) return 1
-  const diff = Math.floor((startOfDay(now) - startOfDay(dueDate)) / DAY_MS)
+  const diff = getBeijingElapsedDays(dueDate, now)
   return Math.max(1, diff)
 }
 
@@ -470,7 +467,7 @@ function computeMedItemsForBeijingDay(activeMedications: GenericRow[], targetDat
   return (activeMedications || [])
     .map((med) => {
       const startDayStart = getBeijingDayContext(med.actual_start_date || med.start_date || med.created_at || targetDate).dayStart
-      const currentDay = Math.floor((targetDayStart - startDayStart) / DAY_MS) + 1
+      const currentDay = getBeijingOrdinalDay(startDayStart, targetDayStart) || 0
       if (currentDay < 1 || currentDay > (med.duration_days || 1)) return null
       const frequency = med.frequency || 1
       const todayDoses = med.daily_doses?.[String(currentDay)] || 0
@@ -542,7 +539,7 @@ function mergeTasks(tasks: GenericRow[], todayCompleted: GenericRow[] = [], acti
       symptomSummary: getIllnessSymptomSummary(illness.details || {}),
       severity: illness.details?.severity || '轻微',
       illnessId: illness._id,
-      daysSick: Math.max(1, getBeijingDayDiff(todayDayStart, startOfDay(illness.date || illness.created_at || now)) + 1),
+      daysSick: getBeijingOrdinalDay(illness.date || illness.created_at || now, todayDayStart) || 1,
       treatmentStatus: status,
       _createdAt: illness.date || illness.created_at || 0,
     }
@@ -572,7 +569,7 @@ function mergeTasks(tasks: GenericRow[], todayCompleted: GenericRow[] = [], acti
         illnessId: illness._id,
         linkedMedicationTaskId: explicitLinkedMedication?._id || '',
         relationType: hasExplicitLinkedMedication ? 'linked' : (hasFallbackMedication ? 'fallback' : 'standalone'),
-        daysSick: Math.max(1, getBeijingDayDiff(todayDayStart, illnessStart) + 1),
+        daysSick: getBeijingOrdinalDay(illnessStart, todayDayStart) || 1,
         treatmentStatus: status,
         _createdAt: illness.date || illness.created_at || 0,
       }

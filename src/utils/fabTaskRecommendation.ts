@@ -1,4 +1,4 @@
-import { getBeijingDayStart } from '@/utils/date'
+import { getBeijingElapsedDays } from '@/utils/date'
 import { getExtraArrangementTitle } from '@/utils/breedingExtraArrangement'
 import { deriveBreedingMilestoneViewModel } from '@/utils/breedingMilestone'
 import { buildBreedingMilestoneSummary } from '@/utils/breedingMilestoneSummary'
@@ -11,8 +11,6 @@ import type { HomeCardFocusTarget } from '@/utils/homeCardFocus'
 import { buildMedicationDetailUrl } from '@/utils/dogDetailNavigation'
 import type { IconTone } from '@/utils/iconRegistry'
 import type { HomeCard, HomeTask, HomeWorkbenchDog } from '@/types/home-workbench'
-
-const DAY_MS = 86400000
 
 type RecommendationTagTone = 'red' | 'amber' | 'green' | 'plum' | 'blue'
 export type FabRecommendationCategory = 'todo' | 'suggestion' | 'common'
@@ -462,7 +460,7 @@ function getDogName(dog: HomeWorkbenchDog): string | undefined {
 
 function getOverdueDays(dueDate: number | undefined, now = Date.now()): number {
   if (!dueDate) return 0
-  const diff = Math.floor((getBeijingDayStart(now) - getBeijingDayStart(dueDate)) / DAY_MS)
+  const diff = getBeijingElapsedDays(dueDate, now)
   return diff > 0 ? diff : 0
 }
 

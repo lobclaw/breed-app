@@ -245,6 +245,15 @@ export function getBeijingDayDiff(targetTs: number, baseTs: number = Date.now())
   return Math.floor((getBeijingDayStart(targetTs) - getBeijingDayStart(baseTs)) / DAY_MS)
 }
 
+export function getBeijingElapsedDays(startTs: number, endTs: number = Date.now()) {
+  return Math.max(0, getBeijingDayDiff(endTs, startTs))
+}
+
+export function getBeijingOrdinalDay(startTs?: number | null, endTs: number = Date.now()) {
+  if (typeof startTs !== 'number' || !Number.isFinite(startTs) || startTs <= 0) return null
+  return Math.max(1, getBeijingElapsedDays(startTs, endTs) + 1)
+}
+
 export function isSameBeijingDay(leftTs: number, rightTs: number) {
   return getBeijingDayStart(leftTs) === getBeijingDayStart(rightTs)
 }

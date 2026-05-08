@@ -14,8 +14,7 @@ describe('batch-weight source contract', () => {
   })
 
   it('应按北京时间出生第 1 天起算，并用窝级存活数展示摘要', () => {
-    expect(source).toContain('getBeijingDayStart(Date.now()) - getBeijingDayStart(selectedLitter.value.birth_date)')
-    expect(source).toContain('Math.max(1, Math.floor')
+    expect(source).toContain('getBeijingOrdinalDay(selectedLitter.value.birth_date) || 1')
     expect(source).toContain('const livePuppyCount = computed(() => {')
     expect(source).toContain('const totalPuppyCount = computed(() => {')
     expect(source).toContain('selectedLitter.value?.born_alive ?? selectedLitter.value?.aliveCount')

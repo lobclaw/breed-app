@@ -1302,7 +1302,7 @@ import {
   getBreedingTimelineExpectedDueDate,
   formatRelativeDayLabel as formatDueRelativeDayLabel,
 } from '@/utils/breedingTimeline'
-import { buildTimestampFromDayOffset, formatDateInputValue, getBeijingDayStart } from '@/utils/date'
+import { buildTimestampFromDayOffset, formatDateInputValue, getBeijingOrdinalDay } from '@/utils/date'
 import { formatFinanceAmount, getFinanceAmountParts, type FinanceAmountParts } from '@/utils/financeDisplay'
 import { normalizeExpenseCategoryName, normalizeIncomeType } from '@/constants/financeCategories'
 
@@ -2064,7 +2064,7 @@ function onInlineDateConfirm(value: number | string) {
 }
 
 function formatAge(birthTs: number) {
-  const days = Math.max(1, Math.floor((Date.now() - birthTs) / 86400000))
+  const days = getBeijingOrdinalDay(birthTs) || 1
   if (days < 30) return `${days}天`
   if (days < 365) return `${Math.floor(days / 30)}月龄`
   const years = Math.floor(days / 365)
@@ -2324,8 +2324,7 @@ function getIllnessStartTs() {
 }
 
 function getElapsedDaysFromTs(startTs?: number | null) {
-  if (typeof startTs !== 'number') return null
-  return Math.max(1, Math.floor((getBeijingDayStart(Date.now()) - getBeijingDayStart(startTs)) / 86400000) + 1)
+  return getBeijingOrdinalDay(startTs)
 }
 
 function normalizeBreedingStageLabel(text?: string | null) {

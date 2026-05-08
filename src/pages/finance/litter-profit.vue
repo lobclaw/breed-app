@@ -203,6 +203,12 @@ const incomeItems = computed(() => {
       statusHint = '已完成成交并计入收入'
       amountClass = 'income'
       amountText = formatFinanceAmount(item.amount, { scene: 'report' })
+    } else if (item.status === 'received') {
+      statusClass = 'received'
+      statusText = '已收款'
+      statusHint = '已计入收入，未标记成交'
+      amountClass = 'income'
+      amountText = formatFinanceAmount(item.amount, { scene: 'report' })
     } else if (item.status === 'reserved') {
       statusClass = 'reserved'
       statusText = '已预定'
@@ -592,6 +598,11 @@ onLoad((query) => {
 .detail-item-status.reserved {
   color: var(--blue);
   background: rgba(78, 141, 255, 0.12);
+}
+
+.detail-item-status.received {
+  color: var(--primary);
+  background: rgba(234, 62, 119, 0.1);
 }
 
 .detail-item-hint {

@@ -580,7 +580,7 @@ import {
   openHomeBreedingAction,
 } from '@/utils/homeBreedingActions'
 import { buildHomeWorkbench } from '@/utils/homeWorkbench'
-import { buildTimestampFromDayOffset, formatDateInputValue, getBeijingDayStart } from '@/utils/date'
+import { buildTimestampFromDayOffset, formatDateInputValue, getBeijingDayStart, getBeijingElapsedDays } from '@/utils/date'
 import { buildMedicationDetailUrl } from '@/utils/dogDetailNavigation'
 import type { MedicationRouteIllnessLink } from '@/utils/recordFormRoutes'
 import { getBatchCardDogId } from '@/utils/batchCardProgress'
@@ -879,7 +879,7 @@ function startOfDay(ts: number) {
 
 function getOverdueDays(dueDate?: number | null) {
   if (!dueDate) return 1
-  const diff = Math.floor((startOfDay(Date.now()) - startOfDay(dueDate)) / 86400000)
+  const diff = getBeijingElapsedDays(dueDate, Date.now())
   return Math.max(1, diff)
 }
 

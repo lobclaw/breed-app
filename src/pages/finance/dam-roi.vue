@@ -189,6 +189,7 @@ import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BSkeleton from '@/components/feedback/BSkeleton.vue'
+import { getBeijingOrdinalDay } from '@/utils/date'
 import { formatFinanceAmount, getFinanceAmountParts } from '@/utils/financeDisplay'
 
 const { currentFamily } = useAuth()
@@ -344,7 +345,7 @@ function formatPercent(val: number): string {
 }
 
 function formatAge(birthTs: number) {
-  const days = Math.max(1, Math.floor((Date.now() - birthTs) / 86400000))
+  const days = getBeijingOrdinalDay(birthTs) || 1
   if (days < 30) return `${days}天`
   if (days < 365) return `${Math.floor(days / 30)}月龄`
   const years = Math.floor(days / 365)

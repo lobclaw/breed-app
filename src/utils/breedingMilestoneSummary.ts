@@ -1,4 +1,4 @@
-import { getBeijingDayStart } from '@/utils/date'
+import { getBeijingOrdinalDay } from '@/utils/date'
 import type { BreedingMilestoneViewModel } from '@/utils/breedingMilestone'
 
 export interface BreedingMilestoneSummary {
@@ -106,7 +106,7 @@ function buildFollicleAlertLabel(milestone: BreedingMilestoneViewModel) {
 
 function buildCheckDistanceOnlyLabel(milestone: BreedingMilestoneViewModel) {
   if (!milestone.latestFollicleCheckDate) return '时间待确认'
-  const diffDays = Math.max(1, Math.floor((startOfDay(milestone.now) - startOfDay(milestone.latestFollicleCheckDate)) / DAY_MS) + 1)
+  const diffDays = getBeijingOrdinalDay(milestone.latestFollicleCheckDate, milestone.now) || 1
   return `${diffDays}天前`
 }
 
@@ -137,10 +137,4 @@ function buildPregnancyCheckSecondaryLabel(milestone: BreedingMilestoneViewModel
   if (!milestone.dueDate) return '建议尽快孕检'
   return milestone.referenceDateLabel.replace('建议日期 · ', '建议 ')
     .concat('孕检')
-}
-
-const DAY_MS = 86400000
-
-function startOfDay(ts: number) {
-  return getBeijingDayStart(ts)
 }

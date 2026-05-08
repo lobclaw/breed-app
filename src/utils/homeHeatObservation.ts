@@ -1,3 +1,5 @@
+import { getBeijingDayDiff } from '@/utils/date'
+
 interface HomeBreedingCardLike {
   dogId?: string
   dogName?: string
@@ -10,15 +12,8 @@ interface HomeBreedingCardLike {
   }>
 }
 
-const DAY_MS = 86400000
-const BEIJING_OFFSET_MS = 8 * 60 * 60 * 1000
-
 function encodeQueryValue(value: string) {
   return encodeURIComponent(value)
-}
-
-function startOfBeijingDay(ts: number) {
-  return Math.floor((ts + BEIJING_OFFSET_MS) / DAY_MS) * DAY_MS - BEIJING_OFFSET_MS
 }
 
 function getBirthMilestoneDueDate(task: NonNullable<HomeBreedingCardLike['tasks']>[number] | undefined): number | null {
@@ -114,7 +109,7 @@ export function canOpenHomePreLabor(card: HomeBreedingCardLike | null | undefine
   const dueDate = getBirthMilestoneDueDate(task)
   if (!dueDate) return false
 
-  const diffDays = Math.floor((startOfBeijingDay(dueDate) - startOfBeijingDay(now)) / DAY_MS)
+  const diffDays = getBeijingDayDiff(dueDate, now)
   return diffDays <= 5
 }
 

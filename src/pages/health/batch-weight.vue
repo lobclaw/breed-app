@@ -211,7 +211,7 @@ import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 import BLitterSelector from '@/components/form/BLitterSelector.vue'
 import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
-import { buildTimestampFromDayOffset, formatDateTimeInputValue, getBeijingDayStart } from '@/utils/date'
+import { buildTimestampFromDayOffset, formatDateTimeInputValue, getBeijingDayDiff, getBeijingDayStart, getBeijingOrdinalDay } from '@/utils/date'
 
 type DateChipKey = 'today' | 'yesterday' | 'dayBefore' | ''
 
@@ -287,7 +287,7 @@ const isMinWarning = computed(() => {
 })
 const daysSinceBirth = computed(() => {
   if (!selectedLitter.value?.birth_date) return 0
-  return Math.max(1, Math.floor((getBeijingDayStart(Date.now()) - getBeijingDayStart(selectedLitter.value.birth_date)) / 86400000) + 1)
+  return getBeijingOrdinalDay(selectedLitter.value.birth_date) || 1
 })
 const livePuppyCount = computed(() => {
   const alive = Number(selectedLitter.value?.born_alive ?? selectedLitter.value?.aliveCount ?? selectedLitter.value?.pupStats?.alive)
@@ -304,9 +304,7 @@ let preselectedLitterId = ''
 let latestSelectionToken = 0
 
 function getStartOfDay(ts: number) {
-  const date = new Date(ts)
-  date.setHours(0, 0, 0, 0)
-  return date.getTime()
+  return getBeijingDayStart(ts)
 }
 
 function parseWeightValue(value: string) {
@@ -324,7 +322,7 @@ function formatWeightTime(ts: number) {
   const target = new Date(ts)
   const todayStart = getStartOfDay(now.getTime())
   const targetStart = getStartOfDay(ts)
-  const diffDays = Math.floor((todayStart - targetStart) / 86400000)
+  const diffDays = getBeijingDayDiff(todayStart, targetStart)
   if (diffDays === 0) return '今天'
   if (diffDays === 1) return '昨天'
   if (diffDays === 2) return '前天'
@@ -392,7 +390,7 @@ function setDateChip(chip: Exclude<DateChipKey, ''>) {
 
 function syncDateChipActive() {
   const today = getStartOfDay(Date.now())
-  const diffDays = Math.round((today - getStartOfDay(recordDateTime.value)) / 86400000)
+  const diffDays = getBeijingDayDiff(today, recordDateTime.value)
   if (diffDays === 0) dateChipActive.value = 'today'
   else if (diffDays === 1) dateChipActive.value = 'yesterday'
   else if (diffDays === 2) dateChipActive.value = 'dayBefore'

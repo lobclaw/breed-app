@@ -10,7 +10,9 @@ import {
   formatDateTimeInputValue,
   formatTimeInputValue,
   getBeijingDayDiff,
+  getBeijingElapsedDays,
   getBeijingDayStart,
+  getBeijingOrdinalDay,
   getDraftTimestamp,
   normalizeMonthCursor,
   offsetMonthCursor,
@@ -128,6 +130,14 @@ describe('日期工具函数', () => {
     const nextMorningTs = new Date('2026-04-23T00:00:00.001+08:00').getTime()
 
     expect(getBeijingDayDiff(nextMorningTs, baseTs)).toBe(1)
+  })
+
+  it('第 N 天应按北京时间日边界并从起始当天算第 1 天', () => {
+    const startTs = new Date('2026-05-07T23:30:00+08:00').getTime()
+    const nextMorningTs = new Date('2026-05-08T00:10:00+08:00').getTime()
+
+    expect(getBeijingElapsedDays(startTs, nextMorningTs)).toBe(1)
+    expect(getBeijingOrdinalDay(startTs, nextMorningTs)).toBe(2)
   })
 
   it('timestamp 毫秒数应为正整数', () => {
