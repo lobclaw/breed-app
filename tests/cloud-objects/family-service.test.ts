@@ -577,7 +577,7 @@ describe('family-service', () => {
         type: 'dog',
         type_label: '犬只',
         name: '奶盖',
-        summary: '马尔济斯 · 种狗 · 在养',
+        summary: '马尔济斯 · 种犬 · 在养',
         days_remaining: 27,
       })
 

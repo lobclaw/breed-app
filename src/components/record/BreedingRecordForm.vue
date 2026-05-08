@@ -595,8 +595,13 @@ const typeLabel = computed(() => {
 
 const pageSubtitle = computed(() => {
   if (breedingType.value !== 'heat_observation' || !selectedDog.value) return ''
-  return `${selectedDog.value.gender || ''} · ${selectedDog.value.role || ''}`
+  return `${selectedDog.value.gender || ''} · ${roleDisplayText(selectedDog.value.role)}`
 })
+
+function roleDisplayText(role?: string | null) {
+  if (role === '种狗') return '种犬'
+  return role || ''
+}
 
 const isHeatMultiCreate = computed(() => !isEdit.value && breedingType.value === 'heat' && !dogLocked.value)
 

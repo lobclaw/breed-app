@@ -103,7 +103,7 @@ export function getTaskActionMeta(): Record<string, QuickActionMeta> {
 export function getDogRoleLabel(role?: DogRole | string | null) {
   if (role === '外部种公') return '外部种公'
   if (role === '幼崽') return '幼崽'
-  return '种狗'
+  return '种犬'
 }
 
 function toCatalogItem(item: UnifiedRecordItem): UnifiedRecordItem {

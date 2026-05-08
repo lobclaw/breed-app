@@ -27,7 +27,7 @@ describe('dog detail breeding tab source contract', () => {
   ]`)
     expect(source).toContain(`  if (d.role === '幼崽') {
     return [
-      { key: 'promote', icon: 'trending_up', title: '升级为种犬', sub: '切换为种狗身份并恢复在养状态', tone: 'amber' },
+      { key: 'promote', icon: 'trending_up', title: '升级为种犬', sub: '切换为种犬身份并恢复在养状态', tone: 'amber' },
       { key: 'adoption', icon: 'volunteer_activism', title: '送领养', sub: '登记领养去向与领养费用', tone: 'green' },
       { key: 'gift', icon: 'redeem', title: '赠送', sub: '登记受赠对象与赠送日期', tone: 'teal' },
       { key: 'deceased', icon: 'heart_broken', title: '标记已故', sub: '结束当前状态并取消未完成任务', tone: 'red' },

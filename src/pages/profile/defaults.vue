@@ -71,9 +71,9 @@ function getSettingValue(key: string, fallback: string): string {
 const settingsItems = reactive<SettingItem[]>([
   { key: 'default_weaning_days', label: '默认断奶龄', unit: '天', value: getSettingValue('default_weaning_days', '45') },
   { key: 'default_vaccine_interval_puppy', label: '幼犬疫苗间隔', unit: '天', value: getSettingValue('default_vaccine_interval_puppy', '21') },
-  { key: 'default_vaccine_interval_adult', label: '种狗疫苗间隔', unit: '天', value: getSettingValue('default_vaccine_interval_adult', '365') },
+  { key: 'default_vaccine_interval_adult', label: '种犬疫苗间隔', unit: '天', value: getSettingValue('default_vaccine_interval_adult', '365') },
   { key: 'default_deworming_interval_puppy', label: '幼犬驱虫间隔', unit: '天', value: getSettingValue('default_deworming_interval_puppy', '14') },
-  { key: 'default_deworming_interval_adult', label: '种狗驱虫间隔', unit: '天', value: getSettingValue('default_deworming_interval_adult', '90') },
+  { key: 'default_deworming_interval_adult', label: '种犬驱虫间隔', unit: '天', value: getSettingValue('default_deworming_interval_adult', '90') },
 ])
 
 async function loadLocalSettings() {

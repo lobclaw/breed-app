@@ -162,12 +162,16 @@ const LEGACY_INCOME_TYPE_MAP = {
   领养费: '领养',
   配种费收入: '其他',
 }
+function formatDogRoleLabel(role) {
+  if (role === '种狗') return '种犬'
+  return role
+}
 const RECYCLE_SUPPORTED_TYPES = {
   dog: {
     collection: 'dogs',
     typeLabel: '犬只',
     name: item => item.name || '未命名犬只',
-    summary: item => [item.breed, item.role, item.disposition].filter(Boolean).join(' · '),
+    summary: item => [item.breed, formatDogRoleLabel(item.role), item.disposition].filter(Boolean).join(' · '),
   },
   expense: {
     collection: 'expenses',

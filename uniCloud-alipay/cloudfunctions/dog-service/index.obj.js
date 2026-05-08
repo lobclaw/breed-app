@@ -1427,7 +1427,7 @@ module.exports = {
   },
 
   /**
-   * 幼崽升级为种狗
+   * 幼崽升级为种犬
    */
   async upgradePuppyToBreeder(input) {
     const dogId = typeof input === 'object' ? (input.dogId || input.dog_id || input.id) : input
@@ -1460,7 +1460,7 @@ module.exports = {
       actionType: 'status_change',
       targetId: dogId,
       targetName: dog.name || '未命名犬只',
-      summary: `将幼崽 ${dog.name || '未命名犬只'} 升级为种狗`,
+      summary: `将幼崽 ${dog.name || '未命名犬只'} 升级为种犬`,
       meta: { role: '种狗' },
     })
 
@@ -1469,7 +1469,7 @@ module.exports = {
       .limit(1)
       .get()
     const response = {
-      message: '已升级为种狗',
+      message: '已升级为种犬',
       ...buildSyncAck(syncMeta, {
         ack: 'accepted',
         touchedEntities: updatedDogs?.[0] ? [buildTouchedEntity('dogs', updatedDogs[0])] : [],

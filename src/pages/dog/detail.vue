@@ -145,7 +145,7 @@
           </view>
           <!-- 角色标签（静态，带边框） -->
           <view class="dog-detail__hero-tag dog-detail__hero-tag--static">
-            <text class="dog-detail__hero-tag-text">{{ dog.role || '种狗' }}</text>
+            <text class="dog-detail__hero-tag-text">{{ roleDisplayText(dog.role) }}</text>
           </view>
         </view>
       </view>
@@ -1044,16 +1044,16 @@
     <BModal
       v-model:visible="showCancelRetireModal"
       title="取消退休"
-      content="确认恢复在养状态？犬只将重新回到活跃种狗列表中。"
+      content="确认恢复在养状态？犬只将重新回到活跃种犬列表中。"
       confirm-text="确认恢复"
       @confirm="doCancelRetire"
     />
 
-    <!-- ==================== D-12: 幼崽升级为种狗确认 Modal ==================== -->
+    <!-- ==================== D-12: 幼崽升级为种犬确认 Modal ==================== -->
     <BModal
       v-model:visible="showPromoteModal"
-      title="升级为种狗"
-      content="确认将此幼崽升级为种狗？角色将从「幼崽」变更为「种狗」，去向变为「在养」。"
+      title="升级为种犬"
+      content="确认将此幼崽升级为种犬？角色将从「幼崽」变更为「种犬」，去向变为「在养」。"
       confirm-text="确认升级"
       @confirm="doPromote"
     />
@@ -1641,7 +1641,7 @@ const dispositionActions = computed<DispositionAction[]>(() => {
 
   if (d.role === '幼崽') {
     return [
-      { key: 'promote', icon: 'trending_up', title: '升级为种犬', sub: '切换为种狗身份并恢复在养状态', tone: 'amber' },
+      { key: 'promote', icon: 'trending_up', title: '升级为种犬', sub: '切换为种犬身份并恢复在养状态', tone: 'amber' },
       { key: 'adoption', icon: 'volunteer_activism', title: '送领养', sub: '登记领养去向与领养费用', tone: 'green' },
       { key: 'gift', icon: 'redeem', title: '赠送', sub: '登记受赠对象与赠送日期', tone: 'teal' },
       { key: 'deceased', icon: 'heart_broken', title: '标记已故', sub: '结束当前状态并取消未完成任务', tone: 'red' },
@@ -1665,8 +1665,14 @@ const dispositionActions = computed<DispositionAction[]>(() => {
 const dispositionActionSummary = computed(() => {
   const d = dog.value
   if (!d) return '请选择去向管理动作'
-  return `${d.role || '种狗'} · ${d.disposition || '在养'}`
+  return `${roleDisplayText(d.role)} · ${d.disposition || '在养'}`
 })
+
+function roleDisplayText(role?: string | null) {
+  if (role === '外部种公') return '外部种公'
+  if (role === '幼崽') return '幼崽'
+  return '种犬'
+}
 
 function onHealthFilterScroll(event: any) {
   healthFilterScrollLeft.value = Number(event?.detail?.scrollLeft || 0)
@@ -2919,7 +2925,7 @@ async function doCancelRetire() {
   await loadData()
 }
 
-// ==================== D-12: 幼崽升级为种狗 ====================
+// ==================== D-12: 幼崽升级为种犬 ====================
 
 const showPromoteModal = ref(false)
 

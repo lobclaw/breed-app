@@ -196,9 +196,14 @@ watch(selectedDog, (dog: any) => {
 
 // 计算属性
 const headerSubtitle = computed(() => {
-  if (selectedDog.value) return `${selectedDog.value.gender || ''} · ${selectedDog.value.role || ''}`
+  if (selectedDog.value) return `${selectedDog.value.gender || ''} · ${roleDisplayText(selectedDog.value.role)}`
   return ''
 })
+
+function roleDisplayText(role?: string | null) {
+  if (role === '种狗') return '种犬'
+  return role || ''
+}
 
 const lastRecordTime = computed(() => {
   if (!tempHistory.value.length) return ''

@@ -312,7 +312,7 @@ let loadRequestId = 0
 
 const filterOptions: Array<{ label: string; value: QuickFilterValue }> = [
   { label: '全部', value: 'all' },
-  { label: '种狗', value: 'breeding' },
+  { label: '种犬', value: 'breeding' },
   { label: '幼崽', value: 'puppy' },
   { label: '待售', value: 'sale' },
   { label: '外部种公', value: 'external' },
@@ -325,7 +325,7 @@ const genderOptions = [
 ]
 
 const roleOptions = [
-  { label: '种狗', value: '种狗' },
+  { label: '种犬', value: '种狗' },
   { label: '幼崽', value: '幼崽' },
   { label: '外部种公', value: '外部种公' },
 ]
@@ -766,7 +766,7 @@ function roleTagClass(dog: DogListItem) {
 function roleLabel(dog: DogWithStatus) {
   if (dog.role === '外部种公') return '外部种公'
   if (dog.role === '幼崽') return '幼崽'
-  return '种狗'
+  return '种犬'
 }
 
 function formatAge(birthTs: number) {

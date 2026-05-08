@@ -44,7 +44,7 @@
             <DogAvatar :name="dog.name" :size="64" />
             <view class="dog-picker__item-info">
               <text class="dog-picker__item-name">{{ dog.name }}</text>
-              <text class="dog-picker__item-meta">{{ dog.gender }} · {{ dog.role }}</text>
+              <text class="dog-picker__item-meta">{{ dog.gender }} · {{ roleLabel(dog.role) }}</text>
             </view>
             <view v-if="isSelected(dog._id)" class="dog-picker__check">✓</view>
           </view>
@@ -111,6 +111,11 @@ const filteredDogs = computed(() => {
     return dog.role === activeFilter.value
   })
 })
+
+function roleLabel(role: string) {
+  if (role === '种狗') return '种犬'
+  return role
+}
 
 const selectedDogs = computed(() => {
   const ids = Array.isArray(props.modelValue) ? props.modelValue : [props.modelValue].filter(Boolean)

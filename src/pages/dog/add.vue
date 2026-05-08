@@ -116,7 +116,7 @@
         </view>
       </view>
 
-      <!-- 购入日期（种狗） -->
+      <!-- 购入日期（种犬） -->
       <view v-if="form.role === '种狗'" class="form-field">
         <view class="field-label">
           <text>购入日期</text>
@@ -130,7 +130,7 @@
         </view>
       </view>
 
-      <!-- 购入价格（种狗） -->
+      <!-- 购入价格（种犬） -->
       <view v-if="form.role === '种狗'" class="form-field">
         <view class="field-label">
           <text>购入价格</text>
@@ -321,7 +321,7 @@ watch(() => form.role, (role) => {
 })
 
 const roleOptions = [
-  { label: '种狗', value: '种狗' },
+  { label: '种犬', value: '种狗' },
   { label: '幼崽', value: '幼崽' },
   { label: '外部种公', value: '外部种公' },
 ]
@@ -331,7 +331,7 @@ const canSubmit = computed(() => {
   if (!form.role) return false
   if (form.role !== '幼崽' && !form.name.trim()) return false
   if (form.role === '外部种公' && form.gender !== '公') return false
-  // 种狗和幼崽必须填出生日期，外部种公选填
+  // 种犬和幼崽必须填出生日期，外部种公选填
   if (form.role !== '外部种公' && !form.birth_date) return false
   return true
 })

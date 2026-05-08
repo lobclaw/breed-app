@@ -173,7 +173,7 @@ async function buildOperationDescriptor(type: LocalMutationType, payload: Record
         targetType: 'dog',
         targetId: String(payload.id || payload.dogId || ''),
         targetName: dogName,
-        summary: `将 ${dogName} 升级为种狗`,
+        summary: `将 ${dogName} 升级为种犬`,
       }
     }
     case LOCAL_MUTATION_TYPES.SOFT_DELETE_DOG: {

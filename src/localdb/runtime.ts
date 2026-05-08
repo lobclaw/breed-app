@@ -1783,7 +1783,7 @@ class LocalSyncRuntime {
       syncMeta,
     )
     return {
-      message: '已升级为种狗',
+      message: '已升级为种犬',
       ...buildLocalAck(syncMeta, [{ collection: 'dogs', id: dogId, version: Number(dog.version || 0), updatedAt: now }]),
     }
   }
