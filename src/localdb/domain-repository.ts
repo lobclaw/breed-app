@@ -1212,6 +1212,28 @@ export async function listLocalLatestVaccinationDatesByDogIds(familyId: string, 
   }, {})
 }
 
+export async function listLocalLatestDewormingDatesByDogIds(familyId: string, dogIds: string[]) {
+  const dogIdSet = new Set((dogIds || []).map(id => String(id || '').trim()).filter(Boolean))
+  if (!familyId || dogIdSet.size === 0) return {} as Record<string, number>
+
+  const records = await localDb.query<HealthRecord & { deleted_at?: number | null }>('health_records', row =>
+    row.family_id === familyId
+    && row.type === 'deworming'
+    && dogIdSet.has(row.dog_id)
+    && !row.deleted_at,
+  )
+
+  return records.reduce<Record<string, number>>((map, record) => {
+    const dogId = String(record.dog_id || '')
+    const date = Number(record.date || record.created_at || 0)
+    if (!dogId || !Number.isFinite(date) || date <= 0) return map
+    if (!map[dogId] || date > map[dogId]) {
+      map[dogId] = date
+    }
+    return map
+  }, {})
+}
+
 function getMedicationHistorySortTs(task: Record<string, any>) {
   return Number(task?.actual_start_date) || Number(task?.updated_at) || Number(task?.created_at) || 0
 }

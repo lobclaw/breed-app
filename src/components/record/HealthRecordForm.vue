@@ -57,7 +57,8 @@
           v-model="selectedDogs"
           :multiple="true"
           title="选择犬只"
-          :extra-meta-map="latestVaccinationMetaMap"
+          :extra-meta-map="latestHealthMetaMap"
+          :show-health-status-tags="shouldShowHealthStatusTags"
         />
       </view>
 
@@ -346,6 +347,7 @@ import {
   findLocalDuplicateIllnesses,
   getLocalHealthRecordDetail,
   getLocalTaskById,
+  listLocalLatestDewormingDatesByDogIds,
   listLocalLatestVaccinationDatesByDogIds,
 } from '@/localdb/domain-repository'
 import { localSyncRuntime } from '@/localdb/runtime'
@@ -393,6 +395,8 @@ const savedRecordId = ref('')
 const savedIllnessLinks = ref<MedicationRouteIllnessLink[]>([])
 const latestVaccinationRequestToken = ref(0)
 const latestVaccinationDates = ref<Record<string, number>>({})
+const latestDewormingRequestToken = ref(0)
+const latestDewormingDates = ref<Record<string, number>>({})
 
 const resolvedType = computed<HealthRecordType | ''>(() => {
   return (isEdit.value ? currentRecord.value?.type : props.type) || ''
@@ -484,6 +488,28 @@ const latestVaccinationMetaMap = computed(() => {
 
 const shouldShowLatestVaccinationMeta = computed(() => {
   return !isEdit.value && resolvedType.value === 'vaccination'
+})
+
+const latestDewormingMetaMap = computed(() => {
+  if (!shouldShowLatestDewormingMeta.value) return {}
+  return Object.entries(latestDewormingDates.value).reduce<Record<string, string>>((map, [dogId, ts]) => {
+    const text = formatDateOnly(ts)
+    if (text) map[dogId] = `上次驱虫：${text}`
+    return map
+  }, {})
+})
+
+const shouldShowLatestDewormingMeta = computed(() => {
+  return !isEdit.value && resolvedType.value === 'deworming'
+})
+
+const latestHealthMetaMap = computed(() => {
+  if (resolvedType.value === 'deworming') return latestDewormingMetaMap.value
+  return latestVaccinationMetaMap.value
+})
+
+const shouldShowHealthStatusTags = computed(() => {
+  return !isEdit.value && resolvedType.value === 'illness'
 })
 
 const PRESET_VACCINE_TYPES = ['卫佳5', '卫佳8', '卫佳10', '狂犬']
@@ -716,6 +742,26 @@ async function refreshLatestVaccinationDates() {
   latestVaccinationDates.value = dates
 }
 
+async function refreshLatestDewormingDates() {
+  const requestToken = ++latestDewormingRequestToken.value
+  const familyId = currentFamily.value?._id || ''
+  if (!shouldShowLatestDewormingMeta.value || !familyId) {
+    latestDewormingDates.value = {}
+    return
+  }
+
+  await dogStore.ensure().catch(() => {})
+  const dogIds = dogStore.list.map((dog: any) => dog._id).filter(Boolean)
+  if (dogIds.length === 0) {
+    latestDewormingDates.value = {}
+    return
+  }
+
+  const dates = await listLocalLatestDewormingDatesByDogIds(familyId, dogIds)
+  if (requestToken !== latestDewormingRequestToken.value) return
+  latestDewormingDates.value = dates
+}
+
 async function loadCreateQuery() {
   resetFormState()
   const routeQuery = resolveHealthCreateRouteQuery(props.query)
@@ -733,6 +779,7 @@ async function loadCreateQuery() {
   }
 
   void refreshLatestVaccinationDates()
+  void refreshLatestDewormingDates()
 }
 
 async function loadEditRecord() {
@@ -1304,6 +1351,14 @@ watch(
   [shouldShowLatestVaccinationMeta, () => currentFamily.value?._id || '', () => dogStore.list.map((dog: any) => dog._id).join(',')],
   () => {
     void refreshLatestVaccinationDates()
+  },
+  { immediate: true },
+)
+
+watch(
+  [shouldShowLatestDewormingMeta, () => currentFamily.value?._id || '', () => dogStore.list.map((dog: any) => dog._id).join(',')],
+  () => {
+    void refreshLatestDewormingDates()
   },
   { immediate: true },
 )

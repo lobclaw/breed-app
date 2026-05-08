@@ -69,7 +69,7 @@
 
       <view class="field-group">
         <view class="field-label"><text>选择犬只</text></view>
-        <BDogPicker v-model="selectedDogs" :multiple="true" title="选择犬只" />
+        <BDogPicker v-model="selectedDogs" :multiple="true" title="选择犬只" :show-health-status-tags="true" />
       </view>
 
       <view v-if="showSingleIllnessSelector" class="field-group">

@@ -73,6 +73,22 @@ describe('local-first source contract', () => {
     expect(breedingFormSource).toContain(':show-breeding-stage="true"')
   })
 
+  it('疾病和用药犬只选择器应在名字右侧展示当前疾病与用药标签', () => {
+    const pickerSource = readWorkspaceFile('src/components/form/BDogPicker.vue')
+    const healthFormSource = readWorkspaceFile('src/components/record/HealthRecordForm.vue')
+    const medicationFormSource = readWorkspaceFile('src/components/record/MedicationTaskForm.vue')
+
+    expect(pickerSource).toContain('showHealthStatusTags?: boolean')
+    expect(pickerSource).toContain('showHealthStatusTags: false')
+    expect(pickerSource).toContain('class="b-dog-picker__health-tag"')
+    expect(pickerSource).toContain("status?.type === '生病中' || status?.type === '用药中'")
+    expect(pickerSource).toContain('buildCompactDeriveStatusTitle')
+    expect(pickerSource).toContain('getDogStatusTone')
+    expect(healthFormSource).toContain(':show-health-status-tags="shouldShowHealthStatusTags"')
+    expect(healthFormSource).toContain("resolvedType.value === 'illness'")
+    expect(medicationFormSource).toContain(':show-health-status-tags="true"')
+  })
+
   it('发情、卵检、配种候选应通过本地记录展示上次发情日期', () => {
     const formSource = readWorkspaceFile('src/components/record/BreedingRecordForm.vue')
     const pickerSource = readWorkspaceFile('src/components/form/BDogPicker.vue')
@@ -97,12 +113,28 @@ describe('local-first source contract', () => {
     const repositorySource = readWorkspaceFile('src/localdb/domain-repository.ts')
 
     expect(formSource).toContain('listLocalLatestVaccinationDatesByDogIds')
-    expect(formSource).toContain(':extra-meta-map="latestVaccinationMetaMap"')
+    expect(formSource).toContain(':extra-meta-map="latestHealthMetaMap"')
+    expect(formSource).toContain('latestVaccinationMetaMap')
     expect(formSource).toContain('resolvedType.value === \'vaccination\'')
     expect(formSource).toContain('`上次疫苗：${text}`')
     expect(formSource).not.toContain(':show-breeding-stage="true"')
     expect(repositorySource).toContain('export async function listLocalLatestVaccinationDatesByDogIds')
     expect(repositorySource).toContain("row.type === 'vaccination'")
+    expect(repositorySource).toContain('!row.deleted_at')
+  })
+
+  it('驱虫候选应通过本地记录展示上次驱虫日期，且不展示繁育阶段', () => {
+    const formSource = readWorkspaceFile('src/components/record/HealthRecordForm.vue')
+    const repositorySource = readWorkspaceFile('src/localdb/domain-repository.ts')
+
+    expect(formSource).toContain('listLocalLatestDewormingDatesByDogIds')
+    expect(formSource).toContain(':extra-meta-map="latestHealthMetaMap"')
+    expect(formSource).toContain('latestDewormingMetaMap')
+    expect(formSource).toContain('resolvedType.value === \'deworming\'')
+    expect(formSource).toContain('`上次驱虫：${text}`')
+    expect(formSource).not.toContain(':show-breeding-stage="true"')
+    expect(repositorySource).toContain('export async function listLocalLatestDewormingDatesByDogIds')
+    expect(repositorySource).toContain("row.type === 'deworming'")
     expect(repositorySource).toContain('!row.deleted_at')
   })
 

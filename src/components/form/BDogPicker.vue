@@ -112,6 +112,16 @@
         <view class="b-dog-picker__info">
           <view class="b-dog-picker__title-row">
             <text class="b-dog-picker__name">{{ dog.name || '未命名' }}</text>
+            <view v-if="dogHealthStatusTags(dog).length" class="b-dog-picker__health-tags">
+              <text
+                v-for="tag in dogHealthStatusTags(dog)"
+                :key="tag.key"
+                class="b-dog-picker__health-tag"
+                :class="`b-dog-picker__health-tag--${tag.tone}`"
+              >
+                {{ tag.label }}
+              </text>
+            </view>
             <text v-if="dogExtraMetaText(dog)" class="b-dog-picker__extra-meta">
               {{ dogExtraMetaText(dog) }}
             </text>
@@ -144,6 +154,9 @@ import { ref, watch, computed } from 'vue'
 import { useDogStore } from '@/stores/dogStore'
 import { useAuth } from '@/composables/useAuth'
 import { getBeijingOrdinalDay } from '@/utils/date'
+import { buildCompactDeriveStatusTitle } from '@/utils/dogStatusCopy'
+import { getDogStatusTone } from '@/utils/themeSemantics'
+import type { DeriveStatus } from '@/types/dog'
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BSheet from '../layout/BSheet.vue'
 import BSkeleton from '../feedback/BSkeleton.vue'
@@ -193,6 +206,8 @@ const props = withDefaults(defineProps<{
   extraMetaMap?: Record<string, string>
   /** 是否展示繁育阶段标签 */
   showBreedingStage?: boolean
+  /** 是否在名字右侧展示当前疾病/用药标签 */
+  showHealthStatusTags?: boolean
 }>(), {
   modelValue: undefined,
   visible: undefined,
@@ -210,6 +225,7 @@ const props = withDefaults(defineProps<{
   emptyDescription: '没有符合条件的犬只',
   extraMetaMap: () => ({}),
   showBreedingStage: false,
+  showHealthStatusTags: false,
 })
 
 const emit = defineEmits<{
@@ -512,6 +528,62 @@ function dogMetaText(dog: Dog) {
 
 function dogExtraMetaText(dog: Dog) {
   return props.extraMetaMap?.[dog._id] || ''
+}
+
+function splitStatusDetail(detail?: string | null) {
+  const raw = `${detail || ''}`.trim()
+  if (!raw) return { primary: '', secondary: '' }
+
+  const dotParts = raw.split('·').map(part => part.trim()).filter(Boolean)
+  if (dotParts.length > 1) {
+    return {
+      primary: dotParts[0],
+      secondary: dotParts.slice(1).join(' · '),
+    }
+  }
+
+  const spaceParts = raw.split(/\s+/).filter(Boolean)
+  if (spaceParts.length > 1) {
+    return {
+      primary: spaceParts[0],
+      secondary: spaceParts.slice(1).join(' '),
+    }
+  }
+
+  return { primary: raw, secondary: '' }
+}
+
+function medicationStatusName(status: DeriveStatus) {
+  return splitStatusDetail(status.detail).primary || status.label || '用药'
+}
+
+function statusTagLabel(status: DeriveStatus) {
+  if (status.type === '用药中' && Number(status.count || 0) >= 2) {
+    return `${medicationStatusName(status)}等${Number(status.count)}项`
+  }
+
+  return buildCompactDeriveStatusTitle(status, {
+    nameOverride: status.type === '用药中' ? splitStatusDetail(status.detail).primary : undefined,
+  })
+}
+
+function healthStatusTagTone(status: DeriveStatus) {
+  return getDogStatusTone(status.type).variant === 'illness'
+    ? 'illness'
+    : getDogStatusTone(status.type).color
+}
+
+function dogHealthStatusTags(dog: Dog) {
+  if (!props.showHealthStatusTags) return []
+  const statuses = Array.isArray(dog.statuses) ? dog.statuses : []
+  return statuses
+    .filter((status): status is DeriveStatus => status?.type === '生病中' || status?.type === '用药中')
+    .slice(0, 2)
+    .map((status, index) => ({
+      key: `${status.type}-${status.recordId || status.taskId || status.activityTs || index}`,
+      label: statusTagLabel(status),
+      tone: healthStatusTagTone(status),
+    }))
 }
 
 function dogBreedingStageTag(dog: Dog) {
@@ -848,6 +920,40 @@ function formatAge(birthTs?: number | null) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.b-dog-picker__health-tags {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.b-dog-picker__health-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 18px;
+  max-width: 96px;
+  padding: 0 7px;
+  border-radius: var(--radius-tag);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 18px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &--illness {
+    color: rgba(201, 70, 70, 1);
+    background: rgba(255, 228, 223, 0.95);
+  }
+
+  &--plum {
+    color: var(--plum);
+    background: var(--plum-soft);
+  }
 }
 
 .b-dog-picker__stage-tag {
