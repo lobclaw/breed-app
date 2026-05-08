@@ -556,7 +556,7 @@ function formatAmount(n: number): string {
 function linkedMedicationStatusLabel(taskItem: any) {
   if (taskItem?.status === 'completed') return '已完成'
   if (taskItem?.status === 'cancelled') return '已取消'
-  return '进行中'
+  return '用药中'
 }
 
 function linkedMedicationStatusColor(taskItem: any): 'plum' | 'green' | 'gray' {

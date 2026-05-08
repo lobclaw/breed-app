@@ -33,7 +33,7 @@ describe('createCycleBreedingAddRecordGroups', () => {
     ])
   })
 
-  it('怀孕中周期只保留怀孕阶段可追加的记录', () => {
+  it('怀孕中且尚未记录孕检时保留孕检入口', () => {
     const groups = createCycleBreedingAddRecordGroups('怀孕中')
 
     expect(groups).toHaveLength(1)
@@ -41,6 +41,21 @@ describe('createCycleBreedingAddRecordGroups', () => {
       'breeding-pregnancy',
       'breeding-prenatal',
       'breeding-prelabor',
+      'birth-wizard',
+      'breeding-termination',
+    ])
+  })
+
+  it('怀孕中且已有孕检记录时不再展示孕检入口', () => {
+    const groups = createCycleBreedingAddRecordGroups('怀孕中', {
+      records: [{ type: 'pregnancy_check' }],
+    })
+
+    expect(groups).toHaveLength(1)
+    expect(groups[0].items.map(item => item.page)).toEqual([
+      'breeding-prenatal',
+      'breeding-prelabor',
+      'birth-wizard',
       'breeding-termination',
     ])
   })
@@ -76,7 +91,7 @@ describe('createDogDetailAddRecordGroups', () => {
     ])
   })
 
-  it('怀孕中的犬只详情保留生产入口，但周期详情弹窗不重复展示生产', () => {
+  it('怀孕中的犬只详情和周期详情都通过添加记录提供生产入口', () => {
     const groups = createDogDetailAddRecordGroups({
       role: '种狗',
       gender: '母',
@@ -91,7 +106,27 @@ describe('createDogDetailAddRecordGroups', () => {
       'birth-wizard',
       'breeding-termination',
     ])
-    expect(createCycleBreedingAddRecordGroups('怀孕中')[0].items.map(item => item.page)).not.toContain('birth-wizard')
+    expect(createCycleBreedingAddRecordGroups('怀孕中')[0].items.map(item => item.page)).toContain('birth-wizard')
+    expect(createCycleBreedingAddRecordGroups('怀孕中', {
+      records: [{ type: 'pregnancy_check' }],
+    })[0].items.map(item => item.page)).not.toContain('breeding-pregnancy')
+  })
+
+  it('怀孕中的犬只详情已有孕检记录时同步隐藏孕检入口', () => {
+    const groups = createDogDetailAddRecordGroups({
+      role: '种狗',
+      gender: '母',
+      activeCycleStatus: '怀孕中',
+      activeCycleRecords: [{ type: 'pregnancy_check' }],
+    })
+    const breedingGroup = groups.find(group => group.key === 'breeding')
+
+    expect(breedingGroup?.items.map(item => item.page)).toEqual([
+      'breeding-prenatal',
+      'breeding-prelabor',
+      'birth-wizard',
+      'breeding-termination',
+    ])
   })
 
   it('哺乳中的犬只详情不提供繁育新增入口', () => {

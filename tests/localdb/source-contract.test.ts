@@ -51,6 +51,15 @@ describe('local-first source contract', () => {
     expect(pickerSource).not.toContain('if (!hasModelValue.value && props.multiple) {')
   })
 
+  it('BDogPicker 在带角色候选的选择器中应保底显示品种横向筛选', () => {
+    const pickerSource = readWorkspaceFile('src/components/form/BDogPicker.vue')
+    expect(pickerSource).toContain("const PRESET_BREEDS = ['马尔济斯', '西施', '约克夏']")
+    expect(pickerSource).toContain("props.candidateDogs !== undefined || !!props.roleFilter || !!props.genderFilter")
+    expect(pickerSource).toContain("const customBreeds = currentFamily.value?.settings?.custom_breed_types || []")
+    expect(pickerSource).toContain('class="b-dog-picker__filters-scroll"')
+    expect(pickerSource).toContain('scroll-x')
+  })
+
   it('应确保已迁移的页面详情读取不再直接依赖云端 detail 接口', () => {
     const pageReadContracts: Array<{ file: string; forbiddenReads: string[] }> = [
       {

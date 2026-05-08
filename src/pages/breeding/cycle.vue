@@ -132,7 +132,11 @@
             </view>
             <view v-if="expectedDueDateText" class="info-row">
               <text class="info-label">预产期</text>
-              <text class="info-value">{{ expectedDueDateText }} · {{ expectedDueDateRelativeText }}</text>
+              <view class="info-value info-value--due">
+                <text class="info-value__date">{{ expectedDueDateText }}</text>
+                <text class="info-value__separator">·</text>
+                <text class="info-value__relative">{{ expectedDueDateRelativeText }}</text>
+              </view>
             </view>
           </view>
         </BCard>
@@ -287,13 +291,39 @@
 
       <BSheet v-model:visible="showMoreActions" title="更多操作">
         <view class="more-actions">
-          <view v-if="canAddBirth" class="more-action-item" @click="handleAddBirthFromMore">
-            <text class="material-icons-round" style="font-size: 20px; color: var(--green);">child_care</text>
-            <text class="more-action-label">录入生产</text>
+          <view v-if="canAbandonCycle" class="more-action-item" @click="handleAbandonCycleFromMore">
+            <text class="material-icons-round" style="font-size: 20px; color: var(--amber);">block</text>
+            <text class="more-action-label">放弃本周期</text>
           </view>
-          <view v-if="canCloseCycle" class="more-action-item" @click="handleCloseCycleFromMore">
-            <text class="material-icons-round" style="font-size: 20px; color: var(--red);">warning</text>
-            <text class="more-action-label more-action-label--danger">记录异常终止</text>
+        </view>
+      </BSheet>
+
+      <BSheet v-model:visible="showCloseCycleSheet" title="放弃本周期" height="auto">
+        <view class="close-cycle-sheet">
+          <view class="close-cycle-sheet__warning">
+            <view class="close-cycle-sheet__warning-icon">
+              <text class="material-icons-round">block</text>
+            </view>
+            <view class="close-cycle-sheet__warning-copy">
+              <text class="close-cycle-sheet__warning-title">确认放弃当前周期</text>
+              <text class="close-cycle-sheet__warning-desc">本次发情未完成配种，确认后会直接将周期标记为放弃，并取消相关未完成提醒。</text>
+            </view>
+          </view>
+          <view class="close-cycle-sheet__options">
+            <view
+              class="close-cycle-sheet__option"
+              :class="{ 'close-cycle-sheet__option--disabled': closeCycleSubmitting }"
+              @click="closeCycleAsAbandoned"
+            >
+              <view class="close-cycle-sheet__option-icon close-cycle-sheet__option-icon--amber">
+                <text class="material-icons-round">block</text>
+              </view>
+              <view class="close-cycle-sheet__option-copy">
+                <text class="close-cycle-sheet__option-title">确认放弃本周期</text>
+                <text class="close-cycle-sheet__option-desc">不创建繁育记录，仅关闭当前未配种周期。</text>
+              </view>
+              <text class="material-icons-round close-cycle-sheet__option-arrow">chevron_right</text>
+            </view>
           </view>
         </view>
       </BSheet>
@@ -340,6 +370,8 @@ const expenses = ref<BreedingCycleExpense[]>([])
 const loading = ref(true)
 const showAddRecordSheet = ref(false)
 const showMoreActions = ref(false)
+const showCloseCycleSheet = ref(false)
+const closeCycleSubmitting = ref(false)
 let cycleId = ''
 const submitBannerMessage = ref('')
 let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
@@ -358,11 +390,11 @@ const isTerminal = computed(() => {
   return cycle.value && ['已生产', '失败', '放弃'].includes(cycle.value.status)
 })
 
-const cycleAddRecordGroups = computed(() => createCycleBreedingAddRecordGroups(cycle.value?.status))
+const cycleAddRecordGroups = computed(() => createCycleBreedingAddRecordGroups(cycle.value?.status, { records: records.value }))
 const canAddRecord = computed(() => !loading.value && !!cycle.value && !isTerminal.value)
-const canAddBirth = computed(() => canAddRecord.value && cycle.value?.status === '怀孕中')
-const canCloseCycle = computed(() => canAddRecord.value)
-const hasMoreActions = computed(() => canAddBirth.value || canCloseCycle.value)
+const hasMatingRecord = computed(() => records.value.some(record => record?.type === 'mating'))
+const canAbandonCycle = computed(() => canAddRecord.value && cycle.value?.status === '发情中' && !hasMatingRecord.value)
+const hasMoreActions = computed(() => canAbandonCycle.value)
 const hasHeaderActions = computed(() => canAddRecord.value || hasMoreActions.value)
 
 const timelineRecords = computed(() => {
@@ -593,40 +625,47 @@ function runAfterMoreSheetClose(task: () => void) {
 
 function navigateToRecord(item: AddRecordItem) {
   showAddRecordSheet.value = false
+  const damName = encodeURIComponent(cycle.value?.dam_name || '')
+  const dogId = cycle.value?.dam_id || ''
+
+  if (item.page === 'birth-wizard') {
+    uni.navigateTo({
+      url: `/pages/breeding/birth-wizard?cycleId=${cycleId}&damName=${damName}&dogId=${dogId}&dogName=${damName}&locked=true`,
+      fail() {
+        uni.showToast({ title: '页面打开失败', icon: 'none' })
+      },
+    })
+    return
+  }
+
   const baseUrl = item.url || `/pages/record/${item.page}`
   uni.navigateTo({
-    url: `${baseUrl}?cycleId=${cycleId}&dogId=${cycle.value.dam_id}&dogName=${encodeURIComponent(cycle.value.dam_name)}&locked=true`,
+    url: `${baseUrl}?cycleId=${cycleId}&dogId=${dogId}&dogName=${damName}&locked=true`,
     fail() {
       uni.showToast({ title: '页面打开失败', icon: 'none' })
     },
   })
 }
 
-function addBirth() {
-  uni.navigateTo({ url: `/pages/breeding/birth-wizard?cycleId=${cycleId}&damName=${encodeURIComponent(cycle.value.dam_name)}` })
-}
-
-function handleAddBirthFromMore() {
+function handleAbandonCycleFromMore() {
   runAfterMoreSheetClose(() => {
-    addBirth()
+    showCloseCycleSheet.value = true
   })
 }
 
-function handleCloseCycleFromMore() {
-  runAfterMoreSheetClose(() => {
-    closeCycleAction()
-  })
-}
-
-async function closeCycleAction() {
-  uni.showActionSheet({
-    itemList: ['放弃（未配种）', '失败（确认未怀孕/流产）'],
-    success: async (res) => {
-      const reason = res.tapIndex === 0 ? '放弃' : '失败'
-      await localSyncRuntime.closeBreedingCycleLocally(currentFamily.value?._id || '', cycleId, reason)
-      await loadData()
-    },
-  })
+async function closeCycleAsAbandoned() {
+  if (closeCycleSubmitting.value) return
+  closeCycleSubmitting.value = true
+  try {
+    await localSyncRuntime.closeBreedingCycleLocally(currentFamily.value?._id || '', cycleId, '放弃')
+    showCloseCycleSheet.value = false
+    showSubmitBanner('已记录放弃本周期')
+    await loadData()
+  } catch (error: any) {
+    uni.showToast({ title: error?.message || '操作失败，请重试', icon: 'none' })
+  } finally {
+    closeCycleSubmitting.value = false
+  }
 }
 
 async function loadData() {
@@ -1046,6 +1085,30 @@ onShow(() => {
   font-weight: 700;
 }
 
+.info-value--due {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 0;
+}
+
+.info-value__date {
+  color: var(--text-1);
+  white-space: nowrap;
+}
+
+.info-value__separator {
+  color: var(--text-4);
+  font-weight: 700;
+}
+
+.info-value__relative {
+  color: var(--primary);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 /* 时间线 */
 .timeline {
   position: relative;
@@ -1340,7 +1403,126 @@ onShow(() => {
   color: var(--text-1);
 }
 
-.more-action-label--danger {
-  color: var(--red);
+/* 放弃周期 */
+.close-cycle-sheet {
+  padding-bottom: 12px;
+}
+
+.close-cycle-sheet__warning {
+  display: flex;
+  gap: 12px;
+  padding: 14px;
+  border-radius: var(--radius-card);
+  background: rgba(232, 155, 62, 0.1);
+  margin-bottom: 12px;
+}
+
+.close-cycle-sheet__warning-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-icon);
+  background: var(--icon-amber);
+  color: var(--amber);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+
+  .material-icons-round {
+    font-size: 19px;
+  }
+}
+
+.close-cycle-sheet__warning-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.close-cycle-sheet__warning-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text-1);
+}
+
+.close-cycle-sheet__warning-desc {
+  font-size: 12px;
+  line-height: 1.55;
+  font-weight: 600;
+  color: var(--text-3);
+}
+
+.close-cycle-sheet__options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.close-cycle-sheet__option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border-radius: var(--radius-row);
+  background: var(--card);
+  border: 1px solid rgba(216, 203, 189, 0.28);
+  transition: transform 0.12s ease, opacity 0.12s ease;
+
+  &:active {
+    transform: scale(0.98);
+  }
+}
+
+.close-cycle-sheet__option--disabled {
+  opacity: 0.58;
+  pointer-events: none;
+}
+
+.close-cycle-sheet__option-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-icon);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+
+  .material-icons-round {
+    font-size: 19px;
+  }
+}
+
+.close-cycle-sheet__option-icon--amber {
+  background: var(--icon-amber);
+  color: var(--amber);
+}
+
+.close-cycle-sheet__option-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.close-cycle-sheet__option-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-1);
+}
+
+.close-cycle-sheet__option-desc {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-3);
+  font-weight: 600;
+}
+
+.close-cycle-sheet__option-arrow {
+  font-size: 18px;
+  color: var(--text-4);
+  flex-shrink: 0;
 }
 </style>

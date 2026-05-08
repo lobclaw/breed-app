@@ -364,7 +364,7 @@ const statusText = computed(() => {
   if (!task.value) return ''
   if (task.value.status === 'completed') return '已完成'
   if (task.value.status === 'cancelled') return '已取消'
-  return '进行中'
+  return '用药中'
 })
 const statusTagTone = computed<'plum' | 'green' | 'gray'>(() => {
   if (task.value?.status === 'completed') return 'green'

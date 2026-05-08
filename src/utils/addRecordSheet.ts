@@ -29,13 +29,27 @@ export type AddRecordGroup = {
 
 type DogDetailBreedingStatus = Extract<DeriveStatus['type'], '发情中' | '怀孕中' | '哺乳中'>
 
+type BreedingRecordSummary = {
+  type?: string | null
+}
+
+type ActiveCycleBreedingPagesOptions = {
+  includeBirth?: boolean
+  hasPregnancyCheck?: boolean
+}
+
 type CreateDogDetailAddRecordGroupsOptions = {
   role?: DogRole | string | null
   gender?: DogGender | string | null
   allowBreeding?: boolean
   activeCycleStatus?: CycleStatus | string | null
+  activeCycleRecords?: BreedingRecordSummary[]
   statuses?: DeriveStatus[]
   includeBreedingHint?: boolean
+}
+
+type CreateCycleBreedingAddRecordGroupsOptions = {
+  records?: BreedingRecordSummary[]
 }
 
 const breedingItems: AddRecordItem[] = BREEDING_RECORD_ITEMS.map(item => ({
@@ -76,14 +90,14 @@ const medicationItems: AddRecordItem[] = MEDICATION_RECORD_ITEMS.map(item => ({
   layout: item.layout,
 }))
 
-function getActiveCycleBreedingPages(status: string | null | undefined, options: { includeBirth?: boolean } = {}) {
+function getActiveCycleBreedingPages(status: string | null | undefined, options: ActiveCycleBreedingPagesOptions = {}) {
   if (status === '发情中') {
     return ['heat-observation', 'breeding-follicle', 'breeding-mating', 'breeding-termination']
   }
 
   if (status === '怀孕中') {
     return [
-      'breeding-pregnancy',
+      ...(options.hasPregnancyCheck ? [] : ['breeding-pregnancy']),
       'breeding-prenatal',
       'breeding-prelabor',
       ...(options.includeBirth ? ['birth-wizard'] : []),
@@ -143,12 +157,21 @@ function resolveDogDetailBreedingStatus({
   return ''
 }
 
-function getDogDetailBreedingPages(status: DogDetailBreedingStatus | '') {
+function getDogDetailBreedingPages(status: DogDetailBreedingStatus | '', records?: BreedingRecordSummary[]) {
   if (status === '哺乳中') {
     return []
   }
 
-  return status ? getActiveCycleBreedingPages(status, { includeBirth: true }) : ['breeding-heat']
+  return status
+    ? getActiveCycleBreedingPages(status, {
+      includeBirth: true,
+      hasPregnancyCheck: hasBreedingRecord(records, 'pregnancy_check'),
+    })
+    : ['breeding-heat']
+}
+
+function hasBreedingRecord(records: BreedingRecordSummary[] | undefined, type: string) {
+  return Array.isArray(records) && records.some(record => record?.type === type)
 }
 
 export function createDogDetailAddRecordGroups({
@@ -156,6 +179,7 @@ export function createDogDetailAddRecordGroups({
   gender,
   allowBreeding: allowBreedingInput,
   activeCycleStatus,
+  activeCycleRecords,
   statuses = [],
   includeBreedingHint = false,
 }: CreateDogDetailAddRecordGroupsOptions): AddRecordGroup[] {
@@ -164,7 +188,7 @@ export function createDogDetailAddRecordGroups({
 
   if (allowBreeding) {
     const breedingStatus = resolveDogDetailBreedingStatus({ activeCycleStatus, statuses })
-    const breedingPages = getDogDetailBreedingPages(breedingStatus)
+    const breedingPages = getDogDetailBreedingPages(breedingStatus, activeCycleRecords)
     const filteredBreedingItems = breedingItems.filter(item => breedingPages.includes(item.page))
 
     if (filteredBreedingItems.length > 0) {
@@ -193,8 +217,14 @@ export function createDogDetailAddRecordGroups({
   return groups
 }
 
-export function createCycleBreedingAddRecordGroups(status?: string): AddRecordGroup[] {
-  const allowedPages = getActiveCycleBreedingPages(status)
+export function createCycleBreedingAddRecordGroups(
+  status?: string,
+  options: CreateCycleBreedingAddRecordGroupsOptions = {},
+): AddRecordGroup[] {
+  const allowedPages = getActiveCycleBreedingPages(status, {
+    includeBirth: true,
+    hasPregnancyCheck: hasBreedingRecord(options.records, 'pregnancy_check'),
+  })
   const items = breedingItems.filter(item => allowedPages.includes(item.page))
 
   if (items.length === 0) return []

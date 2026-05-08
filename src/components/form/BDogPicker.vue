@@ -62,18 +62,26 @@
     </view>
 
     <!-- 筛选栏 -->
-    <view v-if="filterTabs.length || multiple" class="b-dog-picker__filter-row">
-      <view v-if="filterTabs.length" class="b-dog-picker__filters">
-        <view
-          v-for="f in filterTabs"
-          :key="f.value"
-          class="b-dog-picker__filter"
-          :class="{ 'b-dog-picker__filter--active': activeFilter === f.value }"
-          @click="activeFilter = f.value"
-        >
-          <text>{{ f.label }}</text>
+    <view v-if="visibleFilterTabs.length || multiple" class="b-dog-picker__filter-row">
+      <scroll-view
+        v-if="visibleFilterTabs.length"
+        scroll-x
+        class="b-dog-picker__filters-scroll"
+        show-scrollbar="false"
+        enhanced
+      >
+        <view class="b-dog-picker__filters">
+          <view
+            v-for="f in visibleFilterTabs"
+            :key="f.value"
+            class="b-dog-picker__filter"
+            :class="{ 'b-dog-picker__filter--active': isFilterActive(f.value) }"
+            @click="selectFilter(f.value)"
+          >
+            <text>{{ f.label }}</text>
+          </view>
         </view>
-      </view>
+      </scroll-view>
       <view v-if="multiple && filteredDogs.length > 0" class="b-dog-picker__select-all" @click="toggleSelectAll">
         <text>{{ isAllSelected ? '取消全选' : '全选' }}</text>
       </view>
@@ -104,7 +112,7 @@
         <view class="b-dog-picker__info">
           <text class="b-dog-picker__name">{{ dog.name || '未命名' }}</text>
           <text class="b-dog-picker__meta">
-            {{ dog.breed || '马尔济斯' }} · {{ formatAge(dog.birth_date) || '未知' }} · {{ roleLabel(dog.role) }}
+            {{ dogMetaText(dog) }}
           </text>
         </view>
         <view
@@ -122,6 +130,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { useDogStore } from '@/stores/dogStore'
+import { useAuth } from '@/composables/useAuth'
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
 import BSheet from '../layout/BSheet.vue'
 import BSkeleton from '../feedback/BSkeleton.vue'
@@ -239,7 +248,9 @@ const loading = ref(false)
 const dogs = ref<Dog[]>([])
 const selectedIds = ref<string[]>([])
 const activeFilter = ref('all')
+const activeBreedFilter = ref('all')
 const searchKeyword = ref('')
+const PRESET_BREEDS = ['马尔济斯', '西施', '约克夏']
 
 const filterTabs = computed(() => {
   if (props.candidateDogs !== undefined) return []
@@ -251,6 +262,38 @@ const filterTabs = computed(() => {
     { label: '幼崽', value: 'puppy' },
   ]
 })
+
+const shouldShowBreedFilter = computed(() => (
+  props.candidateDogs !== undefined || !!props.roleFilter || !!props.genderFilter
+))
+
+const breedFilterTabs = computed(() => {
+  if (!shouldShowBreedFilter.value) return []
+
+  const customBreeds = currentFamily.value?.settings?.custom_breed_types || []
+  const values = new Set<string>(['all', ...PRESET_BREEDS])
+  for (const breed of customBreeds) {
+    const value = `${breed || ''}`.trim()
+    if (value) values.add(value)
+  }
+  for (const dog of visibleDogs.value) {
+    values.add(normalizeBreed(dog))
+  }
+
+  const custom = [...values]
+    .filter(value => value !== 'all' && !PRESET_BREEDS.includes(value))
+    .sort(compareString)
+
+  return [
+    { label: '全部', value: 'all' },
+    ...PRESET_BREEDS.map(value => ({ label: value, value })),
+    ...custom.map(value => ({ label: value, value })),
+  ]
+})
+
+const visibleFilterTabs = computed(() => (
+  breedFilterTabs.value.length ? breedFilterTabs.value : filterTabs.value
+))
 
 const filteredDogs = computed(() => {
   let list = visibleDogs.value
@@ -265,6 +308,9 @@ const filteredDogs = computed(() => {
   if (activeFilter.value === 'dam') return list.filter(d => d.role === '种狗' && d.gender === '母')
   if (activeFilter.value === 'sire') return list.filter(d => d.role === '种狗' && d.gender === '公')
   if (activeFilter.value === 'puppy') return list.filter(d => d.role === '幼崽')
+  if (breedFilterTabs.value.length && activeBreedFilter.value !== 'all') {
+    return list.filter(d => normalizeBreed(d) === activeBreedFilter.value)
+  }
   return list
 })
 
@@ -279,6 +325,7 @@ const visibleDogs = computed(() => (
 ))
 
 const dogStore = useDogStore()
+const { currentFamily } = useAuth()
 
 // 组件挂载时预加载
 dogStore.ensure()
@@ -289,7 +336,16 @@ watch(() => sheetVisible.value, (val) => {
       ? [...(props.selectedIds || [])]
       : []
     searchKeyword.value = ''
+    if (!breedFilterTabs.value.some(tab => tab.value === activeBreedFilter.value)) {
+      activeBreedFilter.value = 'all'
+    }
     loadDogs()
+  }
+})
+
+watch(breedFilterTabs, (tabs) => {
+  if (!tabs.some(tab => tab.value === activeBreedFilter.value)) {
+    activeBreedFilter.value = 'all'
   }
 })
 
@@ -425,6 +481,36 @@ function roleLabel(role: string) {
     '外部种公': '外部种公',
   }
   return map[role] || role
+}
+
+function dogMetaText(dog: Dog) {
+  const parts = [normalizeBreed(dog)]
+  if (dog.gender) parts.push(dog.gender)
+  parts.push(formatAge(dog.birth_date) || '未知')
+  parts.push(roleLabel(dog.role))
+  return parts.join(' · ')
+}
+
+function normalizeBreed(dog: Pick<Dog, 'breed'>) {
+  return dog.breed?.trim() || '马尔济斯'
+}
+
+function compareString(a?: string | null, b?: string | null) {
+  return `${a || ''}`.localeCompare(`${b || ''}`, 'zh-Hans-CN')
+}
+
+function isFilterActive(value: string) {
+  return breedFilterTabs.value.length
+    ? activeBreedFilter.value === value
+    : activeFilter.value === value
+}
+
+function selectFilter(value: string) {
+  if (breedFilterTabs.value.length) {
+    activeBreedFilter.value = value
+  } else {
+    activeFilter.value = value
+  }
 }
 
 function avatarColorClass(dog: Dog) {
@@ -598,13 +684,18 @@ function formatAge(birthTs?: number | null) {
   margin-bottom: 12px;
 }
 
-.b-dog-picker__filters {
-  display: flex;
-  gap: 6px;
+.b-dog-picker__filters-scroll {
   flex: 1;
-  overflow-x: auto;
+  min-width: 0;
+  white-space: nowrap;
   scrollbar-width: none;
   &::-webkit-scrollbar { display: none; }
+}
+
+.b-dog-picker__filters {
+  display: inline-flex;
+  gap: 8px;
+  min-width: max-content;
 }
 
 .b-dog-picker__select-all {

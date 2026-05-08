@@ -2607,6 +2607,7 @@ const addRecordGroups = computed(() => createDogDetailAddRecordGroups({
   gender: dog.value?.gender,
   allowBreeding: dog.value?.role !== '幼崽',
   activeCycleStatus: activeCycle.value?.status,
+  activeCycleRecords: activeCycleSummaryDetail.value?.records || [],
   statuses: statuses.value,
   includeBreedingHint: !!activeCycle.value?._id,
 }))
