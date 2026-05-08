@@ -13,6 +13,7 @@ import {
   getLocalKennelDashboardStats,
   getLocalLitterDetail,
   getLocalLitterProfit,
+  getLocalMedicationTaskDetail,
   getLocalProjectionParams,
   getLocalSaleDetail,
   getLocalTaskById,
@@ -80,10 +81,20 @@ describe('local domain repository', () => {
       updated_at: now,
     }])
     await localDb.replaceTable('litters', [])
+    await localDb.replaceTable('breeding_records', [])
 
     const dogs = await listLocalDogsWithStatus('fam_1')
     expect(dogs).toHaveLength(1)
     expect(dogs[0].statuses.map(status => status.type)).toEqual(['生病中', '用药中', '怀孕中'])
+    expect(dogs[0].statuses.find(status => status.type === '生病中')?.relationType).toBe('standalone')
+    expect(dogs[0].statuses.find(status => status.type === '用药中')?.relationType).toBe('standalone')
+
+    const detail = await getLocalDogDetail('fam_1', 'dog_1')
+    expect(detail?.statuses.find(status => status.type === '生病中')?.relationType).toBe('standalone')
+    expect(detail?.statuses.find(status => status.type === '用药中')?.relationType).toBe('standalone')
+
+    const medicationDetail = await getLocalMedicationTaskDetail('fam_1', 'med_1')
+    expect(medicationDetail?.relationType).toBe('standalone')
   })
 
   it('犬只列表默认只返回当前犬只，多去向筛选可返回历史犬只', async () => {
@@ -1798,6 +1809,39 @@ describe('local domain repository', () => {
       _id: 'cycle_number_2',
       cycleNumber: 2,
       statusLabel: '怀孕中',
+    })
+  })
+
+  it('已生产周期列表明细应优先显示关联窝存活数', async () => {
+    const now = new Date('2026-05-08T10:00:00+08:00').getTime()
+    await localDb.replaceTable('breeding_cycles', [{
+      _id: 'cycle_litter_alive',
+      family_id: 'fam_cycle_alive',
+      dam_id: 'dam_cycle_alive',
+      dam_name: '肉肉',
+      status: '已生产',
+      start_date: now - (65 * 86400000),
+      updated_at: now,
+      record_count: 0,
+    }])
+    await localDb.replaceTable('litters', [{
+      _id: 'litter_cycle_alive',
+      family_id: 'fam_cycle_alive',
+      cycle_id: 'cycle_litter_alive',
+      dam_id: 'dam_cycle_alive',
+      dam_name: '肉肉',
+      birth_date: now - (2 * 86400000),
+      total_born: 4,
+      born_alive: 4,
+      updated_at: now,
+    }])
+
+    const cycles = await listLocalBreedingCycles('fam_cycle_alive')
+
+    expect(cycles[0]).toMatchObject({
+      _id: 'cycle_litter_alive',
+      detail: '存活 4/4',
+      statusLabel: '已生产',
     })
   })
 

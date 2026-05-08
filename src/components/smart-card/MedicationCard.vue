@@ -215,7 +215,7 @@ function taskStatusLabel(task: any): string {
 
 function relationLabel(dog: any): string {
   if (dog?.relationType === 'linked') return '关联疾病'
-  if (dog?.relationType === 'fallback') return '推断关联'
+  if (dog?.relationType === 'fallback') return '可能关联当前疾病'
   return '独立用药'
 }
 

@@ -132,7 +132,13 @@ function getBeijingElapsedDays(startTs: number, nowTs = Date.now()) {
   return Math.max(0, Math.floor((startOfDay(nowTs) - startOfDay(startTs)) / 86400000))
 }
 
-function buildIllnessRelationType(illnessId: string, activeMedicationTasks: any[]) {
+function isTreatingIllness(illness: any) {
+  return String(illness?.details?.treatment_status || '观察中').trim() === '治疗中'
+}
+
+function buildIllnessRelationType(illness: any, activeMedicationTasks: any[]) {
+  if (!isTreatingIllness(illness)) return 'standalone'
+  const illnessId = illness?._id
   if (activeMedicationTasks.some(task => task?.source_record_id === illnessId)) return 'linked'
   if (activeMedicationTasks.some(task => !task?.source_record_id)) return 'fallback'
   return 'standalone'
@@ -140,7 +146,7 @@ function buildIllnessRelationType(illnessId: string, activeMedicationTasks: any[
 
 function getIllnessRelationLabel(relationType: 'linked' | 'fallback' | 'standalone') {
   if (relationType === 'linked') return '关联用药'
-  if (relationType === 'fallback') return '按当前治疗状态推断关联'
+  if (relationType === 'fallback') return '可能关联当前用药'
   return '未关联用药'
 }
 
@@ -163,7 +169,7 @@ function buildListIllnessStatuses(illnesses: any[] = [], activeMedicationTasks: 
   const latest = sortedRecords[0]
   const illnessStartTs = latest?.details?.start_date || latest?.date || latest?.created_at || 0
   const illnessDay = labels.length === 1 ? getIllnessDayCount(illnessStartTs) : null
-  const relationType = buildIllnessRelationType(firstRecordId, activeMedicationTasks)
+  const relationType = buildIllnessRelationType(latest, activeMedicationTasks)
   const meta = [
     ...(relationType === 'standalone' ? [] : [{ icon: 'link', text: getIllnessRelationLabel(relationType) }]),
     ...(illnessDay ? [{ icon: 'schedule', text: `第${illnessDay}天` }] : []),
@@ -198,7 +204,7 @@ function buildDetailIllnessStatuses(illnesses: any[] = [], activeMedicationTasks
       ? symptomTags.join(' / ')
       : `${symptomTags.slice(0, 2).join(' / ')} 等${symptomTags.length}项`
     const treatmentStatus = illness?.details?.treatment_status || '观察中'
-    const relationType = buildIllnessRelationType(illness._id, activeMedicationTasks)
+    const relationType = buildIllnessRelationType(illness, activeMedicationTasks)
 
     return {
       type: '生病中',
@@ -249,13 +255,13 @@ function pickPreferredMedicationTask(currentTask: any, nextTask: any) {
 
 function buildMedicationRelationType(task: any, illnesses: any[]) {
   if (task?.source_record_id) return 'linked'
-  if (illnesses.length > 0) return 'fallback'
+  if (illnesses.some(illness => isTreatingIllness(illness))) return 'fallback'
   return 'standalone'
 }
 
 function getMedicationRelationLabel(relationType: 'linked' | 'fallback' | 'standalone') {
   if (relationType === 'linked') return '关联疾病'
-  if (relationType === 'fallback') return '按当前治疗状态推断关联'
+  if (relationType === 'fallback') return '可能关联当前疾病'
   return '独立用药'
 }
 
@@ -339,7 +345,7 @@ function buildListMedicationStatus(tasks: any[] = [], nowTs = Date.now(), active
     detail: drugName,
     relationType,
     progress: { current: Math.min(currentDay, totalDays), total: totalDays },
-    meta: relationType === 'standalone' ? [] : [{ icon: 'link', text: relationType === 'linked' ? '关联疾病' : '按当前治疗状态推断关联' }],
+    meta: relationType === 'standalone' ? [] : [{ icon: 'link', text: getMedicationRelationLabel(relationType) }],
     activityTs: preferredTask?.updated_at || preferredTask?.created_at || 0,
   }]
 }
@@ -786,7 +792,7 @@ function getCycleStatusOrder(status?: string) {
   return 3
 }
 
-function buildCycleProjection(row: Record<string, any>) {
+function buildCycleProjection(row: Record<string, any>, linkedLitter?: Record<string, any> | null) {
   const referenceTs = Number(row.mated_at || row.start_date || row.updated_at || row.created_at || 0)
   const daysPassed = referenceTs ? Math.max(1, getBeijingElapsedDays(referenceTs) + (row.status === '怀孕中' ? 0 : 1)) : 0
   let detail = row.start_date ? formatDate(row.start_date) : `${Number(row.record_count || 0)}条记录`
@@ -795,6 +801,10 @@ function buildCycleProjection(row: Record<string, any>) {
     detail = `发情第${Math.max(1, getBeijingElapsedDays(Number(row.start_date)) + 1)}天`
   } else if (row.status === '怀孕中' && referenceTs) {
     detail = `怀孕第${daysPassed}天`
+  } else if (row.status === '已生产' && linkedLitter) {
+    const aliveCount = Number(linkedLitter.born_alive || linkedLitter.total_born || 0)
+    const totalCount = Number(linkedLitter.total_born || linkedLitter.born_alive || 0)
+    detail = `存活 ${aliveCount}/${totalCount}`
   } else if (row.status === '已生产' && row.birth_date) {
     detail = `生产于 ${formatDate(row.birth_date)}`
   }
@@ -927,11 +937,39 @@ export async function listLocalBreedingCycles(
       return true
     }),
   ])
+  const cycleIds = rows.map(row => row._id).filter(Boolean)
+  const litters = cycleIds.length
+    ? await localDb.query<any>('litters', row =>
+      row.family_id === familyId
+      && !row.deleted_at
+      && cycleIds.includes(row.cycle_id),
+      { sort: sortByRecent },
+    )
+    : []
+  const litterIds = litters.map(row => row._id).filter(Boolean)
+  const puppies = litterIds.length
+    ? await localDb.query<any>('dogs', row =>
+      row.family_id === familyId
+      && !row.deleted_at
+      && litterIds.includes(row.origin_litter_id),
+    )
+    : []
+  const puppyCountByLitter = puppies.reduce<Record<string, number>>((map, puppy) => {
+    const sourceLitterId = String(puppy.origin_litter_id || '')
+    map[sourceLitterId] = (map[sourceLitterId] || 0) + 1
+    return map
+  }, {})
+  const litterByCycleId = new Map<string, Record<string, any>>()
+  litters.forEach((litter) => {
+    const cycleId = String(litter.cycle_id || '')
+    if (!cycleId || litterByCycleId.has(cycleId)) return
+    litterByCycleId.set(cycleId, normalizeLitterBirthCounts(litter, puppyCountByLitter[litter._id] || 0))
+  })
   const cycleNumberById = new Map(attachCycleNumbers(familyCycles.map(row => ({ ...row }))).map(row => [row._id, row.cycle_number]))
   return rows.map(row => buildCycleProjection({
     ...row,
     cycle_number: cycleNumberById.get(row._id) || row.cycle_number,
-  })) as Array<BreedingCycle & ReturnType<typeof buildCycleProjection>>
+  }, litterByCycleId.get(row._id))) as Array<BreedingCycle & ReturnType<typeof buildCycleProjection>>
 }
 
 export async function listLocalMatingRecordsBySire(familyId: string, input: { sireId?: string; sireName?: string } = {}) {
@@ -2554,6 +2592,7 @@ export async function getLocalMedicationTaskDetail(familyId: string, taskId: str
     const fallback = illnesses
       .filter(item => item.dog_id === task.dog_id)
       .filter(isActiveIllnessRecord)
+      .filter(isTreatingIllness)
       .sort(sortByRecent)[0]
     if (fallback) relationType = 'fallback'
   }

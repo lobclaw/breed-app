@@ -1480,6 +1480,47 @@ describe('health-service', () => {
       })
     })
 
+    it('用药详情不应把观察中疾病推断为关联来源', async () => {
+      const now = new Date('2026-04-23T10:00:00+08:00').getTime()
+      vi.spyOn(Date, 'now').mockReturnValue(now)
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+
+      seedCollection('health_records', [{
+        _id: 'ill_med_detail_observe',
+        type: 'illness',
+        dog_id: 'dog_1',
+        dog_name: '花花',
+        family_id: familyId,
+        deleted_at: null,
+        date: now - DAY_MS,
+        details: {
+          primary_condition: '感冒',
+          condition: '感冒',
+          treatment_status: '观察中',
+        },
+        created_at: now - DAY_MS,
+        updated_at: now - DAY_MS,
+      }])
+      seedCollection('medication_tasks', [{
+        _id: 'med_detail_observe',
+        dog_id: 'dog_1',
+        dog_name: '花花',
+        family_id: familyId,
+        drug_name: '阿莫西林',
+        frequency: 1,
+        duration_days: 3,
+        actual_start_date: now - DAY_MS,
+        status: '进行中',
+        created_at: now - DAY_MS,
+        updated_at: now - DAY_MS,
+      }])
+
+      const result = await healthService.getMedicationTaskDetail.call(ctx, { id: 'med_detail_observe' })
+
+      expect(result.data.relationType).toBe('standalone')
+      expect(result.data.linkedIllness).toBeNull()
+    })
+
     it('疾病详情应返回关联中的用药与历史疗程', async () => {
       const now = new Date('2026-04-23T10:00:00+08:00').getTime()
       vi.spyOn(Date, 'now').mockReturnValue(now)

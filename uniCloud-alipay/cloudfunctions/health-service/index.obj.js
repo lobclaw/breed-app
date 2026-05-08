@@ -393,6 +393,10 @@ function isActiveIllnessRecord(record) {
   return record?.type === 'illness' && (record.details?.treatment_status || '观察中') !== '已康复'
 }
 
+function isTreatingIllnessRecord(record) {
+  return record?.type === 'illness' && String(record.details?.treatment_status || '观察中').trim() === '治疗中'
+}
+
 function getRecordActivityTs(record) {
   return record?.updated_at || record?.date || record?.created_at || 0
 }
@@ -2284,7 +2288,7 @@ module.exports = {
           deleted_at: null,
         })
         .get()
-      const latestFallbackIllness = sortRecordsByActivityDesc((activeIllnesses || []).filter(isActiveIllnessRecord))[0]
+      const latestFallbackIllness = sortRecordsByActivityDesc((activeIllnesses || []).filter(isActiveIllnessRecord).filter(isTreatingIllnessRecord))[0]
       if (latestFallbackIllness) relationType = 'fallback'
     }
 

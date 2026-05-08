@@ -382,7 +382,7 @@ const relationType = computed<'linked' | 'fallback' | 'standalone'>(() => {
 })
 const relationTypeLabel = computed(() => {
   if (relationType.value === 'linked') return '关联疾病'
-  if (relationType.value === 'fallback') return '未明确关联'
+  if (relationType.value === 'fallback') return '可能关联当前疾病'
   return '独立用药'
 })
 const linkedIllnessSymptomText = computed(() => {

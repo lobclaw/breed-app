@@ -289,6 +289,10 @@ function getIllnessSymptomSummary(source = {}, limit = 2) {
   return `${tags.slice(0, limit).join(' / ')} 等${tags.length}项`
 }
 
+function isTreatingIllness(illness) {
+  return String(illness?.details?.treatment_status || '观察中').trim() === '治疗中'
+}
+
 function buildMedicationRelationInfo(task, illnesses = []) {
   const illnessById = new Map((illnesses || []).map(illness => [illness._id, illness]))
   if (task?.source_record_id) {
@@ -298,11 +302,13 @@ function buildMedicationRelationInfo(task, illnesses = []) {
       linkedIllness: illnessById.get(task.source_record_id) || null,
     }
   }
-  const latestIllness = [...(illnesses || [])].sort((a, b) => (b.updated_at || b.date || b.created_at || 0) - (a.updated_at || a.date || a.created_at || 0))[0]
+  const latestIllness = [...(illnesses || [])]
+    .filter(isTreatingIllness)
+    .sort((a, b) => (b.updated_at || b.date || b.created_at || 0) - (a.updated_at || a.date || a.created_at || 0))[0]
   if (latestIllness) {
     return {
       relationType: 'fallback',
-      relationLabel: '按当前治疗状态推断关联',
+      relationLabel: '可能关联当前疾病',
       linkedIllness: latestIllness,
     }
   }
@@ -314,11 +320,14 @@ function buildMedicationRelationInfo(task, illnesses = []) {
 }
 
 function buildIllnessRelationInfo(illness, tasks = []) {
+  if (!isTreatingIllness(illness)) {
+    return { relationType: 'standalone', relationLabel: '未关联用药' }
+  }
   if ((tasks || []).some(task => task?.source_record_id === illness?._id)) {
     return { relationType: 'linked', relationLabel: '关联用药' }
   }
   if ((tasks || []).some(task => !task?.source_record_id)) {
-    return { relationType: 'fallback', relationLabel: '按当前治疗状态推断关联' }
+    return { relationType: 'fallback', relationLabel: '可能关联当前用药' }
   }
   return { relationType: 'standalone', relationLabel: '未关联用药' }
 }

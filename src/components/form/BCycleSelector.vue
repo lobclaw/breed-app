@@ -13,15 +13,30 @@
 -->
 <template>
   <BSheet v-model:visible="sheetVisible" title="选择繁育周期" height="50%">
+    <view class="b-cycle-selector__search">
+      <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">search</text>
+      <input
+        v-model="searchKeyword"
+        class="b-cycle-selector__search-input"
+        placeholder="搜索母犬名或繁育次数..."
+        confirm-type="search"
+      />
+      <text
+        v-if="searchKeyword"
+        class="material-icons-round b-cycle-selector__search-clear"
+        @click="searchKeyword = ''"
+      >close</text>
+    </view>
+
     <!-- 加载态 -->
     <BSkeleton v-if="loading" :rows="3" />
 
     <!-- 空状态 -->
     <BEmpty
-      v-else-if="!cycles.length"
-      icon="cycle"
-      title="暂无繁育周期"
-      description="当前没有可选的繁育周期记录"
+      v-else-if="!filteredCycles.length"
+      :icon="searchKeyword ? 'search_off' : 'cycle'"
+      :title="searchKeyword ? '没有匹配的繁育周期' : '暂无繁育周期'"
+      :description="searchKeyword ? '换个关键词试试，或清空搜索查看全部周期' : '当前没有可选的繁育周期记录'"
     />
 
     <!-- 列表 -->
@@ -133,14 +148,35 @@ const loading = ref(false)
 const cycles = ref<Cycle[]>([])
 const selected = ref('')
 const selectedIdsState = ref<string[]>([])
+const searchKeyword = ref('')
 const { currentFamily } = useAuth()
 
-const activeCycles = computed(() => cycles.value.filter(c => !['失败', '放弃'].includes(String(c.status || ''))))
-const closedCycles = computed(() => cycles.value.filter(c => ['失败', '放弃'].includes(String(c.status || ''))))
+const filteredCycles = computed(() => {
+  if (!searchKeyword.value.trim()) return cycles.value
+  const keyword = searchKeyword.value.trim().toLowerCase()
+  return cycles.value.filter((cycle) => {
+    const cycleNumber = Number(cycle.cycleNumber || cycle.cycle_number || 0)
+    const keywords = [
+      cycle.damName || '',
+      cycle.dam_name || '',
+      cycle.statusLabel || '',
+      cycle.status || '',
+      cycle.detail || '',
+      formatCycleMeta(cycle),
+      cycleNumber > 0 ? `第${cycleNumber}次繁育` : '',
+      cycleNumber > 0 ? `${cycleNumber}次繁育` : '',
+    ]
+    return keywords.some(item => String(item).toLowerCase().includes(keyword))
+  })
+})
+const activeCycles = computed(() => filteredCycles.value.filter(c => !['失败', '放弃'].includes(String(c.status || ''))))
+const closedCycles = computed(() => filteredCycles.value.filter(c => ['失败', '放弃'].includes(String(c.status || ''))))
 
 watch(() => props.visible, async (val) => {
   if (val) {
     selectedIdsState.value = [...(props.selectedIds || [])]
+    selected.value = props.selectedIds?.[0] || ''
+    searchKeyword.value = ''
     await fetchCycles()
   }
 })
@@ -209,6 +245,34 @@ function isSelected(id: string) {
 </script>
 
 <style lang="scss" scoped>
+.b-cycle-selector__search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 14px;
+  background: var(--card-dim);
+  border-radius: 20px;
+  margin-bottom: 12px;
+}
+
+.b-cycle-selector__search-input {
+  flex: 1;
+  height: 40px;
+  line-height: 40px;
+  font-size: 13px;
+  color: var(--text-1);
+  background: transparent;
+  border: none;
+  outline: none;
+}
+
+.b-cycle-selector__search-clear {
+  font-size: 18px;
+  color: var(--text-3);
+  padding: 2px;
+}
+
 .b-cycle-selector {
   display: flex;
   flex-direction: column;
