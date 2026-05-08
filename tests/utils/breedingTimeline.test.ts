@@ -146,15 +146,50 @@ describe('breedingTimeline', () => {
   it('失败或放弃的周期应把当前节点标记为终止', () => {
     const items = buildBreedingTimelineSyntheticItems(createCycle({
       status: '失败',
-    }), [], now)
+    }), [
+      createRecord('abnormal_termination', '2026-04-20T00:00:00+08:00', {
+        termination_type: '未怀孕',
+      }),
+    ], now)
 
     expect(items.map(item => item.key)).toEqual(['current'])
     expect(items[0]).toMatchObject({
       kind: 'current',
       label: '终止',
       tone: 'red',
-      title: '失败',
-      summary: '失败',
+      title: '本次繁育已终止',
+      summary: '异常终止：未怀孕',
+    })
+  })
+
+  it('放弃周期的当前节点应区分周期结果和记录事实', () => {
+    const items = buildBreedingTimelineSyntheticItems(createCycle({
+      status: '放弃',
+    }), [
+      createRecord('abnormal_termination', '2026-04-20T00:00:00+08:00', {
+        termination_type: '放弃配种',
+      }),
+    ], now)
+
+    expect(items.map(item => item.key)).toEqual(['current'])
+    expect(items[0]).toMatchObject({
+      kind: 'current',
+      label: '终止',
+      tone: 'red',
+      title: '本次繁育已终止',
+      summary: '异常终止：放弃配种',
+    })
+  })
+
+  it('无异常终止记录的放弃周期应显示放弃日期', () => {
+    const items = buildBreedingTimelineSyntheticItems(createCycle({
+      status: '放弃',
+      updated_at: new Date('2026-05-06T00:00:00+08:00').getTime(),
+    }), [], now)
+
+    expect(items[0]).toMatchObject({
+      title: '本次繁育已放弃',
+      summary: '放弃于 2026-05-06',
     })
   })
 })

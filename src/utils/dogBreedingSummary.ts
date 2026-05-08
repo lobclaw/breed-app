@@ -274,7 +274,8 @@ export function buildActiveCycleSummaryViewModel(
 
 export function buildHistoryCycleSummaryViewModel(
   cycle?: BreedingCycle | null,
-  litter?: Litter | null
+  litter?: Litter | null,
+  records: BreedingRecord[] = [],
 ): HistoryCycleSummaryViewModel {
   const title = cycle?.cycle_number ? `第${cycle.cycle_number}次周期` : '繁育周期'
   const metaParts = []
@@ -297,10 +298,9 @@ export function buildHistoryCycleSummaryViewModel(
     } else {
       resultParts.push('已生产')
     }
-  } else if (cycle?.status === '失败') {
-    resultParts.push('未成功')
-  } else if (cycle?.status === '放弃') {
-    resultParts.push('已放弃')
+  } else if (cycle?.status === '失败' || cycle?.status === '放弃') {
+    const abnormalTermination = getLatestBreedingRecord(records, 'abnormal_termination')
+    resultParts.push(abnormalTermination ? '异常终止' : cycle.status === '失败' ? '未成功' : '已放弃')
   }
 
   const statusText = getHistoryCycleStatusText(cycle, litter)

@@ -456,6 +456,10 @@ function isLocalPregnancyRejected(details: Record<string, any> = {}) {
   return details.confirmed === '否' || details.confirmed === false
 }
 
+function isLocalAbandonMatingTermination(details: Record<string, any> = {}) {
+  return details.termination_type === '放弃配种'
+}
+
 function shouldClearLocalBreedingMilestones(data: Record<string, any>) {
   if (['heat', 'follicle_check', 'mating', 'abnormal_termination'].includes(data.type)) return true
   if (data.type === 'pregnancy_check') {
@@ -2363,6 +2367,12 @@ class LocalSyncRuntime {
     const existingCycle = data.cycle_id
       ? await localDb.findById<any>('breeding_cycles', data.cycle_id)
       : currentCycles[0]
+    if (data.type === 'abnormal_termination' && existingCycle?.status === '发情中' && !isLocalAbandonMatingTermination(data.details || {})) {
+      throw new Error('发情中周期只能选择放弃配种')
+    }
+    if (data.type === 'abnormal_termination' && existingCycle?.status === '怀孕中' && isLocalAbandonMatingTermination(data.details || {})) {
+      throw new Error('放弃配种仅适用于发情中周期')
+    }
     const cycleId = existingCycle?._id || createStableEntityId('breeding_cycle')
     const recordId = createStableEntityId('breeding_record')
     const nextStatus = data.type === 'heat'
@@ -2370,7 +2380,7 @@ class LocalSyncRuntime {
       : data.type === 'mating'
         ? '怀孕中'
         : data.type === 'abnormal_termination'
-          ? '失败'
+          ? isLocalAbandonMatingTermination(data.details || {}) ? '放弃' : '失败'
           : data.type === 'pregnancy_check' && isLocalPregnancyRejected(data.details || {})
             ? '失败'
             : existingCycle?.status || '发情中'

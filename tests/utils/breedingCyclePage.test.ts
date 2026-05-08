@@ -79,15 +79,15 @@ describe('breeding cycle page source contract', () => {
     expect(source).toContain('.timeline-desc--rose')
   })
 
-  it('应把记录入口归到添加记录，更多操作只保留未配种放弃', () => {
-    expect(source).toContain('const hasMatingRecord = computed(() => records.value.some(record => record?.type === \'mating\'))')
-    expect(source).toContain("cycle.value?.status === '发情中'")
-    expect(source).toContain('!hasMatingRecord.value')
+  it('应把记录入口归到添加记录，更多操作保留独立放弃周期动作', () => {
+    expect(source).toContain('const canAbandonCycle = computed(() => canAddRecord.value)')
     expect(source).toContain('const hasMoreActions = computed(() => canAbandonCycle.value)')
-    expect(source).toContain('<text class="more-action-label">放弃本周期</text>')
+    expect(source).toContain('<text class="more-action-label">放弃本次繁育</text>')
+    expect(source).toContain('不创建繁育记录，仅关闭当前繁育。')
     expect(source).toContain('createCycleBreedingAddRecordGroups(cycle.value?.status, { records: records.value })')
     expect(source).toContain("if (item.page === 'birth-wizard')")
     expect(source).toContain('/pages/breeding/birth-wizard?cycleId=${cycleId}&damName=${damName}')
+    expect(source).not.toContain('const hasMatingRecord = computed')
     expect(source).not.toContain('const canAddBirth')
     expect(source).not.toContain('handleAddBirthFromMore')
     expect(source).not.toContain('goToTerminationRecord')

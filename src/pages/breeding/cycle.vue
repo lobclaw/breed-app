@@ -293,21 +293,16 @@
         <view class="more-actions">
           <view v-if="canAbandonCycle" class="more-action-item" @click="handleAbandonCycleFromMore">
             <text class="material-icons-round" style="font-size: 20px; color: var(--amber);">block</text>
-            <text class="more-action-label">放弃本周期</text>
+            <text class="more-action-label">放弃本次繁育</text>
           </view>
         </view>
       </BSheet>
 
-      <BSheet v-model:visible="showCloseCycleSheet" title="放弃本周期" height="auto">
+      <BSheet v-model:visible="showCloseCycleSheet" title="放弃本次繁育" height="auto">
         <view class="close-cycle-sheet">
-          <view class="close-cycle-sheet__warning">
-            <view class="close-cycle-sheet__warning-icon">
-              <text class="material-icons-round">block</text>
-            </view>
-            <view class="close-cycle-sheet__warning-copy">
-              <text class="close-cycle-sheet__warning-title">确认放弃当前周期</text>
-              <text class="close-cycle-sheet__warning-desc">本次发情未完成配种，确认后会直接将周期标记为放弃，并取消相关未完成提醒。</text>
-            </view>
+          <view class="close-cycle-sheet__notice">
+            <text class="material-icons-round close-cycle-sheet__notice-icon">info</text>
+            <text class="close-cycle-sheet__notice-text">确认后会直接将本次繁育标记为放弃，并取消相关未完成提醒。</text>
           </view>
           <view class="close-cycle-sheet__options">
             <view
@@ -319,8 +314,8 @@
                 <text class="material-icons-round">block</text>
               </view>
               <view class="close-cycle-sheet__option-copy">
-                <text class="close-cycle-sheet__option-title">确认放弃本周期</text>
-                <text class="close-cycle-sheet__option-desc">不创建繁育记录，仅关闭当前未配种周期。</text>
+                <text class="close-cycle-sheet__option-title">确认放弃本次繁育</text>
+                <text class="close-cycle-sheet__option-desc">不创建繁育记录，仅关闭当前繁育。</text>
               </view>
               <text class="material-icons-round close-cycle-sheet__option-arrow">chevron_right</text>
             </view>
@@ -392,8 +387,7 @@ const isTerminal = computed(() => {
 
 const cycleAddRecordGroups = computed(() => createCycleBreedingAddRecordGroups(cycle.value?.status, { records: records.value }))
 const canAddRecord = computed(() => !loading.value && !!cycle.value && !isTerminal.value)
-const hasMatingRecord = computed(() => records.value.some(record => record?.type === 'mating'))
-const canAbandonCycle = computed(() => canAddRecord.value && cycle.value?.status === '发情中' && !hasMatingRecord.value)
+const canAbandonCycle = computed(() => canAddRecord.value)
 const hasMoreActions = computed(() => canAbandonCycle.value)
 const hasHeaderActions = computed(() => canAddRecord.value || hasMoreActions.value)
 
@@ -659,7 +653,7 @@ async function closeCycleAsAbandoned() {
   try {
     await localSyncRuntime.closeBreedingCycleLocally(currentFamily.value?._id || '', cycleId, '放弃')
     showCloseCycleSheet.value = false
-    showSubmitBanner('已记录放弃本周期')
+    showSubmitBanner('已记录放弃本次繁育')
     await loadData()
   } catch (error: any) {
     uni.showToast({ title: error?.message || '操作失败，请重试', icon: 'none' })
@@ -1408,46 +1402,24 @@ onShow(() => {
   padding-bottom: 12px;
 }
 
-.close-cycle-sheet__warning {
+.close-cycle-sheet__notice {
   display: flex;
-  gap: 12px;
-  padding: 14px;
-  border-radius: var(--radius-card);
-  background: rgba(232, 155, 62, 0.1);
-  margin-bottom: 12px;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 2px 4px 14px;
+  margin-bottom: 4px;
 }
 
-.close-cycle-sheet__warning-icon {
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-icon);
-  background: var(--icon-amber);
+.close-cycle-sheet__notice-icon {
+  font-size: 17px;
   color: var(--amber);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   flex-shrink: 0;
-
-  .material-icons-round {
-    font-size: 19px;
-  }
+  margin-top: 1px;
 }
 
-.close-cycle-sheet__warning-copy {
+.close-cycle-sheet__notice-text {
   flex: 1;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.close-cycle-sheet__warning-title {
-  font-size: 15px;
-  font-weight: 800;
-  color: var(--text-1);
-}
-
-.close-cycle-sheet__warning-desc {
   font-size: 12px;
   line-height: 1.55;
   font-weight: 600;

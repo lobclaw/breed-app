@@ -315,6 +315,18 @@ describe('dogBreedingSummary', () => {
     expect(abandoned.statusTone).toBe('red')
   })
 
+  it('存在异常终止记录的历史周期应显示异常终止结果', () => {
+    const summary = buildHistoryCycleSummaryViewModel(createCycle({ status: '放弃' }), null, [
+      createRecord('abnormal_termination', '2026-04-20T00:00:00+08:00', {
+        termination_type: '放弃配种',
+      }),
+    ] as any)
+
+    expect(summary.result).toBe('异常终止')
+    expect(summary.statusText).toBe('已终止')
+    expect(summary.statusTone).toBe('red')
+  })
+
   it('已生产但未断奶的周期应归为当前进行中，不进入繁育历史', () => {
     const cycle = createCycle({ status: '已生产' })
     const litter = createLitter({ weaned_at: null })

@@ -735,6 +735,62 @@ describe('breeding-service', () => {
       expect(res.data.recordId).toBeTruthy()
     })
 
+    it('发情中异常终止选择放弃配种时应创建记录并将周期标记为放弃', async () => {
+      const now = Date.now()
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      seedCollection('breeding_cycles', [{
+        _id: 'cycle_abandon_mating',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        status: '发情中',
+        created_at: now,
+        updated_at: now,
+      }])
+
+      const res = await breedingService.addBreedingRecord.call(ctx, {
+        type: 'abnormal_termination',
+        dog_id: 'dam_1',
+        cycle_id: 'cycle_abandon_mating',
+        date: now,
+        details: {
+          termination_type: '放弃配种',
+        },
+      })
+
+      const { data: cycles } = await db.collection('breeding_cycles').doc('cycle_abandon_mating').get()
+      const { data: records } = await db.collection('breeding_records')
+        .where({ cycle_id: 'cycle_abandon_mating', type: 'abnormal_termination' })
+        .get()
+      expect(res.data.recordId).toBeTruthy()
+      expect(cycles[0].status).toBe('放弃')
+      expect(records[0].details?.termination_type).toBe('放弃配种')
+    })
+
+    it('放弃配种只能用于发情中周期', async () => {
+      const now = Date.now()
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      seedCollection('breeding_cycles', [{
+        _id: 'cycle_pregnant_abandon_mating',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        status: '怀孕中',
+        created_at: now,
+        updated_at: now,
+      }])
+
+      await expect(breedingService.addBreedingRecord.call(ctx, {
+        type: 'abnormal_termination',
+        dog_id: 'dam_1',
+        cycle_id: 'cycle_pregnant_abandon_mating',
+        date: now,
+        details: {
+          termination_type: '放弃配种',
+        },
+      })).rejects.toThrow('放弃配种仅适用于发情中周期')
+    })
+
     it('应支持删除发情观察记录', async () => {
       const now = Date.now()
       seedCollection('breeding_records', [{

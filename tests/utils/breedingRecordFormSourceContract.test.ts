@@ -14,4 +14,12 @@ describe('breeding record form source contract', () => {
     expect(source).toContain('const completedTaskIds = prefillTaskId.value && prefillTaskIsPersisted.value ? [prefillTaskId.value] : []')
     expect(source).toContain('message: buildRecordFeedbackMessage(1, completedTaskIds.length)')
   })
+
+  it('异常终止类型应按当前周期状态过滤放弃配种', () => {
+    expect(source).toContain("const ABANDON_MATING_TERMINATION = '放弃配种'")
+    expect(source).toContain("if (terminationCycleStatus.value === '发情中') return [ABANDON_MATING_TERMINATION]")
+    expect(source).toContain('return pregnancyTerminationTypes')
+    expect(source).toContain('visibleTerminationTypes.value.includes(details.termination_type)')
+    expect(source).toContain('details.termination_type = \'\'')
+  })
 })

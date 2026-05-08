@@ -397,7 +397,7 @@
             <view class="field-label"><text>类型</text></view>
             <view class="pill-select">
               <view
-                v-for="terminationType in terminationTypes"
+                v-for="terminationType in visibleTerminationTypes"
                 :key="terminationType"
                 class="pill-select__item"
                 :class="{ 'pill-select__item--active': details.termination_type === terminationType }"
@@ -489,6 +489,7 @@ import {
   getLocalNextMatingNumberPreview,
   getLocalTaskById,
 } from '@/localdb/domain-repository'
+import { findLocal } from '@/localdb'
 import { localSyncRuntime } from '@/localdb/runtime'
 import { resolveBreedingRouteQuery } from '@/utils/recordFormRoutes'
 import { getDefaultExtraArrangementDate, type ExtraArrangementKind } from '@/utils/breedingExtraArrangement'
@@ -581,11 +582,15 @@ const dischargeStatus = ref('')
 const selectedSymptoms = ref<string[]>([])
 const matingPreviewRequestToken = ref(0)
 const latestHeatRequestToken = ref(0)
+const cycleStatusRequestToken = ref(0)
 const latestHeatDates = ref<Record<string, number>>({})
+const currentCycleStatus = ref('')
 
 const matingMethods = ['人工授精', '自然交配']
 const follicleResults = ['发育中', '已成熟', '发育不良', '其他']
-const terminationTypes = ['流产', '死胎', '医疗终止', '确认未怀孕']
+const ABANDON_MATING_TERMINATION = '放弃配种'
+const pregnancyTerminationTypes = ['流产', '死胎', '医疗终止', '未怀孕']
+const terminationTypes = [ABANDON_MATING_TERMINATION, ...pregnancyTerminationTypes]
 const vulvaOptions = ['硬/肿胀', '开始软化', '明显松软']
 const dischargeOptions = ['鲜红较多', '暗红减少', '淡粉/草黄色', '接近透明']
 const symptoms = ['主动靠近公犬', '接受爬跨', '翘尾侧偏', '频繁排尿', '舔舐外阴增多']
@@ -643,6 +648,23 @@ const latestHeatMetaMap = computed(() => {
     if (text) map[dogId] = `上次发情：${text}`
     return map
   }, {})
+})
+
+const selectedDogCycleStatus = computed(() => {
+  const statuses = Array.isArray(selectedDog.value?.statuses) ? selectedDog.value.statuses : []
+  const activeStatuses = statuses.filter((status: any) => status?.type === '发情中' || status?.type === '怀孕中')
+  const matchedStatus = cycleId.value
+    ? activeStatuses.find((status: any) => status?.cycleId === cycleId.value)
+    : activeStatuses[0]
+  return matchedStatus?.type || ''
+})
+
+const terminationCycleStatus = computed(() => currentCycleStatus.value || selectedDogCycleStatus.value)
+
+const visibleTerminationTypes = computed(() => {
+  if (isEdit.value) return terminationTypes
+  if (terminationCycleStatus.value === '发情中') return [ABANDON_MATING_TERMINATION]
+  return pregnancyTerminationTypes
 })
 
 const submitIdleLabel = computed(() => isEdit.value ? '保存修改' : '保存记录')
@@ -736,7 +758,7 @@ const canSubmit = computed(() => {
   if (!selectedDog.value || !date.value) return false
   if (breedingType.value === 'follicle_check') return !!details.left_count
   if (breedingType.value === 'mating') return !!selectedSire.value
-  if (breedingType.value === 'abnormal_termination') return !!details.termination_type
+  if (breedingType.value === 'abnormal_termination') return visibleTerminationTypes.value.includes(details.termination_type)
   return true
 })
 
@@ -808,7 +830,7 @@ const skeletonBlocks = computed<BreedingSkeletonBlock[]>(() => {
       { kind: 'input' },
     )
   } else if (breedingType.value === 'abnormal_termination') {
-    blocks.push({ kind: 'choice', count: 4, grid: true })
+    blocks.push({ kind: 'choice', count: visibleTerminationTypes.value.length || 4, grid: true })
   }
 
   if (showCostField.value) {
@@ -868,6 +890,19 @@ function formatDateOnly(ts?: number | null) {
 function hasCurrentHeatStatus(dog: Record<string, any>) {
   const statuses = Array.isArray(dog?.statuses) ? dog.statuses : []
   return statuses.some((status: any) => status?.type === '发情中')
+}
+
+async function refreshCurrentCycleStatus() {
+  const requestToken = ++cycleStatusRequestToken.value
+  const id = cycleId.value
+  if (!id) {
+    currentCycleStatus.value = ''
+    return
+  }
+
+  const cycle = await findLocal<any>('breeding_cycles', id).catch(() => null)
+  if (requestToken !== cycleStatusRequestToken.value) return
+  currentCycleStatus.value = cycle?.status || ''
 }
 
 async function refreshLatestHeatDates() {
@@ -1077,6 +1112,8 @@ async function loadCreateState() {
       applyTaskPrefill(task)
     }
   }
+
+  await refreshCurrentCycleStatus()
 }
 
 async function loadEditState() {
@@ -1281,6 +1318,25 @@ watch(
   async ([type, editing]) => {
     if (type !== 'mating' || editing) return
     await refreshMatingNumberPreview()
+  },
+  { immediate: true }
+)
+
+watch(
+  cycleId,
+  () => {
+    void refreshCurrentCycleStatus()
+  },
+  { immediate: true }
+)
+
+watch(
+  [breedingType, visibleTerminationTypes],
+  ([type, options]) => {
+    if (type !== 'abnormal_termination') return
+    if (details.termination_type && !options.includes(details.termination_type)) {
+      details.termination_type = ''
+    }
   },
   { immediate: true }
 )

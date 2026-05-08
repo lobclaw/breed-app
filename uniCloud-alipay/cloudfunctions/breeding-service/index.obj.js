@@ -146,6 +146,10 @@ function isPregnancyRejected(details = {}) {
   return details.confirmed === '否' || details.confirmed === false
 }
 
+function isAbandonMatingTermination(details = {}) {
+  return details.termination_type === '放弃配种'
+}
+
 async function countCycleMatingRecords(familyId, cycleId) {
   if (!cycleId) return 0
 
@@ -909,6 +913,12 @@ async function addBreedingRecordCore({
     if (!strictCycleRule.allowedStatuses.includes(cycle.status)) {
       throw new Error(strictCycleRule.errorMessage)
     }
+    if (data.type === 'abnormal_termination' && cycle.status === '发情中' && !isAbandonMatingTermination(data.details || {})) {
+      throw new Error('发情中周期只能选择放弃配种')
+    }
+    if (data.type === 'abnormal_termination' && cycle.status === '怀孕中' && isAbandonMatingTermination(data.details || {})) {
+      throw new Error('放弃配种仅适用于发情中周期')
+    }
   }
 
   const normalizedDetails = {
@@ -943,6 +953,9 @@ async function addBreedingRecordCore({
   let newStatus = STATUS_TRANSITIONS[data.type]
   if (data.type === 'pregnancy_check' && isPregnancyRejected(data.details)) {
     newStatus = '失败'
+  }
+  if (data.type === 'abnormal_termination' && isAbandonMatingTermination(data.details)) {
+    newStatus = '放弃'
   }
   if (newStatus) {
     const updateData = { status: newStatus, ...buildVersionUpdate(dbCmd, now) }

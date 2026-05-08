@@ -1904,7 +1904,7 @@ const activeCycleDueTagTitle = computed(() => {
 })
 const historyCycleCards = computed(() => {
   return pastCycles.value.map((cycle: any) => {
-    const summary = buildHistoryCycleSummaryViewModel(cycle, litterByCycleId.value.get(cycle._id) || null)
+    const summary = buildHistoryCycleSummaryViewModel(cycle, litterByCycleId.value.get(cycle._id) || null, cycle._terminal_records || [])
     return {
       ...cycle,
       summaryTitle: summary.title,

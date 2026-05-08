@@ -930,6 +930,15 @@ export async function listLocalBreedingCycles(
       { sort: sortByRecent },
     )
     : []
+  const terminalRecords = cycleIds.length
+    ? await localDb.query<any>('breeding_records', row =>
+      row.family_id === familyId
+      && !row.deleted_at
+      && cycleIds.includes(row.cycle_id)
+      && row.type === 'abnormal_termination',
+      { sort: sortByRecent },
+    )
+    : []
   const litterIds = litters.map(row => row._id).filter(Boolean)
   const puppies = litterIds.length
     ? await localDb.query<any>('dogs', row =>
@@ -950,9 +959,16 @@ export async function listLocalBreedingCycles(
     litterByCycleId.set(cycleId, normalizeLitterBirthCounts(litter, puppyCountByLitter[litter._id] || 0))
   })
   const cycleNumberById = new Map(attachCycleNumbers(familyCycles.map(row => ({ ...row }))).map(row => [row._id, row.cycle_number]))
+  const terminalRecordsByCycleId = terminalRecords.reduce<Record<string, any[]>>((map, record) => {
+    const cycleId = String(record.cycle_id || '')
+    if (!cycleId) return map
+    map[cycleId] = [...(map[cycleId] || []), record]
+    return map
+  }, {})
   return rows.map(row => buildCycleProjection({
     ...row,
     cycle_number: cycleNumberById.get(row._id) || row.cycle_number,
+    _terminal_records: terminalRecordsByCycleId[row._id] || [],
   }, litterByCycleId.get(row._id))) as Array<BreedingCycle & ReturnType<typeof buildCycleProjection>>
 }
 

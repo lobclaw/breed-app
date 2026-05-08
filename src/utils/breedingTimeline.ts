@@ -135,11 +135,38 @@ export function buildBreedingTimelineCurrentTitle(
   now = Date.now(),
   context: BreedingTimelineContext = {},
 ) {
+  if (cycle?.status === '放弃') return '本次繁育已放弃'
+  if (cycle?.status === '失败') return '本次繁育失败'
   if (cycle?.status === '已生产') {
     if (isNursingLitter(context.litter)) return formatNursingTitle(context.litter, now)
     if (context.litter?.weaned_at) return '已断奶'
   }
   return buildCompactBreedingCycleStatusTitle(cycle, records, now)
+}
+
+function getLatestAbnormalTerminationReason(records: BreedingRecord[] = []) {
+  const abnormalTermination = getLatestBreedingRecord(records, 'abnormal_termination')
+  const terminationType = abnormalTermination?.details?.termination_type
+  if (typeof terminationType === 'string' && terminationType.trim()) return terminationType.trim()
+  return ''
+}
+
+function getLatestTerminalReason(records: BreedingRecord[] = []) {
+  const abnormalTerminationReason = getLatestAbnormalTerminationReason(records)
+  if (abnormalTerminationReason) return abnormalTerminationReason
+  const pregnancyCheck = getLatestBreedingRecord(records, 'pregnancy_check')
+  const details = pregnancyCheck?.details || {}
+  if (details.confirmed === '否' || details.confirmed === false) return '未怀孕'
+  return ''
+}
+
+function getTerminalDate(
+  cycle?: BreedingCycle | null,
+  records: BreedingRecord[] = [],
+) {
+  const abnormalTermination = getLatestBreedingRecord(records, 'abnormal_termination')
+  if (typeof abnormalTermination?.date === 'number') return abnormalTermination.date
+  return cycle?.updated_at || cycle?.created_at || null
 }
 
 function buildBreedingTimelineCurrentSummary(
@@ -170,6 +197,22 @@ function buildBreedingTimelineCurrentSummary(
         : '等待确认断奶'
     }
     if (typeof context.litter?.weaned_at === 'number') return `断奶于 ${formatDate(context.litter.weaned_at)}`
+  }
+
+  const abnormalTerminationReason = getLatestAbnormalTerminationReason(records)
+  if (abnormalTerminationReason) {
+    return `异常终止：${abnormalTerminationReason}`
+  }
+
+  if (cycle.status === '放弃') {
+    const reason = getLatestTerminalReason(records)
+    const terminalDate = getTerminalDate(cycle, records)
+    return typeof terminalDate === 'number' ? `放弃于 ${formatDate(terminalDate)}` : reason ? `周期结果：${reason}` : '周期结果：放弃'
+  }
+
+  if (cycle.status === '失败') {
+    const reason = getLatestTerminalReason(records)
+    return reason ? `失败原因：${reason}` : '周期结果：失败'
   }
 
   return cycle.status
@@ -285,7 +328,7 @@ export function buildBreedingTimelineSyntheticItems(
       type: 'current',
       tone: getBreedingTimelineCurrentStatusTone(cycle, context),
       label: getBreedingTimelineCurrentLabel(cycle, context),
-      title: currentTitle,
+      title: getLatestAbnormalTerminationReason(records) ? '本次繁育已终止' : currentTitle,
       summary: buildBreedingTimelineCurrentSummary(cycle, records, context),
       date: baseDate + 1,
     })
