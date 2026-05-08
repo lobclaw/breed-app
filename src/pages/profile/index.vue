@@ -160,7 +160,7 @@
         <view class="dashboard-section__header" style="display: flex; align-items: flex-start; justify-content: space-between;">
           <view>
             <text class="dashboard-section__title">繁育状态</text>
-            <text class="dashboard-section__desc">当前需要理解的繁育阶段</text>
+            <text class="dashboard-section__desc">发情、怀孕、哺乳与生产统计</text>
           </view>
         </view>
         <view class="status-strip" style="display: flex; justify-content: space-between;">
@@ -350,10 +350,12 @@ const stats = reactive({
   soldCount: 0,
   damCount: 0,
   sireCount: 0,
+  puppyCount: 0,
   dueSoonCount: 0,
   heatCount: 0,
   pregnantCount: 0,
   nursingCount: 0,
+  deliveredCount: 0,
   monthlyIncome: 0,
   monthlyExpense: 0,
   monthlyNet: 0,
@@ -386,13 +388,13 @@ const kennelMetrics = computed(() => [
   { label: '已售', value: stats.soldCount, icon: 'verified', tone: 'teal' },
   { label: '种母', value: stats.damCount, icon: 'female', tone: 'rose' },
   { label: '种公', value: stats.sireCount, icon: 'male', tone: 'plum' },
-  { label: '待产', value: stats.dueSoonCount, icon: 'child_friendly', tone: 'red' },
+  { label: '幼崽', value: stats.puppyCount, icon: 'child_care', tone: 'amber' },
 ])
 const breedingStatusItems = computed(() => [
   { label: '发情中', value: stats.heatCount, icon: 'whatshot', tone: 'rose' },
   { label: '怀孕中', value: stats.pregnantCount, icon: 'pregnant_woman', tone: 'amber' },
   { label: '哺乳中', value: stats.nursingCount, icon: 'child_care', tone: 'teal' },
-  { label: '待产', value: stats.dueSoonCount, icon: 'child_friendly', tone: 'red' },
+  { label: '已生产', value: stats.deliveredCount, icon: 'child_friendly', tone: 'red' },
 ])
 const saleStatusItems = computed(() => [
   { label: '待售', value: stats.salePendingCount, tone: 'amber' },
@@ -420,10 +422,12 @@ async function loadStats() {
   )
   stats.damCount = activeDogs.filter(dog => dog.role === '种狗' && dog.gender === '母').length
   stats.sireCount = activeDogs.filter(dog => dog.role === '种狗' && dog.gender === '公').length
+  stats.puppyCount = activeDogs.filter(dog => dog.role === '幼崽').length
   stats.heatCount = countDogsByStatus(activeDogs, '发情中')
   stats.pregnantCount = countDogsByStatus(activeDogs, '怀孕中')
   stats.nursingCount = Math.max(countDogsByStatus(activeDogs, '哺乳中'), litters.length)
   stats.dueSoonCount = countDueSoonDogs(activeDogs)
+  stats.deliveredCount = result.deliveredCount || 0
   stats.monthlyIncome = result.monthlyIncome || 0
   stats.monthlyExpense = result.monthlyExpense || 0
   stats.monthlyNet = stats.monthlyIncome - stats.monthlyExpense

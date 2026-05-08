@@ -1023,15 +1023,17 @@ export async function getLocalKennelDashboardStats(familyId: string, options: { 
       dogs: [] as DogWithStatus[],
       litters: [] as any[],
       sales: [] as any[],
+      deliveredCount: 0,
       monthlyIncome: 0,
       monthlyExpense: 0,
     }
   }
 
-  const [activeDogs, soldDogs, litters, sales, expenses, incomes] = await Promise.all([
+  const [activeDogs, soldDogs, litters, allLitters, sales, expenses, incomes] = await Promise.all([
     listLocalDogsWithStatus(familyId),
     listLocalDogsWithStatus(familyId, { disposition: '已售' }),
-    localDb.query<any>('litters', litter => litter.family_id === familyId && !litter.weaned_at),
+    localDb.query<any>('litters', litter => litter.family_id === familyId && !litter.deleted_at && !litter.weaned_at),
+    localDb.query<any>('litters', litter => litter.family_id === familyId && !litter.deleted_at),
     localDb.query<any>('sale_records', sale => sale.family_id === familyId && !sale.deleted_at),
     localDb.query<any>('expenses', expense => expense.family_id === familyId && !expense.deleted_at),
     localDb.query<any>('incomes', income => income.family_id === familyId && !income.deleted_at),
@@ -1049,6 +1051,7 @@ export async function getLocalKennelDashboardStats(familyId: string, options: { 
     activeDogs,
     soldDogs,
     litters,
+    deliveredCount: allLitters.length,
     sales,
     monthlyIncome,
     monthlyExpense,

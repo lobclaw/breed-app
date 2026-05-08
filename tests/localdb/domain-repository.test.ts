@@ -1650,12 +1650,28 @@ describe('local domain repository', () => {
     await localDb.replaceTable('breeding_cycles', [])
     await localDb.replaceTable('health_records', [])
     await localDb.replaceTable('medication_tasks', [])
-    await localDb.replaceTable('litters', [{
-      _id: 'litter_1',
-      family_id: 'fam_1',
-      dam_id: 'dog_1',
-      updated_at: monthTs,
-    }])
+    await localDb.replaceTable('litters', [
+      {
+        _id: 'litter_1',
+        family_id: 'fam_1',
+        dam_id: 'dog_1',
+        updated_at: monthTs,
+      },
+      {
+        _id: 'litter_weaned_1',
+        family_id: 'fam_1',
+        dam_id: 'dog_1',
+        weaned_at: monthTs,
+        updated_at: monthTs,
+      },
+      {
+        _id: 'litter_deleted_1',
+        family_id: 'fam_1',
+        dam_id: 'dog_1',
+        deleted_at: monthTs,
+        updated_at: monthTs,
+      },
+    ])
     await localDb.replaceTable('sale_records', [{
       _id: 'sale_1',
       family_id: 'fam_1',
@@ -1682,6 +1698,8 @@ describe('local domain repository', () => {
     const stats = await getLocalKennelDashboardStats('fam_1', { now: monthTs })
     expect(stats.activeDogs).toHaveLength(1)
     expect(stats.soldDogs).toHaveLength(1)
+    expect(stats.litters).toHaveLength(1)
+    expect(stats.deliveredCount).toBe(2)
     expect(stats.monthlyIncome).toBe(1000)
     expect(stats.monthlyExpense).toBe(300)
   })
