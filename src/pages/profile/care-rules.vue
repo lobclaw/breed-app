@@ -46,7 +46,14 @@
           <text class="template-card__title">{{ tpl.task_description }}</text>
           <text class="template-card__meta">触发：{{ tpl.status_trigger }} · {{ tpl.frequency }}</text>
         </view>
-        <button class="template-card__btn" @click="enableTemplate(tpl)">+ 启用</button>
+        <button
+          class="template-card__btn"
+          :disabled="!!enablingTemplateKey"
+          :loading="enablingTemplateKey === getTemplateKey(tpl)"
+          @click="enableTemplate(tpl)"
+        >
+          {{ enablingTemplateKey === getTemplateKey(tpl) ? '启用中' : '+ 启用' }}
+        </button>
       </view>
     </view>
 
@@ -109,7 +116,14 @@
       </view>
       <template #footer>
         <view class="form-sheet__footer">
-          <button class="form-sheet__submit" @click="onConfirm">保存规则</button>
+          <BSubmitButton
+            :loading="submitState === 'submitting'"
+            :success="submitState === 'success'"
+            :disabled="submitState === 'submitting'"
+            @click="onConfirm"
+          >
+            {{ submitButtonText }}
+          </BSubmitButton>
         </view>
       </template>
     </BSheet>
@@ -125,6 +139,7 @@ import { listLocalCareRules } from '@/localdb/domain-repository'
 import { localSyncRuntime } from '@/localdb/runtime'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
+import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import BDeleteConfirm from '@/components/layout/BDeleteConfirm.vue'
 
@@ -154,6 +169,9 @@ const availableTemplates = computed(() =>
 const showModal = ref(false)
 const showDeleteConfirm = ref(false)
 const deletingIndex = ref(-1)
+const submitState = ref<'idle' | 'submitting' | 'success'>('idle')
+const enablingTemplateKey = ref('')
+const deleteSubmitting = ref(false)
 const form = reactive({
   status_trigger: '',
   customTrigger: '',
@@ -164,6 +182,12 @@ const form = reactive({
 const isCustomTrigger = computed(() =>
   form.status_trigger === '自定义' || (form.status_trigger && !triggerOptions.includes(form.status_trigger))
 )
+
+const submitButtonText = computed(() => {
+  if (submitState.value === 'submitting') return '保存中...'
+  if (submitState.value === 'success') return '已保存'
+  return '保存规则'
+})
 
 function selectTrigger(opt: string) {
   if (opt === '自定义') {
@@ -190,6 +214,7 @@ function openAddModal() {
   form.customTrigger = ''
   form.task_description = ''
   form.frequency = '每日'
+  submitState.value = 'idle'
   showModal.value = true
 }
 
@@ -200,6 +225,7 @@ function triggerColorClass(trigger: string) {
 }
 
 async function onConfirm() {
+  if (submitState.value === 'submitting') return
   const trigger = isCustomTrigger.value ? form.customTrigger.trim() : form.status_trigger
   if (!trigger || !form.task_description.trim()) {
     uni.showToast({ title: '请填写触发条件和任务描述', icon: 'none' })
@@ -210,7 +236,7 @@ async function onConfirm() {
     task_description: form.task_description.trim(),
     frequency: form.frequency,
   }
-  showModal.value = false
+  submitState.value = 'submitting'
   try {
     const familyId = currentFamily.value?._id || ''
     localSyncRuntime.setCurrentFamilyId(familyId)
@@ -218,12 +244,24 @@ async function onConfirm() {
     await localSyncRuntime.addCareRuleLocally(familyId, newRule)
     await refreshFamilyFromLocal(familyId)
     await loadLocalRules()
-  } catch {
-    uni.showToast({ title: '添加失败，请重试', icon: 'none' })
+    submitState.value = 'success'
+    setTimeout(() => {
+      showModal.value = false
+      submitState.value = 'idle'
+    }, 520)
+  } catch (error: any) {
+    submitState.value = 'idle'
+    uni.showToast({ title: error?.message || '添加失败，请重试', icon: 'none' })
   }
 }
 
+function getTemplateKey(tpl: typeof templates[0]) {
+  return `${tpl.status_trigger}__${tpl.task_description}`
+}
+
 async function enableTemplate(tpl: typeof templates[0]) {
+  if (enablingTemplateKey.value) return
+  enablingTemplateKey.value = getTemplateKey(tpl)
   const newRule = { status_trigger: tpl.status_trigger, task_description: tpl.task_description, frequency: tpl.frequency }
   try {
     const familyId = currentFamily.value?._id || ''
@@ -232,8 +270,10 @@ async function enableTemplate(tpl: typeof templates[0]) {
     await localSyncRuntime.addCareRuleLocally(familyId, newRule)
     await refreshFamilyFromLocal(familyId)
     await loadLocalRules()
-  } catch {
-    uni.showToast({ title: '启用失败，请重试', icon: 'none' })
+  } catch (error: any) {
+    uni.showToast({ title: error?.message || '启用失败，请重试', icon: 'none' })
+  } finally {
+    enablingTemplateKey.value = ''
   }
 }
 
@@ -243,9 +283,10 @@ function askDelete(index: number) {
 }
 
 async function confirmDelete() {
+  if (deleteSubmitting.value) return
   const index = deletingIndex.value
   if (index < 0) return
-  showDeleteConfirm.value = false
+  deleteSubmitting.value = true
   try {
     const familyId = currentFamily.value?._id || ''
     localSyncRuntime.setCurrentFamilyId(familyId)
@@ -253,8 +294,11 @@ async function confirmDelete() {
     await localSyncRuntime.removeCareRuleLocally(familyId, index)
     await refreshFamilyFromLocal(familyId)
     await loadLocalRules()
-  } catch {
-    uni.showToast({ title: '删除失败，请重试', icon: 'none' })
+    showDeleteConfirm.value = false
+  } catch (error: any) {
+    uni.showToast({ title: error?.message || '删除失败，请重试', icon: 'none' })
+  } finally {
+    deleteSubmitting.value = false
   }
 }
 
