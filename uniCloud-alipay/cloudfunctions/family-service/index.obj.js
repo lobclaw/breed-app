@@ -16,6 +16,12 @@ try {
 } catch (error) {
   syncUtils = require('../common/breed-sync')
 }
+let attachmentGc = null
+try {
+  attachmentGc = require('attachment-gc')
+} catch (error) {
+  attachmentGc = require('../common/attachment-gc')
+}
 const {
   getSyncMeta,
   buildTouchedEntity,
@@ -27,6 +33,9 @@ const {
   getServerVersion,
   buildVersionUpdate,
 } = syncUtils
+const {
+  cleanupPendingAttachmentDeletions,
+} = attachmentGc
 
 const db = uniCloud.database()
 const dbCmd = db.command
@@ -145,6 +154,7 @@ const EXPORT_COLLECTIONS = [
   'agents',
   'dog_weights',
   'medication_protocols',
+  'attachment_deletions',
 ]
 const SOFT_DELETE_REPAIR_COLLECTIONS = new Set([
   'dogs',
@@ -1899,6 +1909,20 @@ module.exports = {
     }
 
     return { data: { created, skipped, failures } }
+  },
+
+  /**
+   * 定时任务：清理超过保留期且不再被引用的附件
+   */
+  async _timing_dailyCleanupAttachments(input = {}) {
+    const limit = Number(input?.limit || 100)
+    const data = await cleanupPendingAttachmentDeletions(db, {
+      familyId: input?.familyId || '',
+      now: Date.now(),
+      limit: Number.isFinite(limit) && limit > 0 ? Math.min(limit, 500) : 100,
+      dryRun: !!input?.dryRun,
+    })
+    return { data }
   },
 
   /**

@@ -369,7 +369,7 @@
               <text class="info-row-value" :style="{ color: record.notes ? 'var(--text-1)' : 'var(--text-3)' }">{{ record.notes || '—' }}</text>
             </view>
             <view v-if="showRecordImages" class="image-section">
-              <view class="info-row">
+              <view class="info-row image-section__header">
                 <text class="info-row-label">检查图片</text>
                 <text class="info-row-value">{{ recordImageRefs.length }}张</text>
               </view>
@@ -954,19 +954,25 @@ onShow(() => {
 }
 
 .image-section {
-  padding-top: 2px;
+  padding: 2px 0 12px;
+}
+.image-section__header {
+  border-bottom: none;
+  padding-bottom: 8px;
 }
 .image-gallery {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  padding: 0 16px 14px;
+  padding: 0;
 }
 .image-thumb {
-  width: 100%;
-  aspect-ratio: 1;
-  border-radius: var(--radius-row);
+  width: 78px;
+  height: 78px;
+  border-radius: 10px;
   background: var(--card-dim);
+  object-fit: cover;
+  flex-shrink: 0;
 }
 
 /* ==================== MINI AVATAR ==================== */

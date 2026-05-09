@@ -801,6 +801,110 @@ describe('family-service', () => {
       nowSpy.mockRestore()
     })
 
+    it('定时附件清理应只删除到期且不再被引用的托管附件', async () => {
+      const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1700000000000)
+      const orphanFile = `mock://attachments/${familyId}/breeding_records/record_1/orphan.jpg`
+      const referencedFile = `mock://attachments/${familyId}/breeding_records/record_2/keep.jpg`
+      seedCollection('attachment_deletions', [
+        {
+          _id: 'delete_orphan',
+          family_id: familyId,
+          file_id: orphanFile,
+          status: 'pending',
+          scheduled_delete_at: 1699999999999,
+          attempts: 0,
+          source_refs: ['breeding_records:record_1'],
+        },
+        {
+          _id: 'delete_referenced',
+          family_id: familyId,
+          file_id: referencedFile,
+          status: 'pending',
+          scheduled_delete_at: 1699999999999,
+          attempts: 0,
+          source_refs: ['breeding_records:record_2'],
+        },
+      ])
+      seedCollection('breeding_records', [{
+        _id: 'record_2',
+        family_id: familyId,
+        details: { images: [referencedFile] },
+      }])
+
+      const result = await familyService._timing_dailyCleanupAttachments()
+
+      expect(result.data).toMatchObject({ deleted: 1, skipped: 1, failed: 0 })
+      expect((mockUniCloud as any).__getDeletedFiles()).toEqual([orphanFile])
+      const { data } = await db.collection('attachment_deletions').get()
+      expect(data.find((item: any) => item._id === 'delete_orphan')?.status).toBe('deleted')
+      expect(data.find((item: any) => item._id === 'delete_referenced')?.status).toBe('skipped_referenced')
+
+      nowSpy.mockRestore()
+    })
+
+    it('定时附件清理失败后应保留 pending 并按 next_retry_at 重试', async () => {
+      const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1700000000000)
+      const fileID = `mock://attachments/${familyId}/health_records/record_retry/image.jpg`
+      seedCollection('attachment_deletions', [{
+        _id: 'delete_retry',
+        family_id: familyId,
+        file_id: fileID,
+        status: 'pending',
+        scheduled_delete_at: 1699999999999,
+        attempts: 0,
+        source_refs: ['health_records:record_retry'],
+      }])
+      ;(mockUniCloud.deleteFile as any).mockRejectedValueOnce(new Error('temporary unavailable'))
+
+      const first = await familyService._timing_dailyCleanupAttachments()
+      expect(first.data).toMatchObject({ deleted: 0, skipped: 0, failed: 1 })
+      expect((mockUniCloud as any).__getDeletedFiles()).toEqual([])
+      let rows = (await db.collection('attachment_deletions').doc('delete_retry').get()).data
+      expect(rows[0]).toMatchObject({
+        status: 'pending',
+        attempts: 1,
+        last_error: 'temporary unavailable',
+      })
+      expect(rows[0].next_retry_at).toBeGreaterThan(1700000000000)
+
+      const retryLater = await familyService._timing_dailyCleanupAttachments()
+      expect(retryLater.data).toMatchObject({ deleted: 0, skipped: 1, failed: 0 })
+      expect(mockUniCloud.deleteFile).toHaveBeenCalledTimes(1)
+
+      nowSpy.mockReturnValue(rows[0].next_retry_at)
+      const retried = await familyService._timing_dailyCleanupAttachments()
+      expect(retried.data).toMatchObject({ deleted: 1, skipped: 0, failed: 0 })
+      expect((mockUniCloud as any).__getDeletedFiles()).toEqual([fileID])
+      rows = (await db.collection('attachment_deletions').doc('delete_retry').get()).data
+      expect(rows[0].status).toBe('deleted')
+
+      nowSpy.mockRestore()
+    })
+
+    it('定时附件清理应兼容历史 failed 队列重试', async () => {
+      const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1700000000000)
+      const fileID = `mock://attachments/${familyId}/health_records/record_failed/image.jpg`
+      seedCollection('attachment_deletions', [{
+        _id: 'delete_failed_legacy',
+        family_id: familyId,
+        file_id: fileID,
+        status: 'failed',
+        scheduled_delete_at: 1699999999999,
+        attempts: 1,
+        source_refs: ['health_records:record_failed'],
+        last_error: 'old error',
+      }])
+
+      const result = await familyService._timing_dailyCleanupAttachments()
+      expect(result.data).toMatchObject({ deleted: 1, skipped: 0, failed: 0 })
+      expect((mockUniCloud as any).__getDeletedFiles()).toEqual([fileID])
+
+      const { data } = await db.collection('attachment_deletions').doc('delete_failed_legacy').get()
+      expect(data[0].status).toBe('deleted')
+
+      nowSpy.mockRestore()
+    })
+
     it('getBackupHistory 应返回最近备份，restoreBackup 应先创建恢复前备份再恢复业务集合', async () => {
       const nowSpy = vi.spyOn(Date, 'now')
       nowSpy.mockReturnValueOnce(1700000006000).mockReturnValue(1700000007000)

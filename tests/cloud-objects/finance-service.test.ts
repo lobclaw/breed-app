@@ -442,6 +442,88 @@ describe('finance-service', () => {
     })
   })
 
+  it('updateIncome 应写回图片并登记被删除的托管附件', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+    const removedImage = `mock://attachments/${familyId}/incomes/income_images_1/old.jpg`
+    const keptImage = `mock://attachments/${familyId}/incomes/income_images_1/keep.jpg`
+    seedCollection('incomes', [{
+      _id: 'income_images_1',
+      family_id: familyId,
+      dog_id: 'dog_1',
+      dog_name: '花花',
+      type: '定金',
+      amount: 800,
+      date: aprilTs,
+      source_sale_id: null,
+      notes: null,
+      images: [removedImage, keptImage],
+      deleted_at: null,
+      version: 1,
+    }])
+
+    await financeService.updateIncome.call(ctx, {
+      id: 'income_images_1',
+      amount: 900,
+      type: '领养',
+      dog_id: 'dog_1',
+      dog_name: '花花',
+      date: aprilTs,
+      notes: '补充凭证',
+      images: [keptImage],
+    })
+
+    const { data: incomes } = await db.collection('incomes').doc('income_images_1').get()
+    expect(incomes[0].images).toEqual([keptImage])
+
+    const { data: deletions } = await db.collection('attachment_deletions')
+      .where({ family_id: familyId })
+      .get()
+    expect(deletions).toHaveLength(1)
+    expect(deletions[0]).toMatchObject({
+      family_id: familyId,
+      file_id: removedImage,
+      status: 'pending',
+      source_refs: ['incomes:income_images_1'],
+    })
+  })
+
+  it('updateIncome 未传 images 时应保留原图片', async () => {
+    const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+    const image = `mock://attachments/${familyId}/incomes/income_images_keep/keep.jpg`
+    seedCollection('incomes', [{
+      _id: 'income_images_keep',
+      family_id: familyId,
+      dog_id: 'dog_1',
+      dog_name: '花花',
+      type: '定金',
+      amount: 800,
+      date: aprilTs,
+      source_sale_id: null,
+      notes: null,
+      images: [image],
+      deleted_at: null,
+      version: 1,
+    }])
+
+    await financeService.updateIncome.call(ctx, {
+      id: 'income_images_keep',
+      amount: 900,
+      type: '领养',
+      dog_id: 'dog_1',
+      dog_name: '花花',
+      date: aprilTs,
+      notes: '只改金额',
+    })
+
+    const { data: incomes } = await db.collection('incomes').doc('income_images_keep').get()
+    expect(incomes[0].images).toEqual([image])
+
+    const { data: deletions } = await db.collection('attachment_deletions')
+      .where({ family_id: familyId })
+      .get()
+    expect(deletions).toHaveLength(0)
+  })
+
   it('自动收入不可从财务入口编辑或删除', async () => {
     const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
     seedCollection('incomes', [{

@@ -34,4 +34,12 @@ describe('breeding-detail source contract', () => {
     expect(source).toContain('resolveImageSafeSrc')
     expect(source).toContain('uni.previewImage')
   })
+
+  it('检查图片缩略图应使用固定宽高避免被原图比例撑开', () => {
+    expect(source).toContain('class="info-row image-section__header"')
+    expect(source).toContain('.image-thumb {')
+    expect(source).toContain('width: 78px;')
+    expect(source).toContain('height: 78px;')
+    expect(source).not.toContain('aspect-ratio: 1;')
+  })
 })

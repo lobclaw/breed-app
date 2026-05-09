@@ -15,6 +15,12 @@ try {
 } catch (error) {
   syncUtils = require('../common/breed-sync')
 }
+let attachmentGc = null
+try {
+  attachmentGc = require('attachment-gc')
+} catch (error) {
+  attachmentGc = require('../common/attachment-gc')
+}
 const {
   getSyncMeta,
   buildTouchedEntity,
@@ -27,6 +33,10 @@ const {
   buildVersionUpdate,
   buildVersionedCreate,
 } = syncUtils
+const {
+  getRemovedManagedAttachmentRefs,
+  enqueueRemovedAttachments,
+} = attachmentGc
 
 const db = uniCloud.database()
 const dbCmd = db.command
@@ -2127,8 +2137,16 @@ module.exports = {
       updateData.details = nextDetails
     }
     validateDetails(record.type, nextDetails)
+    const removedImageRefs = getRemovedManagedAttachmentRefs(record.details?.images, nextDetails?.images)
 
     await db.collection('breeding_records').doc(id).update(updateData)
+    await enqueueRemovedAttachments(db, {
+      familyId: this.familyId,
+      refs: removedImageRefs,
+      sourceCollection: 'breeding_records',
+      sourceId: id,
+      now,
+    })
     const nextCost = cost !== undefined ? cost : record.cost
     const nextNotes = notes !== undefined ? notes : record.notes
     const { data: dogs } = await db.collection('dogs')

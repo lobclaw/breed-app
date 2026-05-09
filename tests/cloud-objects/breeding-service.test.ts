@@ -2,7 +2,7 @@
  * breeding-service 云对象测试
  * 测试繁育状态机、任务生成、生产记录等核心逻辑
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import {
   resetDB,
   seedCollection,
@@ -1256,6 +1256,98 @@ describe('breeding-service', () => {
         date: now + 86400000,
         details: {},
       })).rejects.toThrow('产检记录必须填写检查结果或检查图片')
+    })
+
+    it('编辑繁育记录删除图片时应登记延迟清理附件', async () => {
+      const now = Date.now()
+      const removedImage = `mock://attachments/${familyId}/breeding_records/prenatal_record_gc/old.jpg`
+      const keptImage = `mock://attachments/${familyId}/breeding_records/prenatal_record_gc/keep.jpg`
+      seedCollection('breeding_records', [{
+        _id: 'prenatal_record_gc',
+        type: 'prenatal_check',
+        cycle_id: 'cycle_prenatal_gc',
+        dog_id: 'dam_1',
+        family_id: familyId,
+        date: now,
+        notes: '原始备注',
+        details: {
+          results: '胎心稳定',
+          images: [removedImage, keptImage, 'https://cdn.example.com/external.jpg'],
+        },
+        created_by: 'user_1',
+        created_at: now,
+        updated_at: now,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      await breedingService.updateBreedingRecord.call(ctx, {
+        id: 'prenatal_record_gc',
+        details: {
+          results: '胎心稳定',
+          images: [keptImage],
+        },
+      })
+
+      const { data: deletions } = await db.collection('attachment_deletions')
+        .where({ family_id: familyId })
+        .get()
+      expect(deletions).toHaveLength(1)
+      expect(deletions[0]).toMatchObject({
+        family_id: familyId,
+        file_id: removedImage,
+        status: 'pending',
+        source_refs: ['breeding_records:prenatal_record_gc'],
+      })
+      expect(deletions[0].scheduled_delete_at).toBeGreaterThan(now)
+    })
+
+    it('附件清理入队失败不应阻断繁育记录保存', async () => {
+      const now = Date.now()
+      const removedImage = `mock://attachments/${familyId}/breeding_records/prenatal_record_queue_fail/old.jpg`
+      seedCollection('breeding_records', [{
+        _id: 'prenatal_record_queue_fail',
+        type: 'prenatal_check',
+        cycle_id: 'cycle_prenatal_queue_fail',
+        dog_id: 'dam_1',
+        family_id: familyId,
+        date: now,
+        details: {
+          results: '胎心稳定',
+          images: [removedImage],
+        },
+        created_by: 'user_1',
+        created_at: now,
+        updated_at: now,
+      }])
+
+      const originalCollection = db.collection.bind(db)
+      const collectionSpy = vi.spyOn(db, 'collection').mockImplementation((name: string) => {
+        if (name === 'attachment_deletions') throw new Error('attachment_deletions missing')
+        return originalCollection(name)
+      })
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+
+      try {
+        const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+        await expect(breedingService.updateBreedingRecord.call(ctx, {
+          id: 'prenatal_record_queue_fail',
+          details: {
+            results: '复查正常',
+            images: [],
+          },
+        })).resolves.toMatchObject({ message: '已更新' })
+      } finally {
+        collectionSpy.mockRestore()
+        warnSpy.mockRestore()
+      }
+
+      const { data: records } = await db.collection('breeding_records')
+        .doc('prenatal_record_queue_fail')
+        .get()
+      expect(records[0].details).toMatchObject({
+        results: '复查正常',
+        images: [],
+      })
     })
 
     it('编辑最近一次卵泡检查结果时应重算当前主链节点', async () => {

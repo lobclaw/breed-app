@@ -21,6 +21,7 @@ const BUSINESS_COLLECTIONS = [
   'medication_protocols',
   'operation_logs',
   'sync_mutations',
+  'attachment_deletions',
 ]
 
 const AUTH_COLLECTIONS = [

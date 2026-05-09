@@ -15,6 +15,12 @@ try {
 } catch (error) {
   syncUtils = require('../common/breed-sync')
 }
+let attachmentGc = null
+try {
+  attachmentGc = require('attachment-gc')
+} catch (error) {
+  attachmentGc = require('../common/attachment-gc')
+}
 const {
   getSyncMeta,
   buildTouchedEntity,
@@ -27,6 +33,10 @@ const {
   buildVersionUpdate,
   buildVersionedCreate,
 } = syncUtils
+const {
+  getRemovedManagedAttachmentRefs,
+  enqueueRemovedAttachments,
+} = attachmentGc
 
 const db = uniCloud.database()
 const dbCmd = db.command
@@ -1298,6 +1308,8 @@ module.exports = {
     const conflict = getEntityConflict(syncMeta, 'expenses', expenses[0])
     if (conflict) return conflict
     const now = Date.now()
+    const nextImages = data.images !== undefined ? data.images : expenses[0].images || []
+    const removedImageRefs = getRemovedManagedAttachmentRefs(expenses[0].images, nextImages)
 
     await db.collection('expenses').doc(expenseId).update({
       total_amount: data.total_amount,
@@ -1310,8 +1322,15 @@ module.exports = {
       dog_names: data.dog_names || [],
       litter_number: data.litter_number || null,
       notes: data.notes || null,
-      images: data.images || [],
+      images: nextImages,
       ...buildVersionUpdate(dbCmd, now),
+    })
+    await enqueueRemovedAttachments(db, {
+      familyId: this.familyId,
+      refs: removedImageRefs,
+      sourceCollection: 'expenses',
+      sourceId: expenseId,
+      now,
     })
 
     await logFinanceOperation({
@@ -1364,6 +1383,8 @@ module.exports = {
     const conflict = getEntityConflict(syncMeta, 'incomes', incomes[0])
     if (conflict) return conflict
     const now = Date.now()
+    const nextImages = data.images !== undefined ? data.images : incomes[0].images || []
+    const removedImageRefs = getRemovedManagedAttachmentRefs(incomes[0].images, nextImages)
 
     await db.collection('incomes').doc(incomeId).update({
       amount: data.amount,
@@ -1372,7 +1393,15 @@ module.exports = {
       dog_name: data.dog_name || null,
       date: data.date || incomes[0].date,
       notes: data.notes || null,
+      images: nextImages,
       ...buildVersionUpdate(dbCmd, now),
+    })
+    await enqueueRemovedAttachments(db, {
+      familyId: this.familyId,
+      refs: removedImageRefs,
+      sourceCollection: 'incomes',
+      sourceId: incomeId,
+      now,
     })
 
     await logFinanceOperation({

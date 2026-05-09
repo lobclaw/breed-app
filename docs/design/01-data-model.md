@@ -449,6 +449,7 @@
 - `dog_weights`：体重历史
 - `medication_protocols`：用药方案库
 - `sync_mutations`：服务端幂等 mutation 记录
+- `attachment_deletions`：托管附件延迟删除队列
 
 其中 `families` 至少包含：
 
@@ -484,6 +485,27 @@
 
 - `families.settings` 进入本地镜像，但成员管理、邀请、角色变更仍保持在线优先
 - `families` 主文档也补充 `version`，用于设置类字段的同步校验
+
+其中 `attachment_deletions` 至少包含：
+
+- `_id`
+- `family_id`
+- `file_id`
+- `status`
+- `source_refs`
+- `scheduled_delete_at`
+- `next_retry_at`
+- `attempts`
+- `first_seen_at`
+- `updated_at`
+- `last_error`
+
+规则：
+
+- 仅登记 `attachments/` 路径下由应用托管的云文件；外部 URL 不进入删除队列
+- 用户从记录中删除图片时，业务集合立即移除引用，并将文件写入 `attachment_deletions.status=pending`
+- 默认 30 天后由定时清理删除云文件；删除前必须再次扫描 `expenses`、`incomes`、`health_records`、`breeding_records` 确认没有任何记录仍引用该文件
+- 若文件仍被引用，队列记录标记为 `skipped_referenced`，不得删除云文件
 
 其中 `families.settings.notification_types` 结构为：
 
@@ -585,7 +607,7 @@
 
 ## 6. 当前集合清单
 
-V1 当前主要业务集合共 14 个：
+V1 当前主要业务/辅助集合共 15 个：
 
 1. `dogs`
 2. `breeding_cycles`
@@ -601,5 +623,6 @@ V1 当前主要业务集合共 14 个：
 12. `agents`
 13. `dog_weights`
 14. `medication_protocols`
+15. `attachment_deletions`
 
 另有 `uni-id` 自带用户集合。
