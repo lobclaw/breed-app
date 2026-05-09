@@ -18,6 +18,54 @@ function pad2(value: number) {
   return String(value).padStart(2, '0')
 }
 
+export function getBeijingDateParts(value: number | Date = Date.now()) {
+  const ts = resolveSourceTimestamp(value)
+  const date = new Date(ts + BEIJING_OFFSET_MS)
+  return {
+    year: date.getUTCFullYear(),
+    month: date.getUTCMonth() + 1,
+    monthIndex: date.getUTCMonth(),
+    day: date.getUTCDate(),
+    hours: date.getUTCHours(),
+    minutes: date.getUTCMinutes(),
+    seconds: date.getUTCSeconds(),
+    milliseconds: date.getUTCMilliseconds(),
+  }
+}
+
+export function buildBeijingTimestampFromParts(
+  year: number,
+  monthIndex: number,
+  day: number,
+  hours = 0,
+  minutes = 0,
+  seconds = 0,
+  milliseconds = 0,
+) {
+  return Date.UTC(year, monthIndex, day, hours, minutes, seconds, milliseconds) - BEIJING_OFFSET_MS
+}
+
+export function getBeijingMonthRange(year: number, monthIndex: number) {
+  return {
+    startDate: buildBeijingTimestampFromParts(year, monthIndex, 1),
+    endDate: buildBeijingTimestampFromParts(year, monthIndex + 1, 1),
+  }
+}
+
+export function getBeijingQuarterRange(year: number, quarterStartMonthIndex: number) {
+  return {
+    startDate: buildBeijingTimestampFromParts(year, quarterStartMonthIndex, 1),
+    endDate: buildBeijingTimestampFromParts(year, quarterStartMonthIndex + 3, 1),
+  }
+}
+
+export function getBeijingYearRange(year: number) {
+  return {
+    startDate: buildBeijingTimestampFromParts(year, 0, 1),
+    endDate: buildBeijingTimestampFromParts(year + 1, 0, 1),
+  }
+}
+
 export function parseDateString(dateStr: string) {
   const [year, month, day] = String(dateStr).split('-').map(Number)
   if (!year || !month || !day) return null
@@ -61,16 +109,16 @@ export function buildTimestampFromDateTimeParts(
   minutes: number,
   timeSource: number | Date = Date.now(),
 ) {
-  const base = toDate(timeSource)
-  return new Date(
+  const base = getBeijingDateParts(timeSource)
+  return buildBeijingTimestampFromParts(
     year,
     monthIndex,
     day,
     hours,
     minutes,
-    base.getSeconds(),
-    base.getMilliseconds(),
-  ).getTime()
+    base.seconds,
+    base.milliseconds,
+  )
 }
 
 export function buildTimestampFromDateParts(
@@ -79,16 +127,16 @@ export function buildTimestampFromDateParts(
   day: number,
   timeSource: number | Date = Date.now(),
 ) {
-  const base = toDate(resolveSourceTimestamp(timeSource))
-  return new Date(
+  const base = getBeijingDateParts(timeSource)
+  return buildBeijingTimestampFromParts(
     year,
     monthIndex,
     day,
-    base.getHours(),
-    base.getMinutes(),
-    base.getSeconds(),
-    base.getMilliseconds(),
-  ).getTime()
+    base.hours,
+    base.minutes,
+    base.seconds,
+    base.milliseconds,
+  )
 }
 
 export function buildTimestampFromMonthParts(
@@ -110,11 +158,11 @@ export function buildTimestampFromTimeParts(
   minutes: number,
   dateSource: number | Date = Date.now(),
 ) {
-  const base = toDate(resolveSourceTimestamp(dateSource))
+  const base = getBeijingDateParts(dateSource)
   return buildTimestampFromDateTimeParts(
-    base.getFullYear(),
-    base.getMonth(),
-    base.getDate(),
+    base.year,
+    base.monthIndex,
+    base.day,
     hours,
     minutes,
     dateSource,
@@ -146,16 +194,16 @@ export function buildTimestampFromDateTimeStrings(
 }
 
 export function buildTimestampFromDayOffset(offsetDays: number, timeSource: number | Date = Date.now()) {
-  const base = toDate(resolveSourceTimestamp(timeSource))
-  return new Date(
-    base.getFullYear(),
-    base.getMonth(),
-    base.getDate() + offsetDays,
-    base.getHours(),
-    base.getMinutes(),
-    base.getSeconds(),
-    base.getMilliseconds(),
-  ).getTime()
+  const base = getBeijingDateParts(timeSource)
+  return buildBeijingTimestampFromParts(
+    base.year,
+    base.monthIndex,
+    base.day + offsetDays,
+    base.hours,
+    base.minutes,
+    base.seconds,
+    base.milliseconds,
+  )
 }
 
 export function replaceTimestampDateParts(
@@ -183,8 +231,8 @@ export function getDraftTimestamp(value?: number | Date | null, fallback: number
 
 export function normalizeMonthCursor(value?: number | Date | null, fallback: number | Date = Date.now()) {
   const baseTs = resolveSourceTimestamp(value, fallback)
-  const base = toDate(baseTs)
-  return buildTimestampFromMonthParts(base.getFullYear(), base.getMonth(), baseTs)
+  const base = getBeijingDateParts(baseTs)
+  return buildTimestampFromMonthParts(base.year, base.monthIndex, baseTs)
 }
 
 export function offsetMonthCursor(
@@ -193,14 +241,14 @@ export function offsetMonthCursor(
   fallback: number | Date = Date.now(),
 ) {
   const baseTs = resolveSourceTimestamp(value, fallback)
-  const base = toDate(baseTs)
-  return buildTimestampFromMonthParts(base.getFullYear(), base.getMonth() + offsetMonths, baseTs)
+  const base = getBeijingDateParts(baseTs)
+  return buildTimestampFromMonthParts(base.year, base.monthIndex + offsetMonths, baseTs)
 }
 
 export function formatDateInputValue(ts?: number | null) {
   if (!ts) return ''
-  const date = new Date(ts)
-  return `${formatDateParts(date.getFullYear(), date.getMonth(), date.getDate())} ${formatTimeParts(date.getHours(), date.getMinutes())}`
+  const date = getBeijingDateParts(ts)
+  return `${formatDateParts(date.year, date.monthIndex, date.day)} ${formatTimeParts(date.hours, date.minutes)}`
 }
 
 export function formatTimeInputValue(value?: number | string | null) {
@@ -210,8 +258,8 @@ export function formatTimeInputValue(value?: number | string | null) {
     if (!parsed) return ''
     return formatTimeParts(parsed.hours, parsed.minutes)
   }
-  const date = new Date(value)
-  return formatTimeParts(date.getHours(), date.getMinutes())
+  const date = getBeijingDateParts(value)
+  return formatTimeParts(date.hours, date.minutes)
 }
 
 export function formatDateTimeInputValue(ts?: number | null) {

@@ -27,4 +27,11 @@ describe('date time picker task calendar contract', () => {
     expect(source).toContain("'b-date-time-picker__calendar-cell--disabled': cell.isDisabled")
     expect(source).toContain('<view v-if="cell.showDot" class="b-date-time-picker__calendar-dot" />')
   })
+
+  it('picker 年月日与日历格应使用北京时间口径', () => {
+    expect(source).toContain('getBeijingDateParts')
+    expect(source).toContain('const draftDateParts = computed(() => getBeijingDateParts(draftTimestamp.value))')
+    expect(source).toContain('buildBeijingTimestampFromParts(year, monthIndex, 1, 12)')
+    expect(source).toContain('buildBeijingTimestampFromParts(cellYear, cellMonth - 1, cellDay, 12)')
+  })
 })

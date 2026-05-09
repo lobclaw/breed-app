@@ -7,7 +7,15 @@ import type { HealthRecord, MedicationTask } from '@/types/health'
 import type { RecycleBinItem } from '@/types/recycle'
 import type { DeriveStatus, DogWithStatus } from '@/types/dog'
 import type { Task } from '@/types/task'
-import { getBeijingDayStart, getBeijingElapsedDays, getBeijingOrdinalDay } from '@/utils/date'
+import {
+  getBeijingDateParts,
+  getBeijingDayStart,
+  getBeijingElapsedDays,
+  getBeijingMonthRange,
+  getBeijingOrdinalDay,
+  getBeijingQuarterRange,
+  getBeijingYearRange,
+} from '@/utils/date'
 import {
   buildExpenseCategoryGroups,
   getExpenseCategoryGroupKey,
@@ -804,18 +812,18 @@ function buildCycleProjection(row: Record<string, any>, linkedLitter?: Record<st
 
 function formatDate(ts?: number): string {
   if (!ts) return '--'
-  const date = new Date(ts)
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
+  const date = getBeijingDateParts(ts)
+  const y = date.year
+  const m = String(date.month).padStart(2, '0')
+  const d = String(date.day).padStart(2, '0')
   return `${y}-${m}-${d}`
 }
 
 function formatMonthDay(ts?: number): string {
   if (!ts) return '--'
-  const date = new Date(ts)
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
+  const date = getBeijingDateParts(ts)
+  const m = String(date.month).padStart(2, '0')
+  const d = String(date.day).padStart(2, '0')
   return `${m}月${d}日`
 }
 
@@ -1049,10 +1057,9 @@ export async function getLocalBreedingCycleDetail(familyId: string, cycleId: str
 }
 
 function getCurrentMonthRange(now = Date.now()) {
-  const date = new Date(now)
-  const start = new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0, 0).getTime()
-  const end = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999).getTime()
-  return { start, end }
+  const date = getBeijingDateParts(now)
+  const range = getBeijingMonthRange(date.year, date.monthIndex)
+  return { start: range.startDate, end: range.endDate - 1 }
 }
 
 export async function getLocalKennelDashboardStats(familyId: string, options: { now?: number } = {}) {
@@ -1840,21 +1847,15 @@ export async function getLocalIncomeDetail(familyId: string, incomeId: string) {
 }
 
 function resolveFinanceDateRange(period: string, month?: number, year?: number) {
-  const now = new Date()
-  const targetYear = Number(year) || now.getFullYear()
-  const targetMonth = Math.max(1, Math.min(12, Number(month) || (now.getMonth() + 1)))
+  const nowParts = getBeijingDateParts()
+  const targetYear = Number(year) || nowParts.year
+  const targetMonth = Math.max(1, Math.min(12, Number(month) || nowParts.month))
 
   if (period === 'yearly') {
-    return {
-      startDate: new Date(targetYear, 0, 1, 0, 0, 0, 0).getTime(),
-      endDate: new Date(targetYear + 1, 0, 1, 0, 0, 0, 0).getTime(),
-    }
+    return getBeijingYearRange(targetYear)
   }
 
-  return {
-    startDate: new Date(targetYear, targetMonth - 1, 1, 0, 0, 0, 0).getTime(),
-    endDate: new Date(targetYear, targetMonth, 1, 0, 0, 0, 0).getTime(),
-  }
+  return getBeijingMonthRange(targetYear, targetMonth - 1)
 }
 
 export async function getLocalFinancialSummary(
@@ -1986,41 +1987,28 @@ function resolveLocalFinanceDateRange(filters: Record<string, any> = {}) {
     const startDate = Number(filters.dateRange?.startDate || filters.customStartDate || 0)
     const endDate = Number(filters.dateRange?.endDate || filters.customEndDate || 0)
     if (startDate && endDate) {
-      return { startDate, endDate: endDate + 86400000 }
+      return { startDate: getBeijingDayStart(startDate), endDate: getBeijingDayStart(endDate) + 86400000 }
     }
   }
 
-  const now = new Date()
-  const year = Number(filters.year || now.getFullYear())
-  const month = Number(filters.month || (now.getMonth() + 1))
-  const anchorDate = new Date(year, month - 1, 1)
+  const nowParts = getBeijingDateParts()
+  const year = Number(filters.year || nowParts.year)
+  const month = Number(filters.month || nowParts.month)
 
   if (rangeValue === 'last_month') {
-    return {
-      startDate: new Date(year, month - 2, 1).getTime(),
-      endDate: new Date(year, month - 1, 1).getTime(),
-    }
+    return getBeijingMonthRange(year, month - 2)
   }
 
   if (rangeValue === 'this_quarter') {
-    const quarterStartMonth = Math.floor(anchorDate.getMonth() / 3) * 3
-    return {
-      startDate: new Date(anchorDate.getFullYear(), quarterStartMonth, 1).getTime(),
-      endDate: new Date(anchorDate.getFullYear(), quarterStartMonth + 3, 1).getTime(),
-    }
+    const quarterStartMonth = Math.floor((month - 1) / 3) * 3
+    return getBeijingQuarterRange(year, quarterStartMonth)
   }
 
   if (rangeValue === 'this_year' || filters.period === 'yearly') {
-    return {
-      startDate: new Date(anchorDate.getFullYear(), 0, 1).getTime(),
-      endDate: new Date(anchorDate.getFullYear() + 1, 0, 1).getTime(),
-    }
+    return getBeijingYearRange(year)
   }
 
-  return {
-    startDate: new Date(year, month - 1, 1).getTime(),
-    endDate: new Date(year, month, 1).getTime(),
-  }
+  return getBeijingMonthRange(year, month - 1)
 }
 
 function hasIntersection(left: string[] = [], right: string[] = []) {

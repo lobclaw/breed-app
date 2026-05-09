@@ -524,7 +524,14 @@ import {
   normalizeExpenseCategories,
 } from '@/constants/financeCategories'
 import type { ExpenseCategory, ExpenseCategoryGroup, ExpenseCategoryGroupKey } from '@/types/finance'
-import { normalizeMonthCursor, offsetMonthCursor } from '@/utils/date'
+import {
+  DAY_MS,
+  getBeijingDateParts,
+  getBeijingDayStart,
+  getBeijingMonthRange,
+  normalizeMonthCursor,
+  offsetMonthCursor,
+} from '@/utils/date'
 import { formatFinanceAmount, getFinanceAmountDisplay, getFinanceAmountParts } from '@/utils/financeDisplay'
 
 type FinanceFilterType = '' | 'income' | 'expense'
@@ -592,11 +599,13 @@ const summary = reactive({
 })
 
 function monthStartTs(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), 1).getTime()
+  const parts = getBeijingDateParts(date)
+  return getBeijingMonthRange(parts.year, parts.monthIndex).startDate
 }
 
 function monthEndTs(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth() + 1, 0).getTime()
+  const parts = getBeijingDateParts(date)
+  return getBeijingMonthRange(parts.year, parts.monthIndex).endDate - DAY_MS
 }
 
 function createDefaultFilters(date = currentMonth.value): FinanceFilterState {
@@ -737,19 +746,21 @@ const monthLabel = computed(() => {
   }
 
   if (appliedFilters.dateRange === 'this_year') {
-    return `${currentMonth.value.getFullYear()}年`
+    const parts = getBeijingDateParts(currentMonth.value)
+    return `${parts.year}年`
   }
 
   if (appliedFilters.dateRange === 'this_quarter') {
-    const quarter = Math.floor(currentMonth.value.getMonth() / 3) + 1
-    return `${currentMonth.value.getFullYear()}年 Q${quarter}`
+    const parts = getBeijingDateParts(currentMonth.value)
+    const quarter = Math.floor(parts.monthIndex / 3) + 1
+    return `${parts.year}年 Q${quarter}`
   }
 
-  const displayDate = new Date(currentMonth.value)
-  if (appliedFilters.dateRange === 'last_month') {
-    displayDate.setMonth(displayDate.getMonth() - 1)
-  }
-  return `${displayDate.getFullYear()}年${displayDate.getMonth() + 1}月`
+  const displayTs = appliedFilters.dateRange === 'last_month'
+    ? offsetMonthCursor(currentMonth.value, -1)
+    : normalizeMonthCursor(currentMonth.value)
+  const displayDate = getBeijingDateParts(displayTs)
+  return `${displayDate.year}年${displayDate.month}月`
 })
 
 const summaryPrefix = computed(() => {
@@ -884,8 +895,9 @@ function buildQueryPayload(filters: FinanceFilterState) {
     }
   } else {
     payload.dateRange = filters.dateRange
-    payload.year = currentMonth.value.getFullYear()
-    payload.month = currentMonth.value.getMonth() + 1
+    const currentMonthParts = getBeijingDateParts(currentMonth.value)
+    payload.year = currentMonthParts.year
+    payload.month = currentMonthParts.month
     payload.period = filters.dateRange === 'this_year' ? 'yearly' : 'monthly'
   }
 
@@ -902,59 +914,57 @@ function formatTransactionAmount(tx: any) {
   return tx._txType === 'income' ? `+${formattedAmount}` : formattedAmount
 }
 
-function isSameDay(left: Date, right: Date) {
-  return left.getFullYear() === right.getFullYear()
-    && left.getMonth() === right.getMonth()
-    && left.getDate() === right.getDate()
+function isSameDay(left: number, right: number) {
+  return getBeijingDayStart(left) === getBeijingDayStart(right)
 }
 
 function getDayGroupKey(ts: number) {
   if (!ts) return 'unknown'
-  const d = new Date(ts)
-  const year = d.getFullYear()
-  const month = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
+  const d = getBeijingDateParts(ts)
+  const year = d.year
+  const month = String(d.month).padStart(2, '0')
+  const day = String(d.day).padStart(2, '0')
   return `${year}-${month}-${day}`
 }
 
 function formatDayGroupLabel(ts: number) {
   if (!ts) return '未设置日期'
-  const target = new Date(ts)
-  const today = new Date()
-  const yesterday = new Date(today)
-  yesterday.setDate(today.getDate() - 1)
+  const todayTs = Date.now()
+  const yesterdayTs = todayTs - DAY_MS
+  const target = getBeijingDateParts(ts)
+  const today = getBeijingDateParts(todayTs)
 
-  if (isSameDay(target, today)) return '今天'
-  if (isSameDay(target, yesterday)) return '昨天'
-  if (target.getFullYear() === today.getFullYear()) {
-    return `${target.getMonth() + 1}月${target.getDate()}日`
+  if (isSameDay(ts, todayTs)) return '今天'
+  if (isSameDay(ts, yesterdayTs)) return '昨天'
+  if (target.year === today.year) {
+    return `${target.month}月${target.day}日`
   }
-  return `${target.getFullYear()}年${target.getMonth() + 1}月${target.getDate()}日`
+  return `${target.year}年${target.month}月${target.day}日`
 }
 
 function formatTransactionTime(ts: number) {
   if (!ts) return ''
-  const d = new Date(ts)
-  const hours = String(d.getHours()).padStart(2, '0')
-  const minutes = String(d.getMinutes()).padStart(2, '0')
+  const d = getBeijingDateParts(ts)
+  const hours = String(d.hours).padStart(2, '0')
+  const minutes = String(d.minutes).padStart(2, '0')
   return `${hours}:${minutes}`
 }
 
 function formatDateInput(ts: number) {
   if (!ts) return ''
-  const d = new Date(ts)
-  const year = d.getFullYear()
-  const month = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  const hours = String(d.getHours()).padStart(2, '0')
-  const minutes = String(d.getMinutes()).padStart(2, '0')
+  const d = getBeijingDateParts(ts)
+  const year = d.year
+  const month = String(d.month).padStart(2, '0')
+  const day = String(d.day).padStart(2, '0')
+  const hours = String(d.hours).padStart(2, '0')
+  const minutes = String(d.minutes).padStart(2, '0')
   return `${year}-${month}-${day} ${hours}:${minutes}`
 }
 
 function formatDateRangeLabel(ts: number) {
   if (!ts) return ''
-  const d = new Date(ts)
-  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`
+  const d = getBeijingDateParts(ts)
+  return `${d.year}/${d.month}/${d.day}`
 }
 
 function formatSelectionSummary(names: string[], placeholder: string) {

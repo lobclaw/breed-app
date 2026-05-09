@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  buildBeijingTimestampFromParts,
   buildTimestampFromDateTimeStrings,
   buildTimestampFromDateString,
   buildTimestampFromMonthParts,
@@ -9,10 +10,14 @@ import {
   formatDateInputValue,
   formatDateTimeInputValue,
   formatTimeInputValue,
+  getBeijingDateParts,
   getBeijingDayDiff,
   getBeijingElapsedDays,
   getBeijingDayStart,
+  getBeijingMonthRange,
   getBeijingOrdinalDay,
+  getBeijingQuarterRange,
+  getBeijingYearRange,
   getDraftTimestamp,
   normalizeMonthCursor,
   offsetMonthCursor,
@@ -28,6 +33,36 @@ describe('日期工具函数', () => {
     const result = buildTimestampFromDateString('2026-05-01', baseTs)
 
     expect(result).toBe(new Date('2026-05-01T15:16:17.123+08:00').getTime())
+  })
+
+  it('北京时间构造不应依赖设备本地时区', () => {
+    expect(buildBeijingTimestampFromParts(2026, 4, 1, 15, 16, 17, 123))
+      .toBe(new Date('2026-05-01T15:16:17.123+08:00').getTime())
+    expect(getBeijingDateParts(new Date('2026-04-30T17:30:00.456Z').getTime())).toMatchObject({
+      year: 2026,
+      month: 5,
+      monthIndex: 4,
+      day: 1,
+      hours: 1,
+      minutes: 30,
+      seconds: 0,
+      milliseconds: 456,
+    })
+  })
+
+  it('北京时间月份、季度、年份范围应使用北京时间日边界', () => {
+    expect(getBeijingMonthRange(2026, 4)).toEqual({
+      startDate: new Date('2026-05-01T00:00:00.000+08:00').getTime(),
+      endDate: new Date('2026-06-01T00:00:00.000+08:00').getTime(),
+    })
+    expect(getBeijingQuarterRange(2026, 3)).toEqual({
+      startDate: new Date('2026-04-01T00:00:00.000+08:00').getTime(),
+      endDate: new Date('2026-07-01T00:00:00.000+08:00').getTime(),
+    })
+    expect(getBeijingYearRange(2026)).toEqual({
+      startDate: new Date('2026-01-01T00:00:00.000+08:00').getTime(),
+      endDate: new Date('2027-01-01T00:00:00.000+08:00').getTime(),
+    })
   })
 
   it('月份选择应固定落在当月 1 号，并保留当前时分秒毫秒', () => {

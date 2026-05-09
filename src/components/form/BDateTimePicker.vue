@@ -201,10 +201,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import {
+  buildBeijingTimestampFromParts,
   buildTimestampFromDateParts,
   clampDayInMonth,
   formatDateParts,
   formatTimeParts,
+  getBeijingDateParts,
   getBeijingDayStart,
   getDaysInMonth,
   getDraftTimestamp,
@@ -247,7 +249,7 @@ const props = withDefaults(defineProps<{
   mode: 'date',
   valueType: 'timestamp',
   yearStart: 1990,
-  yearEnd: new Date().getFullYear() + 10,
+  yearEnd: getBeijingDateParts().year + 10,
   minuteStep: 1,
   dateOnly: false,
   dayDotCounts: undefined,
@@ -263,12 +265,13 @@ const emit = defineEmits<{
 const PICKER_ANIMATION_MS = 250
 const indicatorStyle = 'height: 54px; background: transparent;'
 const weekLabels = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+const nowParts = getBeijingDateParts()
 const renderVisible = ref(props.visible)
 const animOpen = ref(false)
 const currentView = ref<PickerViewMode>('calendar')
 const draftTimestamp = ref(Date.now())
-const calendarYear = ref(new Date().getFullYear())
-const calendarMonth = ref(new Date().getMonth() + 1)
+const calendarYear = ref(nowParts.year)
+const calendarMonth = ref(nowParts.month)
 const panelYear = ref(calendarYear.value)
 const panelMonth = ref(calendarMonth.value)
 const monthPickerValue = ref([0, 0])
@@ -293,16 +296,16 @@ const minutes = computed(() => {
   return result
 })
 
-const draftDate = computed(() => new Date(draftTimestamp.value))
 const mode = computed(() => props.mode)
 const isMonthOnlyMode = computed(() => props.mode === 'month')
 const isDateOnlyMode = computed(() => props.mode === 'date' && props.dateOnly)
-const selectedYear = computed(() => draftDate.value.getFullYear())
-const selectedMonth = computed(() => draftDate.value.getMonth() + 1)
-const selectedMonthIndex = computed(() => draftDate.value.getMonth())
-const selectedDay = computed(() => draftDate.value.getDate())
-const selectedHour = computed(() => draftDate.value.getHours())
-const selectedMinute = computed(() => draftDate.value.getMinutes())
+const draftDateParts = computed(() => getBeijingDateParts(draftTimestamp.value))
+const selectedYear = computed(() => draftDateParts.value.year)
+const selectedMonth = computed(() => draftDateParts.value.month)
+const selectedMonthIndex = computed(() => draftDateParts.value.monthIndex)
+const selectedDay = computed(() => draftDateParts.value.day)
+const selectedHour = computed(() => draftDateParts.value.hours)
+const selectedMinute = computed(() => draftDateParts.value.minutes)
 
 const toolbarLeftLabel = computed(() => {
   if (props.mode === 'time') return '取消'
@@ -329,7 +332,12 @@ const calendarMonthLabel = computed(() => `${calendarYear.value}年${calendarMon
 const monthPanelLabel = computed(() => `${panelYear.value}年${panelMonth.value}月`)
 const draftTimeText = computed(() => formatTimeParts(selectedHour.value, selectedMinute.value))
 const draftDateMetaText = computed(() => {
-  const weekday = weekLabels[draftDate.value.getDay()]
+  const weekday = weekLabels[new Date(buildBeijingTimestampFromParts(
+    selectedYear.value,
+    selectedMonthIndex.value,
+    selectedDay.value,
+    12,
+  )).getUTCDay()]
   return `${selectedYear.value}年${selectedMonth.value}月${selectedDay.value}日 ${weekday}`
 })
 
@@ -338,7 +346,7 @@ const calendarCells = computed<CalendarCell[]>(() => {
   const year = calendarYear.value
   const month = calendarMonth.value
   const monthIndex = month - 1
-  const firstWeekday = new Date(year, monthIndex, 1).getDay()
+  const firstWeekday = new Date(buildBeijingTimestampFromParts(year, monthIndex, 1, 12)).getUTCDay()
   const daysInMonth = getDaysInMonth(year, monthIndex)
   const prevMonthYear = month === 1 ? year - 1 : year
   const prevMonth = month === 1 ? 12 : month - 1
@@ -367,7 +375,7 @@ const calendarCells = computed<CalendarCell[]>(() => {
       isCurrentMonth = false
     }
 
-    const dayStartTs = getBeijingDayStart(new Date(cellYear, cellMonth - 1, cellDay, 12, 0, 0, 0).getTime())
+    const dayStartTs = getBeijingDayStart(buildBeijingTimestampFromParts(cellYear, cellMonth - 1, cellDay, 12))
     const isPast = dayStartTs < todayDayStartTs
 
     cells.push({

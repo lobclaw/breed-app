@@ -3242,6 +3242,56 @@ describe('local domain repository', () => {
     })
   })
 
+  it('财务自定义日期范围应按北京时间整天过滤', async () => {
+    const now = new Date('2026-04-30T23:30:00+08:00').getTime()
+    await localDb.replaceTable('families', [{
+      _id: 'fam_finance_beijing_range',
+      settings: {
+        custom_expense_categories: [],
+        custom_expense_category_groups: [],
+      },
+      updated_at: now,
+    }])
+    await localDb.replaceTable('expenses', [{
+      _id: 'expense_apr_start',
+      family_id: 'fam_finance_beijing_range',
+      total_amount: 100,
+      category: '医疗',
+      date: new Date('2026-04-30T00:05:00+08:00').getTime(),
+      deleted_at: null,
+      updated_at: now,
+    }, {
+      _id: 'expense_apr_end',
+      family_id: 'fam_finance_beijing_range',
+      total_amount: 200,
+      category: '医疗',
+      date: new Date('2026-04-30T23:59:59.999+08:00').getTime(),
+      deleted_at: null,
+      updated_at: now,
+    }, {
+      _id: 'expense_may',
+      family_id: 'fam_finance_beijing_range',
+      total_amount: 300,
+      category: '医疗',
+      date: new Date('2026-05-01T00:00:00+08:00').getTime(),
+      deleted_at: null,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('incomes', [])
+
+    const list = await getLocalTransactionList('fam_finance_beijing_range', {
+      dateRange: {
+        value: 'custom',
+        startDate: now,
+        endDate: now,
+      },
+      type: 'expense',
+      sort: 'date_asc',
+    })
+
+    expect(list.map(item => item._id).sort()).toEqual(['expense_apr_end', 'expense_apr_start'])
+  })
+
   it('应为犬只详情页提供本地详情、历史、窝统计与体重投影', async () => {
     const now = new Date('2026-04-24T10:00:00+08:00').getTime()
     const runtimeNow = Date.now()
