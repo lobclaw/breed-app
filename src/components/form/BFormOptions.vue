@@ -87,7 +87,7 @@ import { ref, computed, watch } from 'vue'
 import {
   buildTimestampFromDayOffset,
   formatDateInputValue,
-  getLocalCalendarDayDiff,
+  getBeijingCalendarDayDiff,
 } from '@/utils/date'
 import BDateTimePicker from './BDateTimePicker.vue'
 
@@ -183,7 +183,7 @@ if (!props.date) {
 
 watch(() => props.date, (value) => {
   if (!value) return
-  const diff = getLocalCalendarDayDiff(value)
+  const diff = getBeijingCalendarDayDiff(value)
   if (props.isTodo) {
     if (diff === 0) chipActive.value = 'today'
     else if (diff === 1) chipActive.value = 'tomorrow'

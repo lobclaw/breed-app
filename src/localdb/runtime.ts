@@ -238,12 +238,64 @@ function isUploadedImageRef(value: string) {
   const text = String(value || '').trim()
   return /^https?:\/\//.test(text)
     || /^cloud:\/\//.test(text)
+    || /^mock:\/\//.test(text)
     || /^unicloud:\/\//i.test(text)
 }
 
 function hasPendingUploadImages(images: any) {
   return Array.isArray(images)
     && images.some(item => typeof item === 'string' && item.trim() && !isUploadedImageRef(item))
+}
+
+function getPendingImageRefs(images: any) {
+  if (!Array.isArray(images)) return []
+  return images
+    .filter((item): item is string => typeof item === 'string' && item.trim().length > 0 && !isUploadedImageRef(item))
+}
+
+function replaceImageRefs(images: any, uploadedRefMap: Map<string, string>) {
+  if (!Array.isArray(images)) return images
+  return images.map((item) => {
+    if (typeof item !== 'string') return item
+    return uploadedRefMap.get(item) || item
+  })
+}
+
+function replaceUploadedRefsDeep(value: any, uploadedRefMap: Map<string, string>): any {
+  if (typeof value === 'string') return uploadedRefMap.get(value) || value
+  if (Array.isArray(value)) return value.map(item => replaceUploadedRefsDeep(item, uploadedRefMap))
+  if (!value || typeof value !== 'object') return value
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [key, replaceUploadedRefsDeep(item, uploadedRefMap)]),
+  )
+}
+
+function getFileExtension(path: string) {
+  const cleanPath = String(path || '').split('?')[0]
+  const match = cleanPath.match(/\.([a-zA-Z0-9]{1,8})$/)
+  return match ? match[1].toLowerCase() : 'jpg'
+}
+
+function buildUploadCloudPath(familyId: string, collection: string, rowId: string, localRef: string, index: number) {
+  const safeFamilyId = encodeURIComponent(familyId || 'unknown')
+  const safeRowId = encodeURIComponent(rowId || 'unknown')
+  const suffix = `${Date.now().toString(36)}_${index}_${Math.random().toString(36).slice(2, 8)}`
+  return `attachments/${safeFamilyId}/${collection}/${safeRowId}/${suffix}.${getFileExtension(localRef)}`
+}
+
+async function uploadLocalImageRef(familyId: string, collection: string, rowId: string, localRef: string, index: number) {
+  if (typeof uniCloud === 'undefined' || typeof uniCloud.uploadFile !== 'function') {
+    throw new Error('当前环境不支持附件上传')
+  }
+  const cloudPath = buildUploadCloudPath(familyId, collection, rowId, localRef, index)
+  const result = await uniCloud.uploadFile({
+    cloudPath,
+    filePath: localRef,
+    fileContent: '',
+  } as any)
+  const uploadedRef = String(result?.fileID || result?.url || '').trim()
+  if (!uploadedRef) throw new Error('附件上传未返回 fileID')
+  return uploadedRef
 }
 
 function getCollectionFamilyWhere(collection: BusinessCollectionName, familyId: string, lastPulledAt: number, dbCmd: any, forceFull = false) {
@@ -1305,6 +1357,87 @@ class LocalSyncRuntime {
       })
   }
 
+  async uploadPendingAttachments(familyIdInput: string) {
+    const familyId = getFamilyId(familyIdInput || this.currentFamilyId)
+    const uploadCollections: BusinessCollectionName[] = ['expenses', 'incomes', 'health_records', 'breeding_records']
+    const rowsByCollection = await Promise.all(
+      uploadCollections.map(async collection => ({
+        collection,
+        rows: await localDb.query<any>(collection, row => (
+          row.family_id === familyId
+          && (row._pending_upload || row.pending_upload)
+          && !row.deleted_at
+        )),
+      })),
+    )
+    const uploadTargets: Array<{
+      collection: BusinessCollectionName
+      row: Record<string, any>
+      localRef: string
+      index: number
+    }> = []
+
+    for (const { collection, rows } of rowsByCollection) {
+      for (const row of rows) {
+        const refs = [
+          ...getPendingImageRefs(row.images),
+          ...getPendingImageRefs(row.details?.images),
+        ]
+        refs.forEach((localRef, index) => {
+          uploadTargets.push({ collection, row, localRef, index })
+        })
+      }
+    }
+    if (!rowsByCollection.some(item => item.rows.length > 0)) return { uploaded: 0 }
+
+    const uniqueTargets = [
+      ...new Map(uploadTargets.map(target => [`${target.collection}:${target.row._id}:${target.localRef}`, target])).values(),
+    ]
+
+    const uploadedRefMap = new Map<string, string>()
+    for (const target of uniqueTargets) {
+      if (uploadedRefMap.has(target.localRef)) continue
+      const uploadedRef = await uploadLocalImageRef(familyId, target.collection, target.row._id, target.localRef, target.index)
+      uploadedRefMap.set(target.localRef, uploadedRef)
+    }
+
+    const now = getNow()
+    await localDb.transact([...uploadCollections, 'outbox_mutations'], (tables) => {
+      for (const collection of uploadCollections) {
+        tables[collection] = (tables[collection] as any[]).map((row) => {
+          if (row.family_id !== familyId || !(row._pending_upload || row.pending_upload) || row.deleted_at) return row
+          const nextDetails = row.details && typeof row.details === 'object'
+            ? { ...row.details, images: replaceImageRefs(row.details.images, uploadedRefMap) }
+            : row.details
+          const nextRow = {
+            ...row,
+            images: replaceImageRefs(row.images, uploadedRefMap),
+            ...(nextDetails !== row.details ? { details: nextDetails } : {}),
+          }
+          const stillPending = hasPendingUploadImages(nextRow.images) || hasPendingUploadImages(nextRow.details?.images)
+          return {
+            ...nextRow,
+            _pending_upload: stillPending,
+            pending_upload: stillPending,
+            _upload_error: stillPending ? row._upload_error || null : null,
+            updated_at: now,
+          }
+        })
+      }
+
+      tables.outbox_mutations = (tables.outbox_mutations as OutboxMutation[]).map((mutation) => {
+        if (mutation.family_id !== familyId || mutation.status === 'synced') return mutation
+        return {
+          ...mutation,
+          payload: replaceUploadedRefsDeep(mutation.payload, uploadedRefMap),
+          updated_at: now,
+        }
+      })
+    })
+
+    return { uploaded: uploadedRefMap.size }
+  }
+
   async retryFailedOutboxNow(familyIdInput: string) {
     const familyId = getFamilyId(familyIdInput || this.currentFamilyId)
     await this.init()
@@ -1919,6 +2052,7 @@ class LocalSyncRuntime {
 
     try {
       await recoverStaleProcessingOutbox(familyId)
+      await this.uploadPendingAttachments(familyId)
       const outbox = await localDb.getOutbox()
       const now = getNow()
       const pendingMutations = outbox.filter(mutation =>

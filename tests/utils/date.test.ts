@@ -10,6 +10,7 @@ import {
   formatDateInputValue,
   formatDateTimeInputValue,
   formatTimeInputValue,
+  getBeijingCalendarDayDiff,
   getBeijingDateParts,
   getBeijingDayDiff,
   getBeijingElapsedDays,
@@ -165,6 +166,15 @@ describe('日期工具函数', () => {
     const nextMorningTs = new Date('2026-04-23T00:00:00.001+08:00').getTime()
 
     expect(getBeijingDayDiff(nextMorningTs, baseTs)).toBe(1)
+  })
+
+  it('快捷日期标签差值应使用北京时间日历', () => {
+    const baseTs = new Date('2026-04-22T23:30:00+08:00').getTime()
+    const sameBeijingDay = new Date('2026-04-22T00:30:00+08:00').getTime()
+    const nextBeijingDay = new Date('2026-04-23T00:10:00+08:00').getTime()
+
+    expect(getBeijingCalendarDayDiff(sameBeijingDay, baseTs)).toBe(0)
+    expect(getBeijingCalendarDayDiff(nextBeijingDay, baseTs)).toBe(1)
   })
 
   it('第 N 天应按北京时间日边界并从起始当天算第 1 天', () => {

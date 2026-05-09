@@ -332,12 +332,12 @@ const calendarMonthLabel = computed(() => `${calendarYear.value}年${calendarMon
 const monthPanelLabel = computed(() => `${panelYear.value}年${panelMonth.value}月`)
 const draftTimeText = computed(() => formatTimeParts(selectedHour.value, selectedMinute.value))
 const draftDateMetaText = computed(() => {
-  const weekday = weekLabels[new Date(buildBeijingTimestampFromParts(
+  const weekday = weekLabels[getBeijingDateParts(buildBeijingTimestampFromParts(
     selectedYear.value,
     selectedMonthIndex.value,
     selectedDay.value,
     12,
-  )).getUTCDay()]
+  )).weekday]
   return `${selectedYear.value}年${selectedMonth.value}月${selectedDay.value}日 ${weekday}`
 })
 
@@ -346,7 +346,7 @@ const calendarCells = computed<CalendarCell[]>(() => {
   const year = calendarYear.value
   const month = calendarMonth.value
   const monthIndex = month - 1
-  const firstWeekday = new Date(buildBeijingTimestampFromParts(year, monthIndex, 1, 12)).getUTCDay()
+  const firstWeekday = getBeijingDateParts(buildBeijingTimestampFromParts(year, monthIndex, 1, 12)).weekday
   const daysInMonth = getDaysInMonth(year, monthIndex)
   const prevMonthYear = month === 1 ? year - 1 : year
   const prevMonth = month === 1 ? 12 : month - 1

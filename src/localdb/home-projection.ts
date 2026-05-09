@@ -1,5 +1,5 @@
 import type { SyncTouchedEntity } from '@/localdb/types'
-import { getBeijingElapsedDays, getBeijingOrdinalDay } from '@/utils/date'
+import { getBeijingDateParts, getBeijingDayStart, getBeijingElapsedDays, getBeijingOrdinalDay } from '@/utils/date'
 
 const DAY_MS = 86400000
 const BREEDING_EXTRA_TYPES = new Set([
@@ -25,17 +25,11 @@ export interface HomeProjectionEntities {
 }
 
 function getBeijingDayContext(now = Date.now()) {
-  const offsetMs = 8 * 60 * 60 * 1000
-  const beijingNow = new Date(now + offsetMs)
-  const year = beijingNow.getUTCFullYear()
-  const month = beijingNow.getUTCMonth()
-  const day = beijingNow.getUTCDate()
-  const hour = String(beijingNow.getUTCHours()).padStart(2, '0')
-  const minute = String(beijingNow.getUTCMinutes()).padStart(2, '0')
-  const start = Date.UTC(year, month, day, 0, 0, 0, 0) - offsetMs
+  const parts = getBeijingDateParts(now)
+  const start = getBeijingDayStart(now)
 
   return {
-    currentTime: `${hour}:${minute}`,
+    currentTime: `${String(parts.hours).padStart(2, '0')}:${String(parts.minutes).padStart(2, '0')}`,
     dayStart: start,
     dayEnd: start + DAY_MS - 1,
   }
@@ -896,8 +890,7 @@ export function buildLocalHomeCards(entities: HomeProjectionEntities, now = Date
   const medItems = computeMedItemsForDay(activeMedications, now) as GenericRow[]
   const sectioned: any = buildSectionedCards(normalizedPendingTasks, todayCompletedTasks, activeIllnesses, medItems, now)
 
-  const beijingToday = new Date(todayStartTs + (8 * 60 * 60 * 1000))
-  const dayOfWeek = beijingToday.getUTCDay()
+  const dayOfWeek = getBeijingDateParts(todayStartTs).weekday
   const daysToSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek
   const sundayEndTs = todayStartTs + (daysToSunday * DAY_MS) + DAY_MS - 1
   const day30EndTs = todayStartTs + (30 * DAY_MS) + DAY_MS - 1

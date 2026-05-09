@@ -486,8 +486,8 @@ function buildDetailBreedingStatuses(cycles: any[] = [], activeLitters: any[] = 
     const totalDays = 63
     const currentDay = getBeijingOrdinalDay(startTs, now) || 1
     const dueTs = startTs + totalDays * 86400000
-    const dueDate = new Date(dueTs)
-    const dueMd = `${dueDate.getMonth() + 1}月${dueDate.getDate()}日`
+    const dueDate = getBeijingDateParts(dueTs)
+    const dueMd = `${dueDate.month}月${dueDate.day}日`
 
     return [{
       type: '怀孕中',
@@ -2140,7 +2140,7 @@ export async function getLocalProjectionParams(familyId: string) {
   ).length
 
   const littersByYear = litters.reduce<Record<string, number>>((map, litter) => {
-    const year = new Date(litter.birth_date || litter.created_at || now).getFullYear()
+    const year = getBeijingDateParts(litter.birth_date || litter.created_at || now).year
     map[String(year)] = (map[String(year)] || 0) + 1
     return map
   }, {})

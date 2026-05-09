@@ -71,6 +71,7 @@ import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 import { useProtocolStore } from '@/stores/protocolStore'
 import type { RecycleBinItem, RecycleItemType } from '@/types/recycle'
+import { getBeijingDateParts } from '@/utils/date'
 
 const protocolStore = useProtocolStore()
 const { currentFamily } = useAuth()
@@ -97,8 +98,8 @@ function getIcon(type: RecycleItemType): string {
 
 function formatDate(ts: number): string {
   if (!ts) return ''
-  const d = new Date(ts)
-  return `${d.getMonth() + 1}月${d.getDate()}日`
+  const d = getBeijingDateParts(ts)
+  return `${d.month}月${d.day}日`
 }
 
 async function syncRecycleSideEffects(type: RecycleItemType) {

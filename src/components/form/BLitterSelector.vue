@@ -81,6 +81,7 @@ import BEntityIcon from '../base/BEntityIcon.vue'
 import BSheet from '../layout/BSheet.vue'
 import BSkeleton from '../feedback/BSkeleton.vue'
 import BEmpty from '../feedback/BEmpty.vue'
+import { getBeijingDateParts } from '@/utils/date'
 
 interface Litter {
   _id: string
@@ -196,11 +197,8 @@ function isSelected(id: string) {
 
 function formatDate(ts?: number): string {
   if (!ts) return '--'
-  const d = new Date(ts)
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
+  const d = getBeijingDateParts(ts)
+  return `${d.year}-${String(d.month).padStart(2, '0')}-${String(d.day).padStart(2, '0')}`
 }
 
 function formatLitterTitle(litter: Litter): string {

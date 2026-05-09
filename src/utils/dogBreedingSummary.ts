@@ -10,6 +10,7 @@ import {
   type BreedingTimelineKind,
   type BreedingTimelineTone,
 } from '@/utils/breedingTimeline'
+import { getBeijingDateParts } from '@/utils/date'
 
 export interface ActiveCycleSummaryTimelineItem {
   key: string
@@ -66,8 +67,8 @@ const RECORD_STAGE_SORT_ORDER: Record<string, number> = {
 
 function formatDate(ts?: number | null) {
   if (typeof ts !== 'number') return '—'
-  const date = new Date(ts)
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  const date = getBeijingDateParts(ts)
+  return `${date.year}-${String(date.month).padStart(2, '0')}-${String(date.day).padStart(2, '0')}`
 }
 
 function truncateText(text: string, maxLength = 18) {

@@ -253,6 +253,7 @@ import BSheet from '@/components/layout/BSheet.vue'
 import { localSyncRuntime } from '@/localdb/runtime'
 import { localDb } from '@/localdb/db'
 import { isAuthTokenError } from '@/utils/cloudError'
+import { getBeijingDateParts } from '@/utils/date'
 import type { BusinessCollectionName } from '@/localdb/types'
 
 const backingUp = ref(false)
@@ -429,8 +430,8 @@ function promptLoginExpired() {
 
 function formatDate(ts: number): string {
   if (!ts) return ''
-  const d = new Date(ts)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  const d = getBeijingDateParts(ts)
+  return `${d.year}-${String(d.month).padStart(2, '0')}-${String(d.day).padStart(2, '0')} ${String(d.hours).padStart(2, '0')}:${String(d.minutes).padStart(2, '0')}`
 }
 
 function formatBackupHistoryTime(ts: number): string {
@@ -486,13 +487,13 @@ function hydrateBackupInfoFromCache() {
 }
 
 function formatDateForFileName(ts = Date.now()): string {
-  const d = new Date(ts)
+  const d = getBeijingDateParts(ts)
   return [
-    d.getFullYear(),
-    String(d.getMonth() + 1).padStart(2, '0'),
-    String(d.getDate()).padStart(2, '0'),
-    String(d.getHours()).padStart(2, '0'),
-    String(d.getMinutes()).padStart(2, '0'),
+    d.year,
+    String(d.month).padStart(2, '0'),
+    String(d.day).padStart(2, '0'),
+    String(d.hours).padStart(2, '0'),
+    String(d.minutes).padStart(2, '0'),
   ].join('')
 }
 

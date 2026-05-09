@@ -231,6 +231,12 @@ import { useCloudCall } from '@/composables/useCloudCall'
 import { useAuth } from '@/composables/useAuth'
 import { getLocalOperationStatusText } from '@/localdb/local-operation-log'
 import { localSyncRuntime } from '@/localdb/runtime'
+import {
+  DAY_MS,
+  getBeijingDateParts,
+  getBeijingDayStart,
+  getBeijingMonthRange,
+} from '@/utils/date'
 import { mergeOperationLogs } from '@/utils/operationLogMerge'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSheet from '@/components/layout/BSheet.vue'
@@ -443,13 +449,11 @@ function arraysEqual(left: string[], right: string[]): boolean {
 }
 
 function startOfDay(timestamp: number): number {
-  const date = new Date(timestamp)
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0).getTime()
+  return getBeijingDayStart(timestamp)
 }
 
 function endOfDay(timestamp: number): number {
-  const date = new Date(timestamp)
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999).getTime()
+  return getBeijingDayStart(timestamp) + DAY_MS - 1
 }
 
 function getTodayRange() {
@@ -461,18 +465,19 @@ function getTodayRange() {
 }
 
 function getWeekRange() {
-  const now = new Date()
-  const day = now.getDay() || 7
+  const now = getBeijingDateParts()
+  const day = now.weekday || 7
   return {
-    start: new Date(now.getFullYear(), now.getMonth(), now.getDate() - day + 1, 0, 0, 0, 0).getTime(),
+    start: getBeijingDayStart(Date.now() - (day - 1) * DAY_MS),
     end: Date.now(),
   }
 }
 
 function getMonthRange() {
-  const now = new Date()
+  const now = getBeijingDateParts()
+  const range = getBeijingMonthRange(now.year, now.monthIndex)
   return {
-    start: new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0).getTime(),
+    start: range.startDate,
     end: Date.now(),
   }
 }
@@ -496,41 +501,38 @@ function getFilterRange(range: LogDateRangeValue, customStartDate: number, custo
 
 function formatDateInput(timestamp: number) {
   if (!timestamp) return ''
-  const date = new Date(timestamp)
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
+  const date = getBeijingDateParts(timestamp)
+  const year = date.year
+  const month = String(date.month).padStart(2, '0')
+  const day = String(date.day).padStart(2, '0')
   return `${year}-${month}-${day}`
 }
 
 function formatClock(timestamp: number): string {
-  const d = new Date(timestamp)
-  const hours = String(d.getHours()).padStart(2, '0')
-  const minutes = String(d.getMinutes()).padStart(2, '0')
+  const d = getBeijingDateParts(timestamp)
+  const hours = String(d.hours).padStart(2, '0')
+  const minutes = String(d.minutes).padStart(2, '0')
   return `${hours}:${minutes}`
 }
 
 function getDateKey(timestamp: number): string {
-  const d = new Date(timestamp)
-  const year = d.getFullYear()
-  const month = String(d.getMonth() + 1).padStart(2, '0')
-  const date = String(d.getDate()).padStart(2, '0')
-  return `${year}-${month}-${date}`
+  const d = getBeijingDateParts(timestamp)
+  const month = String(d.month).padStart(2, '0')
+  const date = String(d.day).padStart(2, '0')
+  return `${d.year}-${month}-${date}`
 }
 
 function formatGroupLabel(timestamp: number): string {
-  const now = new Date()
-  const todayKey = getDateKey(now.getTime())
-  const yesterday = new Date(now)
-  yesterday.setDate(now.getDate() - 1)
-  const yesterdayKey = getDateKey(yesterday.getTime())
+  const now = Date.now()
+  const todayKey = getDateKey(now)
+  const yesterdayKey = getDateKey(now - DAY_MS)
   const currentKey = getDateKey(timestamp)
 
   if (currentKey === todayKey) return '今天'
   if (currentKey === yesterdayKey) return '昨天'
 
-  const d = new Date(timestamp)
-  return `${d.getMonth() + 1}月${d.getDate()}日`
+  const d = getBeijingDateParts(timestamp)
+  return `${d.month}月${d.day}日`
 }
 
 function buildLogDetail(raw: Record<string, any>): string {

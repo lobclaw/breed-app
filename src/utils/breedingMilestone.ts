@@ -1,4 +1,5 @@
 import {
+  getBeijingDateParts,
   getBeijingDayDiff,
   getBeijingElapsedDays,
   getBeijingOrdinalDay,
@@ -289,8 +290,8 @@ function getFallbackStageTitle(title?: string): string {
 }
 
 function formatMonthDay(ts: number): string {
-  const date = new Date(ts)
-  return `${date.getMonth() + 1}月${date.getDate()}日`
+  const date = getBeijingDateParts(ts)
+  return `${date.month}月${date.day}日`
 }
 
 function getNumber(value: unknown): number | null {

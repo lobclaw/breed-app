@@ -26,6 +26,7 @@ export function getBeijingDateParts(value: number | Date = Date.now()) {
     month: date.getUTCMonth() + 1,
     monthIndex: date.getUTCMonth(),
     day: date.getUTCDate(),
+    weekday: date.getUTCDay(),
     hours: date.getUTCHours(),
     minutes: date.getUTCMinutes(),
     seconds: date.getUTCSeconds(),
@@ -267,12 +268,12 @@ export function formatDateTimeInputValue(ts?: number | null) {
   return formatDateInputValue(ts)
 }
 
+export function getBeijingCalendarDayDiff(targetTs: number, baseTs: number = Date.now()) {
+  return getBeijingDayDiff(targetTs, baseTs)
+}
+
 export function getLocalCalendarDayDiff(targetTs: number, baseTs: number = Date.now()) {
-  const target = new Date(targetTs)
-  const base = new Date(baseTs)
-  const targetStart = new Date(target.getFullYear(), target.getMonth(), target.getDate()).getTime()
-  const baseStart = new Date(base.getFullYear(), base.getMonth(), base.getDate()).getTime()
-  return Math.round((targetStart - baseStart) / DAY_MS)
+  return getBeijingCalendarDayDiff(targetTs, baseTs)
 }
 
 export function getBeijingDayStart(ts: number) {

@@ -28,7 +28,7 @@ Local-First Foundation：
 - 核心业务读写已升级为“本地事务 + outbox + 后台同步”
 - `local-first` 页面已统一接入页面级 scope 与 `usePageSync`
 - 产品按“本地优先单主端”落地，但同步底座保留升级到多端并发的能力
-- 当前剩余重点转为 Network 验收、冲突 UX 与待上传入口补强
+- 当前剩余重点转为 Network 验收、冲突 UX 与附件失败/重试体验补强
 
 ## 3. 服务边界
 
@@ -163,7 +163,8 @@ Local-First Foundation：
 - 核心写路径已收口到本地事务 + outbox，并由各域云对象处理 `_sync` 幂等 ack
 - 销售流程已补齐本地候选过滤、列表/详情归一化投影，以及退款/定金取消金额边界的前端、本地事务、云对象三层校验
 - 备份页已接入 pending outbox / pending upload 阻断提示
-- 同步状态页已接入 pending / failed / conflict / pending upload 统计、当前 active scope、最近同步时间与失败/冲突重试
+- 同步状态页已接入 pending / failed / conflict / pending upload 统计、当前 active scope、最近同步时间与失败/冲突重试；`flushOutbox` 前会先上传本地附件，成功后替换本地行与 outbox payload 并清除 `pending_upload`
+- 低频页面、日期选择器与繁育摘要展示统一读取 timestamp 后按北京时间格式化/计算日历差值，避免海外设备本地时区影响业务日期展示
 - 在线优先页已补断网联网提示
 - 旧入口 `pages/record/health`、`pages/record/breeding`、`pages/finance/income-add` 已归类为 `redirect-deprecated`
 

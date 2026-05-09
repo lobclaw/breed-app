@@ -295,7 +295,7 @@ import { findLocal, queryLocal } from '@/localdb/repository'
 import { localSyncRuntime } from '@/localdb/runtime'
 import { useDogStore } from '@/stores/dogStore'
 import { getBirthCycleIdFromDog, getBreedingDogPickerEmptyState, getEligibleBreedingDogs } from '@/utils/breedingDogEligibility'
-import { buildTimestampFromDayOffset, formatDateInputValue, getLocalCalendarDayDiff } from '@/utils/date'
+import { buildTimestampFromDayOffset, formatDateInputValue, getBeijingCalendarDayDiff } from '@/utils/date'
 import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 
@@ -349,7 +349,7 @@ const birthDateStr = computed(() => {
 })
 
 const dateChips = computed(() => {
-  const diff = form.birth_date ? getLocalCalendarDayDiff(form.birth_date) : null
+  const diff = form.birth_date ? getBeijingCalendarDayDiff(form.birth_date) : null
   return [
     { label: '今天', offset: 0, active: diff === 0 },
     { label: '昨天', offset: -1, active: diff === -1 },

@@ -381,7 +381,7 @@ import {
 import { localSyncRuntime } from '@/localdb/runtime'
 import { resolveMedicationRouteQuery, type MedicationRouteIllnessLink } from '@/utils/recordFormRoutes'
 import { formatMedicationDosage, formatMedicationFrequency, formatMedicationMethod } from '@/utils/medicationDisplay'
-import { buildTimestampFromDayOffset, formatDateInputValue, getLocalCalendarDayDiff } from '@/utils/date'
+import { buildTimestampFromDayOffset, formatDateInputValue, getBeijingCalendarDayDiff } from '@/utils/date'
 import { useProtocolStore, type MedicationProtocol } from '@/stores/protocolStore'
 import BCard from '@/components/base/BCard.vue'
 import BTag from '@/components/base/BTag.vue'
@@ -589,7 +589,7 @@ function onDateConfirm(value: number | string) {
   if (typeof value !== 'number') return
   date.value = value
   chipActive.value = ''
-  const diff = getLocalCalendarDayDiff(date.value)
+  const diff = getBeijingCalendarDayDiff(date.value)
   if (diff === 0) chipActive.value = 'today'
   else if (diff === -1) chipActive.value = 'yesterday'
   else if (diff === -2) chipActive.value = 'dayBefore'

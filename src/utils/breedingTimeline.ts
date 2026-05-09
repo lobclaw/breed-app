@@ -1,5 +1,5 @@
 import type { BreedingCycle, BreedingRecord, Litter } from '@/types/breeding'
-import { getBeijingDayDiff, getBeijingOrdinalDay } from '@/utils/date'
+import { getBeijingDateParts, getBeijingDayDiff, getBeijingOrdinalDay } from '@/utils/date'
 import { buildCompactBreedingCycleStatusTitle, getBreedingCycleCurrentDayCount } from '@/utils/dogStatusCopy'
 
 export type BreedingTimelineKind = 'upcoming' | 'current' | 'record'
@@ -24,8 +24,8 @@ type BreedingTimelineContext = {
 
 function formatDate(ts?: number | null) {
   if (typeof ts !== 'number') return '—'
-  const date = new Date(ts)
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  const date = getBeijingDateParts(ts)
+  return `${date.year}-${String(date.month).padStart(2, '0')}-${String(date.day).padStart(2, '0')}`
 }
 
 export function getBreedingTimelineRecordTone(type?: string | null): BreedingTimelineTone {

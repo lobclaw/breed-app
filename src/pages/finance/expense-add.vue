@@ -187,7 +187,7 @@ import {
   getIncomeTypeMeta,
   normalizeExpenseCategories,
 } from '@/constants/financeCategories'
-import { buildTimestampFromDayOffset, formatDateInputValue, getLocalCalendarDayDiff } from '@/utils/date'
+import { buildTimestampFromDayOffset, formatDateInputValue, getBeijingCalendarDayDiff } from '@/utils/date'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BExpenseCategorySheet from '@/components/form/BExpenseCategorySheet.vue'
@@ -327,7 +327,7 @@ function onDateConfirm(value: number | string) {
   if (typeof value !== 'number') return
   date.value = value
   chipActive.value = ''
-  const diff = getLocalCalendarDayDiff(date.value)
+  const diff = getBeijingCalendarDayDiff(date.value)
   if (diff === 0) chipActive.value = 'today'
   else if (diff === -1) chipActive.value = 'yesterday'
   else if (diff === -2) chipActive.value = 'dayBefore'

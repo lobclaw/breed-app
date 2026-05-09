@@ -103,6 +103,7 @@ import { useAuth } from '@/composables/useAuth'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import { localSyncRuntime } from '@/localdb/runtime'
 import { isAuthTokenError } from '@/utils/cloudError'
+import { getBeijingDateParts } from '@/utils/date'
 
 interface SyncIssue {
   _id: string
@@ -160,7 +161,10 @@ const syncActionIcon = computed(() => {
   if (canRetryIssues.value) return 'restart_alt'
   return 'sync'
 })
-const syncActionDisabled = computed(() => syncActionLoading.value || (!hasAuthExpiredIssue.value && !canRetryIssues.value && !syncStatus.activeScope))
+const syncActionDisabled = computed(() => (
+  syncActionLoading.value
+  || (!hasAuthExpiredIssue.value && !canRetryIssues.value && !syncStatus.activeScope && syncStatus.pendingUpload === 0)
+))
 const isDevMode = computed(() => {
   const devFlag = typeof globalThis !== 'undefined' ? (globalThis as any).__DEV__ : undefined
   return devFlag === true || import.meta.env.DEV === true
@@ -236,8 +240,8 @@ function promptLoginExpired() {
 
 function formatTime(ts: number) {
   if (!ts) return '暂无'
-  const d = new Date(ts)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  const d = getBeijingDateParts(ts)
+  return `${d.year}-${String(d.month).padStart(2, '0')}-${String(d.day).padStart(2, '0')} ${String(d.hours).padStart(2, '0')}:${String(d.minutes).padStart(2, '0')}`
 }
 
 function issueStatusText(status: string) {
@@ -357,7 +361,31 @@ async function handleSyncAction() {
     await retryIssues()
     return
   }
+  if (!syncStatus.activeScope && syncStatus.pendingUpload > 0) {
+    await syncPendingUploads()
+    return
+  }
   await forceSyncActiveScope()
+}
+
+async function syncPendingUploads() {
+  if (syncingScope.value) return
+  const familyId = currentFamily.value?._id || ''
+  if (!familyId) {
+    uni.showToast({ title: '缺少家庭信息', icon: 'none' })
+    return
+  }
+  syncingScope.value = true
+  try {
+    await localSyncRuntime.uploadPendingAttachments(familyId)
+    await loadStatus()
+    uni.showToast(getRemainingSyncToast())
+  } catch (error) {
+    await loadStatus()
+    uni.showToast({ title: error instanceof Error ? error.message : '附件上传失败', icon: 'none' })
+  } finally {
+    syncingScope.value = false
+  }
 }
 
 async function forceSyncActiveScope() {

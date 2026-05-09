@@ -244,6 +244,7 @@ import BNavBar from '@/components/layout/BNavBar.vue'
 import BModal from '@/components/layout/BModal.vue'
 import { getLocalKennelDashboardStats } from '@/localdb/domain-repository'
 import { localSyncRuntime } from '@/localdb/runtime'
+import { getBeijingDateParts } from '@/utils/date'
 
 type DrawerMenuItem = {
   label: string
@@ -365,8 +366,8 @@ const stats = reactive({
 })
 
 const currentMonthLabel = computed(() => {
-  const now = new Date()
-  return `${now.getMonth() + 1}月`
+  const now = getBeijingDateParts()
+  return `${now.month}月`
 })
 const monthlyIncomeLabel = computed(() => formatMoney(stats.monthlyIncome))
 const monthlyExpenseLabel = computed(() => formatMoney(-stats.monthlyExpense))

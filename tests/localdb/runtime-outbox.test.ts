@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { localDb } from '../../src/localdb/db'
 import { localSyncRuntime } from '../../src/localdb/runtime'
+import { createMockUniCloud } from '../helpers/mock-unicloud'
 
 function createDeferred<T = void>() {
   let resolve!: (value: T | PromiseLike<T>) => void
@@ -20,7 +21,10 @@ describe('local sync runtime outbox diagnostics', () => {
     await localDb.replaceTable('dogs', [])
     await localDb.replaceTable('tasks', [])
     await localDb.replaceTable('health_records', [])
+    await localDb.replaceTable('breeding_records', [])
     await localDb.replaceTable('medication_tasks', [])
+    await localDb.replaceTable('expenses', [])
+    await localDb.replaceTable('incomes', [])
     localSyncRuntime.setCurrentFamilyId('')
   })
 
@@ -73,6 +77,79 @@ describe('local sync runtime outbox diagnostics', () => {
       createdAt: 1,
       updatedAt: 10,
     }])
+  })
+
+  it('上传待传附件后应替换本地记录与 outbox payload', async () => {
+    const mockUniCloud = createMockUniCloud()
+    ;(globalThis as any).uniCloud = mockUniCloud
+    const localImage = 'wxfile://tmp/receipt.jpg'
+
+    await localDb.replaceTable('expenses', [{
+      _id: 'expense_upload_1',
+      family_id: 'fam_upload',
+      total_amount: 120,
+      category: '医疗',
+      images: [localImage],
+      date: 1000,
+      updated_at: 1000,
+      _pending_upload: true,
+      pending_upload: true,
+    }])
+    await localDb.replaceTable('outbox_mutations', [{
+      _id: 'outbox_upload_1',
+      type: 'finance.addExpense',
+      collection_scope: ['expenses'],
+      payload: {
+        total_amount: 120,
+        category: '医疗',
+        images: [localImage],
+        _sync: { clientMutationId: 'upload_1', deviceId: 'device_1', clientTimestamp: 1000 },
+      },
+      family_id: 'fam_upload',
+      status: 'pending',
+      retry_count: 0,
+      next_retry_at: 0,
+      last_error: null,
+      client_mutation_id: 'upload_1',
+      device_id: 'device_1',
+      created_at: 1000,
+      updated_at: 1000,
+    }])
+
+    const result = await localSyncRuntime.uploadPendingAttachments('fam_upload')
+    const [expense] = await localDb.getTable<any>('expenses')
+    const [mutation] = await localDb.getOutbox()
+    const uploadedFiles = (mockUniCloud as any).__getUploadedFiles()
+    const uploadedRef = uploadedFiles[0].fileID
+
+    expect(result.uploaded).toBe(1)
+    expect(uploadedFiles[0].cloudPath).toContain('attachments/fam_upload/expenses/expense_upload_1/')
+    expect(expense.images).toEqual([uploadedRef])
+    expect(expense._pending_upload).toBe(false)
+    expect(expense.pending_upload).toBe(false)
+    expect(mutation.payload.images).toEqual([uploadedRef])
+  })
+
+  it('待传标记遇到已上传图片时应自动清理', async () => {
+    ;(globalThis as any).uniCloud = createMockUniCloud()
+    await localDb.replaceTable('expenses', [{
+      _id: 'expense_uploaded_1',
+      family_id: 'fam_upload',
+      total_amount: 80,
+      category: '医疗',
+      images: ['cloud://receipt.jpg'],
+      date: 1000,
+      updated_at: 1000,
+      _pending_upload: true,
+      pending_upload: true,
+    }])
+
+    const result = await localSyncRuntime.uploadPendingAttachments('fam_upload')
+    const [expense] = await localDb.getTable<any>('expenses')
+
+    expect(result.uploaded).toBe(0)
+    expect(expense._pending_upload).toBe(false)
+    expect(expense.pending_upload).toBe(false)
   })
 
   it('应用 sync_conflicts 详情替换冲突项的旧错误文案', async () => {
