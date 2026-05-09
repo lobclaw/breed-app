@@ -187,7 +187,8 @@
 - 表单主 CTA 统一支持 `默认 / 提交中 / 成功瞬态` 三态，成功瞬态当前口径为 `520ms`
 - 业务图片附件遵循 Local-First：选择后先压缩并保存本地持久引用，业务记录立即保存；同步前再通过 `uniCloud.uploadFile` 上传并回填云 `fileID`
 - 普通业务图片目标 `<=350KB`；健康/繁育记录图片目标 `<=450KB`；头像目标 `<=180KB`
-- 云存储 `fileID` 不直接作为 `<image>` / `previewImage` 地址使用；展示前统一走 `resolveImageDisplayUrl(s)`，优先命中 `image_cache_entries` 本地缓存，未命中再取云端临时 URL 并 best-effort 回填缓存
+- 云存储 `fileID` 不直接作为 `<image>` / `previewImage` 地址使用；展示前统一走 `resolveImageDisplayUrl(s)`，优先命中 `image_cache_entries` 本地缓存，未命中批量取云端临时 URL 并 best-effort 回填缓存
+- Local-First 页面同步按当前 scope 批量拉取集合，首页只同步首页集合；非首页数据进入对应页面后再同步
 - 下一阶段对短时可逆动作优先补 `Undo / 可撤销`，不回退为强 success toast 驱动
 
 ## 10. 成本结论

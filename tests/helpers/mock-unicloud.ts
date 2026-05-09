@@ -53,9 +53,9 @@ function createDbCommand() {
 function createQueryChain(collectionName: string) {
   let filterFn: ((doc: any) => boolean) | null = null
   let fieldProjection: Record<string, boolean> | null = null
-  let sortField: string | null = null
-  let sortOrder: 'asc' | 'desc' = 'asc'
+  const sortRules: Array<{ field: string; order: 'asc' | 'desc' }> = []
   let limitCount = 0
+  let skipCount = 0
   let docId: string | null = null
 
   const chain: any = {
@@ -97,8 +97,11 @@ function createQueryChain(collectionName: string) {
       return chain
     },
     orderBy(field: string, order: 'asc' | 'desc') {
-      sortField = field
-      sortOrder = order
+      sortRules.push({ field, order })
+      return chain
+    },
+    skip(n: number) {
+      skipCount = Math.max(0, Number(n) || 0)
       return chain
     },
     limit(n: number) {
@@ -115,12 +118,19 @@ function createQueryChain(collectionName: string) {
 
       let results = filterFn ? col.filter(filterFn) : [...col]
 
-      if (sortField) {
-        const sf = sortField
+      if (sortRules.length > 0) {
         results.sort((a, b) => {
-          const av = a[sf], bv = b[sf]
-          return sortOrder === 'asc' ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1)
+          for (const { field, order } of sortRules) {
+            const av = a[field], bv = b[field]
+            if (av === bv) continue
+            return order === 'asc' ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1)
+          }
+          return 0
         })
+      }
+
+      if (skipCount > 0) {
+        results = results.slice(skipCount)
       }
 
       if (limitCount > 0) {

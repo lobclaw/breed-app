@@ -35,6 +35,7 @@ import {
   type SyncScopeMode,
 } from '@/localdb/scope-registry'
 import { getSyncStatus } from '@/localdb/sync-status'
+import { cloudCall } from '@/composables/useCloudCall'
 import type {
   BusinessCollectionName,
   LocalCollectionName,
@@ -70,10 +71,41 @@ interface SyncScopeResult {
   force: boolean
 }
 
+interface PullCollectionPayload {
+  ok?: boolean
+  rows?: Record<string, any>[]
+  cursor?: number
+  offset?: number
+  hasMore?: boolean
+  error?: string
+}
+
+interface PullCollectionsResponse {
+  data?: {
+    collections?: Partial<Record<BusinessCollectionName, PullCollectionPayload>>
+  }
+}
+
+type PulledRow = Record<string, any> & { _id: string; updated_at?: number; created_at?: number; version: number }
+
+interface PullCollectionFailure {
+  collection: BusinessCollectionName
+  error: string
+}
+
+interface PullCollectionsBatchResult {
+  rowsByCollection: Partial<Record<BusinessCollectionName, PulledRow[]>>
+  failures: PullCollectionFailure[]
+}
+
+interface PullCollectionInFlightResult {
+  rows: PulledRow[]
+  failure: PullCollectionFailure | null
+}
+
 const ACTIVE_SCOPE_META_KEY = 'sync:active-scope'
 const CORE_SYNC_META_KEY = 'sync:core'
 const CORE_SYNC_INTERVAL_MS = 10 * 60 * 1000
-const CORE_SYNC_BATCH_SIZE = 4
 const EXTRA_ARRANGEMENT_TITLE_MAP: Record<string, string> = {
   contact_doctor: '联系医生',
   recheck_observe: '复测观察',
@@ -263,69 +295,162 @@ function replaceUploadedRefsDeep(value: any, uploadedRefMap: Map<string, string>
   )
 }
 
-function getCollectionFamilyWhere(collection: BusinessCollectionName, familyId: string, lastPulledAt: number, dbCmd: any, forceFull = false) {
-  if (collection === 'families') {
-    return forceFull
-      ? { _id: familyId }
-      : { _id: familyId, updated_at: dbCmd.gte(lastPulledAt || 0) }
-  }
+const pullInFlight = new Map<string, Promise<PullCollectionInFlightResult>>()
 
-  return forceFull
-    ? { family_id: familyId }
-    : {
-        family_id: familyId,
-        updated_at: dbCmd.gte(lastPulledAt || 0),
-      }
+function buildPullKey(collection: BusinessCollectionName, familyId: string, forceFull = false) {
+  return `${collection}:${familyId}:${forceFull ? 'full' : 'delta'}`
 }
 
-const pullInFlight = new Map<string, Promise<Record<string, any>[]>>()
+function formatPullFailures(failures: PullCollectionFailure[]) {
+  return failures.map(failure => `${failure.collection}: ${failure.error || '同步失败'}`).join('；')
+}
 
-async function pullCollection(collection: BusinessCollectionName, familyId: string, forceFull = false) {
-  const pullKey = `${collection}:${familyId}:${forceFull ? 'full' : 'delta'}`
-  const runningPull = pullInFlight.get(pullKey)
-  if (runningPull) return runningPull
-
-  const run = (async () => {
+async function doPullCollections(collections: BusinessCollectionName[], familyId: string, forceFull = false): Promise<PullCollectionsBatchResult> {
+  const uniqueCollections = [...new Set(collections)]
+  const statePairs = await Promise.all(uniqueCollections.map(async (collection) => {
     const currentState = await localDb.getSyncState(collection)
     const baseState = toSyncStateRow(collection, currentState || undefined)
-    const lastPulledAt = forceFull ? 0 : baseState.last_pulled_at
+    return {
+      collection,
+      baseState,
+      lastPulledAt: forceFull ? 0 : baseState.last_pulled_at,
+    }
+  }))
+  const cursors = Object.fromEntries(statePairs.map(({ collection, lastPulledAt }) => [
+    collection,
+    lastPulledAt ? lastPulledAt + 1 : 0,
+  ]))
+  const offsets: Partial<Record<BusinessCollectionName, number>> = {}
+  const accumulatedRows: Partial<Record<BusinessCollectionName, PulledRow[]>> = {}
+  const finalCursors: Partial<Record<BusinessCollectionName, number>> = {}
+  const rowsByCollection: Partial<Record<BusinessCollectionName, PulledRow[]>> = {}
+  const failures: PullCollectionFailure[] = []
+  const failedCollections = new Set<BusinessCollectionName>()
+  let pendingCollections = [...uniqueCollections]
 
-    if (typeof uniCloud === 'undefined' || typeof uniCloud.database !== 'function') {
-      return []
+  while (pendingCollections.length > 0) {
+    const response = await cloudCall<PullCollectionsResponse>('family-service', 'pullCollections', {
+      collections: pendingCollections,
+      cursors,
+      offsets,
+      forceFull,
+      limit: 1000,
+    })
+    const pulledCollections = response?.data?.collections || {}
+    const nextPendingCollections: BusinessCollectionName[] = []
+
+    for (const collection of pendingCollections) {
+      if (!Object.prototype.hasOwnProperty.call(pulledCollections, collection)) {
+        failures.push({ collection, error: '同步响应缺少集合结果' })
+        failedCollections.add(collection)
+        continue
+      }
+      const payload = pulledCollections[collection] || {}
+      if (payload.ok === false) {
+        failures.push({ collection, error: payload.error || '同步失败' })
+        failedCollections.add(collection)
+        continue
+      }
+      const rows = normalizePulledRows(Array.isArray(payload.rows) ? payload.rows : [])
+      accumulatedRows[collection] = [...(accumulatedRows[collection] || []), ...rows]
+      finalCursors[collection] = Number(payload.cursor || 0)
+      if (payload.hasMore) {
+        if (rows.length === 0) {
+          failures.push({ collection, error: '同步分页返回为空' })
+          failedCollections.add(collection)
+          continue
+        }
+        offsets[collection] = Number(offsets[collection] || 0) + rows.length
+        nextPendingCollections.push(collection)
+        continue
+      }
+      rowsByCollection[collection] = accumulatedRows[collection] || []
     }
 
-    const db = uniCloud.database()
-    const dbCmd = db.command
-    const where = getCollectionFamilyWhere(collection, familyId, lastPulledAt ? lastPulledAt + 1 : 0, dbCmd, forceFull)
-    const { data } = await db
-      .collection(collection)
-      .where(where)
-      .orderBy('updated_at', 'asc')
-      .limit(1000)
-      .get()
+    pendingCollections = nextPendingCollections
+  }
 
-    const rows = normalizePulledRows(Array.isArray(data) ? data : [])
+  for (const { collection, baseState, lastPulledAt } of statePairs) {
+    if (failedCollections.has(collection) || !Object.prototype.hasOwnProperty.call(rowsByCollection, collection)) continue
+    const rows = rowsByCollection[collection] || []
     if (rows.length > 0) {
       await localDb.upsertRows(collection, rows)
     }
-
     const maxUpdatedAt = rows.reduce((max, row) => Math.max(max, Number(row.updated_at || row.created_at || 0)), lastPulledAt)
+    const responseCursor = rows.length > 0 ? Number(finalCursors[collection] || 0) : 0
+    const nextCursor = Math.max(maxUpdatedAt, responseCursor)
     await localDb.upsertSyncState({
       ...baseState,
-      last_pulled_at: forceFull && maxUpdatedAt === 0 ? getNow() : maxUpdatedAt,
+      last_pulled_at: forceFull && nextCursor === 0 ? getNow() : nextCursor,
       last_full_sync_at: forceFull ? getNow() : baseState.last_full_sync_at,
       updated_at: getNow(),
     })
-
-    return rows
-  })()
-
-  pullInFlight.set(pullKey, run)
-  try {
-    return await run
-  } finally {
-    pullInFlight.delete(pullKey)
   }
+
+  return { rowsByCollection, failures }
+}
+
+async function pullCollectionsBatch(collections: BusinessCollectionName[], familyId: string, forceFull = false): Promise<PullCollectionsBatchResult> {
+  const uniqueCollections = [...new Set(collections)]
+  const rowsByCollection: Partial<Record<BusinessCollectionName, PulledRow[]>> = {}
+  const failures: PullCollectionFailure[] = []
+  const pendingCollections: BusinessCollectionName[] = []
+  const runningPulls: Array<Promise<void>> = []
+
+  for (const collection of uniqueCollections) {
+    const pullKey = buildPullKey(collection, familyId, forceFull)
+    const runningPull = pullInFlight.get(pullKey)
+    if (runningPull) {
+      runningPulls.push(runningPull.then((result) => {
+        if (result.failure) {
+          failures.push(result.failure)
+        } else {
+          rowsByCollection[collection] = result.rows
+        }
+      }))
+    } else {
+      pendingCollections.push(collection)
+    }
+  }
+
+  if (pendingCollections.length > 0) {
+    const batchPromise = doPullCollections(pendingCollections, familyId, forceFull)
+    for (const collection of pendingCollections) {
+      const pullKey = buildPullKey(collection, familyId, forceFull)
+      const collectionPromise = batchPromise.then((batch) => {
+        const failure = batch.failures.find(item => item.collection === collection) || null
+        return {
+          rows: batch.rowsByCollection[collection] || [],
+          failure,
+        } satisfies PullCollectionInFlightResult
+      })
+      pullInFlight.set(pullKey, collectionPromise)
+      collectionPromise.then(() => {
+        if (pullInFlight.get(pullKey) === collectionPromise) {
+          pullInFlight.delete(pullKey)
+        }
+      }, () => {
+        if (pullInFlight.get(pullKey) === collectionPromise) {
+          pullInFlight.delete(pullKey)
+        }
+      })
+    }
+    runningPulls.push(batchPromise.then((batch) => {
+      Object.assign(rowsByCollection, batch.rowsByCollection)
+      failures.push(...batch.failures)
+    }))
+  }
+
+  await Promise.all(runningPulls)
+  if (failures.length > 0 && Object.keys(rowsByCollection).length === 0) {
+    throw new Error(formatPullFailures(failures))
+  }
+  return { rowsByCollection, failures }
+}
+
+async function pullCollection(collection: BusinessCollectionName, familyId: string, forceFull = false) {
+  const result = await pullCollectionsBatch([collection], familyId, forceFull)
+  return result.rowsByCollection[collection] || []
 }
 
 function buildOutboxMutation<T extends HomeMutationPayload>(
@@ -977,7 +1102,10 @@ async function applySyncAck(ack: SyncAckPayload, fallbackCollections: BusinessCo
   )]
 
   const collectionsToPull = resyncCollections.length > 0 ? resyncCollections : [...new Set([...fallbackCollections, ...touchedCollections])]
-  await Promise.all(collectionsToPull.map(collection => pullCollection(collection, familyId, false)))
+  const { failures } = await pullCollectionsBatch(collectionsToPull, familyId, false)
+  if (failures.length > 0) {
+    throw new Error(formatPullFailures(failures))
+  }
 }
 
 class LocalSyncRuntime {
@@ -1124,7 +1252,7 @@ class LocalSyncRuntime {
 
     const freshness = await this.getStoredScopeFreshness(scope.key, scope)
     const now = getNow()
-    if (!options.force && !options.skipTtl && scope.ttlMs > 0 && freshness.last_synced_at > 0 && now - freshness.last_synced_at < scope.ttlMs) {
+    if (!options.force && !options.skipTtl && !freshness.last_error && scope.ttlMs > 0 && freshness.last_synced_at > 0 && now - freshness.last_synced_at < scope.ttlMs) {
       const skipReason = options.reason || `ttl:${scope.ttlMs}`
       await this.setStoredScopeFreshness(scope, {
         last_skip_reason: skipReason,
@@ -1146,31 +1274,35 @@ class LocalSyncRuntime {
     const runningSync = (async () => {
       const needsFullPull = Boolean(options.forceFull) || !(await this.hasCollectionsData(scope.collections))
       await this.flushOutbox(familyId)
-      const results = await Promise.allSettled(scope.collections.map(collection => pullCollection(collection, familyId, needsFullPull)))
-      const pulledCollections = scope.collections.filter((_, index) => results[index]?.status === 'fulfilled')
+      const { rowsByCollection, failures } = await pullCollectionsBatch(scope.collections, familyId, needsFullPull)
+      const pulledCollections = scope.collections.filter(collection => Array.isArray(rowsByCollection[collection]))
       const syncedAt = getNow()
-      await this.setStoredScopeFreshness(scope, {
-        last_synced_at: syncedAt,
-        last_full_sync_at: needsFullPull ? syncedAt : freshness.last_full_sync_at,
-        last_error: null,
-        last_skip_reason: null,
-      })
+      const lastError = failures.length > 0 ? formatPullFailures(failures) : null
+      await this.setStoredScopeFreshness(scope, failures.length > 0
+        ? {
+            last_error: lastError,
+            last_skip_reason: null,
+          }
+        : {
+            last_synced_at: syncedAt,
+            last_full_sync_at: needsFullPull ? syncedAt : freshness.last_full_sync_at,
+            last_error: null,
+            last_skip_reason: null,
+          })
       this.logScope(scope.key, {
         collections: scope.collections,
         pulledCollections,
+        failures: failures.map(failure => failure.collection),
         force: Boolean(options.force),
         full: needsFullPull,
       })
-      if (scope.routeKey === 'home') {
-        this.scheduleCoreSync(familyId)
-      }
       return {
         scopeKey: scope.key,
         routeKey: scope.routeKey,
         pulledCollections,
         skipped: false,
         skipReason: null,
-        lastSyncedAt: syncedAt,
+        lastSyncedAt: failures.length > 0 ? freshness.last_synced_at : syncedAt,
         force: Boolean(options.force),
       } satisfies SyncScopeResult
     })().catch(async (error) => {
@@ -1218,13 +1350,6 @@ class LocalSyncRuntime {
     return this.syncScope(scopeKey, { force: options.force })
   }
 
-  private scheduleCoreSync(familyId: string) {
-    if (!familyId) return
-    setTimeout(() => {
-      void this.syncCore(familyId)
-    }, 400)
-  }
-
   async syncHome(familyId: string, options: { force?: boolean } = {}) {
     if (!familyId) return null
     this.currentFamilyId = familyId
@@ -1245,10 +1370,7 @@ class LocalSyncRuntime {
     }
 
     this.coreSyncPromise = (async () => {
-      for (let index = 0; index < CORE_SYNC_COLLECTIONS.length; index += CORE_SYNC_BATCH_SIZE) {
-        const batch = CORE_SYNC_COLLECTIONS.slice(index, index + CORE_SYNC_BATCH_SIZE)
-        await this.pullCollections(familyId, batch, Boolean(options.force))
-      }
+      await this.pullCollections(familyId, CORE_SYNC_COLLECTIONS, Boolean(options.force))
       await localDb.upsertLocalMeta(CORE_SYNC_META_KEY, {
         last_synced_at: getNow(),
       })
@@ -1263,14 +1385,20 @@ class LocalSyncRuntime {
 
   async pullHomeCollections(familyId: string, forceFull = false) {
     this.currentFamilyId = familyId
-    await Promise.all(HOME_SYNC_COLLECTIONS.map(collection => pullCollection(collection, familyId, forceFull)))
+    const { failures } = await pullCollectionsBatch(HOME_SYNC_COLLECTIONS, familyId, forceFull)
+    if (failures.length > 0) {
+      throw new Error(formatPullFailures(failures))
+    }
   }
 
   async pullCollections(familyId: string, collections: BusinessCollectionName[], forceFull = false) {
     this.currentFamilyId = familyId
     const uniqueCollections = [...new Set(collections)]
-    const results = await Promise.allSettled(uniqueCollections.map(collection => pullCollection(collection, familyId, forceFull)))
-    return results.filter(result => result.status === 'fulfilled').length
+    const { rowsByCollection, failures } = await pullCollectionsBatch(uniqueCollections, familyId, forceFull)
+    if (failures.length > 0) {
+      throw new Error(formatPullFailures(failures))
+    }
+    return uniqueCollections.filter(collection => Array.isArray(rowsByCollection[collection])).length
   }
 
   async queryLocal<T>(collection: LocalCollectionName, predicate?: (row: T) => boolean) {

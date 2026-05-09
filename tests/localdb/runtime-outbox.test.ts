@@ -387,6 +387,67 @@ describe('local sync runtime outbox diagnostics', () => {
     })
   })
 
+  it('ack 后回拉部分失败时不应把 outbox 标记为已同步', async () => {
+    await localDb.upsertRows('outbox_mutations', [{
+      _id: 'outbox_partial_pull',
+      type: 'task.complete',
+      collection_scope: ['dogs', 'tasks'],
+      payload: {},
+      family_id: 'fam_1',
+      status: 'pending',
+      retry_count: 0,
+      next_retry_at: 0,
+      last_error: null,
+      client_mutation_id: 'mutation_partial_pull',
+      device_id: 'device_1',
+      created_at: 1,
+      updated_at: 1,
+    }])
+
+    ;(globalThis as any).uniCloud = {
+      importObject: () => ({
+        pullCollections: vi.fn(async () => ({
+          data: {
+            collections: {
+              dogs: {
+                ok: true,
+                rows: [{ _id: 'dog_ack_1', family_id: 'fam_1', name: '糯米', updated_at: 300 }],
+                cursor: 300,
+                hasMore: false,
+              },
+              tasks: {
+                ok: false,
+                rows: [],
+                cursor: 0,
+                hasMore: false,
+                error: 'tasks unavailable',
+              },
+            },
+          },
+        })),
+      }),
+    }
+    vi.spyOn(localSyncRuntime as any, 'dispatchMutation')
+      .mockResolvedValue({
+        ack: 'accepted',
+        clientMutationId: 'mutation_partial_pull',
+        touchedEntities: [],
+        resyncScopes: [],
+        conflict: null,
+      })
+
+    await localSyncRuntime.flushOutbox('fam_1')
+
+    expect(await localDb.findById<any>('dogs', 'dog_ack_1')).toMatchObject({
+      name: '糯米',
+    })
+    expect(await localDb.findById<any>('outbox_mutations', 'outbox_partial_pull')).toMatchObject({
+      status: 'failed',
+      retry_count: 1,
+      last_error: 'tasks: tasks unavailable',
+    })
+  })
+
   it('outbox 问题列表应按当前家庭过滤', async () => {
     await localDb.upsertRows('outbox_mutations', [
       {
@@ -549,26 +610,23 @@ describe('local sync runtime outbox diagnostics', () => {
 
   it('强制同步应复用同 scope 的 in-flight 请求', async () => {
     const releasePull = createDeferred()
-    const getCalls: string[] = []
+    const pullCalls: string[][] = []
 
     ;(globalThis as any).uniCloud = {
-      database: () => ({
-        command: {
-          gte: (value: number) => ({ $gte: value }),
-        },
-        collection: (collection: string) => {
-          const chain = {
-            where: vi.fn(() => chain),
-            orderBy: vi.fn(() => chain),
-            limit: vi.fn(() => chain),
-            get: vi.fn(async () => {
-              getCalls.push(collection)
-              await releasePull.promise
-              return { data: [] }
-            }),
+      importObject: () => ({
+        pullCollections: vi.fn(async (input: { collections: string[] }) => {
+          pullCalls.push(input.collections)
+          await releasePull.promise
+          return {
+            data: {
+              collections: Object.fromEntries(input.collections.map(collection => [collection, {
+                rows: [],
+                cursor: 0,
+                hasMore: false,
+              }])),
+            },
           }
-          return chain
-        },
+        }),
       }),
     }
 
@@ -579,11 +637,354 @@ describe('local sync runtime outbox diagnostics', () => {
     const forceSync = localSyncRuntime.forceSyncScope('home')
     await new Promise(resolve => setTimeout(resolve, 0))
 
-    expect(getCalls).toHaveLength(4)
+    expect(pullCalls).toEqual([['dogs', 'tasks', 'health_records', 'medication_tasks']])
     releasePull.resolve()
 
     const [firstResult, forceResult] = await Promise.all([firstSync, forceSync])
     expect(forceResult).toBe(firstResult)
-    expect(getCalls).toHaveLength(4)
+    expect(pullCalls).toHaveLength(1)
+  })
+
+  it('增量空返回不应推进 collection cursor', async () => {
+    await localDb.upsertRows('sync_state', [{
+      _id: 'dogs',
+      collection: 'dogs',
+      last_pulled_at: 200,
+      last_full_sync_at: 0,
+      last_ack_at: 0,
+      updated_at: 200,
+    }])
+    ;(globalThis as any).uniCloud = {
+      importObject: () => ({
+        pullCollections: vi.fn(async () => ({
+          data: {
+            collections: {
+              dogs: {
+                rows: [],
+                cursor: 201,
+                hasMore: false,
+              },
+            },
+          },
+        })),
+      }),
+    }
+
+    await localSyncRuntime.pullCollections('fam_1', ['dogs'])
+
+    expect(await localDb.findById<any>('sync_state', 'dogs')).toMatchObject({
+      last_pulled_at: 200,
+    })
+  })
+
+  it('缺失集合响应时不应当作空成功推进 cursor', async () => {
+    await localDb.upsertRows('sync_state', [{
+      _id: 'dogs',
+      collection: 'dogs',
+      last_pulled_at: 200,
+      last_full_sync_at: 100,
+      last_ack_at: 0,
+      updated_at: 200,
+    }])
+    ;(globalThis as any).uniCloud = {
+      importObject: () => ({
+        pullCollections: vi.fn(async () => ({
+          data: {
+            collections: {},
+          },
+        })),
+      }),
+    }
+
+    await expect(localSyncRuntime.pullCollections('fam_1', ['dogs'], true))
+      .rejects
+      .toThrow('dogs: 同步响应缺少集合结果')
+
+    expect(await localDb.findById<any>('sync_state', 'dogs')).toMatchObject({
+      last_pulled_at: 200,
+      last_full_sync_at: 100,
+    })
+  })
+
+  it('hasMore 为 true 时应继续拉取后续页并保留同毫秒记录', async () => {
+    const pullCalls: Array<{ collections: string[]; cursors?: Record<string, number>; offsets?: Record<string, number> }> = []
+    ;(globalThis as any).uniCloud = {
+      importObject: () => ({
+        pullCollections: vi.fn(async (input: { collections: string[]; cursors?: Record<string, number>; offsets?: Record<string, number> }) => {
+          pullCalls.push(input)
+          const offset = Number(input.offsets?.dogs || 0)
+          return {
+            data: {
+              collections: {
+                dogs: offset === 0
+                  ? {
+                      ok: true,
+                      rows: [
+                        { _id: 'dog_page_a', family_id: 'fam_1', name: 'A', updated_at: 300 },
+                        { _id: 'dog_page_b', family_id: 'fam_1', name: 'B', updated_at: 300 },
+                      ],
+                      cursor: 300,
+                      hasMore: true,
+                    }
+                  : {
+                      ok: true,
+                      rows: [{ _id: 'dog_page_c', family_id: 'fam_1', name: 'C', updated_at: 300 }],
+                      cursor: 300,
+                      hasMore: false,
+                    },
+              },
+            },
+          }
+        }),
+      }),
+    }
+
+    const count = await localSyncRuntime.pullCollections('fam_1', ['dogs'])
+
+    expect(count).toBe(1)
+    expect(pullCalls).toMatchObject([
+      { collections: ['dogs'], cursors: { dogs: 0 } },
+      { collections: ['dogs'], cursors: { dogs: 0 }, offsets: { dogs: 2 } },
+    ])
+    expect((await localDb.getTable<any>('dogs')).map(row => row._id).sort()).toEqual(['dog_page_a', 'dog_page_b', 'dog_page_c'])
+    expect(await localDb.findById<any>('sync_state', 'dogs')).toMatchObject({
+      last_pulled_at: 300,
+    })
+  })
+
+  it('批量 pull 部分失败时应保留成功集合并对直接调用抛错', async () => {
+    await localDb.upsertRows('sync_state', [
+      {
+        _id: 'dogs',
+        collection: 'dogs',
+        last_pulled_at: 100,
+        last_full_sync_at: 0,
+        last_ack_at: 0,
+        updated_at: 100,
+      },
+      {
+        _id: 'tasks',
+        collection: 'tasks',
+        last_pulled_at: 200,
+        last_full_sync_at: 0,
+        last_ack_at: 0,
+        updated_at: 200,
+      },
+    ])
+    ;(globalThis as any).uniCloud = {
+      importObject: () => ({
+        pullCollections: vi.fn(async () => ({
+          data: {
+            collections: {
+              dogs: {
+                ok: true,
+                rows: [{ _id: 'dog_1', family_id: 'fam_1', name: '糯米', updated_at: 300 }],
+                cursor: 300,
+                hasMore: false,
+              },
+              tasks: {
+                ok: false,
+                rows: [],
+                cursor: 200,
+                hasMore: false,
+                error: 'tasks unavailable',
+              },
+            },
+          },
+        })),
+      }),
+    }
+
+    await expect(localSyncRuntime.pullCollections('fam_1', ['dogs', 'tasks']))
+      .rejects
+      .toThrow('tasks: tasks unavailable')
+
+    expect(await localDb.findById<any>('dogs', 'dog_1')).toMatchObject({
+      name: '糯米',
+    })
+    expect(await localDb.findById<any>('sync_state', 'dogs')).toMatchObject({
+      last_pulled_at: 300,
+    })
+    expect(await localDb.findById<any>('sync_state', 'tasks')).toMatchObject({
+      last_pulled_at: 200,
+    })
+  })
+
+  it('scope 部分失败时应保留错误并绕过 TTL 重试', async () => {
+    const pullCollections = vi.fn()
+      .mockResolvedValueOnce({
+        data: {
+          collections: {
+            dogs: {
+              ok: true,
+              rows: [{ _id: 'dog_partial_1', family_id: 'fam_1', name: '糯米', updated_at: 300 }],
+              cursor: 300,
+              hasMore: false,
+            },
+            tasks: {
+              ok: false,
+              rows: [],
+              cursor: 0,
+              hasMore: false,
+              error: 'tasks unavailable',
+            },
+            health_records: {
+              ok: true,
+              rows: [],
+              cursor: 0,
+              hasMore: false,
+            },
+            medication_tasks: {
+              ok: true,
+              rows: [],
+              cursor: 0,
+              hasMore: false,
+            },
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          collections: {
+            dogs: {
+              ok: true,
+              rows: [],
+              cursor: 0,
+              hasMore: false,
+            },
+            tasks: {
+              ok: true,
+              rows: [{ _id: 'task_retry_1', family_id: 'fam_1', title: '复查', updated_at: 400 }],
+              cursor: 400,
+              hasMore: false,
+            },
+            health_records: {
+              ok: true,
+              rows: [],
+              cursor: 0,
+              hasMore: false,
+            },
+            medication_tasks: {
+              ok: true,
+              rows: [],
+              cursor: 0,
+              hasMore: false,
+            },
+          },
+        },
+      })
+
+    ;(globalThis as any).uniCloud = {
+      importObject: () => ({
+        pullCollections,
+      }),
+    }
+
+    await localDb.upsertLocalMeta('sync:scope:home', {
+      scopeKey: 'home',
+      routeKey: 'home',
+      routePath: '',
+      last_synced_at: Date.now(),
+      last_full_sync_at: 0,
+      last_error: null,
+      last_skip_reason: null,
+      ttl_ms: 20000,
+      mode: 'local-first',
+    })
+
+    localSyncRuntime.setCurrentFamilyId('fam_1')
+    await localSyncRuntime.syncScope('home', { force: true })
+
+    const partialFreshness = await localDb.getLocalMeta<any>('sync:scope:home')
+    expect(partialFreshness.last_error).toBe('tasks: tasks unavailable')
+    const partialSyncedAt = partialFreshness.last_synced_at
+    expect(await localDb.findById<any>('dogs', 'dog_partial_1')).toMatchObject({
+      name: '糯米',
+    })
+
+    await localSyncRuntime.syncScope('home')
+
+    expect(pullCollections).toHaveBeenCalledTimes(2)
+    const retriedFreshness = await localDb.getLocalMeta<any>('sync:scope:home')
+    expect(retriedFreshness.last_error).toBeNull()
+    expect(retriedFreshness.last_synced_at).toBeGreaterThanOrEqual(partialSyncedAt)
+    expect(await localDb.findById<any>('tasks', 'task_retry_1')).toMatchObject({
+      title: '复查',
+    })
+  })
+
+  it('复用 in-flight 成功集合时不应被新批次全失败误判为整体失败', async () => {
+    await localDb.upsertRows('dogs', [{ _id: 'dog_seed', family_id: 'fam_1', name: '种子犬', updated_at: 100 }])
+    await localDb.upsertRows('tasks', [{ _id: 'task_seed', family_id: 'fam_1', title: '种子任务', updated_at: 100 }])
+    await localDb.upsertRows('health_records', [{ _id: 'health_seed', family_id: 'fam_1', dog_id: 'dog_seed', updated_at: 100 }])
+    await localDb.upsertRows('medication_tasks', [{ _id: 'med_seed', family_id: 'fam_1', dog_id: 'dog_seed', updated_at: 100 }])
+
+    const releaseDogs = createDeferred()
+    const pullCollections = vi.fn(async (input: { collections: string[] }) => {
+      if (input.collections.length === 1 && input.collections.includes('dogs')) {
+        await releaseDogs.promise
+        return {
+          data: {
+            collections: {
+              dogs: {
+                ok: true,
+                rows: [{ _id: 'dog_inflight_1', family_id: 'fam_1', name: '糯米', updated_at: 500 }],
+                cursor: 500,
+                hasMore: false,
+              },
+            },
+          },
+        }
+      }
+      expect(input.collections).toEqual(['tasks', 'health_records', 'medication_tasks'])
+      return {
+        data: {
+          collections: {
+            tasks: {
+              ok: false,
+              rows: [],
+              cursor: 0,
+              hasMore: false,
+              error: 'tasks unavailable',
+            },
+            health_records: {
+              ok: true,
+              rows: [],
+              cursor: 0,
+              hasMore: false,
+            },
+            medication_tasks: {
+              ok: true,
+              rows: [],
+              cursor: 0,
+              hasMore: false,
+            },
+          },
+        },
+      }
+    })
+
+    ;(globalThis as any).uniCloud = {
+      importObject: () => ({
+        pullCollections,
+      }),
+    }
+
+    const firstPull = localSyncRuntime.pullCollections('fam_1', ['dogs'])
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    const secondPull = localSyncRuntime.syncScope('home', { force: true })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    releaseDogs.resolve()
+
+    await expect(firstPull).resolves.toBe(1)
+    const result = await secondPull
+
+    expect(result?.pulledCollections).toContain('dogs')
+    expect(await localDb.findById<any>('dogs', 'dog_inflight_1')).toMatchObject({
+      name: '糯米',
+    })
+    const freshness = await localDb.getLocalMeta<any>('sync:scope:home')
+    expect(freshness.last_error).toBe('tasks: tasks unavailable')
   })
 })

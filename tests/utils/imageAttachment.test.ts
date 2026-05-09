@@ -4,6 +4,7 @@ import {
   chooseLocalImages,
   prepareLocalImage,
   resolveImageDisplayUrl,
+  resolveImageDisplayUrls,
   uploadLocalImage,
 } from '@/utils/imageAttachment'
 import { localDb } from '../../src/localdb/db'
@@ -258,6 +259,26 @@ describe('imageAttachment', () => {
     expect(url).toBe('https://temp.local/bucket/photo.jpg')
     expect((globalThis as any).uniCloud.getTempFileURL).toHaveBeenCalledWith({
       fileList: ['cloud://bucket/photo.jpg'],
+    })
+  })
+
+  it('批量解析多张云图片时应合并临时 URL 请求', async () => {
+    const urls = await resolveImageDisplayUrls([
+      'cloud://bucket/batch-a.jpg',
+      'saved://local.jpg',
+      'cloud://bucket/batch-b.jpg',
+      'cloud://bucket/batch-a.jpg',
+    ], { familyId: 'fam_1' })
+
+    expect(urls).toEqual([
+      'https://temp.local/bucket/batch-a.jpg',
+      'saved://local.jpg',
+      'https://temp.local/bucket/batch-b.jpg',
+      'https://temp.local/bucket/batch-a.jpg',
+    ])
+    expect((globalThis as any).uniCloud.getTempFileURL).toHaveBeenCalledTimes(1)
+    expect((globalThis as any).uniCloud.getTempFileURL).toHaveBeenCalledWith({
+      fileList: ['cloud://bucket/batch-a.jpg', 'cloud://bucket/batch-b.jpg'],
     })
   })
 

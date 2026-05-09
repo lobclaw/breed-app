@@ -136,6 +136,64 @@ function getEntityConflict(syncMeta, collection, entity) {
   })
 }
 
+function normalizePullCollectionsInput(input = {}) {
+  const collections = Array.isArray(input.collections)
+    ? [...new Set(input.collections.map(item => String(item || '').trim()).filter(Boolean))]
+    : []
+  if (collections.length === 0) {
+    throw new Error('缺少同步集合')
+  }
+  const invalidCollection = collections.find(collection => !PULL_COLLECTIONS.has(collection))
+  if (invalidCollection) {
+    throw new Error(`不支持同步集合 ${invalidCollection}`)
+  }
+
+  const rawLimit = Number(input.limit || 1000)
+  const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 1000) : 1000
+  const cursors = input.cursors && typeof input.cursors === 'object' ? input.cursors : {}
+  const offsets = input.offsets && typeof input.offsets === 'object' ? input.offsets : {}
+  return {
+    collections,
+    cursors,
+    offsets,
+    forceFull: !!input.forceFull,
+    limit,
+  }
+}
+
+function buildPullCollectionWhere(collection, familyId, cursor, forceFull) {
+  if (collection === 'families') {
+    return forceFull
+      ? { _id: familyId }
+      : { _id: familyId, updated_at: dbCmd.gte(cursor || 0) }
+  }
+
+  return forceFull
+    ? { family_id: familyId }
+    : { family_id: familyId, updated_at: dbCmd.gte(cursor || 0) }
+}
+
+async function pullCollectionForSync(familyId, collection, options) {
+  const cursor = Number(options.cursors?.[collection] || 0)
+  const offset = Math.max(0, Number(options.offsets?.[collection] || 0))
+  const { data } = await db.collection(collection)
+    .where(buildPullCollectionWhere(collection, familyId, cursor, options.forceFull))
+    .orderBy('updated_at', 'asc')
+    .orderBy('_id', 'asc')
+    .skip(offset)
+    .limit(options.limit)
+    .get()
+  const rows = Array.isArray(data) ? data : []
+  const nextCursor = rows.reduce((max, row) => Math.max(max, Number(row.updated_at || row.created_at || 0)), cursor)
+  return {
+    ok: true,
+    rows,
+    cursor: nextCursor,
+    offset,
+    hasMore: rows.length >= options.limit,
+  }
+}
+
 const RECYCLE_RETENTION_DAYS = 30
 const BACKUP_FILE_RETENTION_LIMIT = 4
 const SYSTEM_MANAGED_SETTING_KEYS = new Set(['last_backup_date', 'last_backup_file_id', 'backup_file_ids'])
@@ -156,6 +214,10 @@ const EXPORT_COLLECTIONS = [
   'medication_protocols',
   'attachment_deletions',
 ]
+const PULL_COLLECTIONS = new Set([
+  'families',
+  ...EXPORT_COLLECTIONS.filter(collection => collection !== 'attachment_deletions'),
+])
 const SOFT_DELETE_REPAIR_COLLECTIONS = new Set([
   'dogs',
   'expenses',
@@ -1017,6 +1079,28 @@ module.exports = {
         settings: mergeFamilySettings(family.settings),
       },
     }
+  },
+
+  /**
+   * 批量拉取 local-first 集合同步数据
+   */
+  async pullCollections(input = {}) {
+    const options = normalizePullCollectionsInput(input)
+    const entries = await Promise.all(options.collections.map(async (collection) => {
+      try {
+        return [collection, await pullCollectionForSync(this.familyId, collection, options)]
+      } catch (error) {
+        return [collection, {
+          ok: false,
+          rows: [],
+          cursor: Number(options.cursors?.[collection] || 0),
+          hasMore: false,
+          error: error instanceof Error ? error.message : String(error || '同步失败'),
+        }]
+      }
+    }))
+    const collections = Object.fromEntries(entries)
+    return { data: { collections } }
   },
 
   /**

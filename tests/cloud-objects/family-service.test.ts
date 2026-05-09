@@ -133,6 +133,137 @@ describe('family-service', () => {
     })
   })
 
+  describe('pullCollections', () => {
+    it('应批量按家庭和 cursor 拉取多个集合', async () => {
+      seedCollection('dogs', [
+        { _id: 'dog_old', family_id: familyId, name: '旧犬', updated_at: 1000, version: 1 },
+        { _id: 'dog_new', family_id: familyId, name: '新犬', updated_at: 3000, version: 2 },
+        { _id: 'dog_other', family_id: 'fam_other', name: '其他家庭', updated_at: 4000, version: 1 },
+      ])
+      seedCollection('tasks', [
+        { _id: 'task_new', family_id: familyId, title: '任务', updated_at: 2500, version: 1 },
+      ])
+
+      const ctx = createCloudObjectContext({ familyId })
+      const result = await familyService.pullCollections.call(ctx, {
+        collections: ['dogs', 'tasks'],
+        cursors: { dogs: 2000, tasks: 0 },
+      })
+
+      expect(result.data.collections.dogs.rows.map((row: any) => row._id)).toEqual(['dog_new'])
+      expect(result.data.collections.tasks.rows.map((row: any) => row._id)).toEqual(['task_new'])
+      expect(result.data.collections.dogs.ok).toBe(true)
+      expect(result.data.collections.dogs.cursor).toBe(3000)
+      expect(result.data.collections.tasks.cursor).toBe(2500)
+    })
+
+    it('应支持同 cursor 下用 offset 拉取后续分页', async () => {
+      seedCollection('dogs', [
+        { _id: 'dog_a', family_id: familyId, name: 'A', updated_at: 3000, version: 1 },
+        { _id: 'dog_b', family_id: familyId, name: 'B', updated_at: 3000, version: 1 },
+        { _id: 'dog_c', family_id: familyId, name: 'C', updated_at: 3000, version: 1 },
+      ])
+
+      const ctx = createCloudObjectContext({ familyId })
+      const first = await familyService.pullCollections.call(ctx, {
+        collections: ['dogs'],
+        cursors: { dogs: 0 },
+        offsets: { dogs: 0 },
+        limit: 2,
+      })
+      const second = await familyService.pullCollections.call(ctx, {
+        collections: ['dogs'],
+        cursors: { dogs: 0 },
+        offsets: { dogs: 2 },
+        limit: 2,
+      })
+
+      expect(first.data.collections.dogs.rows.map((row: any) => row._id)).toEqual(['dog_a', 'dog_b'])
+      expect(first.data.collections.dogs.hasMore).toBe(true)
+      expect(second.data.collections.dogs.rows.map((row: any) => row._id)).toEqual(['dog_c'])
+      expect(second.data.collections.dogs.hasMore).toBe(false)
+    })
+
+
+    it('families 集合只能拉取当前家庭', async () => {
+      seedCollection('families', [
+        { _id: familyId, name: '本家庭', updated_at: 3000 },
+        { _id: 'fam_other', name: '其他家庭', updated_at: 4000 },
+      ])
+
+      const ctx = createCloudObjectContext({ familyId })
+      const result = await familyService.pullCollections.call(ctx, {
+        collections: ['families'],
+        cursors: { families: 0 },
+      })
+
+      expect(result.data.collections.families.rows.map((row: any) => row._id)).toEqual([familyId])
+    })
+
+    it('应拒绝不在同步白名单内的集合', async () => {
+      const ctx = createCloudObjectContext({ familyId })
+
+      await expect(familyService.pullCollections.call(ctx, {
+        collections: ['operation_logs'],
+      })).rejects.toThrow('不支持同步集合 operation_logs')
+    })
+
+    it('单个集合查询失败时不应影响其他集合返回', async () => {
+      seedCollection('dogs', [
+        { _id: 'dog_1', family_id: familyId, name: '糯米', updated_at: 3000, version: 1 },
+      ])
+      const originalCollection = mockUniCloud.database().collection
+      mockUniCloud.database().collection = (name: string) => {
+        if (name === 'tasks') {
+          return {
+            where() {
+              return {
+                orderBy() {
+                  const chain = {
+                    orderBy() {
+                      return chain
+                    },
+                    skip() {
+                      return chain
+                    },
+                    limit() {
+                      return chain
+                    },
+                    async get() {
+                      throw new Error('tasks unavailable')
+                    },
+                  }
+                  return chain
+                },
+              }
+            },
+          }
+        }
+        return originalCollection(name)
+      }
+
+      try {
+        const ctx = createCloudObjectContext({ familyId })
+        const result = await familyService.pullCollections.call(ctx, {
+          collections: ['dogs', 'tasks'],
+          cursors: { dogs: 0, tasks: 2000 },
+        })
+
+        expect(result.data.collections.dogs).toMatchObject({
+          ok: true,
+          cursor: 3000,
+        })
+        expect(result.data.collections.tasks).toMatchObject({
+          ok: false,
+          cursor: 2000,
+          error: 'tasks unavailable',
+        })
+      } finally {
+        mockUniCloud.database().collection = originalCollection
+      }
+    })
+  })
+
   describe('updateSettings', () => {
     it('应更新通知设置并强制 overdue 保持开启', async () => {
       seedCollection('families', [{

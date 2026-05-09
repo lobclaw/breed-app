@@ -163,8 +163,9 @@ Local-First Foundation：
 - 核心写路径已收口到本地事务 + outbox，并由各域云对象处理 `_sync` 幂等 ack
 - 销售流程已补齐本地候选过滤、列表/详情归一化投影，以及退款/定金取消金额边界的前端、本地事务、云对象三层校验
 - 备份页已接入 pending outbox / pending upload 阻断提示
+- 页面级同步通过 `family-service.pullCollections` 批量拉取当前 scope 的多个集合；首页严格只同步 `home` scope，不再进入后后台预拉非首页核心集合
 - 同步状态页已接入 pending / failed / conflict / pending upload 统计、当前 active scope、最近同步时间与失败/冲突重试；图片附件选取后先压缩并保存本地持久路径，`flushOutbox` 前统一上传本地附件，成功后替换本地行与 outbox payload 并清除 `pending_upload`
-- 图片展示统一先解析 display URL：本地路径直接展示，云 `fileID` 先查 `image_cache_entries` 本地缓存，未命中再通过 `getTempFileURL` 转换后用于缩略图与预览，并 best-effort 回填缓存；账号头像复用统一压缩/上传工具，但仍按在线优先边界处理
+- 图片展示统一先解析 display URL：本地路径直接展示，云 `fileID` 先查 `image_cache_entries` 本地缓存，未命中再批量通过 `getTempFileURL` 转换后用于缩略图与预览，并 best-effort 回填缓存；账号头像复用统一压缩/上传工具，但仍按在线优先边界处理
 - 在线优先页保持云端权威：家庭成员、操作日志、备份页不接普通 `usePageSync`；断网时使用统一联网守卫，允许只读缓存兜底
 - 操作日志页合并展示本地 pending 操作与云端日志；云端日志第一页按 `familyId + stable filter signature` 缓存，离线时弱提示“仅显示本地缓存和待同步操作”
 - 备份页缓存最近备份信息/历史用于进入页面先展示；备份、恢复、导出、修复、下载云文件、自动备份开关仍要求联网
@@ -210,6 +211,7 @@ Local-First Foundation：
 - 首页批量健康卡是否只在全部完成后整卡退场
 - 用药状态排序、漏服判断、批量操作
 - WeekStrip 红点与首页可见内容一致性
+- 页面 scope 批量 pull 请求数、首页不拉非首页 scope、同 scope 并发去重
 - `tests/` 目录是开发/CI 测试护栏，不进入正式 app 包；源码约束与边界测试需随功能保留
 - 在线优先边界：`tests/utils/onlineFirstBoundary.test.ts`
 - 操作日志缓存：`tests/utils/operationLogCache.test.ts`，覆盖在线写入、离线按稳定 signature 命中、筛选数组排序去重

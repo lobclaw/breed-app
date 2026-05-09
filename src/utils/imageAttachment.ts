@@ -712,7 +712,68 @@ export async function resolveImageDisplayUrl(ref: string, options: ResolveImageD
 }
 
 export async function resolveImageDisplayUrls(refs: string[], options: ResolveImageDisplayOptions = {}) {
-  return Promise.all((refs || []).map(ref => resolveImageDisplayUrl(ref, options)))
+  const imageRefs = refs || []
+  const results: string[] = new Array(imageRefs.length).fill('')
+  const pendingCloudRefs = new Map<string, { ref: string, indices: number[] }>()
+
+  for (let index = 0; index < imageRefs.length; index += 1) {
+    const imageRef = String(imageRefs[index] || '').trim()
+    if (!imageRef) continue
+    if (!isCloudImageRef(imageRef)) {
+      results[index] = imageRef
+      continue
+    }
+
+    const localCached = await resolveCachedImageSrc(imageRef, options)
+    if (localCached) {
+      results[index] = localCached
+      continue
+    }
+
+    const displayCacheKey = getDisplayUrlCacheKey(imageRef, options)
+    const cached = displayUrlCache.get(displayCacheKey)
+    if (cached) {
+      results[index] = cached
+      continue
+    }
+
+    const pending = pendingCloudRefs.get(displayCacheKey)
+    if (pending) {
+      pending.indices.push(index)
+    } else {
+      pendingCloudRefs.set(displayCacheKey, { ref: imageRef, indices: [index] })
+    }
+  }
+
+  const pendingItems = [...pendingCloudRefs.values()]
+  if (pendingItems.length === 0) return results
+
+  const cloudApi = getUniCloudApi()
+  if (!cloudApi?.getTempFileURL) return results
+  try {
+    const fileList = pendingItems.map(item => item.ref)
+    const result = await cloudApi.getTempFileURL({ fileList })
+    const files = Array.isArray(result?.fileList) ? result.fileList : []
+    const urlByFileId = new Map<string, string>()
+    files.forEach((file: any, index: number) => {
+      const fileID = String(file?.fileID || fileList[index] || '').trim()
+      const url = String(file?.tempFileURL || file?.url || '').trim()
+      if (fileID && url) urlByFileId.set(fileID, url)
+    })
+
+    pendingItems.forEach((item) => {
+      const url = urlByFileId.get(item.ref) || ''
+      if (!url) return
+      displayUrlCache.set(getDisplayUrlCacheKey(item.ref, options), url)
+      item.indices.forEach((index) => {
+        results[index] = url
+      })
+      void cacheRemoteImage(item.ref, url, options)
+    })
+  } catch (error) {
+    console.warn('批量解析图片地址失败', error)
+  }
+  return results
 }
 
 export function resolveImageSafeSrc(ref: string, displayUrl = '') {
