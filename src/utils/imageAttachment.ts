@@ -1,3 +1,7 @@
+import { localDb } from '@/localdb/db'
+import { BUSINESS_COLLECTIONS } from '@/localdb/types'
+import type { ImageCacheEntry, OutboxMutation } from '@/localdb/types'
+
 export interface LocalImagePrepareResult {
   path: string
   compressed: boolean
@@ -23,6 +27,17 @@ export type ImageCompressionProfile = 'business' | 'record' | 'avatar'
 
 interface ImagePrepareOptions {
   profile?: ImageCompressionProfile
+}
+
+interface ResolveImageDisplayOptions {
+  familyId?: string
+}
+
+interface ImageCacheInput {
+  fileID: string
+  familyId?: string
+  localSrc: string
+  size?: number
 }
 
 interface ImageCompressionAttempt {
@@ -63,6 +78,9 @@ const IMAGE_COMPRESSION_PROFILES: Record<ImageCompressionProfile, {
   },
 }
 const displayUrlCache = new Map<string, string>()
+const IMAGE_CACHE_MAX_BYTES = 300 * 1024 * 1024
+const IMAGE_CACHE_MAX_AGE_MS = 90 * 86400000
+let imageCacheCleanupPromise: Promise<void> | null = null
 
 function getUniApi() {
   return typeof uni === 'undefined' ? null : uni as any
@@ -70,6 +88,28 @@ function getUniApi() {
 
 function getUniCloudApi() {
   return typeof uniCloud === 'undefined' ? null : uniCloud as any
+}
+
+function getLegacyImageCacheEntryId(fileID: string) {
+  let hash = 0
+  const input = String(fileID || '')
+  for (let index = 0; index < input.length; index += 1) {
+    hash = ((hash << 5) - hash + input.charCodeAt(index)) | 0
+  }
+  return `image_cache_${Math.abs(hash)}`
+}
+
+function getImageCacheEntryId(fileID: string) {
+  const input = String(fileID || '').trim()
+  const encoded = encodeURIComponent(input).replace(/[^a-zA-Z0-9_-]/g, (char) => {
+    return `_${char.charCodeAt(0).toString(16).padStart(2, '0')}`
+  })
+  return `image_cache_${encoded}`
+}
+
+function getDisplayUrlCacheKey(fileID: string, options: ResolveImageDisplayOptions = {}) {
+  const familyId = String(options.familyId || '').trim()
+  return familyId ? `${familyId}:${fileID}` : fileID
 }
 
 export function isUploadedImageRef(value: string) {
@@ -85,6 +125,11 @@ export function isCloudImageRef(value: string) {
   return /^cloud:\/\//.test(text)
     || /^mock:\/\//.test(text)
     || /^unicloud:\/\//i.test(text)
+}
+
+function isLocalImageRef(value: unknown) {
+  const text = String(value || '').trim()
+  return !!text && !isUploadedImageRef(text)
 }
 
 export function isDataUrlImageRef(value: string) {
@@ -152,6 +197,234 @@ function createUploadObjectUrl(dataUrl: string) {
   const blob = dataUrlToBlob(dataUrl)
   if (!blob || typeof URL === 'undefined' || !URL.createObjectURL) return ''
   return URL.createObjectURL(blob)
+}
+
+async function isLocalCacheReadable(localSrc: string) {
+  const src = String(localSrc || '').trim()
+  if (!src) return false
+  if (isDataUrlImageRef(src)) return true
+  const api = getUniApi()
+  if (!api?.getFileInfo) return false
+  return new Promise<boolean>((resolve) => {
+    api.getFileInfo({
+      filePath: src,
+      success: () => resolve(true),
+      fail: () => resolve(false),
+    })
+  })
+}
+
+async function removeCachedLocalFile(localSrc: string) {
+  const api = getUniApi()
+  const src = String(localSrc || '').trim()
+  if (!src || isDataUrlImageRef(src) || /^https?:\/\//i.test(src)) return
+  if (!api?.removeSavedFile) return
+  await new Promise<void>((resolve) => {
+    api.removeSavedFile({
+      filePath: src,
+      success: () => resolve(),
+      fail: () => resolve(),
+    })
+  })
+}
+
+async function removeImageCacheEntry(entry: ImageCacheEntry, removeFile = false) {
+  await localDb.transact(['image_cache_entries'], (tables) => {
+    tables.image_cache_entries = (tables.image_cache_entries as ImageCacheEntry[])
+      .filter(row => row._id !== entry._id)
+  })
+  if (removeFile) await removeCachedLocalFile(entry.local_src)
+}
+
+async function touchImageCacheEntry(entry: ImageCacheEntry, now = Date.now()) {
+  await localDb.upsertRows('image_cache_entries', [{
+    ...entry,
+    last_accessed_at: now,
+    updated_at: now,
+  }])
+}
+
+async function findImageCacheEntry(fileID: string, familyId = '') {
+  const imageRef = String(fileID || '').trim()
+  if (!imageRef) return null
+  const entry = await localDb.findById<ImageCacheEntry>('image_cache_entries', getImageCacheEntryId(imageRef))
+    || await localDb.findById<ImageCacheEntry>('image_cache_entries', getLegacyImageCacheEntryId(imageRef))
+  if (!entry) return null
+  if (entry.file_id !== imageRef) return null
+  if (familyId && entry.family_id && entry.family_id !== familyId) return null
+  return entry
+}
+
+function collectLocalImageRefs(images: unknown, refs: Set<string>) {
+  if (!Array.isArray(images)) return
+  images.forEach((item) => {
+    if (isLocalImageRef(item)) refs.add(String(item).trim())
+  })
+}
+
+function collectLocalImageRefsDeep(value: unknown, refs: Set<string>) {
+  if (!value || typeof value !== 'object') return
+  if (Array.isArray(value)) {
+    value.forEach(item => collectLocalImageRefsDeep(item, refs))
+    return
+  }
+  Object.entries(value as Record<string, unknown>).forEach(([key, nested]) => {
+    if (key === 'images') collectLocalImageRefs(nested, refs)
+    collectLocalImageRefsDeep(nested, refs)
+  })
+}
+
+async function getProtectedLocalImageRefs() {
+  const refs = new Set<string>()
+  await Promise.all(BUSINESS_COLLECTIONS.map(async (collection) => {
+    const rows = await localDb.getTable<any>(collection)
+    rows.forEach((row) => {
+      collectLocalImageRefs(row?.images, refs)
+      collectLocalImageRefs(row?.details?.images, refs)
+    })
+  }))
+  const outbox = await localDb.getTable<OutboxMutation>('outbox_mutations')
+  outbox.forEach((mutation) => {
+    if (mutation.status === 'synced') return
+    collectLocalImageRefsDeep(mutation.payload, refs)
+  })
+  return refs
+}
+
+async function pruneImageCacheEntries() {
+  if (imageCacheCleanupPromise) return imageCacheCleanupPromise
+  imageCacheCleanupPromise = (async () => {
+    const now = Date.now()
+    const cutoff = now - IMAGE_CACHE_MAX_AGE_MS
+    const protectedLocalSrcs = await getProtectedLocalImageRefs()
+    const dropped = await localDb.transact(['image_cache_entries'], (tables) => {
+      const rows = tables.image_cache_entries as ImageCacheEntry[]
+      const freshRows = rows
+        .filter(row => Number(row.last_accessed_at || row.updated_at || 0) >= cutoff)
+        .sort((a, b) => Number(b.last_accessed_at || b.updated_at || 0) - Number(a.last_accessed_at || a.updated_at || 0))
+      const kept: ImageCacheEntry[] = []
+      const staleRows = rows.filter(row => !freshRows.some(fresh => fresh._id === row._id))
+      const droppedRows = [...staleRows]
+      let totalBytes = 0
+      for (const row of freshRows) {
+        const size = Math.max(0, Number(row.size || 0))
+        if (totalBytes + size <= IMAGE_CACHE_MAX_BYTES || kept.length === 0) {
+          kept.push(row)
+          totalBytes += size
+        } else {
+          droppedRows.push(row)
+        }
+      }
+      tables.image_cache_entries = kept
+      const keptLocalSrcs = new Set(kept.map(row => row.local_src).filter(Boolean))
+      return droppedRows.filter(row => (
+        row.local_src
+        && !keptLocalSrcs.has(row.local_src)
+        && !protectedLocalSrcs.has(row.local_src)
+      ))
+    })
+    await Promise.all(dropped.map(row => removeCachedLocalFile(row.local_src)))
+  })()
+    .catch(error => console.warn('清理图片本地缓存失败', error))
+    .finally(() => {
+      imageCacheCleanupPromise = null
+    })
+  return imageCacheCleanupPromise
+}
+
+export async function upsertImageCacheEntry(input: ImageCacheInput) {
+  const fileID = String(input.fileID || '').trim()
+  const localSrc = String(input.localSrc || '').trim()
+  if (!isCloudImageRef(fileID) || !localSrc || isCloudImageRef(localSrc)) return null
+  const now = Date.now()
+  const size = Number(input.size || await getFileSize(localSrc) || 0)
+  const existing = await findImageCacheEntry(fileID, input.familyId || '')
+  const entry: ImageCacheEntry = {
+    _id: getImageCacheEntryId(fileID),
+    file_id: fileID,
+    family_id: input.familyId || existing?.family_id || '',
+    local_src: localSrc,
+    size,
+    created_at: existing?.created_at || now,
+    last_accessed_at: now,
+    updated_at: now,
+  }
+  await localDb.transact(['image_cache_entries'], (tables) => {
+    tables.image_cache_entries = (tables.image_cache_entries as ImageCacheEntry[])
+      .filter(row => row.file_id !== fileID && row._id !== entry._id)
+    tables.image_cache_entries.push(entry)
+  })
+  void pruneImageCacheEntries()
+  return entry
+}
+
+export async function cacheUploadedImageLocalRef(fileID: string, localRef: string, options: ResolveImageDisplayOptions = {}) {
+  try {
+    return await upsertImageCacheEntry({
+      fileID,
+      familyId: options.familyId,
+      localSrc: localRef,
+    })
+  } catch (error) {
+    console.warn('写入上传图片本地缓存失败', error)
+    return null
+  }
+}
+
+async function resolveCachedImageSrc(fileID: string, options: ResolveImageDisplayOptions = {}) {
+  const entry = await findImageCacheEntry(fileID, options.familyId || '')
+  if (!entry) return ''
+  if (!(await isLocalCacheReadable(entry.local_src))) {
+    await removeImageCacheEntry(entry, false).catch(error => console.warn('移除失效图片缓存失败', error))
+    return ''
+  }
+  await touchImageCacheEntry(entry).catch(error => console.warn('更新图片缓存访问时间失败', error))
+  void pruneImageCacheEntries()
+  return entry.local_src
+}
+
+async function downloadRemoteImageToLocal(url: string) {
+  const api = getUniApi()
+  if (api?.downloadFile) {
+    const tempPath = await new Promise<string>((resolve, reject) => {
+      api.downloadFile({
+        url,
+        success: (res: any) => resolve(String(res?.tempFilePath || '')),
+        fail: reject,
+      })
+    })
+    if (!tempPath) return null
+    const persisted = await persistLocalImage(tempPath)
+    return {
+      localSrc: persisted.path,
+      size: await getFileSize(persisted.path),
+    }
+  }
+  if (typeof fetch === 'function') {
+    const response = await fetch(url)
+    if (!response.ok) return null
+    const blob = await response.blob()
+    return {
+      localSrc: await blobToDataUrl(blob),
+      size: blob.size,
+    }
+  }
+  return null
+}
+
+async function cacheRemoteImage(fileID: string, url: string, options: ResolveImageDisplayOptions = {}) {
+  try {
+    const downloaded = await downloadRemoteImageToLocal(url)
+    if (!downloaded?.localSrc) return
+    await upsertImageCacheEntry({
+      fileID,
+      familyId: options.familyId,
+      localSrc: downloaded.localSrc,
+      size: downloaded.size,
+    })
+  } catch (error) {
+    console.warn('缓存云端图片到本地失败', error)
+  }
 }
 
 async function createDurableInlineImageRef(path: string) {
@@ -412,11 +685,14 @@ export async function uploadLocalImage(localRef: string, meta: UploadImageMeta) 
   }
 }
 
-export async function resolveImageDisplayUrl(ref: string) {
+export async function resolveImageDisplayUrl(ref: string, options: ResolveImageDisplayOptions = {}) {
   const imageRef = String(ref || '').trim()
   if (!imageRef) return ''
   if (!isCloudImageRef(imageRef)) return imageRef
-  const cached = displayUrlCache.get(imageRef)
+  const localCached = await resolveCachedImageSrc(imageRef, options)
+  if (localCached) return localCached
+  const displayCacheKey = getDisplayUrlCacheKey(imageRef, options)
+  const cached = displayUrlCache.get(displayCacheKey)
   if (cached) return cached
   const cloudApi = getUniCloudApi()
   if (!cloudApi?.getTempFileURL) return ''
@@ -425,7 +701,8 @@ export async function resolveImageDisplayUrl(ref: string) {
     const file = Array.isArray(result?.fileList) ? result.fileList[0] : null
     const url = String(file?.tempFileURL || file?.url || '').trim()
     if (url) {
-      displayUrlCache.set(imageRef, url)
+      displayUrlCache.set(displayCacheKey, url)
+      void cacheRemoteImage(imageRef, url, options)
       return url
     }
   } catch (error) {
@@ -434,8 +711,8 @@ export async function resolveImageDisplayUrl(ref: string) {
   return ''
 }
 
-export async function resolveImageDisplayUrls(refs: string[]) {
-  return Promise.all((refs || []).map(ref => resolveImageDisplayUrl(ref)))
+export async function resolveImageDisplayUrls(refs: string[], options: ResolveImageDisplayOptions = {}) {
+  return Promise.all((refs || []).map(ref => resolveImageDisplayUrl(ref, options)))
 }
 
 export function resolveImageSafeSrc(ref: string, displayUrl = '') {

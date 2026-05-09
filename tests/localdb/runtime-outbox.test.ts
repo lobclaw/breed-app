@@ -18,6 +18,7 @@ describe('local sync runtime outbox diagnostics', () => {
     await localDb.replaceTable('sync_conflicts', [])
     await localDb.replaceTable('sync_state', [])
     await localDb.replaceTable('local_meta', [])
+    await localDb.replaceTable('image_cache_entries', [])
     await localDb.replaceTable('dogs', [])
     await localDb.replaceTable('tasks', [])
     await localDb.replaceTable('health_records', [])
@@ -129,6 +130,12 @@ describe('local sync runtime outbox diagnostics', () => {
     expect(expense._pending_upload).toBe(false)
     expect(expense.pending_upload).toBe(false)
     expect(mutation.payload.images).toEqual([uploadedRef])
+    const imageCache = await localDb.getTable<any>('image_cache_entries')
+    expect(imageCache).toEqual([expect.objectContaining({
+      file_id: uploadedRef,
+      family_id: 'fam_upload',
+      local_src: localImage,
+    })])
   })
 
   it('待传标记遇到已上传图片时应自动清理', async () => {

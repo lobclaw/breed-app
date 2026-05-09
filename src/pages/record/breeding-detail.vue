@@ -509,7 +509,7 @@ const showRecordImages = computed(() => {
 })
 
 watch(recordImageRefs, async (images) => {
-  imageDisplayUrls.value = await resolveImageDisplayUrls(images)
+  imageDisplayUrls.value = await resolveImageDisplayUrls(images, { familyId: currentFamily.value?._id || '' })
 }, { immediate: true })
 
 function getMatingSireName(details: Record<string, any> = {}) {
@@ -642,7 +642,7 @@ function goToCycle() {
 async function previewImage(index: number) {
   const urls = imageDisplayUrls.value.length
     ? imageDisplayUrls.value
-    : await resolveImageDisplayUrls(recordImageRefs.value)
+    : await resolveImageDisplayUrls(recordImageRefs.value, { familyId: currentFamily.value?._id || '' })
   uni.previewImage({
     current: urls[index] || index,
     urls,

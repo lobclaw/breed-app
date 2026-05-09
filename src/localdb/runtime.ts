@@ -46,7 +46,7 @@ import type {
   SyncStateRow,
 } from '@/localdb/types'
 import { getBeijingDayStart, getBeijingOrdinalDay } from '@/utils/date'
-import { isUploadedImageRef, uploadLocalImage } from '@/utils/imageAttachment'
+import { cacheUploadedImageLocalRef, isUploadedImageRef, uploadLocalImage } from '@/utils/imageAttachment'
 
 interface StoredScopeFreshness {
   scopeKey: string
@@ -1419,6 +1419,10 @@ class LocalSyncRuntime {
         }
       })
     })
+
+    await Promise.all([...uploadedRefMap.entries()].map(([localRef, uploadedRef]) => (
+      cacheUploadedImageLocalRef(uploadedRef, localRef, { familyId })
+    )))
 
     if (uploadErrorMap.size > 0) {
       throw new Error([...uploadErrorMap.values()][0] || '附件上传失败')

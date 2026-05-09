@@ -540,6 +540,13 @@
 - 保存设备级元信息与本地库元数据
 - 关键字段：`device_id`、`schema_version`、`last_bootstrap_at`
 
+#### `image_cache_entries`
+
+- 保存云端附件 fileID 对应的本地显示图缓存，不参与云同步
+- 关键字段：`_id`、`file_id`、`family_id`、`local_src`、`size`、`created_at`、`last_accessed_at`、`updated_at`
+- 业务记录仍以云端 `file_id` 作为稳定引用；展示时优先读本地缓存，未命中再解析云端临时 URL
+- 缓存按 LRU 清理，默认约 300MB 或最近 90 天访问窗口
+
 其中 `families.settings.custom_expense_categories` 结构为：
 
 - `name`

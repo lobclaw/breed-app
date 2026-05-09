@@ -178,7 +178,7 @@ async function loadRecord() {
   }
   localSyncRuntime.setCurrentFamilyId(familyId)
   record.value = await getLocalExpenseDetail(familyId, recordId)
-  imageDisplayUrls.value = await resolveImageDisplayUrls(record.value?.images || [])
+  imageDisplayUrls.value = await resolveImageDisplayUrls(record.value?.images || [], { familyId })
   loading.value = false
   hasLoadedOnce = true
 }
@@ -190,7 +190,7 @@ async function refreshRecord() {
 async function previewImage(index: number) {
   const urls = imageDisplayUrls.value.length
     ? imageDisplayUrls.value
-    : await resolveImageDisplayUrls(record.value?.images || [])
+    : await resolveImageDisplayUrls(record.value?.images || [], { familyId: currentFamily.value?._id || '' })
   uni.previewImage({
     current: urls[index] || index,
     urls,

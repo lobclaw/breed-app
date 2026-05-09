@@ -61,6 +61,10 @@
 - 附件上传必须有 in-flight 去重；页面自动同步、手动同步、网络恢复 flush 不得重复上传同一批本地图片
 - 附件上传失败不得阻塞业务记录保存；保留本地引用、保留 `pending_upload`，写入 `_upload_error`，由同步状态入口继续处理
 - 图片展示不得直接把 `cloud://` / `unicloud://` 传给 `<image>` 或 `previewImage`；必须先解析 display URL，解析失败时显示占位，不回退到云协议原文
+- 业务记录中的图片事实源只保存云端 `fileID` 或待上传本地引用；已上传图片的本地显示缓存单独写入 `image_cache_entries`，不进入云同步、不回写业务字段
+- 图片展示解析保持 local-first：`resolveImageDisplayUrl(s)` 先按 `fileID + familyId` 查本地缓存，未命中才取云端临时 URL，并 best-effort 回填本地缓存
+- 待上传图片成功上传后，替换业务记录和 outbox payload 的本地引用时，必须同步写入 `image_cache_entries` 的 `fileID -> local_src` 映射
+- `image_cache_entries` 是性能缓存不是业务事实；LRU 清理默认约 `300MB / 90天`，删除本地缓存文件前必须确认该 `local_src` 没有被业务记录或未同步 outbox 继续引用
 - 图片 display URL 异步解析必须防旧请求覆盖新状态；图片列表增删、切页、重进表单时保留 latest token / 当前数组引用校验
 
 ## Scope 与在线优先边界
@@ -135,7 +139,7 @@
 - 改销售：核对可售候选过滤、同犬只进行中唯一性、未结算退款拦截、退款/定金取消金额边界、销售列表/详情归一化
 - 改通知 / 晨间摘要 / 推送：核对 `families.settings` 与北京时间 `HH:MM` 分钟级命中
 - 改家庭协作 / 云对象 / 详情页刷新：核对 `operation_logs`、多集合写入边界、北京时间按天换算、重复请求与 latest token
-- 改图片 / 附件：核对本地持久保存、目标体积压缩、云 fileID 展示解析、`pending_upload` 入口、失效图片重选入口、附件上传 in-flight 去重、outbox payload 引用替换
+- 改图片 / 附件：核对本地持久保存、目标体积压缩、云 fileID 展示解析、`image_cache_entries` 本地优先命中、`pending_upload` 入口、失效图片重选入口、附件上传 in-flight 去重、outbox payload 引用替换、缓存清理不误删待上传本地文件
 - 改完后：验证来源页承接、局部移除、scope TTL、in-flight 去重、outbox 重放、冲突/失败/待上传状态
 
 ## 测试 / 验收

@@ -21,6 +21,7 @@ export const SYSTEM_COLLECTIONS = [
   'sync_state',
   'sync_conflicts',
   'local_meta',
+  'image_cache_entries',
 ] as const
 
 export const LOCAL_COLLECTIONS = [...BUSINESS_COLLECTIONS, ...SYSTEM_COLLECTIONS] as const
@@ -110,6 +111,17 @@ export interface LocalMetaRow {
   _id: string
   key: string
   value: unknown
+  updated_at: number
+}
+
+export interface ImageCacheEntry {
+  _id: string
+  file_id: string
+  family_id: string
+  local_src: string
+  size: number
+  created_at: number
+  last_accessed_at: number
   updated_at: number
 }
 

@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  cacheUploadedImageLocalRef,
   chooseLocalImages,
   prepareLocalImage,
   resolveImageDisplayUrl,
   uploadLocalImage,
 } from '@/utils/imageAttachment'
+import { localDb } from '../../src/localdb/db'
 
 const originalFetch = globalThis.fetch
 const originalCreateObjectURL = URL.createObjectURL
@@ -12,8 +14,25 @@ const originalRevokeObjectURL = URL.revokeObjectURL
 const originalDocument = globalThis.document
 const originalImage = globalThis.Image
 
+async function waitForCondition(assertion: () => boolean | Promise<boolean>) {
+  for (let index = 0; index < 20; index += 1) {
+    if (await assertion()) return
+    await new Promise(resolve => setTimeout(resolve, 5))
+  }
+}
+
+function imageCacheEntryId(fileID: string) {
+  const encoded = encodeURIComponent(fileID).replace(/[^a-zA-Z0-9_-]/g, (char) => {
+    return `_${char.charCodeAt(0).toString(16).padStart(2, '0')}`
+  })
+  return `image_cache_${encoded}`
+}
+
 describe('imageAttachment', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await localDb.replaceTable('image_cache_entries', [])
+    await localDb.replaceTable('expenses', [])
+    await localDb.replaceTable('outbox_mutations', [])
     ;(globalThis as any).uni = {
       chooseImage: vi.fn(({ success }) => success({ tempFilePaths: ['tmp://photo.jpg'] })),
       getImageInfo: vi.fn(({ success }) => success({ width: 3000, height: 1500 })),
@@ -203,6 +222,36 @@ describe('imageAttachment', () => {
     expect((globalThis as any).uniCloud.getTempFileURL).not.toHaveBeenCalled()
   })
 
+  it('云 fileID 有本地缓存时应直接显示本地图片', async () => {
+    await cacheUploadedImageLocalRef('cloud://bucket/cached.jpg', 'saved://cached-local.jpg', { familyId: 'fam_1' })
+
+    const url = await resolveImageDisplayUrl('cloud://bucket/cached.jpg', { familyId: 'fam_1' })
+
+    expect(url).toBe('saved://cached-local.jpg')
+    expect((globalThis as any).uniCloud.getTempFileURL).not.toHaveBeenCalled()
+  })
+
+  it('无法验证本地缓存路径时应回退到云端临时 URL', async () => {
+    delete (globalThis as any).uni.getFileInfo
+    await localDb.upsertRows('image_cache_entries', [{
+      _id: 'image_cache_unreadable',
+      file_id: 'cloud://bucket/unreadable.jpg',
+      family_id: 'fam_1',
+      local_src: 'saved://missing-local.jpg',
+      size: 100,
+      created_at: 1000,
+      last_accessed_at: 1000,
+      updated_at: 1000,
+    }])
+
+    const url = await resolveImageDisplayUrl('cloud://bucket/unreadable.jpg', { familyId: 'fam_1' })
+
+    expect(url).toBe('https://temp.local/bucket/unreadable.jpg')
+    expect((globalThis as any).uniCloud.getTempFileURL).toHaveBeenCalledWith({
+      fileList: ['cloud://bucket/unreadable.jpg'],
+    })
+  })
+
   it('云 fileID 展示前应转换为临时 URL', async () => {
     const url = await resolveImageDisplayUrl('cloud://bucket/photo.jpg')
 
@@ -210,6 +259,170 @@ describe('imageAttachment', () => {
     expect((globalThis as any).uniCloud.getTempFileURL).toHaveBeenCalledWith({
       fileList: ['cloud://bucket/photo.jpg'],
     })
+  })
+
+  it('临时 URL 内存缓存应按家庭隔离', async () => {
+    let callIndex = 0
+    ;(globalThis as any).fetch = vi.fn(async () => ({ ok: false }))
+    ;(globalThis as any).uniCloud.getTempFileURL = vi.fn(({ fileList }) => {
+      callIndex += 1
+      return {
+        fileList: fileList.map((fileID: string) => ({
+          fileID,
+          tempFileURL: `https://temp.local/family-${callIndex}.jpg`,
+        })),
+      }
+    })
+
+    const firstFamilyUrl = await resolveImageDisplayUrl('cloud://bucket/family-cache.jpg', { familyId: 'fam_1' })
+    const secondFamilyUrl = await resolveImageDisplayUrl('cloud://bucket/family-cache.jpg', { familyId: 'fam_2' })
+    const secondFamilyCachedUrl = await resolveImageDisplayUrl('cloud://bucket/family-cache.jpg', { familyId: 'fam_2' })
+
+    expect(firstFamilyUrl).toBe('https://temp.local/family-1.jpg')
+    expect(secondFamilyUrl).toBe('https://temp.local/family-2.jpg')
+    expect(secondFamilyCachedUrl).toBe('https://temp.local/family-2.jpg')
+    expect((globalThis as any).uniCloud.getTempFileURL).toHaveBeenCalledTimes(2)
+  })
+
+  it('云 fileID 无本地缓存时应返回临时 URL 并后台写入本地缓存', async () => {
+    ;(globalThis as any).fetch = vi.fn(async () => ({
+      ok: true,
+      blob: async () => new Blob(['remote-image'], { type: 'image/jpeg' }),
+    }))
+
+    const url = await resolveImageDisplayUrl('cloud://bucket/cache-miss.jpg', { familyId: 'fam_1' })
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    expect(url).toBe('https://temp.local/bucket/cache-miss.jpg')
+    const rows = await localDb.getTable<any>('image_cache_entries')
+    expect(rows).toEqual([expect.objectContaining({
+      file_id: 'cloud://bucket/cache-miss.jpg',
+      family_id: 'fam_1',
+      local_src: expect.stringMatching(/^data:image\/jpeg;base64,/),
+    })])
+  })
+
+  it('后台写入本地缓存失败不应影响临时 URL 展示', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.spyOn(localDb, 'upsertRows').mockRejectedValueOnce(new Error('cache write failed'))
+    ;(globalThis as any).fetch = vi.fn(async () => ({
+      ok: true,
+      blob: async () => new Blob(['remote-image'], { type: 'image/jpeg' }),
+    }))
+
+    const url = await resolveImageDisplayUrl('cloud://bucket/cache-write-fail.jpg', { familyId: 'fam_1' })
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    expect(url).toBe('https://temp.local/bucket/cache-write-fail.jpg')
+  })
+
+  it('LRU 清理不应删除仍被保留缓存引用的同一本地文件', async () => {
+    const removeSavedFile = vi.fn(({ success }) => success({}))
+    ;(globalThis as any).uni.removeSavedFile = removeSavedFile
+    const sharedLocalSrc = 'saved://shared-local.jpg'
+    await localDb.replaceTable('image_cache_entries', [
+      {
+        _id: imageCacheEntryId('cloud://bucket/stale.jpg'),
+        file_id: 'cloud://bucket/stale.jpg',
+        family_id: 'fam_1',
+        local_src: sharedLocalSrc,
+        size: 100,
+        created_at: 1000,
+        last_accessed_at: 1000,
+        updated_at: 1000,
+      },
+      {
+        _id: imageCacheEntryId('cloud://bucket/fresh.jpg'),
+        file_id: 'cloud://bucket/fresh.jpg',
+        family_id: 'fam_1',
+        local_src: sharedLocalSrc,
+        size: 100,
+        created_at: Date.now(),
+        last_accessed_at: Date.now(),
+        updated_at: Date.now(),
+      },
+    ])
+
+    await resolveImageDisplayUrl('cloud://bucket/fresh.jpg', { familyId: 'fam_1' })
+    await waitForCondition(async () => {
+      const rows = await localDb.getTable<any>('image_cache_entries')
+      return rows.length === 1
+    })
+
+    expect(removeSavedFile).not.toHaveBeenCalled()
+    const rows = await localDb.getTable<any>('image_cache_entries')
+    expect(rows.map(row => row.file_id)).toEqual(['cloud://bucket/fresh.jpg'])
+  })
+
+  it('LRU 清理不应删除仍被业务记录或 outbox 引用的待上传本地文件', async () => {
+    const removeSavedFile = vi.fn(({ success }) => success({}))
+    ;(globalThis as any).uni.removeSavedFile = removeSavedFile
+    const businessLocalSrc = 'saved://pending-business.jpg'
+    const outboxLocalSrc = 'saved://pending-outbox.jpg'
+    await localDb.replaceTable('image_cache_entries', [
+      {
+        _id: imageCacheEntryId('cloud://bucket/stale-business.jpg'),
+        file_id: 'cloud://bucket/stale-business.jpg',
+        family_id: 'fam_1',
+        local_src: businessLocalSrc,
+        size: 100,
+        created_at: 1000,
+        last_accessed_at: 1000,
+        updated_at: 1000,
+      },
+      {
+        _id: imageCacheEntryId('cloud://bucket/stale-outbox.jpg'),
+        file_id: 'cloud://bucket/stale-outbox.jpg',
+        family_id: 'fam_1',
+        local_src: outboxLocalSrc,
+        size: 100,
+        created_at: 1000,
+        last_accessed_at: 1000,
+        updated_at: 1000,
+      },
+      {
+        _id: imageCacheEntryId('cloud://bucket/fresh-protected-test.jpg'),
+        file_id: 'cloud://bucket/fresh-protected-test.jpg',
+        family_id: 'fam_1',
+        local_src: 'saved://fresh-protected-test.jpg',
+        size: 100,
+        created_at: Date.now(),
+        last_accessed_at: Date.now(),
+        updated_at: Date.now(),
+      },
+    ])
+    await localDb.replaceTable('expenses', [{
+      _id: 'expense_pending_image',
+      family_id: 'fam_1',
+      images: [businessLocalSrc],
+      _pending_upload: true,
+      pending_upload: true,
+    }])
+    await localDb.replaceTable('outbox_mutations', [{
+      _id: 'outbox_pending_image',
+      type: 'finance.addExpense',
+      collection_scope: ['expenses'],
+      payload: { images: [outboxLocalSrc] },
+      family_id: 'fam_1',
+      status: 'pending',
+      retry_count: 0,
+      next_retry_at: 0,
+      client_mutation_id: 'mutation_pending_image',
+      device_id: 'device_1',
+      created_at: 1000,
+      updated_at: 1000,
+    }])
+
+    await resolveImageDisplayUrl('cloud://bucket/fresh-protected-test.jpg', { familyId: 'fam_1' })
+    await waitForCondition(async () => {
+      const rows = await localDb.getTable<any>('image_cache_entries')
+      return rows.length === 1
+    })
+
+    expect(removeSavedFile).not.toHaveBeenCalledWith(expect.objectContaining({ filePath: businessLocalSrc }))
+    expect(removeSavedFile).not.toHaveBeenCalledWith(expect.objectContaining({ filePath: outboxLocalSrc }))
+    const rows = await localDb.getTable<any>('image_cache_entries')
+    expect(rows.map(row => row.file_id)).toEqual(['cloud://bucket/fresh-protected-test.jpg'])
   })
 
   it('云 fileID 解析失败时不应回退为浏览器无法识别的 cloud 协议', async () => {
