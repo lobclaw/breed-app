@@ -1266,14 +1266,24 @@ onBeforeUnmount(() => {
 
   &__btn {
     height: 42px;
+    box-sizing: border-box;
+    margin: 0;
     padding: 0 24px;
     border-radius: var(--radius-btn);
     font-size: 14px;
     font-weight: 700;
+    line-height: 1;
     border: none;
     color: #fff;
     background: var(--primary);
     box-shadow: 0 2px 8px rgba(234, 62, 119, 0.2);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    &::after {
+      border: none;
+    }
 
     &--outline {
       background: transparent;

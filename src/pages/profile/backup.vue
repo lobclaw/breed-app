@@ -1204,12 +1204,16 @@ onShow(() => {
   &__retry {
     flex: 1;
     height: 42px;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
     border: none;
     border-radius: var(--radius-btn);
     background: linear-gradient(135deg, var(--red), #e97862);
     color: #fff;
     font-size: 13px;
     font-weight: 800;
+    line-height: 1;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1238,13 +1242,16 @@ onShow(() => {
   &__detail {
     min-width: 104px;
     height: 42px;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0 12px;
     border: 0;
     border-radius: var(--radius-btn);
     background: rgba(255, 255, 255, 0.72);
     color: var(--text-2);
     font-size: 13px;
     font-weight: 700;
-    line-height: 42px;
+    line-height: 1;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1338,11 +1345,14 @@ onShow(() => {
   width: 100%;
   height: 50px;
   box-sizing: border-box;
+  margin: 0;
+  padding: 0;
   border-radius: var(--radius-btn);
   border: 1.5px solid var(--text-4);
   background: var(--card);
   font-size: 15px;
   font-weight: 700;
+  line-height: 1;
   color: var(--text-1);
   font-family: var(--font-display);
   display: flex;
@@ -1368,12 +1378,15 @@ onShow(() => {
   width: 100%;
   height: 50px;
   box-sizing: border-box;
+  margin: 0;
+  padding: 0;
   border-radius: var(--radius-btn);
   border: none;
   background: var(--card-dim);
   box-shadow: inset 0 0 0 1px rgba(216, 203, 189, 0.28);
   font-size: 15px;
   font-weight: 700;
+  line-height: 1;
   color: var(--text-2);
   font-family: var(--font-display);
   display: flex;
@@ -1558,12 +1571,16 @@ onShow(() => {
     flex: 1;
     min-width: 0;
     height: 34px;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
     border: 0;
     border-radius: 12px;
     background: rgba(255, 255, 255, 0.78);
     color: var(--text-2);
     font-size: 12px;
     font-weight: 800;
+    line-height: 1;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1837,10 +1854,14 @@ onShow(() => {
   &__secondary {
     width: 100%;
     height: 48px;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
     border-radius: var(--radius-btn);
     border: 0;
     font-size: 14px;
     font-weight: 800;
+    line-height: 1;
     display: flex;
     align-items: center;
     justify-content: center;

@@ -683,6 +683,9 @@ onShow(() => {
   &__primary {
     width: 100%;
     height: 42px;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
     border: 0;
     border-radius: var(--radius-row);
     display: flex;
@@ -691,7 +694,11 @@ onShow(() => {
     gap: 5px;
     font-size: 13px;
     font-weight: 700;
-    line-height: 42px;
+    line-height: 1;
+
+    &::after {
+      border: 0;
+    }
   }
 
   &__primary {

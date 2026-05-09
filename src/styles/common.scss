@@ -770,10 +770,14 @@
 .submit-btn {
   width: 100%;
   height: 50px;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
   border-radius: var(--radius-btn);
   border: none;
   font-size: 15px;
   font-weight: 700;
+  line-height: 1;
   color: white;
   background: var(--primary);
   box-shadow: 0 4px 16px rgba(234, 62, 119, 0.25);
@@ -782,6 +786,10 @@
   justify-content: center;
   font-family: var(--font-display);
   transition: all 0.12s ease;
+
+  &::after {
+    border: none;
+  }
 
   &:active {
     transform: scale(0.94);

@@ -148,6 +148,9 @@
 - 若某集合 clientDB/JQL 无法安全做增量拉取，则只为该域补最小同步接口，不新增通用 sync-service
 - 家庭协作、邀请、角色、登录鉴权、`operation_logs` 保持在线优先，不进入第一版离线写入
 - 在线优先页面断网时直接提示“当前功能需要联网”，避免等待云调用超时后再模糊报错
+- 在线优先页可做只读缓存兜底：家庭成员页展示已缓存家庭信息，操作日志页展示本地 pending 操作与最近云端日志缓存，备份页展示最近备份信息/历史
+- 所有会改变云端状态的在线优先动作仍必须先通过统一联网守卫，不写入 outbox，不做本地乐观提交
+- 操作日志缓存签名使用稳定 `rangeKey + actorUserIds + actionTypes`；云端查询可继续使用实时 `start/end`，但缓存匹配不得写入动态 `Date.now()` 结果
 
 ## 7. 首页与提醒架构
 
@@ -182,8 +185,9 @@
 - 弹层打开时锁定滚动
 - 表单提交反馈统一为局部 loading + 弱成功反馈
 - 表单主 CTA 统一支持 `默认 / 提交中 / 成功瞬态` 三态，成功瞬态当前口径为 `520ms`
-- 业务图片附件遵循 Local-First：选择后先压缩到长边约 1280px、质量 70，并保存本地持久路径；同步前再通过 `uniCloud.uploadFile` 上传并回填云 `fileID`
-- 云存储 `fileID` 不直接作为 `<image>` / `previewImage` 地址使用，展示前统一通过 `getTempFileURL` 转临时 URL；本地路径保持本地直显
+- 业务图片附件遵循 Local-First：选择后先压缩并保存本地持久引用，业务记录立即保存；同步前再通过 `uniCloud.uploadFile` 上传并回填云 `fileID`
+- 普通业务图片目标 `<=350KB`；健康/繁育记录图片目标 `<=450KB`；头像目标 `<=180KB`
+- 云存储 `fileID` 不直接作为 `<image>` / `previewImage` 地址使用；展示前统一走 `resolveImageDisplayUrl(s)`，优先命中 `image_cache_entries` 本地缓存，未命中再取云端临时 URL 并 best-effort 回填缓存
 - 下一阶段对短时可逆动作优先补 `Undo / 可撤销`，不回退为强 success toast 驱动
 
 ## 10. 成本结论

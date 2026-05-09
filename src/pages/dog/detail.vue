@@ -4971,12 +4971,21 @@ onShow(() => {
 .sheet-form__btn {
   flex: 1;
   height: 44px;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  border: none;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-btn);
+  line-height: 1;
   transition: transform 0.12s ease, opacity 0.12s ease;
   &:active { transform: scale(0.94); opacity: 0.85; }
+
+  &::after {
+    border: none;
+  }
 }
 .sheet-form__btn--primary {
   background: var(--primary);

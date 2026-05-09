@@ -52,6 +52,7 @@
 - `docs/design/03-tech-stack.md`：技术栈、集合策略、云对象边界、成本与约束
 - `docs/design/04-implementation.md`：当前实现状态、服务边界、测试与近期执行顺序
 - `docs/design/05-field-page-mapping.md`：字段归属、页面写入口、核心审计结论
+- `tests/`：开发/CI 护栏，不进入正式 app 包；源码约束与边界测试随对应功能保留
 
 ## 路线文档
 
@@ -76,5 +77,5 @@
 - 实现阶段与测试口径变化先改 `04-implementation.md`
 - 页面或字段责任变化先改 `05-field-page-mapping.md`
 - `AGENTS.md` 是唯一协作入口；其他同类协作文件不再维护
-- `AGENTS.md` 只保留协作约束、当前阶段、关键红线与任务执行 checklist，不重复长篇设计内容
+- `AGENTS.md` 只保留协作约束、当前阶段、关键红线与任务执行 checklist，不重复长篇设计内容；细节沉淀回 `docs/design/`
 - 交互基线若进入高频协作约束，先同步长期事实源，再压缩更新到 `AGENTS.md`

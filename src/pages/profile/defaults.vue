@@ -32,7 +32,7 @@
 
     <!-- 保存按钮 -->
     <view class="save-area">
-      <button class="save-btn" :loading="saving" @click="saveAll">保存设置</button>
+      <BSubmitButton :loading="saving" @click="saveAll">保存设置</BSubmitButton>
     </view>
   </view>
 </template>
@@ -44,6 +44,7 @@ import { useAuth } from '@/composables/useAuth'
 import { usePageSync } from '@/composables/usePageSync'
 import { getLocalFamilySettings } from '@/localdb/domain-repository'
 import { localSyncRuntime } from '@/localdb/runtime'
+import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 
 interface SettingItem {
@@ -208,20 +209,5 @@ onShow(() => {
 
 .save-area {
   padding: 24px 16px;
-}
-
-.save-btn {
-  width: 100%;
-  height: 50px;
-  border-radius: var(--radius-btn);
-  border: none;
-  font-family: var(--font-display);
-  font-size: 16px;
-  font-weight: 700;
-  color: #fff;
-  background: var(--primary);
-  box-shadow: 0 4px 16px rgba(234, 62, 119, 0.25);
-  transition: all 0.12s ease;
-  &:active { transform: scale(0.97); opacity: 0.9; }
 }
 </style>
