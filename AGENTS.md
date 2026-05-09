@@ -41,6 +41,16 @@
 - 支持软删除的集合统一用 `deleted_at`；回收站当前仅纳入 `dogs`、`expenses`、`incomes`、`agents`、`medication_protocols`
 - 云函数内禁止使用未定义常量；毫秒常量直接写字面量 `86400000`
 
+## 云对象 / UniCloud 部署红线
+
+- 云端目标是支付宝云内置 UniCloud 数据库；不得把 DCloud 扩展数据库 MongoDB native API 当作可用能力，例如 `databaseForNative().collection().dropIndex()` 不适用于当前云空间
+- 云数据库索引以 `uniCloud-alipay/database/*.index.json` 和控制台索引管理为准；旧索引清理走控制台手动删除，不写云对象自动删索引
+- 云对象使用 `uniCloud-alipay/cloudfunctions/common/*` 公共模块时，必须在对应云对象 `package.json` 显式声明 `file:../common/...` 依赖；不能只依赖本地相对路径 fallback
+- `breed-auth`、`breed-sync`、`attachment-gc` 这类公共模块变更后，必须重新部署依赖它们的云对象；至少核对 `family-service`、`dog-service`、`task-service`、`health-service`、`finance-service`、`breeding-service`
+- 本地云函数通过不代表云端可用；云端 500 先看 uniCloud 函数日志真实堆栈，再判断是缺依赖、运行时 API 不支持、数据库索引/集合缺失，还是业务逻辑异常
+- 云对象代码优先使用当前云运行时稳妥语法；新增 `Object.fromEntries`、`Array.prototype.flatMap`、复杂 optional chaining 等运行时相关语法时，要确认云端 Node 版本支持或提供兼容写法
+- 云数据库 command 能力要做兼容判断；例如 `db.command.elemMatch` 不一定在所有运行环境可用，认证/同步关键路径要有 fallback 或测试覆盖
+
 ## Local-First Contract
 
 - 本地数据库是 UI 事实源；云端负责同步、校验、幂等 ack 与冲突返回，不退回“等云返回再显示/提交”
@@ -108,7 +118,8 @@
 - 改 local-first / 同步：核对 scope registry、TTL、active scope、collection cursor、scope freshness、outbox flush、Network 请求数量
 - 改繁育 / 健康 / 用药：核对任务生成条件、状态推进、唯一性约束、记录表单验收、终态展示联动
 - 改销售：核对候选过滤、进行中唯一性、未结算退款拦截、金额边界、列表/详情归一化
-- 改家庭协作 / 云对象 / 详情页刷新：核对 `operation_logs`、多集合写入边界、北京时间按天换算、重复请求与 latest token
+- 改家庭协作 / 云对象 / 详情页刷新：核对 `operation_logs`、多集合写入边界、北京时间按天换算、重复请求与 latest token、云对象 `package.json` 公共依赖、云端函数日志
+- 改云数据库索引：核对 `.index.json` 与查询排序一致；新增索引先部署新索引，旧索引只通过控制台清理，不写云对象清理脚本
 - 改图片 / 附件：核对本地持久保存、目标体积压缩、云 fileID 解析、`image_cache_entries` 命中、`pending_upload`、失效重选、上传去重、outbox 引用替换
 
 ## 测试 / 验收
