@@ -243,18 +243,26 @@ describe('homeHeatObservation', () => {
     })).toBe('/pages/record/breeding-prelabor?dogId=dog-1&dogName=%E5%A5%B6%E7%B3%96%20A&cycleId=cycle-1&locked=true')
   })
 
-  it('首页繁育卡两个渲染路径都接入待产弱入口', () => {
+  it('首页繁育卡两个渲染路径都通过处理弹窗承接待产动作', () => {
     const groupCardSource = readFileSync(resolve(testDir, '../../src/components/smart-card/BreedingProcessGroupCard.vue'), 'utf8')
     const singleCardSource = readFileSync(resolve(testDir, '../../src/components/smart-card/BreedingProcessCard.vue'), 'utf8')
+    const actionSource = readFileSync(resolve(testDir, '../../src/utils/homeBreedingActions.ts'), 'utf8')
 
-    expect(groupCardSource).toContain('canOpenHomePrenatal')
-    expect(groupCardSource).toContain('canOpenHomePreLabor')
-    expect(groupCardSource).toContain('>产检<')
-    expect(groupCardSource).toContain('>临产<')
+    expect(groupCardSource).toContain('hasMultipleHomeBreedingActions')
+    expect(groupCardSource).toContain('show_breeding_actions')
+    expect(groupCardSource).not.toContain('>产检<')
+    expect(groupCardSource).not.toContain('>临产<')
 
-    expect(singleCardSource).toContain('canOpenHomePrenatal')
-    expect(singleCardSource).toContain('canOpenHomePreLabor')
-    expect(singleCardSource).toContain('>产检<')
-    expect(singleCardSource).toContain('>临产<')
+    expect(singleCardSource).toContain('hasMultipleHomeBreedingActions')
+    expect(singleCardSource).toContain('show_breeding_actions')
+    expect(singleCardSource).not.toContain('>产检<')
+    expect(singleCardSource).not.toContain('>临产<')
+
+    expect(actionSource).toContain('canOpenHomePrenatal')
+    expect(actionSource).toContain('canOpenHomePreLabor')
+    expect(actionSource).toContain("key: 'prenatal'")
+    expect(actionSource).toContain("key: 'pre_labor'")
+    expect(actionSource).toContain('buildHomePrenatalUrl(card)')
+    expect(actionSource).toContain('buildHomePreLaborUrl(card)')
   })
 })

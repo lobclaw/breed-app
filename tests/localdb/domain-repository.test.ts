@@ -1125,7 +1125,7 @@ describe('local domain repository', () => {
   })
 
   it('覆盖同名用药时首页应立即只保留新疗程', async () => {
-    const now = new Date('2026-05-06T10:00:00+08:00').getTime()
+    const now = Date.now()
 
     await localDb.replaceTable('dogs', [{
       _id: 'dog_med_override_1',

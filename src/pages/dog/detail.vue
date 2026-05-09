@@ -947,8 +947,13 @@
         </view>
       </view>
       <template #footer>
-        <view class="form-sheet__footer">
-          <button class="form-sheet__submit" @click="doRetire">确认退休</button>
+        <view class="sheet-form__actions">
+          <button class="sheet-form__btn sheet-form__btn--cancel" @click="showRetireSheet = false">
+            <text class="sheet-form__btn-text" style="color: var(--text-2);">取消</text>
+          </button>
+          <button class="sheet-form__btn sheet-form__btn--primary" @click="doRetire">
+            <text class="sheet-form__btn-text" style="color: #fff;">确认退休</text>
+          </button>
         </view>
       </template>
     </BSheet>
@@ -982,8 +987,13 @@
         </view>
       </view>
       <template #footer>
-        <view class="form-sheet__footer">
-          <button class="form-sheet__submit form-sheet__submit--danger" @click="doDeceased">确认标记已故</button>
+        <view class="sheet-form__actions">
+          <button class="sheet-form__btn sheet-form__btn--cancel" @click="showDeceasedSheet = false">
+            <text class="sheet-form__btn-text" style="color: var(--text-2);">取消</text>
+          </button>
+          <button class="sheet-form__btn sheet-form__btn--danger" @click="doDeceased">
+            <text class="sheet-form__btn-text" style="color: #fff;">确认标记已故</text>
+          </button>
         </view>
       </template>
     </BSheet>
@@ -1079,8 +1089,13 @@
         </view>
       </view>
       <template #footer>
-        <view class="form-sheet__footer">
-          <button class="form-sheet__submit" @click="doRecovery">确认康复</button>
+        <view class="sheet-form__actions">
+          <button class="sheet-form__btn sheet-form__btn--cancel" @click="showRecoverySheet = false">
+            <text class="sheet-form__btn-text" style="color: var(--text-2);">取消</text>
+          </button>
+          <button class="sheet-form__btn sheet-form__btn--primary" @click="doRecovery">
+            <text class="sheet-form__btn-text" style="color: #fff;">确认康复</text>
+          </button>
         </view>
       </template>
     </BSheet>

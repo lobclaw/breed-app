@@ -236,8 +236,13 @@
         </view>
       </view>
       <template #footer>
-        <view class="form-sheet__footer">
-          <button class="form-sheet__submit" @click="confirmQuickComplete">确认完成</button>
+        <view class="task-sheet__actions">
+          <view class="task-sheet__btn task-sheet__btn--cancel" @click="showQuickComplete = false">
+            <text style="color: var(--text-2); font-size: 14px; font-weight: 600;">取消</text>
+          </view>
+          <view class="task-sheet__btn task-sheet__btn--confirm" @click="confirmQuickComplete">
+            <text style="color: #fff; font-size: 14px; font-weight: 600;">确认完成</text>
+          </view>
         </view>
       </template>
     </BSheet>
@@ -273,8 +278,13 @@
         </view>
       </view>
       <template #footer>
-        <view class="form-sheet__footer">
-          <button class="form-sheet__submit" @click="doPostpone">确认推迟</button>
+        <view class="task-sheet__actions">
+          <view class="task-sheet__btn task-sheet__btn--cancel" @click="showPostponeModal = false">
+            <text style="color: var(--text-2); font-size: 14px; font-weight: 600;">取消</text>
+          </view>
+          <view class="task-sheet__btn task-sheet__btn--confirm" @click="doPostpone">
+            <text style="color: #fff; font-size: 14px; font-weight: 600;">确认推迟</text>
+          </view>
         </view>
       </template>
     </BSheet>

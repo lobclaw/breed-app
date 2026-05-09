@@ -51,6 +51,7 @@
 - `health.endMedicationByDog` → `health-service.endMedicationByDog`
 - `health.addWeightRecord` → `health-service.addWeightRecord`
 - `health.addMedicationProtocol` → `health-service.addMedicationProtocol`
+- `health.updateMedicationProtocol` → `health-service.updateMedicationProtocol`
 - `health.removeMedicationProtocol` → `health-service.removeMedicationProtocol`
 
 ### 任务
