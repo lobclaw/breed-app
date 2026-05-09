@@ -163,7 +163,7 @@ Local-First Foundation：
 - 核心写路径已收口到本地事务 + outbox，并由各域云对象处理 `_sync` 幂等 ack
 - 销售流程已补齐本地候选过滤、列表/详情归一化投影，以及退款/定金取消金额边界的前端、本地事务、云对象三层校验
 - 备份页已接入 pending outbox / pending upload 阻断提示
-- 页面级同步通过 `family-service.pullCollections` 批量拉取当前 scope 的多个集合；首页严格只同步 `home` scope，不再进入后后台预拉非首页核心集合
+- 页面级同步通过 `family-service.pullCollections` 批量拉取当前 scope 的多个集合，并使用 `updated_at + _id` 复合游标分页拉完 `hasMore` 集合；首页严格只同步 `home` scope，不再进入后后台预拉非首页核心集合
 - 同步状态页已接入 pending / failed / conflict / pending upload 统计、当前 active scope、最近同步时间与失败/冲突重试；图片附件选取后先压缩并保存本地持久路径，`flushOutbox` 前统一上传本地附件，成功后替换本地行与 outbox payload 并清除 `pending_upload`
 - 图片展示统一先解析 display URL：本地路径直接展示，云 `fileID` 先查 `image_cache_entries` 本地缓存，未命中再批量通过 `getTempFileURL` 转换后用于缩略图与预览，并 best-effort 回填缓存；账号头像复用统一压缩/上传工具，但仍按在线优先边界处理
 - 在线优先页保持云端权威：家庭成员、操作日志、备份页不接普通 `usePageSync`；断网时使用统一联网守卫，允许只读缓存兜底

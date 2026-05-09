@@ -75,6 +75,7 @@ interface PullCollectionPayload {
   ok?: boolean
   rows?: Record<string, any>[]
   cursor?: number
+  cursorId?: string
   offset?: number
   hasMore?: boolean
   error?: string
@@ -235,6 +236,7 @@ function toSyncStateRow(collection: BusinessCollectionName, current?: Partial<Sy
     _id: collection,
     collection,
     last_pulled_at: current?.last_pulled_at || 0,
+    last_pulled_id: current?.last_pulled_id || '',
     last_full_sync_at: current?.last_full_sync_at || 0,
     last_ack_at: current?.last_ack_at || 0,
     updated_at: now,
@@ -314,15 +316,20 @@ async function doPullCollections(collections: BusinessCollectionName[], familyId
       collection,
       baseState,
       lastPulledAt: forceFull ? 0 : baseState.last_pulled_at,
+      lastPulledId: forceFull ? '' : baseState.last_pulled_id || '',
     }
   }))
-  const cursors = Object.fromEntries(statePairs.map(({ collection, lastPulledAt }) => [
+  const cursors: Partial<Record<BusinessCollectionName, number>> = Object.fromEntries(statePairs.map(({ collection, lastPulledAt }) => [
     collection,
-    lastPulledAt ? lastPulledAt + 1 : 0,
+    lastPulledAt || 0,
   ]))
-  const offsets: Partial<Record<BusinessCollectionName, number>> = {}
+  const cursorIds: Partial<Record<BusinessCollectionName, string>> = Object.fromEntries(statePairs.map(({ collection, lastPulledId }) => [
+    collection,
+    lastPulledId || '',
+  ]))
   const accumulatedRows: Partial<Record<BusinessCollectionName, PulledRow[]>> = {}
   const finalCursors: Partial<Record<BusinessCollectionName, number>> = {}
+  const finalCursorIds: Partial<Record<BusinessCollectionName, string>> = {}
   const rowsByCollection: Partial<Record<BusinessCollectionName, PulledRow[]>> = {}
   const failures: PullCollectionFailure[] = []
   const failedCollections = new Set<BusinessCollectionName>()
@@ -332,7 +339,7 @@ async function doPullCollections(collections: BusinessCollectionName[], familyId
     const response = await cloudCall<PullCollectionsResponse>('family-service', 'pullCollections', {
       collections: pendingCollections,
       cursors,
-      offsets,
+      cursorIds,
       forceFull,
       limit: 1000,
     })
@@ -351,16 +358,27 @@ async function doPullCollections(collections: BusinessCollectionName[], familyId
         failedCollections.add(collection)
         continue
       }
+      const previousCursor = Number(cursors[collection] || 0)
+      const previousCursorId = String(cursorIds[collection] || '')
       const rows = normalizePulledRows(Array.isArray(payload.rows) ? payload.rows : [])
       accumulatedRows[collection] = [...(accumulatedRows[collection] || []), ...rows]
-      finalCursors[collection] = Number(payload.cursor || 0)
+      const nextCursor = Number(payload.cursor || 0)
+      const nextCursorId = String(payload.cursorId || '')
+      finalCursors[collection] = nextCursor
+      finalCursorIds[collection] = nextCursorId
       if (payload.hasMore) {
         if (rows.length === 0) {
           failures.push({ collection, error: '同步分页返回为空' })
           failedCollections.add(collection)
           continue
         }
-        offsets[collection] = Number(offsets[collection] || 0) + rows.length
+        if (!nextCursorId || nextCursor < previousCursor || (nextCursor === previousCursor && nextCursorId <= previousCursorId)) {
+          failures.push({ collection, error: '同步分页游标未前进' })
+          failedCollections.add(collection)
+          continue
+        }
+        cursors[collection] = nextCursor
+        cursorIds[collection] = nextCursorId
         nextPendingCollections.push(collection)
         continue
       }
@@ -379,9 +397,11 @@ async function doPullCollections(collections: BusinessCollectionName[], familyId
     const maxUpdatedAt = rows.reduce((max, row) => Math.max(max, Number(row.updated_at || row.created_at || 0)), lastPulledAt)
     const responseCursor = rows.length > 0 ? Number(finalCursors[collection] || 0) : 0
     const nextCursor = Math.max(maxUpdatedAt, responseCursor)
+    const nextCursorId = rows.length > 0 ? String(finalCursorIds[collection] || '') : (forceFull ? '' : baseState.last_pulled_id || '')
     await localDb.upsertSyncState({
       ...baseState,
       last_pulled_at: forceFull && nextCursor === 0 ? getNow() : nextCursor,
+      last_pulled_id: nextCursorId,
       last_full_sync_at: forceFull ? getNow() : baseState.last_full_sync_at,
       updated_at: getNow(),
     })

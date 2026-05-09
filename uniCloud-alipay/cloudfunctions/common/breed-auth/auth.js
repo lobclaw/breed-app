@@ -31,25 +31,35 @@ async function verifyAndGetFamily(token, clientInfo) {
     throw createAuthError('TOKEN_INVALID', '登录已过期，请重新登录')
   }
 
-  // 查询用户所属家庭（单家庭模式：取第一个 active 的）
-  // 使用 elemMatch 确保匹配同一个成员的 user_id 和 status
   const dbCmd = db.command
+  const memberWhere = typeof dbCmd.elemMatch === 'function'
+    ? {
+        // 使用 elemMatch 确保匹配同一个成员的 user_id 和 status
+        members: dbCmd.elemMatch({
+          user_id: uid,
+          status: 'active'
+        })
+      }
+    : {
+        // 部分云端数据库 command 不提供 elemMatch，先按 user_id 粗查，再在内存中过滤 active 成员
+        'members.user_id': uid
+      }
   const { data: families } = await db.collection('families')
-    .where({
-      members: dbCmd.elemMatch({
-        user_id: uid,
-        status: 'active'
-      })
-    })
-    .limit(1)
+    .where(memberWhere)
+    .limit(10)
     .get()
 
-  if (!families || families.length === 0) {
+  const activeFamilies = (families || []).filter(family => (
+    Array.isArray(family.members)
+    && family.members.some(m => m.user_id === uid && m.status === 'active')
+  ))
+
+  if (activeFamilies.length === 0) {
     // 用户未加入任何家庭 —— 允许某些操作（如 createFamily）
     return { uid, familyId: null, role: null }
   }
 
-  const family = families[0]
+  const family = activeFamilies[0]
   const member = family.members.find(m => m.user_id === uid && m.status === 'active')
   const role = member ? member.role : null
 

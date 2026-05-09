@@ -2,6 +2,7 @@
   "name": "task-service",
   "version": "1.0.0",
   "dependencies": {
-    "breed-auth": "file:../common/breed-auth"
+    "breed-auth": "file:../common/breed-auth",
+    "breed-sync": "file:../common/breed-sync"
   }
 }

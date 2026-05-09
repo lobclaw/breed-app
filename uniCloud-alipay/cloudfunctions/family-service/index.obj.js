@@ -40,6 +40,15 @@ const {
 const db = uniCloud.database()
 const dbCmd = db.command
 
+function entriesToObject(entries) {
+  const target = {}
+  for (const entry of entries) {
+    if (!entry || entry.length < 2) continue
+    target[entry[0]] = entry[1]
+  }
+  return target
+}
+
 const DEFAULT_NOTIFICATION_TYPES = {
   breeding: true,
   vaccination: true,
@@ -151,44 +160,68 @@ function normalizePullCollectionsInput(input = {}) {
   const rawLimit = Number(input.limit || 1000)
   const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 1000) : 1000
   const cursors = input.cursors && typeof input.cursors === 'object' ? input.cursors : {}
+  const cursorIds = input.cursorIds && typeof input.cursorIds === 'object' ? input.cursorIds : {}
   const offsets = input.offsets && typeof input.offsets === 'object' ? input.offsets : {}
   return {
     collections,
     cursors,
+    cursorIds,
     offsets,
     forceFull: !!input.forceFull,
     limit,
   }
 }
 
-function buildPullCollectionWhere(collection, familyId, cursor, forceFull) {
+function buildPullCollectionBaseWhere(collection, familyId) {
+  return collection === 'families'
+    ? { _id: familyId }
+    : { family_id: familyId }
+}
+
+function buildPullCollectionWhere(collection, familyId, cursor, cursorId, forceFull) {
+  const baseWhere = buildPullCollectionBaseWhere(collection, familyId)
+  if (forceFull) return baseWhere
   if (collection === 'families') {
-    return forceFull
-      ? { _id: familyId }
-      : { _id: familyId, updated_at: dbCmd.gte(cursor || 0) }
+    if (!cursor || !cursorId) return { ...baseWhere, updated_at: dbCmd.gte(cursor || 0) }
+    return dbCmd.and([
+      baseWhere,
+      dbCmd.or([
+        { updated_at: dbCmd.gt(cursor) },
+        { updated_at: cursor, _id: dbCmd.gt(cursorId) },
+      ]),
+    ])
   }
 
-  return forceFull
-    ? { family_id: familyId }
-    : { family_id: familyId, updated_at: dbCmd.gte(cursor || 0) }
+  if (!cursor || !cursorId) return { ...baseWhere, updated_at: dbCmd.gte(cursor || 0) }
+  return dbCmd.and([
+    baseWhere,
+    dbCmd.or([
+      { updated_at: dbCmd.gt(cursor) },
+      { updated_at: cursor, _id: dbCmd.gt(cursorId) },
+    ]),
+  ])
 }
 
 async function pullCollectionForSync(familyId, collection, options) {
   const cursor = Number(options.cursors?.[collection] || 0)
+  const cursorId = String(options.cursorIds?.[collection] || '')
   const offset = Math.max(0, Number(options.offsets?.[collection] || 0))
   const { data } = await db.collection(collection)
-    .where(buildPullCollectionWhere(collection, familyId, cursor, options.forceFull))
+    .where(buildPullCollectionWhere(collection, familyId, cursor, cursorId, options.forceFull))
     .orderBy('updated_at', 'asc')
     .orderBy('_id', 'asc')
     .skip(offset)
     .limit(options.limit)
     .get()
   const rows = Array.isArray(data) ? data : []
-  const nextCursor = rows.reduce((max, row) => Math.max(max, Number(row.updated_at || row.created_at || 0)), cursor)
+  const lastRow = rows[rows.length - 1] || null
+  const nextCursor = lastRow ? Number(lastRow.updated_at || lastRow.created_at || 0) : cursor
+  const nextCursorId = lastRow ? String(lastRow._id || '') : cursorId
   return {
     ok: true,
     rows,
     cursor: nextCursor,
+    cursorId: nextCursorId,
     offset,
     hasMore: rows.length >= options.limit,
   }
@@ -1094,12 +1127,13 @@ module.exports = {
           ok: false,
           rows: [],
           cursor: Number(options.cursors?.[collection] || 0),
+          cursorId: String(options.cursorIds?.[collection] || ''),
           hasMore: false,
           error: error instanceof Error ? error.message : String(error || '同步失败'),
         }]
       }
     }))
-    const collections = Object.fromEntries(entries)
+    const collections = entriesToObject(entries)
     return { data: { collections } }
   },
 

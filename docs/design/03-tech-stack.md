@@ -99,7 +99,7 @@
 ### 4.3 本地镜像策略
 
 - 核心业务集合本地全量镜像；页面默认从本地镜像读
-- 同步以 `updated_at` 增量拉取，以 `deleted_at` tombstone 收口删除
+- 同步以 `updated_at + _id` 复合游标增量拉取，以 `deleted_at` tombstone 收口删除
 - 所有同步管理对象补充 `version`，客户端按 `baseVersions` 做乐观并发校验
 - 客户端新增实体先生成稳定 `_id`，保证离线创建可先建立关联
 
@@ -110,6 +110,7 @@
 - 首页按家庭 + 状态 + 日期查询
 - 犬只列表按家庭 + 去向 + 角色查询
 - 记录列表按 `dog_id` / `cycle_id` / `date` 查询
+- Local-First 同步集合按 `family_id + updated_at + _id` 建复合索引 `family_updated_at_id`，匹配 `family-service.pullCollections` 的增量查询与排序
 - 财务列表按家庭 + 日期查询
 
 ## 5. 云对象与事务约束

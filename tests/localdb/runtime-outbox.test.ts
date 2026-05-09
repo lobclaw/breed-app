@@ -707,16 +707,20 @@ describe('local sync runtime outbox diagnostics', () => {
   })
 
   it('hasMore 为 true 时应继续拉取后续页并保留同毫秒记录', async () => {
-    const pullCalls: Array<{ collections: string[]; cursors?: Record<string, number>; offsets?: Record<string, number> }> = []
+    const pullCalls: Array<{ collections: string[]; cursors?: Record<string, number>; cursorIds?: Record<string, string> }> = []
     ;(globalThis as any).uniCloud = {
       importObject: () => ({
-        pullCollections: vi.fn(async (input: { collections: string[]; cursors?: Record<string, number>; offsets?: Record<string, number> }) => {
-          pullCalls.push(input)
-          const offset = Number(input.offsets?.dogs || 0)
+        pullCollections: vi.fn(async (input: { collections: string[]; cursors?: Record<string, number>; cursorIds?: Record<string, string> }) => {
+          pullCalls.push({
+            collections: [...input.collections],
+            cursors: { ...(input.cursors || {}) },
+            cursorIds: { ...(input.cursorIds || {}) },
+          })
+          const cursorId = String(input.cursorIds?.dogs || '')
           return {
             data: {
               collections: {
-                dogs: offset === 0
+                dogs: !cursorId
                   ? {
                       ok: true,
                       rows: [
@@ -724,12 +728,14 @@ describe('local sync runtime outbox diagnostics', () => {
                         { _id: 'dog_page_b', family_id: 'fam_1', name: 'B', updated_at: 300 },
                       ],
                       cursor: 300,
+                      cursorId: 'dog_page_b',
                       hasMore: true,
                     }
                   : {
                       ok: true,
                       rows: [{ _id: 'dog_page_c', family_id: 'fam_1', name: 'C', updated_at: 300 }],
                       cursor: 300,
+                      cursorId: 'dog_page_c',
                       hasMore: false,
                     },
               },
@@ -743,12 +749,55 @@ describe('local sync runtime outbox diagnostics', () => {
 
     expect(count).toBe(1)
     expect(pullCalls).toMatchObject([
-      { collections: ['dogs'], cursors: { dogs: 0 } },
-      { collections: ['dogs'], cursors: { dogs: 0 }, offsets: { dogs: 2 } },
+      { collections: ['dogs'], cursors: { dogs: 0 }, cursorIds: { dogs: '' } },
+      { collections: ['dogs'], cursors: { dogs: 300 }, cursorIds: { dogs: 'dog_page_b' } },
     ])
     expect((await localDb.getTable<any>('dogs')).map(row => row._id).sort()).toEqual(['dog_page_a', 'dog_page_b', 'dog_page_c'])
     expect(await localDb.findById<any>('sync_state', 'dogs')).toMatchObject({
       last_pulled_at: 300,
+      last_pulled_id: 'dog_page_c',
+    })
+  })
+
+  it('hasMore 为 true 但分页游标未前进时应失败并停止继续拉取', async () => {
+    await localDb.upsertRows('sync_state', [
+      {
+        _id: 'dogs',
+        collection: 'dogs',
+        last_pulled_at: 300,
+        last_pulled_id: 'dog_page_b',
+        last_full_sync_at: 100,
+        last_ack_at: 0,
+        updated_at: 100,
+      },
+    ])
+    const pullCollections = vi.fn(async () => ({
+      data: {
+        collections: {
+          dogs: {
+            ok: true,
+            rows: [{ _id: 'dog_page_b', family_id: 'fam_1', name: 'B', updated_at: 300 }],
+            cursor: 300,
+            cursorId: 'dog_page_b',
+            hasMore: true,
+          },
+        },
+      },
+    }))
+    ;(globalThis as any).uniCloud = {
+      importObject: () => ({ pullCollections }),
+    }
+
+    await expect(localSyncRuntime.pullCollections('fam_1', ['dogs']))
+      .rejects
+      .toThrow('dogs: 同步分页游标未前进')
+
+    expect(pullCollections).toHaveBeenCalledTimes(1)
+    expect(await localDb.findById<any>('dogs', 'dog_page_b')).toBeNull()
+    expect(await localDb.findById<any>('sync_state', 'dogs')).toMatchObject({
+      last_pulled_at: 300,
+      last_pulled_id: 'dog_page_b',
+      last_full_sync_at: 100,
     })
   })
 

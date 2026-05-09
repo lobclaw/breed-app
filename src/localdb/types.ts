@@ -89,6 +89,7 @@ export interface SyncStateRow {
   _id: string
   collection: BusinessCollectionName
   last_pulled_at: number
+  last_pulled_id?: string
   last_full_sync_at: number
   last_ack_at: number
   updated_at: number

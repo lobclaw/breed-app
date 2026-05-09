@@ -35,6 +35,8 @@ function createDbCommand() {
     },
   })
   return {
+    and: (conditions: any[]) => ({ $and: conditions }),
+    or: (conditions: any[]) => ({ $or: conditions }),
     push: (val: any) => ({ $push: val }),
     pull: (val: any) => ({ $pull: val }),
     inc: (val: number) => ({ $inc: val }),
@@ -67,28 +69,7 @@ function createQueryChain(collectionName: string) {
       if (typeof condition === 'function') {
         filterFn = condition
       } else {
-        filterFn = (doc: any) => {
-          for (const [key, val] of Object.entries(condition)) {
-            // 支持嵌套点号路径查询，如 'members.user_id'
-            const docVal = getNestedValue(doc, key)
-            if (val && typeof val === 'object' && ('$lte' in (val as any) || '$lt' in (val as any) || '$gte' in (val as any) || '$gt' in (val as any))) {
-              if ('$lt' in (val as any) && !(docVal < (val as any).$lt)) return false
-              if ('$lte' in (val as any) && !(docVal <= (val as any).$lte)) return false
-              if ('$gt' in (val as any) && !(docVal > (val as any).$gt)) return false
-              if ('$gte' in (val as any) && !(docVal >= (val as any).$gte)) return false
-            } else if (val && typeof val === 'object' && '$in' in (val as any)) {
-              if (!(val as any).$in.includes(docVal)) return false
-            } else if (val && typeof val === 'object' && '$neq' in (val as any)) {
-              if (docVal === (val as any).$neq) return false
-            } else if (Array.isArray(docVal)) {
-              // 数组字段包含查询（如 members.user_id 匹配嵌入数组）
-              if (!docVal.includes(val)) return false
-            } else {
-              if (docVal !== val) return false
-            }
-          }
-          return true
-        }
+        filterFn = (doc: any) => matchesCondition(doc, condition)
       }
       return chain
     },
@@ -231,6 +212,41 @@ function getNestedValue(obj: any, path: string) {
     current = current[parts[i]]
   }
   return current
+}
+
+function matchesFieldValue(docVal: any, val: any) {
+  if (val && typeof val === 'object' && ('$lte' in (val as any) || '$lt' in (val as any) || '$gte' in (val as any) || '$gt' in (val as any))) {
+    if ('$lt' in (val as any) && !(docVal < (val as any).$lt)) return false
+    if ('$lte' in (val as any) && !(docVal <= (val as any).$lte)) return false
+    if ('$gt' in (val as any) && !(docVal > (val as any).$gt)) return false
+    if ('$gte' in (val as any) && !(docVal >= (val as any).$gte)) return false
+    return true
+  }
+  if (val && typeof val === 'object' && '$in' in (val as any)) {
+    return (val as any).$in.includes(docVal)
+  }
+  if (val && typeof val === 'object' && '$neq' in (val as any)) {
+    return docVal !== (val as any).$neq
+  }
+  if (Array.isArray(docVal)) {
+    return docVal.includes(val)
+  }
+  return docVal === val
+}
+
+function matchesCondition(doc: any, condition: any): boolean {
+  if (!condition || typeof condition !== 'object') return true
+  if (Array.isArray(condition.$and)) {
+    return condition.$and.every((item: any) => matchesCondition(doc, item))
+  }
+  if (Array.isArray(condition.$or)) {
+    return condition.$or.some((item: any) => matchesCondition(doc, item))
+  }
+  for (const [key, val] of Object.entries(condition)) {
+    const docVal = getNestedValue(doc, key)
+    if (!matchesFieldValue(docVal, val)) return false
+  }
+  return true
 }
 
 function setNestedValue(obj: any, path: string, value: any) {

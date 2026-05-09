@@ -2,6 +2,8 @@
   "name": "health-service",
   "version": "1.0.0",
   "dependencies": {
-    "breed-auth": "file:../common/breed-auth"
+    "attachment-gc": "file:../common/attachment-gc",
+    "breed-auth": "file:../common/breed-auth",
+    "breed-sync": "file:../common/breed-sync"
   }
 }

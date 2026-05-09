@@ -529,7 +529,8 @@
 #### `sync_state`
 
 - 记录各集合最近一次增量拉取与同步游标
-- 关键字段：`collection`、`last_pulled_at`、`last_full_sync_at`、`last_ack_at`
+- 关键字段：`collection`、`last_pulled_at`、`last_pulled_id`、`last_full_sync_at`、`last_ack_at`
+- 增量拉取游标为 `last_pulled_at + last_pulled_id` 复合游标；服务端按 `updated_at asc, _id asc` 排序，避免同毫秒更新被跳过
 
 #### `sync_conflicts`
 

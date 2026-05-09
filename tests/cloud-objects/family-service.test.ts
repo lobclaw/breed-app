@@ -184,6 +184,26 @@ describe('family-service', () => {
       expect(second.data.collections.dogs.hasMore).toBe(false)
     })
 
+    it('应支持 updated_at 和 _id 组成的复合游标', async () => {
+      seedCollection('dogs', [
+        { _id: 'dog_a', family_id: familyId, name: 'A', updated_at: 3000, version: 1 },
+        { _id: 'dog_b', family_id: familyId, name: 'B', updated_at: 3000, version: 1 },
+        { _id: 'dog_c', family_id: familyId, name: 'C', updated_at: 3000, version: 1 },
+        { _id: 'dog_d', family_id: familyId, name: 'D', updated_at: 4000, version: 1 },
+      ])
+
+      const ctx = createCloudObjectContext({ familyId })
+      const result = await familyService.pullCollections.call(ctx, {
+        collections: ['dogs'],
+        cursors: { dogs: 3000 },
+        cursorIds: { dogs: 'dog_b' },
+      })
+
+      expect(result.data.collections.dogs.rows.map((row: any) => row._id)).toEqual(['dog_c', 'dog_d'])
+      expect(result.data.collections.dogs.cursor).toBe(4000)
+      expect(result.data.collections.dogs.cursorId).toBe('dog_d')
+    })
+
 
     it('families 集合只能拉取当前家庭', async () => {
       seedCollection('families', [
