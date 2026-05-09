@@ -182,6 +182,8 @@
 - 弹层打开时锁定滚动
 - 表单提交反馈统一为局部 loading + 弱成功反馈
 - 表单主 CTA 统一支持 `默认 / 提交中 / 成功瞬态` 三态，成功瞬态当前口径为 `520ms`
+- 业务图片附件遵循 Local-First：选择后先压缩到长边约 1280px、质量 70，并保存本地持久路径；同步前再通过 `uniCloud.uploadFile` 上传并回填云 `fileID`
+- 云存储 `fileID` 不直接作为 `<image>` / `previewImage` 地址使用，展示前统一通过 `getTempFileURL` 转临时 URL；本地路径保持本地直显
 - 下一阶段对短时可逆动作优先补 `Undo / 可撤销`，不回退为强 success toast 驱动
 
 ## 10. 成本结论

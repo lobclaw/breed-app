@@ -55,6 +55,23 @@
               <text class="info-row-label">备注</text>
               <text class="info-row-value">{{ record.notes }}</text>
             </view>
+            <view class="info-row">
+              <text class="info-row-label">图片凭证</text>
+              <text class="info-row-value" :style="{ color: record.images?.length ? 'var(--text-1)' : 'var(--text-3)' }">
+                {{ record.images?.length ? `${record.images.length}张` : '—' }}
+              </text>
+            </view>
+            <view v-if="record.images?.length" class="image-gallery">
+              <template v-for="(img, idx) in record.images" :key="idx">
+                <image
+                  v-if="resolveImageSafeSrc(img, imageDisplayUrls[idx])"
+                  :src="resolveImageSafeSrc(img, imageDisplayUrls[idx])"
+                  class="image-thumb"
+                  mode="aspectFill"
+                  @click="previewImage(idx)"
+                />
+              </template>
+            </view>
           </view>
         </BCard>
       </view>
@@ -119,6 +136,7 @@ import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 import BModal from '@/components/layout/BModal.vue'
 import { formatFinanceAmount } from '@/utils/financeDisplay'
+import { resolveImageDisplayUrls, resolveImageSafeSrc } from '@/utils/imageAttachment'
 
 const { currentFamily } = useAuth()
 usePageSync({
@@ -130,6 +148,7 @@ usePageSync({
 
 const record = ref<any>(null)
 const loading = ref(true)
+const imageDisplayUrls = ref<string[]>([])
 const submitBannerMessage = ref('')
 const showDeleteConfirm = ref(false)
 let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
@@ -159,6 +178,7 @@ async function loadRecord() {
   }
   localSyncRuntime.setCurrentFamilyId(familyId)
   record.value = await getLocalIncomeDetail(familyId, recordId)
+  imageDisplayUrls.value = await resolveImageDisplayUrls(record.value?.images || [])
   loading.value = false
   hasLoadedOnce = true
 }
@@ -175,6 +195,16 @@ function goToSale() {
   if (record.value?.sale_id) {
     uni.navigateTo({ url: `/pages/sale/detail?id=${record.value.sale_id}` })
   }
+}
+
+async function previewImage(index: number) {
+  const urls = imageDisplayUrls.value.length
+    ? imageDisplayUrls.value
+    : await resolveImageDisplayUrls(record.value?.images || [])
+  uni.previewImage({
+    current: urls[index] || index,
+    urls,
+  })
 }
 
 function confirmDelete() {
@@ -270,6 +300,21 @@ onShow(() => {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.image-gallery {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.image-thumb {
+  width: 72px;
+  height: 72px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: var(--card-dim);
 }
 
 /* ==================== MINI AVATAR ==================== */

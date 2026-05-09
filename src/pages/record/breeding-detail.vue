@@ -368,6 +368,23 @@
               <text class="info-row-label">备注</text>
               <text class="info-row-value" :style="{ color: record.notes ? 'var(--text-1)' : 'var(--text-3)' }">{{ record.notes || '—' }}</text>
             </view>
+            <view v-if="showRecordImages" class="image-section">
+              <view class="info-row">
+                <text class="info-row-label">检查图片</text>
+                <text class="info-row-value">{{ recordImageRefs.length }}张</text>
+              </view>
+              <view class="image-gallery">
+                <template v-for="(img, idx) in recordImageRefs" :key="idx">
+                  <image
+                    v-if="resolveImageSafeSrc(img, imageDisplayUrls[idx])"
+                    :src="resolveImageSafeSrc(img, imageDisplayUrls[idx])"
+                    class="image-thumb"
+                    mode="aspectFill"
+                    @click="previewImage(idx)"
+                  />
+                </template>
+              </view>
+            </view>
           </view>
         </BCard>
       </view>
@@ -434,13 +451,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useAuth } from '@/composables/useAuth'
 import { usePageSync } from '@/composables/usePageSync'
 import { getLocalBreedingRecordDetail } from '@/localdb/domain-repository'
 import { localSyncRuntime } from '@/localdb/runtime'
 import { consumeSubmitFeedback, queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
+import { resolveImageDisplayUrls, resolveImageSafeSrc } from '@/utils/imageAttachment'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
@@ -454,6 +472,7 @@ const record = ref<any>(null)
 const loading = ref(true)
 const showMore = ref(false)
 const showDeleteConfirm = ref(false)
+const imageDisplayUrls = ref<string[]>([])
 
 let recordId = ''
 let hasShownOnce = false
@@ -480,6 +499,18 @@ const cardColor = computed(() => typeMap[record.value?.type]?.cardColor || 'gree
 const canEdit = computed(() => !loading.value && !!record.value && record.value.type !== 'heat_observation')
 const canDelete = computed(() => !loading.value && !!record.value && record.value.type === 'heat_observation')
 const hasMoreActions = computed(() => canDelete.value)
+const recordImageRefs = computed(() => {
+  const images = record.value?.details?.images || record.value?.images || []
+  return Array.isArray(images) ? images.filter(Boolean) : []
+})
+const showRecordImages = computed(() => {
+  return ['pregnancy_check', 'prenatal_check'].includes(record.value?.type)
+    && recordImageRefs.value.length > 0
+})
+
+watch(recordImageRefs, async (images) => {
+  imageDisplayUrls.value = await resolveImageDisplayUrls(images)
+}, { immediate: true })
 
 function getMatingSireName(details: Record<string, any> = {}) {
   return details.sire_name || details.male_name || ''
@@ -606,6 +637,16 @@ function goToCycle() {
   if (record.value?.cycle_id) {
     uni.navigateTo({ url: `/pages/breeding/cycle?id=${record.value.cycle_id}` })
   }
+}
+
+async function previewImage(index: number) {
+  const urls = imageDisplayUrls.value.length
+    ? imageDisplayUrls.value
+    : await resolveImageDisplayUrls(recordImageRefs.value)
+  uni.previewImage({
+    current: urls[index] || index,
+    urls,
+  })
 }
 
 function confirmDelete() {
@@ -910,6 +951,22 @@ onShow(() => {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.image-section {
+  padding-top: 2px;
+}
+.image-gallery {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 0 16px 14px;
+}
+.image-thumb {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: var(--radius-row);
+  background: var(--card-dim);
 }
 
 /* ==================== MINI AVATAR ==================== */

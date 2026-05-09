@@ -46,6 +46,7 @@ import type {
   SyncStateRow,
 } from '@/localdb/types'
 import { getBeijingDayStart, getBeijingOrdinalDay } from '@/utils/date'
+import { isUploadedImageRef, uploadLocalImage } from '@/utils/imageAttachment'
 
 interface StoredScopeFreshness {
   scopeKey: string
@@ -234,14 +235,6 @@ function normalizePulledRows<T extends Record<string, any>>(rows: T[]): Array<T 
   })
 }
 
-function isUploadedImageRef(value: string) {
-  const text = String(value || '').trim()
-  return /^https?:\/\//.test(text)
-    || /^cloud:\/\//.test(text)
-    || /^mock:\/\//.test(text)
-    || /^unicloud:\/\//i.test(text)
-}
-
 function hasPendingUploadImages(images: any) {
   return Array.isArray(images)
     && images.some(item => typeof item === 'string' && item.trim() && !isUploadedImageRef(item))
@@ -268,34 +261,6 @@ function replaceUploadedRefsDeep(value: any, uploadedRefMap: Map<string, string>
   return Object.fromEntries(
     Object.entries(value).map(([key, item]) => [key, replaceUploadedRefsDeep(item, uploadedRefMap)]),
   )
-}
-
-function getFileExtension(path: string) {
-  const cleanPath = String(path || '').split('?')[0]
-  const match = cleanPath.match(/\.([a-zA-Z0-9]{1,8})$/)
-  return match ? match[1].toLowerCase() : 'jpg'
-}
-
-function buildUploadCloudPath(familyId: string, collection: string, rowId: string, localRef: string, index: number) {
-  const safeFamilyId = encodeURIComponent(familyId || 'unknown')
-  const safeRowId = encodeURIComponent(rowId || 'unknown')
-  const suffix = `${Date.now().toString(36)}_${index}_${Math.random().toString(36).slice(2, 8)}`
-  return `attachments/${safeFamilyId}/${collection}/${safeRowId}/${suffix}.${getFileExtension(localRef)}`
-}
-
-async function uploadLocalImageRef(familyId: string, collection: string, rowId: string, localRef: string, index: number) {
-  if (typeof uniCloud === 'undefined' || typeof uniCloud.uploadFile !== 'function') {
-    throw new Error('当前环境不支持附件上传')
-  }
-  const cloudPath = buildUploadCloudPath(familyId, collection, rowId, localRef, index)
-  const result = await uniCloud.uploadFile({
-    cloudPath,
-    filePath: localRef,
-    fileContent: '',
-  } as any)
-  const uploadedRef = String(result?.fileID || result?.url || '').trim()
-  if (!uploadedRef) throw new Error('附件上传未返回 fileID')
-  return uploadedRef
 }
 
 function getCollectionFamilyWhere(collection: BusinessCollectionName, familyId: string, lastPulledAt: number, dbCmd: any, forceFull = false) {
@@ -510,6 +475,11 @@ function isLocalPregnancyRejected(details: Record<string, any> = {}) {
 
 function isLocalAbandonMatingTermination(details: Record<string, any> = {}) {
   return details.termination_type === '放弃配种'
+}
+
+function hasLocalPrenatalCheckContent(details: Record<string, any> = {}) {
+  return !!String(details.results || '').trim()
+    || (Array.isArray(details.images) && details.images.some(item => String(item || '').trim()))
 }
 
 function shouldClearLocalBreedingMilestones(data: Record<string, any>) {
@@ -1019,6 +989,7 @@ class LocalSyncRuntime {
   private activeScopeKey = ''
   private scopeSyncPromises = new Map<string, Promise<SyncScopeResult>>()
   private coreSyncPromise: Promise<void> | null = null
+  private attachmentUploadPromises = new Map<string, Promise<{ uploaded: number }>>()
 
   async init() {
     if (this.started) return
@@ -1357,8 +1328,7 @@ class LocalSyncRuntime {
       })
   }
 
-  async uploadPendingAttachments(familyIdInput: string) {
-    const familyId = getFamilyId(familyIdInput || this.currentFamilyId)
+  private async doUploadPendingAttachments(familyId: string) {
     const uploadCollections: BusinessCollectionName[] = ['expenses', 'incomes', 'health_records', 'breeding_records']
     const rowsByCollection = await Promise.all(
       uploadCollections.map(async collection => ({
@@ -1395,10 +1365,20 @@ class LocalSyncRuntime {
     ]
 
     const uploadedRefMap = new Map<string, string>()
+    const uploadErrorMap = new Map<string, string>()
     for (const target of uniqueTargets) {
-      if (uploadedRefMap.has(target.localRef)) continue
-      const uploadedRef = await uploadLocalImageRef(familyId, target.collection, target.row._id, target.localRef, target.index)
-      uploadedRefMap.set(target.localRef, uploadedRef)
+      if (uploadedRefMap.has(target.localRef) || uploadErrorMap.has(target.localRef)) continue
+      try {
+        const uploadedRef = await uploadLocalImage(target.localRef, {
+          familyId,
+          collection: target.collection,
+          rowId: target.row._id,
+          index: target.index,
+        })
+        uploadedRefMap.set(target.localRef, uploadedRef)
+      } catch (error) {
+        uploadErrorMap.set(target.localRef, error instanceof Error ? error.message : '附件上传失败')
+      }
     }
 
     const now = getNow()
@@ -1415,11 +1395,16 @@ class LocalSyncRuntime {
             ...(nextDetails !== row.details ? { details: nextDetails } : {}),
           }
           const stillPending = hasPendingUploadImages(nextRow.images) || hasPendingUploadImages(nextRow.details?.images)
+          const pendingRefs = [
+            ...getPendingImageRefs(nextRow.images),
+            ...getPendingImageRefs(nextRow.details?.images),
+          ]
+          const uploadError = pendingRefs.map(ref => uploadErrorMap.get(ref)).find(Boolean) || row._upload_error || null
           return {
             ...nextRow,
             _pending_upload: stillPending,
             pending_upload: stillPending,
-            _upload_error: stillPending ? row._upload_error || null : null,
+            _upload_error: stillPending ? uploadError : null,
             updated_at: now,
           }
         })
@@ -1435,7 +1420,24 @@ class LocalSyncRuntime {
       })
     })
 
+    if (uploadErrorMap.size > 0) {
+      throw new Error([...uploadErrorMap.values()][0] || '附件上传失败')
+    }
+
     return { uploaded: uploadedRefMap.size }
+  }
+
+  async uploadPendingAttachments(familyIdInput: string) {
+    const familyId = getFamilyId(familyIdInput || this.currentFamilyId)
+    const running = this.attachmentUploadPromises.get(familyId)
+    if (running) return running
+    const uploadPromise = this.doUploadPendingAttachments(familyId)
+    this.attachmentUploadPromises.set(familyId, uploadPromise)
+    try {
+      return await uploadPromise
+    } finally {
+      this.attachmentUploadPromises.delete(familyId)
+    }
   }
 
   async retryFailedOutboxNow(familyIdInput: string) {
@@ -1506,6 +1508,19 @@ class LocalSyncRuntime {
       })
     })
 
+    await this.flushOutbox(familyId)
+    await this.syncActiveScope({ force: true })
+    return this.getSyncStatus()
+  }
+
+  async syncPendingAttachmentsNow(familyIdInput: string) {
+    const familyId = getFamilyId(familyIdInput || this.currentFamilyId)
+    await this.init()
+    this.currentFamilyId = familyId
+    this.online = await detectOnline()
+    if (!this.online) throw new Error('当前网络不可用')
+
+    await this.uploadPendingAttachments(familyId)
     await this.flushOutbox(familyId)
     await this.syncActiveScope({ force: true })
     return this.getSyncStatus()
@@ -2052,7 +2067,12 @@ class LocalSyncRuntime {
 
     try {
       await recoverStaleProcessingOutbox(familyId)
-      await this.uploadPendingAttachments(familyId)
+      try {
+        await this.uploadPendingAttachments(familyId)
+      } catch (error) {
+        console.warn('附件上传失败，已保留待上传状态', error)
+        return
+      }
       const outbox = await localDb.getOutbox()
       const now = getNow()
       const pendingMutations = outbox.filter(mutation =>
@@ -2506,6 +2526,9 @@ class LocalSyncRuntime {
     }
     if (data.type === 'abnormal_termination' && existingCycle?.status === '怀孕中' && isLocalAbandonMatingTermination(data.details || {})) {
       throw new Error('放弃配种仅适用于发情中周期')
+    }
+    if (data.type === 'prenatal_check' && !hasLocalPrenatalCheckContent(data.details || {})) {
+      throw new Error('产检记录必须填写检查结果或检查图片')
     }
     const cycleId = existingCycle?._id || createStableEntityId('breeding_cycle')
     const recordId = createStableEntityId('breeding_record')
@@ -2967,6 +2990,9 @@ class LocalSyncRuntime {
             : {}),
         }
       : (record.details || {})
+    if (record.type === 'prenatal_check' && !hasLocalPrenatalCheckContent(nextDetails)) {
+      throw new Error('产检记录必须填写检查结果或检查图片')
+    }
     const nextRecord = {
       ...record,
       date: data.date !== undefined ? data.date : record.date,

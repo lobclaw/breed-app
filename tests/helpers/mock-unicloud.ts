@@ -237,12 +237,12 @@ function setNestedValue(obj: any, path: string, value: any) {
 export function createMockUniCloud() {
   const uploadedFiles: Array<{ cloudPath: string; fileContent: Buffer; fileID: string; url: string }> = []
   const deletedFiles: string[] = []
-  const uploadFile = vi.fn().mockImplementation(async ({ cloudPath, fileContent }: { cloudPath: string; fileContent: Buffer }) => {
+  const uploadFile = vi.fn().mockImplementation(async ({ cloudPath, fileContent, filePath }: { cloudPath: string; fileContent?: Buffer | string; filePath?: string }) => {
     const fileID = `mock://${cloudPath}`
     const url = `https://mock-cloud.local/${cloudPath}`
     uploadedFiles.push({
       cloudPath,
-      fileContent: Buffer.isBuffer(fileContent) ? fileContent : Buffer.from(fileContent),
+      fileContent: Buffer.isBuffer(fileContent) ? fileContent : Buffer.from(fileContent || filePath || ''),
       fileID,
       url,
     })

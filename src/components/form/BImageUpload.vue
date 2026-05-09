@@ -12,12 +12,15 @@
     <!-- 已上传图片 -->
     <view
       v-for="(url, index) in images"
-      :key="url"
+      :key="`${url}_${index}`"
       class="b-image-upload__item"
       @click="previewImage(index)"
       @longpress="confirmDelete(index)"
     >
-      <image class="b-image-upload__img" :src="url" mode="aspectFill" />
+      <image v-if="displayImageUrls[index]" class="b-image-upload__img" :src="displayImageUrls[index]" mode="aspectFill" />
+      <view v-else class="b-image-upload__placeholder">
+        <text class="material-icons-round b-image-upload__placeholder-icon">image</text>
+      </view>
       <view class="b-image-upload__delete" @click.stop="confirmDelete(index)">
         <text class="material-icons-round" style="font-size: 14px; color: #FFFFFF;">close</text>
       </view>
@@ -27,6 +30,7 @@
     <view
       v-if="images.length < max"
       class="b-image-upload__add"
+      :class="{ 'b-image-upload__add--loading': choosing }"
       @click="chooseImage"
     >
       <text class="material-icons-round b-image-upload__add-icon">add</text>
@@ -45,8 +49,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import BModal from '@/components/layout/BModal.vue'
+import { chooseLocalImages, resolveImageDisplayUrls, resolveImageSafeSrc } from '@/utils/imageAttachment'
 
 const props = withDefaults(defineProps<{
   modelValue?: string[]
@@ -61,45 +66,52 @@ const emit = defineEmits<{
 }>()
 
 const images = computed(() => props.modelValue || [])
+const displayUrls = ref<string[]>([])
+const displayImageUrls = computed(() => images.value.map((url, index) => {
+  return resolveImageSafeSrc(url, displayUrls.value[index])
+}))
 const showDeleteConfirm = ref(false)
 const pendingDeleteIndex = ref(-1)
+const choosing = ref(false)
 
-function chooseImage() {
+async function refreshDisplayUrls() {
+  const currentImages = images.value
+  const urls = await resolveImageDisplayUrls(currentImages)
+  if (currentImages !== images.value) return
+  displayUrls.value = urls
+}
+
+watch(images, () => {
+  void refreshDisplayUrls()
+}, { immediate: true })
+
+async function chooseImage() {
+  if (choosing.value) return
   const remaining = props.max - images.value.length
   if (remaining <= 0) return
 
-  uni.chooseImage({
-    count: remaining,
-    sizeType: ['compressed'],
-    sourceType: ['album', 'camera'],
-    success: async (res) => {
-      const newUrls: string[] = []
-      for (const path of res.tempFilePaths) {
-        try {
-          const uploadRes = await uniCloud.uploadFile({
-            filePath: path,
-            cloudPath: `images/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.jpg`,
-          })
-          if (uploadRes.fileID) {
-            newUrls.push(uploadRes.fileID)
-          }
-        } catch (e) {
-          console.error('上传图片失败', e)
-          newUrls.push(path)
-          uni.showToast({ title: '图片待上传', icon: 'none' })
-        }
-      }
-      if (newUrls.length) {
-        emit('update:modelValue', [...images.value, ...newUrls])
-      }
-    },
-  })
+  choosing.value = true
+  try {
+    const result = await chooseLocalImages(remaining, { profile: 'record' })
+    if (result.paths.length) {
+      emit('update:modelValue', [...images.value, ...result.paths])
+    }
+    if (result.warnings.length) {
+      uni.showToast({ title: result.warnings[0], icon: 'none' })
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '选择图片失败'
+    uni.showToast({ title: message, icon: 'none' })
+  } finally {
+    choosing.value = false
+  }
 }
 
-function previewImage(index: number) {
+async function previewImage(index: number) {
+  const urls = await resolveImageDisplayUrls(images.value)
   uni.previewImage({
-    current: index,
-    urls: images.value,
+    current: urls[index] || index,
+    urls,
   })
 }
 
@@ -137,6 +149,21 @@ function handleDeleteConfirm() {
     height: 100%;
   }
 
+  &__placeholder {
+    width: 100%;
+    height: 100%;
+    background: var(--card-dim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  &__placeholder-icon {
+    font-family: 'Material Icons Round';
+    font-size: 24px;
+    color: var(--text-4);
+  }
+
   &__delete {
     position: absolute;
     top: 4px;
@@ -163,6 +190,11 @@ function handleDeleteConfirm() {
     background: transparent;
 
     &:active { transform: scale(0.94); border-color: var(--primary); }
+
+    &--loading {
+      opacity: 0.58;
+      pointer-events: none;
+    }
   }
 
   &__add-icon {

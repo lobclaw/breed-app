@@ -46,7 +46,7 @@
 ### 4. 同步状态 UX 与备份/上传边界收口
 
 - 同步状态至少覆盖 `pending / failed / conflict / pendingUpload`
-- 备份导出在存在 pending outbox / pending upload 时明确阻止继续；同步前先尝试上传本地附件并替换 outbox payload
+- 备份导出在存在 pending outbox / pending upload 时明确阻止继续；图片附件先本地持久保存，恢复同步前先尝试上传本地附件并替换 outbox payload
 - 在线优先页断网时明确提示“当前功能需要联网”
 
 ### 5. Network 验收与真实设备回归
@@ -61,7 +61,7 @@
 - 新增远端首页事实源
 - 提前扩展到多家庭 SaaS 模型
 - 第一版就完成复杂 CRDT 或自动冲突合并
-- 复杂附件管理超出 `pending_upload` 第一版边界：如删除云文件、压缩转码、进度条、多文件并发控制
+- 复杂附件管理超出 `pending_upload` 第一版边界：如删除云文件、服务端转码、进度条、多文件并发控制
 
 ## 当前验收重点
 

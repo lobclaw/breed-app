@@ -347,6 +347,15 @@
           <view class="field-group">
             <view class="field-label"><text>检查结果</text></view>
             <textarea v-model="details.results" class="form-textarea" :auto-height="true" placeholder="填写检查结果" />
+            <view class="field-hint">检查结果和检查图片至少填写一项</view>
+          </view>
+
+          <view class="field-group">
+            <view class="field-label">
+              <text>检查图片</text>
+              <text class="field-label__optional">（选填）</text>
+            </view>
+            <BImageUpload v-model="images" :max="6" />
           </view>
         </template>
 
@@ -747,6 +756,10 @@ const extraArrangementPayload = computed(() => {
   }
 })
 
+const hasPrenatalCheckContent = computed(() => {
+  return !!String(details.results || '').trim() || images.value.length > 0
+})
+
 const canSubmit = computed(() => {
   if (submitState.value === 'submitting') return false
   if (breedingType.value === 'heat_observation') {
@@ -758,6 +771,7 @@ const canSubmit = computed(() => {
   if (!selectedDog.value || !date.value) return false
   if (breedingType.value === 'follicle_check') return !!details.left_count
   if (breedingType.value === 'mating') return !!selectedSire.value
+  if (breedingType.value === 'prenatal_check') return hasPrenatalCheckContent.value
   if (breedingType.value === 'abnormal_termination') return visibleTerminationTypes.value.includes(details.termination_type)
   return true
 })
@@ -988,6 +1002,7 @@ function buildDetails() {
 
   if (breedingType.value === 'prenatal_check') {
     if (details.results) built.results = details.results
+    if (images.value.length > 0) built.images = images.value
   }
 
   if (breedingType.value === 'pre_labor') {
@@ -1156,8 +1171,10 @@ async function loadEditState() {
           : null
         manualDueDate.value = record.details?.is_due_date_manual ? (record.details?.expected_due_date || null) : null
       }
-      if (record.type === 'pregnancy_check') {
+      if (record.type === 'pregnancy_check' || record.type === 'prenatal_check') {
         images.value = [...(record.details?.images || [])]
+      }
+      if (record.type === 'pregnancy_check') {
         details.confirmed = record.details?.confirmed || '否'
       }
       if (record.type === 'pre_labor' && details.nesting_behavior === undefined) {
@@ -1351,6 +1368,13 @@ watch(
 </script>
 
 <style lang="scss" scoped>
+.field-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-3);
+}
+
 .record-form-skeleton {
   padding: 0 var(--space-page);
   display: flex;

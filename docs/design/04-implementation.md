@@ -163,7 +163,8 @@ Local-First Foundation：
 - 核心写路径已收口到本地事务 + outbox，并由各域云对象处理 `_sync` 幂等 ack
 - 销售流程已补齐本地候选过滤、列表/详情归一化投影，以及退款/定金取消金额边界的前端、本地事务、云对象三层校验
 - 备份页已接入 pending outbox / pending upload 阻断提示
-- 同步状态页已接入 pending / failed / conflict / pending upload 统计、当前 active scope、最近同步时间与失败/冲突重试；`flushOutbox` 前会先上传本地附件，成功后替换本地行与 outbox payload 并清除 `pending_upload`
+- 同步状态页已接入 pending / failed / conflict / pending upload 统计、当前 active scope、最近同步时间与失败/冲突重试；图片附件选取后先压缩并保存本地持久路径，`flushOutbox` 前统一上传本地附件，成功后替换本地行与 outbox payload 并清除 `pending_upload`
+- 图片展示统一先解析 display URL：本地路径直接展示，云 `fileID` 通过 `getTempFileURL` 转换后再用于缩略图与预览；账号头像复用统一压缩/上传工具，但仍按在线优先边界处理
 - 低频页面、日期选择器与繁育摘要展示统一读取 timestamp 后按北京时间格式化/计算日历差值，避免海外设备本地时区影响业务日期展示
 - 在线优先页已补断网联网提示
 - 旧入口 `pages/record/health`、`pages/record/breeding`、`pages/finance/income-add` 已归类为 `redirect-deprecated`

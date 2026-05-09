@@ -54,6 +54,35 @@ describe('local operation log', () => {
     })
   })
 
+  it('应为更新繁育记录生成具体记录类型和犬只名', async () => {
+    await localDb.upsertRows('breeding_records', [{
+      _id: 'record_pregnancy_1',
+      family_id: 'fam_1',
+      dog_id: 'dog_1',
+      dog_name: '波妞',
+      type: 'pregnancy_check',
+      updated_at: 1,
+    } as any])
+
+    const row = await createPendingLocalOperationLog(
+      LOCAL_MUTATION_TYPES.UPDATE_BREEDING_RECORD,
+      'fam_1',
+      { id: 'record_pregnancy_1' },
+      {
+        clientMutationId: 'mutation_pregnancy_update',
+        deviceId: 'device_1',
+        clientTimestamp: 1005,
+      },
+    )
+
+    expect(row).toMatchObject({
+      action_type: 'update',
+      domain: 'breeding',
+      target_name: '波妞',
+      summary: '为 波妞 更新了孕检记录',
+    })
+  })
+
   it('应为完成任务生成本地待同步日志', async () => {
     const row = await createPendingLocalOperationLog(
       LOCAL_MUTATION_TYPES.COMPLETE_TASK,

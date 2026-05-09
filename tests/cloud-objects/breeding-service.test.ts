@@ -679,6 +679,38 @@ describe('breeding-service', () => {
       })).rejects.toThrow('当前不在怀孕中，无法记录临产监测')
     })
 
+    it('产检必须填写检查结果或检查图片', async () => {
+      const now = Date.now()
+      seedCollection('breeding_cycles', [{
+        _id: 'cycle_prenatal_required',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        status: '怀孕中',
+        created_at: now,
+        updated_at: now,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      await expect(breedingService.addBreedingRecord.call(ctx, {
+        type: 'prenatal_check',
+        dog_id: 'dam_1',
+        cycle_id: 'cycle_prenatal_required',
+        date: now,
+        details: {},
+      })).rejects.toThrow('产检记录必须填写检查结果或检查图片')
+
+      const result = await breedingService.addBreedingRecord.call(ctx, {
+        type: 'prenatal_check',
+        dog_id: 'dam_1',
+        cycle_id: 'cycle_prenatal_required',
+        date: now + 1000,
+        details: { images: ['cloud://prenatal.jpg'] },
+      })
+
+      expect(result.data.recordId).toBeTruthy()
+    })
+
     it('异常终止在无周期或终态周期下应拒绝，但进行中周期允许', async () => {
       const now = Date.now()
       const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
@@ -897,7 +929,7 @@ describe('breeding-service', () => {
         dog_id: 'dam_1',
         cycle_id: 'cycle_dup',
         date: now + 1000,
-        details: { fetal_count: 3 },
+        details: { results: '胎心稳定' },
         extra_arrangement: {
           kind: 'contact_doctor',
           due_date: now + 2 * 86400000,
@@ -1198,6 +1230,32 @@ describe('breeding-service', () => {
       expect(records).toHaveLength(1)
       expect(records[0].details?.mating_number).toBe(2)
       expect(records[0].details?.method).toBe('自然交配')
+    })
+
+    it('编辑产检记录时不允许清空检查结果和检查图片', async () => {
+      const now = Date.now()
+      seedCollection('breeding_records', [{
+        _id: 'prenatal_record_edit_required',
+        type: 'prenatal_check',
+        cycle_id: 'cycle_prenatal_edit_required',
+        dog_id: 'dam_1',
+        family_id: familyId,
+        date: now,
+        notes: '原始备注',
+        details: {
+          results: '胎心稳定',
+        },
+        created_by: 'user_1',
+        created_at: now,
+        updated_at: now,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      await expect(breedingService.updateBreedingRecord.call(ctx, {
+        id: 'prenatal_record_edit_required',
+        date: now + 86400000,
+        details: {},
+      })).rejects.toThrow('产检记录必须填写检查结果或检查图片')
     })
 
     it('编辑最近一次卵泡检查结果时应重算当前主链节点', async () => {

@@ -117,6 +117,16 @@ async function getDogName(dogId: string) {
   return normalizeDogName(dog)
 }
 
+async function getBreedingRecordLogContext(recordId: string) {
+  const record = recordId ? await localDb.findById<any>('breeding_records', recordId) : null
+  const label = BREEDING_RECORD_LABEL_MAP[String(record?.type || '')] || '繁育记录'
+  const dogName = String(record?.dog_name || '').trim() || await getDogName(String(record?.dog_id || ''))
+  return {
+    label,
+    dogName,
+  }
+}
+
 async function getEntityName(collection: 'expenses' | 'incomes' | 'agents' | 'medication_protocols', id: string, fallback = '') {
   if (!id) return fallback
   const entity = await localDb.findById<any>(collection, id)
@@ -402,13 +412,14 @@ async function buildOperationDescriptor(type: LocalMutationType, payload: Record
       }
     }
     case LOCAL_MUTATION_TYPES.UPDATE_BREEDING_RECORD: {
+      const { dogName, label } = await getBreedingRecordLogContext(String(payload.id || ''))
       return {
         actionType: 'update',
         domain: 'breeding',
         targetType: 'breeding_record',
         targetId: String(payload.id || ''),
-        targetName: '',
-        summary: '更新了繁育记录',
+        targetName: dogName,
+        summary: `为 ${dogName} 更新了${label}`,
       }
     }
     case LOCAL_MUTATION_TYPES.DELETE_BREEDING_RECORD: {

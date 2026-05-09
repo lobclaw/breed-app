@@ -26,4 +26,12 @@ describe('breeding-detail source contract', () => {
     expect(source).toContain('details.confirmed === \'是\'')
     expect(source).toContain('details.fetus_count || details.puppy_count || details.count')
   })
+
+  it('孕检和产检详情应展示检查图片并使用 display URL 预览', () => {
+    expect(source).toContain("['pregnancy_check', 'prenatal_check'].includes(record.value?.type)")
+    expect(source).toContain('record.value?.details?.images || record.value?.images || []')
+    expect(source).toContain('resolveImageDisplayUrls')
+    expect(source).toContain('resolveImageSafeSrc')
+    expect(source).toContain('uni.previewImage')
+  })
 })

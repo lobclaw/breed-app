@@ -79,12 +79,24 @@
         <text class="sync-section__meta">{{ issueMetaText }}</text>
       </view>
       <view v-if="issues.length" class="issue-list">
-        <view v-for="issue in issues" :key="issue._id" class="issue-row">
+        <view
+          v-for="issue in issues"
+          :key="issue._id"
+          class="issue-row"
+          :class="{ 'issue-row--clickable': Boolean(issueActionUrl(issue)) }"
+          @click="handleIssueClick(issue)"
+        >
           <view class="issue-row__main">
             <text class="issue-row__title">{{ issueTitle(issue) }}</text>
             <text class="issue-row__desc">{{ issueDescription(issue) }}</text>
           </view>
-          <text class="issue-row__badge" :class="`issue-row__badge--${issue.status}`">{{ issueStatusText(issue.status) }}</text>
+          <view class="issue-row__side">
+            <text class="issue-row__badge" :class="`issue-row__badge--${issue.status}`">{{ issueStatusText(issue.status) }}</text>
+            <view v-if="issueActionUrl(issue)" class="issue-row__action">
+              <text>去处理</text>
+              <text class="material-icons-round issue-row__chevron">chevron_right</text>
+            </view>
+          </view>
         </view>
       </view>
       <view v-else class="empty-state">
@@ -109,7 +121,10 @@ interface SyncIssue {
   _id: string
   type: string
   status: string
+  title?: string
   lastError: string
+  collection?: string
+  recordId?: string
 }
 
 const { currentFamily, navigateToLogin } = useAuth()
@@ -147,6 +162,7 @@ const scopeCollectionsText = computed(() => scopeStatus.collections.length ? sco
 const canRetryIssues = computed(() => syncStatus.failed > 0 || syncStatus.conflict > 0)
 const issueMetaText = computed(() => issues.value.length ? `${issues.value.length} 项` : '正常')
 const hasAuthExpiredIssue = computed(() => issues.value.some(issue => isAuthTokenError(issue.lastError)))
+const firstStaleUploadIssue = computed(() => issues.value.find(issue => isStaleImageIssue(issue) && issueActionUrl(issue)) || null)
 const pendingSyncCount = computed(() => syncStatus.pending + syncStatus.processing)
 const syncActionLoading = computed(() => syncingScope.value || retryingIssues.value)
 const syncActionText = computed(() => {
@@ -154,11 +170,15 @@ const syncActionText = computed(() => {
   if (syncingScope.value) return '正在同步'
   if (hasAuthExpiredIssue.value) return '重新登录'
   if (canRetryIssues.value) return '重试同步'
+  if (firstStaleUploadIssue.value) return '处理附件问题'
+  if (syncStatus.pendingUpload > 0) return '上传附件'
   return '立即同步'
 })
 const syncActionIcon = computed(() => {
   if (hasAuthExpiredIssue.value) return 'login'
   if (canRetryIssues.value) return 'restart_alt'
+  if (firstStaleUploadIssue.value) return 'edit'
+  if (syncStatus.pendingUpload > 0) return 'cloud_upload'
   return 'sync'
 })
 const syncActionDisabled = computed(() => (
@@ -186,6 +206,7 @@ const syncIcon = computed(() => {
 const syncHeadline = computed(() => {
   if (syncStatus.conflict > 0) return '有数据需要确认'
   if (syncStatus.failed > 0) return '有数据同步失败'
+  if (firstStaleUploadIssue.value) return '有附件需要处理'
   if (syncStatus.pendingUpload > 0) return '有附件等待上传'
   if (pendingSyncCount.value > 0) return '有数据等待同步'
   return '数据已同步'
@@ -193,6 +214,7 @@ const syncHeadline = computed(() => {
 const syncDescription = computed(() => {
   if (syncStatus.conflict > 0) return '部分记录和云端版本不一致，请确认后再继续同步。'
   if (syncStatus.failed > 0) return '可能是网络或登录状态导致，恢复后可以手动重试。'
+  if (firstStaleUploadIssue.value) return '部分图片路径已经失效，需要进入原记录重新选择。'
   if (syncStatus.pendingUpload > 0) return '图片或附件会在网络稳定后继续上传。'
   if (pendingSyncCount.value > 0) return '离线期间的改动已保存在本机，联网后会继续同步。'
   return '本机数据和云端保持一致，可以放心继续使用。'
@@ -200,6 +222,7 @@ const syncDescription = computed(() => {
 const syncStateText = computed(() => {
   if (syncStatus.conflict > 0) return `${syncStatus.conflict} 项需要确认`
   if (syncStatus.failed > 0) return `${syncStatus.failed} 项同步失败`
+  if (firstStaleUploadIssue.value) return `${syncStatus.pendingUpload} 项附件需处理`
   if (syncStatus.pendingUpload > 0) return `${syncStatus.pendingUpload} 项附件待上传`
   if (pendingSyncCount.value > 0) return `${pendingSyncCount.value} 项待同步`
   return '正常'
@@ -219,6 +242,9 @@ function getRemainingSyncToast() {
   }
   if (syncStatus.failed > 0 || syncStatus.conflict > 0) {
     return { title: '仍有待处理项', icon: 'none' as const }
+  }
+  if (syncStatus.pendingUpload > 0) {
+    return { title: '仍有附件待上传', icon: 'none' as const }
   }
   return { title: '仍有数据待同步', icon: 'none' as const }
 }
@@ -249,10 +275,12 @@ function issueStatusText(status: string) {
   if (status === 'failed') return '失败'
   if (status === 'processing') return '同步中'
   if (status === 'pending') return '待同步'
+  if (status === 'pending_upload') return '待上传'
   return '待处理'
 }
 
 function issueTypeText(type: string) {
+  if (type.startsWith('attachment.')) return '附件图片'
   if (type.startsWith('dog.')) return '犬只资料'
   if (type.startsWith('breeding.')) return '繁育记录'
   if (type.startsWith('health.')) return '健康用药'
@@ -264,6 +292,8 @@ function issueTypeText(type: string) {
 }
 
 function issueTitle(issue: SyncIssue) {
+  if (issue.status === 'pending_upload' && issue.title) return `${issue.title}图片待上传`
+  if (issue.status === 'pending_upload') return `${issueTypeText(issue.type)}待上传`
   return `${issueTypeText(issue.type)}未同步`
 }
 
@@ -274,6 +304,8 @@ function issueDescription(issue: SyncIssue) {
   if (issue.status === 'conflict') return '这条记录需要确认后才能继续同步。'
   if (issue.status === 'failed') return issue.lastError || '同步失败，可以在网络恢复后重试。'
   if (issue.status === 'processing') return '正在同步，请稍候。'
+  if (issue.status === 'pending_upload' && isStaleImageIssue(issue)) return '图片路径已经失效，请进入原记录重新选择图片。'
+  if (issue.status === 'pending_upload') return issue.lastError || '图片会在网络稳定后继续上传。'
   return '等待网络恢复后自动同步。'
 }
 
@@ -282,8 +314,33 @@ function normalizeIssues(items: Array<Record<string, any>> = []): SyncIssue[] {
     _id: String(item._id || ''),
     type: String(item.type || 'unknown'),
     status: String(item.status || ''),
+    title: item.title ? String(item.title) : undefined,
     lastError: String(item.lastError || ''),
+    collection: item.collection ? String(item.collection) : undefined,
+    recordId: item.recordId ? String(item.recordId) : undefined,
   }))
+}
+
+function isStaleImageIssue(issue: SyncIssue) {
+  return issue.status === 'pending_upload' && issue.lastError.includes('临时路径已失效')
+}
+
+function issueActionUrl(issue: SyncIssue) {
+  if (issue.status !== 'pending_upload' || !issue.recordId) return ''
+  const id = encodeURIComponent(issue.recordId)
+  const suffix = `id=${id}&focus=images`
+  if (issue.collection === 'expenses') return `/pages/finance/expense-edit?${suffix}`
+  if (issue.collection === 'incomes') return `/pages/finance/income-edit?${suffix}`
+  if (issue.collection === 'health_records') return `/pages/record/health-edit?${suffix}`
+  if (issue.collection === 'breeding_records') return `/pages/record/breeding-edit?${suffix}`
+  if (issue.collection === 'dogs') return `/pages/dog/add?${suffix}`
+  return ''
+}
+
+function handleIssueClick(issue: SyncIssue) {
+  const url = issueActionUrl(issue)
+  if (!url) return
+  uni.navigateTo({ url })
 }
 
 async function loadStatus() {
@@ -301,7 +358,10 @@ async function loadStatus() {
     syncStatus.activeScope = String(currentStatus?.activeScope || '')
     syncStatus.recentSyncAt = Number(currentStatus?.recentSyncAt || 0)
     syncStatus.lastPulledAt = Number(currentStatus?.lastPulledAt || 0)
-    issues.value = normalizeIssues(currentIssues as Array<Record<string, any>>)
+    issues.value = [
+      ...normalizeIssues(currentStatus?.pendingUploadIssues as Array<Record<string, any>>),
+      ...normalizeIssues(currentIssues as Array<Record<string, any>>),
+    ]
 
     if (syncStatus.activeScope) {
       const currentScope = await localSyncRuntime.getScopeStatus(syncStatus.activeScope)
@@ -361,30 +421,41 @@ async function handleSyncAction() {
     await retryIssues()
     return
   }
-  if (!syncStatus.activeScope && syncStatus.pendingUpload > 0) {
+  if (firstStaleUploadIssue.value) {
+    handleIssueClick(firstStaleUploadIssue.value)
+    return
+  }
+  if (syncStatus.pendingUpload > 0) {
     await syncPendingUploads()
     return
   }
   await forceSyncActiveScope()
 }
 
-async function syncPendingUploads() {
+async function syncPendingUploads(options: { silent?: boolean } = {}) {
   if (syncingScope.value) return
   const familyId = currentFamily.value?._id || ''
   if (!familyId) {
-    uni.showToast({ title: '缺少家庭信息', icon: 'none' })
+    if (!options.silent) uni.showToast({ title: '缺少家庭信息', icon: 'none' })
     return
   }
   syncingScope.value = true
   try {
-    await localSyncRuntime.uploadPendingAttachments(familyId)
+    await localSyncRuntime.syncPendingAttachmentsNow(familyId)
     await loadStatus()
-    uni.showToast(getRemainingSyncToast())
+    if (!options.silent) uni.showToast(getRemainingSyncToast())
   } catch (error) {
     await loadStatus()
-    uni.showToast({ title: error instanceof Error ? error.message : '附件上传失败', icon: 'none' })
+    if (!options.silent) uni.showToast({ title: error instanceof Error ? error.message : '附件上传失败', icon: 'none' })
   } finally {
     syncingScope.value = false
+  }
+}
+
+async function loadStatusAndAutoSync() {
+  await loadStatus()
+  if (syncStatus.pendingUpload > 0 && !firstStaleUploadIssue.value && !canRetryIssues.value) {
+    await syncPendingUploads({ silent: true })
   }
 }
 
@@ -408,7 +479,7 @@ async function forceSyncActiveScope() {
 }
 
 onShow(() => {
-  void loadStatus()
+  void loadStatusAndAutoSync()
 })
 </script>
 
@@ -653,6 +724,14 @@ onShow(() => {
   justify-content: space-between;
   gap: 12px;
 
+  &--clickable {
+    cursor: pointer;
+  }
+
+  &--clickable:active {
+    background: var(--card-dim);
+  }
+
   &__main {
     min-width: 0;
     display: flex;
@@ -674,8 +753,15 @@ onShow(() => {
     word-break: break-word;
   }
 
-  &__badge {
+  &__side {
     flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+  }
+
+  &__badge {
     padding: 4px 8px;
     border-radius: 999px;
     font-size: 11px;
@@ -691,6 +777,26 @@ onShow(() => {
   &__badge--conflict {
     color: var(--plum);
     background: rgba(143, 91, 178, 0.12);
+  }
+
+  &__badge--pending_upload {
+    color: var(--blue);
+    background: var(--blue-soft);
+  }
+
+  &__action {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    font-size: 12px;
+    color: var(--primary);
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  &__chevron {
+    font-size: 16px;
+    line-height: 1;
   }
 }
 

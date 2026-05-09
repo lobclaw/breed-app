@@ -11,6 +11,7 @@
 		store,
 		mutations
 	} from '@/uni_modules/uni-id-pages/common/store.js'
+	import { prepareLocalImage, uploadLocalImage } from '@/utils/imageAttachment'
 	/**
 	* uni-id-pages-avatar
 	* @description 用户头像组件
@@ -67,35 +68,53 @@
 				// 使用 clientDB 提交数据
 				mutations.updateUserInfo({avatar_file})
 			},
+			async ensureOnline() {
+				return new Promise((resolve) => {
+					uni.getNetworkType({
+						success: (res) => resolve(res.networkType !== 'none'),
+						fail: () => resolve(true)
+					})
+				})
+			},
+			async uploadAvatarFile(filePath, extname) {
+				const online = await this.ensureOnline()
+				if (!online) {
+					uni.showToast({ title: '当前功能需要联网', icon: 'none' })
+					return null
+				}
+				const avatar_file = {
+					extname,
+					name: '',
+					url: ''
+				}
+				const cloudPath = `${this.userInfo._id || 'avatar'}${Date.now()}`
+				avatar_file.name = cloudPath
+				uni.showLoading({
+					title: "更新中",
+					mask: true
+				});
+				try {
+					const prepared = await prepareLocalImage(filePath, { profile: 'avatar' })
+					avatar_file.url = await uploadLocalImage(prepared.path, {
+						familyId: this.userInfo._id || 'account',
+						collection: 'avatars',
+						rowId: this.userInfo._id || 'account',
+						index: 0
+					})
+					this.setAvatarFile(avatar_file)
+					return avatar_file
+				} catch (e) {
+					console.error(e);
+					uni.showToast({ title: '头像上传失败', icon: 'none' })
+					return null
+				} finally {
+					uni.hideLoading()
+				}
+			},
 			async bindchooseavatar(res){
 				let avatarUrl = res.detail.avatarUrl
-				let avatar_file = {
-					extname: avatarUrl.split('.')[avatarUrl.split('.').length - 1],
-					name:'',
-					url:''
-				}
-				//上传到服务器
-				let cloudPath = this.userInfo._id + '' + Date.now()
-				avatar_file.name = cloudPath
-				try{
-					uni.showLoading({
-						title: "更新中",
-						mask: true
-					});
-					let {
-						fileID
-					} = await uniCloud.uploadFile({
-						filePath:avatarUrl,
-						cloudPath,
-						fileType: "image"
-					});
-					avatar_file.url = fileID
-					uni.hideLoading()
-				}catch(e){
-					console.error(e);
-				}
-				console.log('avatar_file',avatar_file);
-				this.setAvatarFile(avatar_file)
+				const extname = avatarUrl.split('.')[avatarUrl.split('.').length - 1]
+				await this.uploadAvatarFile(avatarUrl, extname)
 			},
 			uploadAvatarImg(res) {
 				// #ifdef MP-WEIXIN
@@ -150,22 +169,7 @@
 						}
 						// #endif
 
-						let cloudPath = this.userInfo._id + '' + Date.now()
-						avatar_file.name = cloudPath
-						uni.showLoading({
-							title: "更新中",
-							mask: true
-						});
-						let {
-							fileID
-						} = await uniCloud.uploadFile({
-							filePath,
-							cloudPath,
-							fileType: "image"
-						});
-						avatar_file.url = fileID
-						uni.hideLoading()
-						this.setAvatarFile(avatar_file)
+						await this.uploadAvatarFile(filePath, avatar_file.extname)
 					}
 				})
 				// #endif

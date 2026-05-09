@@ -22,4 +22,27 @@ describe('breeding record form source contract', () => {
     expect(source).toContain('visibleTerminationTypes.value.includes(details.termination_type)')
     expect(source).toContain('details.termination_type = \'\'')
   })
+
+  it('孕检和产检都应支持检查图片并保存到 details.images', () => {
+    const pregnancySection = source.slice(
+      source.indexOf("<template v-if=\"breedingType === 'pregnancy_check'\">"),
+      source.indexOf("<template v-if=\"breedingType === 'prenatal_check'\">"),
+    )
+    const prenatalSection = source.slice(
+      source.indexOf("<template v-if=\"breedingType === 'prenatal_check'\">"),
+      source.indexOf("<template v-if=\"breedingType === 'pre_labor'\">"),
+    )
+
+    expect(pregnancySection).toContain('<BImageUpload v-model="images" :max="6" />')
+    expect(prenatalSection).toContain('<BImageUpload v-model="images" :max="6" />')
+    expect(source).toContain("if (breedingType.value === 'pregnancy_check') {\n    if (details.confirmed) built.confirmed = details.confirmed\n    if (details.puppy_count) built.puppy_count = parseInt(details.puppy_count)\n    if (images.value.length > 0) built.images = images.value\n  }")
+    expect(source).toContain("if (breedingType.value === 'prenatal_check') {\n    if (details.results) built.results = details.results\n    if (images.value.length > 0) built.images = images.value\n  }")
+    expect(source).toContain("if (record.type === 'pregnancy_check' || record.type === 'prenatal_check') {\n        images.value = [...(record.details?.images || [])]\n      }")
+  })
+
+  it('产检应要求检查结果或检查图片至少填写一项', () => {
+    expect(source).toContain('检查结果和检查图片至少填写一项')
+    expect(source).toContain("const hasPrenatalCheckContent = computed(() => {\n  return !!String(details.results || '').trim() || images.value.length > 0\n})")
+    expect(source).toContain("if (breedingType.value === 'prenatal_check') return hasPrenatalCheckContent.value")
+  })
 })

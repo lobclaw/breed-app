@@ -123,7 +123,7 @@ function getEntityConflict(syncMeta, collection, entity) {
 /**
  * 校验类型特有字段
  */
-function validateDetails(type, details) {
+function validateDetails(type, details = {}) {
   if (type === 'mating' && !details.sire_id) {
     throw new Error('配种记录必须选择种公')
   }
@@ -135,6 +135,13 @@ function validateDetails(type, details) {
   }
   if (type === 'follicle_check' && details.left_count === undefined) {
     throw new Error('卵泡检查必须填写左侧数量')
+  }
+  if (type === 'prenatal_check') {
+    const hasResults = !!String(details.results || '').trim()
+    const hasImages = Array.isArray(details.images) && details.images.some(item => String(item || '').trim())
+    if (!hasResults && !hasImages) {
+      throw new Error('产检记录必须填写检查结果或检查图片')
+    }
   }
 }
 
@@ -2119,6 +2126,7 @@ module.exports = {
 
       updateData.details = nextDetails
     }
+    validateDetails(record.type, nextDetails)
 
     await db.collection('breeding_records').doc(id).update(updateData)
     const nextCost = cost !== undefined ? cost : record.cost
@@ -2172,8 +2180,8 @@ module.exports = {
       actionType: 'update',
       targetType: 'breeding_record',
       targetId: id,
-      targetName: record.dog_name || record.dog_id || id,
-      summary: `更新了 ${record.dog_name || '未命名犬只'} 的${BREEDING_RECORD_LABEL_MAP[record.type] || '繁育记录'}`,
+      targetName: dog.name || record.dog_name || record.dog_id || id,
+      summary: `为 ${dog.name || record.dog_name || '未命名犬只'} 更新了${BREEDING_RECORD_LABEL_MAP[record.type] || '繁育记录'}`,
       meta: { type: record.type, date: nextDate, result: getFollicleResult(nextDetails) || null },
     })
 

@@ -47,6 +47,8 @@ describe('localdb repository public api', () => {
       family_id: 'fam_upload',
       updated_at: 100,
       _pending_upload: true,
+      images: ['blob:http://localhost/stale-image'],
+      _upload_error: '本地图片失效',
     }])
     await mutateLocal(['dogs'], (tables) => {
       tables.dogs = tables.dogs.map((dog: any) => dog._id === 'dog_local_1'
@@ -86,6 +88,14 @@ describe('localdb repository public api', () => {
       pending: 1,
       failed: 0,
       pendingUpload: 1,
+      pendingUploadIssues: [{
+        _id: 'pending_upload:dogs:dog_local_pending_upload',
+        type: 'attachment.dogs',
+        status: 'pending_upload',
+        lastError: '图片临时路径已失效，请重新选择图片',
+        collection: 'dogs',
+        recordId: 'dog_local_pending_upload',
+      }],
       lastPulledAt: 200,
       activeScope: 'dog-list',
       recentSyncAt: 200,

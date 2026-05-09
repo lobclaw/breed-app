@@ -22,35 +22,35 @@
       </view>
     </view>
 
-    <view class="sync-warning-card" :class="{ 'sync-warning-card--ok': !hasUnsyncedData }">
+    <view class="sync-warning-card" :class="{ 'sync-warning-card--ok': syncStatusReady && !hasUnsyncedData }">
       <view class="sync-warning-card__header">
         <view class="sync-warning-card__icon-wrap">
-          <text class="material-icons-round sync-warning-card__icon">{{ hasUnsyncedData ? 'cloud_sync' : 'cloud_done' }}</text>
+          <text class="material-icons-round sync-warning-card__icon">{{ syncStatusIcon }}</text>
         </view>
         <view class="sync-warning-card__main">
           <view class="sync-warning-card__title-row">
-            <text class="sync-warning-card__title">{{ hasUnsyncedData ? '备份前需完成同步' : '同步状态' }}</text>
-            <text class="sync-warning-card__badge">{{ hasUnsyncedData ? `${syncWarningCount} 项` : '已同步' }}</text>
+            <text class="sync-warning-card__title">{{ syncStatusTitle }}</text>
+            <text class="sync-warning-card__badge">{{ syncStatusBadge }}</text>
           </view>
-          <text class="sync-warning-card__desc">{{ hasUnsyncedData ? syncWarningText : '所有本地数据已同步，可安心备份或导出。' }}</text>
+          <text class="sync-warning-card__desc">{{ syncStatusDescription }}</text>
         </view>
       </view>
-      <view v-if="hasUnsyncedData" class="sync-warning-card__hint-row">
+      <view v-if="syncStatusReady && hasUnsyncedData" class="sync-warning-card__hint-row">
         <text class="material-icons-round sync-warning-card__hint-icon">info</text>
         <text class="sync-warning-card__hint">请先恢复联网并等待同步完成，再执行备份或导出，避免遗漏离线期间的数据。</text>
       </view>
-      <view v-if="hasUnsyncedData && syncIssues.length" class="sync-warning-card__issues">
+      <view v-if="isDevMode && syncStatusReady && hasUnsyncedData && syncIssues.length" class="sync-warning-card__issues">
         <view v-for="issue in syncIssues" :key="issue._id" class="sync-warning-card__issue">
           <text class="sync-warning-card__issue-type">{{ issue.type }}</text>
           <text class="sync-warning-card__issue-error">{{ issue.lastError || '同步失败，等待重试' }}</text>
         </view>
       </view>
       <view class="sync-warning-card__actions">
-        <button v-if="hasUnsyncedData" class="sync-warning-card__retry" :disabled="retryingSync" @click="retrySyncNow">
-          <text class="material-icons-round sync-warning-card__retry-icon">sync</text>
-          <text>{{ retryButtonText }}</text>
+        <button v-if="syncStatusReady && hasUnsyncedData" class="sync-warning-card__retry" :disabled="retryingSync" @click="retrySyncNow">
+          <text class="material-icons-round sync-warning-card__retry-icon">{{ syncPrimaryActionIcon }}</text>
+          <text>{{ syncPrimaryActionText }}</text>
         </button>
-        <button class="sync-warning-card__detail" :class="{ 'sync-warning-card__detail--wide': !hasUnsyncedData }" @click="goToSyncStatus">
+        <button class="sync-warning-card__detail" :class="{ 'sync-warning-card__detail--wide': !syncStatusReady || !hasUnsyncedData }" @click="goToSyncStatus">
           <text>查看同步状态</text>
           <text class="material-icons-round sync-warning-card__detail-icon">chevron_right</text>
         </button>
@@ -59,12 +59,12 @@
 
     <!-- 操作按钮 -->
     <view class="backup-actions">
-      <BSubmitButton :loading="backingUp" :disabled="exporting || repairing || restoringBackup" @click="startBackup">
+      <BSubmitButton :loading="backingUp" :disabled="!syncStatusReady || exporting || repairing || restoringBackup" @click="startBackup">
         <text v-if="!backingUp" class="material-icons-round" style="font-size: 18px; color: #fff; margin-right: 6px;">backup</text>
         立即备份
       </BSubmitButton>
 
-      <button class="action-btn-ghost" :disabled="backingUp || exporting || repairing || restoringBackup" @click="startExport">
+      <button class="action-btn-ghost" :disabled="!syncStatusReady || backingUp || exporting || repairing || restoringBackup" @click="startExport">
         <text class="material-icons-round" style="font-size: 18px; color: var(--text-1); margin-right: 6px;">download</text>
         {{ exporting ? '导出中' : '导出到本地' }}
       </button>
@@ -335,6 +335,8 @@ const backupHistoryLoading = ref(false)
 const restoreTarget = ref<BackupHistoryFile | null>(null)
 const restoringBackup = ref(false)
 const syncIssues = ref<SyncIssue[]>([])
+const syncStatusReady = ref(false)
+const syncStatusChecking = ref(false)
 const syncStatus = ref({
   pending: 0,
   processing: 0,
@@ -360,6 +362,7 @@ const { run: repairData } = useCloudCall<{ data: { checkedCollections: string[];
 const { run: updateSettings } = useCloudCall('family-service', 'updateSettings')
 
 const hasUnsyncedData = computed(() => {
+  if (!syncStatusReady.value) return false
   const current = syncStatus.value
   return current.pending > 0
     || current.processing > 0
@@ -394,9 +397,43 @@ const syncWarningCount = computed(() => {
     + current.pendingUpload
 })
 const hasAuthExpiredIssue = computed(() => syncIssues.value.some(issue => isAuthTokenError(issue.lastError)))
+const hasPendingUploadIssue = computed(() => syncIssues.value.some(issue => issue.status === 'pending_upload'))
+const hasStaleUploadIssue = computed(() => syncIssues.value.some(issue => issue.status === 'pending_upload' && issue.lastError.includes('临时路径已失效')))
 const retryButtonText = computed(() => {
   if (retryingSync.value) return '正在重试'
   return hasAuthExpiredIssue.value ? '重新登录' : '立即重试同步'
+})
+const syncPrimaryActionText = computed(() => {
+  if (hasAuthExpiredIssue.value) return '重新登录'
+  if (hasStaleUploadIssue.value) return '处理附件问题'
+  if (hasPendingUploadIssue.value) return retryingSync.value ? '正在上传' : '上传附件'
+  return retryButtonText.value
+})
+const syncPrimaryActionIcon = computed(() => {
+  if (hasAuthExpiredIssue.value) return 'login'
+  if (hasStaleUploadIssue.value) return 'edit'
+  if (hasPendingUploadIssue.value) return 'cloud_upload'
+  return 'sync'
+})
+const syncStatusIcon = computed(() => {
+  if (!syncStatusReady.value || syncStatusChecking.value) return 'sync'
+  return hasUnsyncedData.value ? 'cloud_sync' : 'cloud_done'
+})
+const syncStatusTitle = computed(() => {
+  if (!syncStatusReady.value) return '正在检查同步状态'
+  return hasUnsyncedData.value ? '备份前需完成同步' : '同步状态'
+})
+const syncStatusBadge = computed(() => {
+  if (!syncStatusReady.value) return '检查中'
+  return hasUnsyncedData.value ? `${syncWarningCount.value} 项` : '已同步'
+})
+const syncStatusDescription = computed(() => {
+  if (!syncStatusReady.value) return '正在读取本机同步状态，确认后再备份或导出。'
+  return hasUnsyncedData.value ? syncWarningText.value : '所有本地数据已同步，可安心备份或导出。'
+})
+const isDevMode = computed(() => {
+  const devFlag = typeof globalThis !== 'undefined' ? (globalThis as any).__DEV__ : undefined
+  return devFlag === true || import.meta.env.DEV === true
 })
 const exportResultName = computed(() => {
   if (!exportResult.value) return '备份文件'
@@ -516,15 +553,7 @@ function normalizeSyncIssues(items: Array<Record<string, any>> = []): SyncIssue[
   }))
 }
 
-async function loadInfo() {
-  const [res, currentSyncStatus, currentIssues] = await Promise.all([
-    getBackupInfo(),
-    localSyncRuntime.getSyncStatus(),
-    localSyncRuntime.getOutboxIssues({ limit: 3 }),
-  ])
-  const backupInfo = normalizeBackupInfo(res?.data)
-  applyBackupInfo(backupInfo)
-  cacheBackupInfo(backupInfo)
+function applySyncSnapshot(currentSyncStatus: Record<string, any> | null | undefined, currentIssues: Array<Record<string, any>> = []) {
   syncStatus.value = {
     pending: Number(currentSyncStatus?.pending || 0),
     processing: Number(currentSyncStatus?.processing || 0),
@@ -532,7 +561,37 @@ async function loadInfo() {
     conflict: Number(currentSyncStatus?.conflict || 0),
     pendingUpload: Number(currentSyncStatus?.pendingUpload || 0),
   }
-  syncIssues.value = normalizeSyncIssues(currentIssues as Array<Record<string, any>>)
+  syncIssues.value = normalizeSyncIssues([
+    ...((currentSyncStatus?.pendingUploadIssues || []) as Array<Record<string, any>>),
+    ...currentIssues,
+  ])
+  syncStatusReady.value = true
+}
+
+async function loadSyncSnapshot() {
+  syncStatusChecking.value = true
+  try {
+    const [currentSyncStatus, currentIssues] = await Promise.all([
+      localSyncRuntime.getSyncStatus(),
+      localSyncRuntime.getOutboxIssues({ limit: 3 }),
+    ])
+    applySyncSnapshot(currentSyncStatus as Record<string, any>, currentIssues as Array<Record<string, any>>)
+  } finally {
+    syncStatusChecking.value = false
+  }
+}
+
+async function loadBackupInfo() {
+  const res = await getBackupInfo()
+  const backupInfo = normalizeBackupInfo(res?.data)
+  applyBackupInfo(backupInfo)
+  cacheBackupInfo(backupInfo)
+}
+
+async function loadInfo() {
+  const syncPromise = loadSyncSnapshot()
+  const backupInfoPromise = loadBackupInfo()
+  await Promise.allSettled([syncPromise, backupInfoPromise])
 }
 
 async function loadBackupHistory() {
@@ -568,15 +627,11 @@ async function clearLocalRestoredCollections(familyId: string) {
 }
 
 async function ensureBackupReady() {
-  const currentSyncStatus = await localSyncRuntime.getSyncStatus()
-  syncIssues.value = normalizeSyncIssues(await localSyncRuntime.getOutboxIssues({ limit: 3 }))
-  syncStatus.value = {
-    pending: Number(currentSyncStatus?.pending || 0),
-    processing: Number(currentSyncStatus?.processing || 0),
-    failed: Number(currentSyncStatus?.failed || 0),
-    conflict: Number(currentSyncStatus?.conflict || 0),
-    pendingUpload: Number(currentSyncStatus?.pendingUpload || 0),
-  }
+  const [currentSyncStatus, currentIssues] = await Promise.all([
+    localSyncRuntime.getSyncStatus(),
+    localSyncRuntime.getOutboxIssues({ limit: 3 }),
+  ])
+  applySyncSnapshot(currentSyncStatus as Record<string, any>, currentIssues as Array<Record<string, any>>)
   if (!hasUnsyncedData.value) return true
   uni.showToast({
     title: '仍有本地数据未同步，请稍后再备份',
@@ -774,6 +829,10 @@ async function retrySyncNow() {
     promptLoginExpired()
     return
   }
+  if (hasStaleUploadIssue.value) {
+    goToSyncStatus()
+    return
+  }
   const familyId = currentFamily.value?._id || ''
   if (!familyId) {
     uni.showToast({ title: '缺少家庭信息，无法同步', icon: 'none' })
@@ -782,7 +841,11 @@ async function retrySyncNow() {
 
   retryingSync.value = true
   try {
-    await localSyncRuntime.retryFailedOutboxNow(familyId)
+    if (hasPendingUploadIssue.value) {
+      await localSyncRuntime.syncPendingAttachmentsNow(familyId)
+    } else {
+      await localSyncRuntime.retryFailedOutboxNow(familyId)
+    }
     await loadInfo()
     uni.showToast(getRemainingSyncToast())
   } catch (error) {
@@ -795,6 +858,21 @@ async function retrySyncNow() {
       title: error instanceof Error ? error.message : '重试同步失败',
       icon: 'none',
     })
+  } finally {
+    retryingSync.value = false
+  }
+}
+
+async function autoSyncPendingAttachments() {
+  if (!syncStatusReady.value || !hasPendingUploadIssue.value || hasStaleUploadIssue.value || retryingSync.value) return
+  const familyId = currentFamily.value?._id || ''
+  if (!familyId) return
+  retryingSync.value = true
+  try {
+    await localSyncRuntime.syncPendingAttachmentsNow(familyId)
+    await loadInfo()
+  } catch {
+    await loadInfo()
   } finally {
     retryingSync.value = false
   }
@@ -900,7 +978,7 @@ function goToSyncStatus() {
 
 onShow(() => {
   hydrateBackupInfoFromCache()
-  loadInfo()
+  void loadInfo().then(() => autoSyncPendingAttachments())
   loadBackupHistory()
 })
 </script>

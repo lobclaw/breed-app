@@ -721,6 +721,67 @@ describe('local domain repository', () => {
     expect(breedingCard).toBeUndefined()
   })
 
+  it('本地产检记录必须填写检查结果或检查图片', async () => {
+    const now = new Date('2026-05-06T10:00:00+08:00').getTime()
+
+    await localDb.replaceTable('dogs', [{
+      _id: 'dam_local_prenatal_required',
+      family_id: 'fam_local_prenatal_required',
+      name: '豆包',
+      gender: '母',
+      role: '种狗',
+      disposition: '在养',
+      updated_at: now,
+    }])
+    await localDb.replaceTable('breeding_cycles', [{
+      _id: 'cycle_local_prenatal_required',
+      family_id: 'fam_local_prenatal_required',
+      dam_id: 'dam_local_prenatal_required',
+      dam_name: '豆包',
+      status: '怀孕中',
+      created_at: now - 25 * 86400000,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('breeding_records', [{
+      _id: 'record_local_prenatal_required',
+      family_id: 'fam_local_prenatal_required',
+      cycle_id: 'cycle_local_prenatal_required',
+      dog_id: 'dam_local_prenatal_required',
+      dog_name: '豆包',
+      type: 'prenatal_check',
+      date: now - 86400000,
+      details: { images: ['cloud://prenatal.jpg'] },
+      created_at: now - 86400000,
+      updated_at: now - 86400000,
+    }])
+    await localDb.replaceTable('tasks', [])
+    await localDb.replaceTable('expenses', [])
+    await localDb.replaceTable('outbox_mutations', [])
+    await localDb.replaceTable('local_operation_logs', [])
+
+    await expect(localSyncRuntime.addBreedingRecordLocally('fam_local_prenatal_required', {
+      type: 'prenatal_check',
+      dog_id: 'dam_local_prenatal_required',
+      cycle_id: 'cycle_local_prenatal_required',
+      date: now,
+      details: {},
+    })).rejects.toThrow('产检记录必须填写检查结果或检查图片')
+
+    await expect(localSyncRuntime.updateBreedingRecordLocally('fam_local_prenatal_required', {
+      id: 'record_local_prenatal_required',
+      date: now,
+      details: {},
+    })).rejects.toThrow('产检记录必须填写检查结果或检查图片')
+
+    await expect(localSyncRuntime.addBreedingRecordLocally('fam_local_prenatal_required', {
+      type: 'prenatal_check',
+      dog_id: 'dam_local_prenatal_required',
+      cycle_id: 'cycle_local_prenatal_required',
+      date: now,
+      details: { images: ['cloud://prenatal-next.jpg'] },
+    })).resolves.toBeTruthy()
+  })
+
   it('购入犬只后应立即出现在本地财务列表', async () => {
     const now = new Date('2026-05-06T10:00:00+08:00').getTime()
 

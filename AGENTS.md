@@ -18,7 +18,7 @@
 - 技术栈：UniApp（Vue 3 + TypeScript + Pinia）+ UniCloud 云对象（支付宝云）+ UniCloud MongoDB
 - 阶段：Phase 1 已完成；当前处于 `Local-First Foundation` 收口
 - 已完成：全量 `local-first` 页面接入页面级 scope、`usePageSync` 与本地事实源；核心读写、回收站、配置、财务、销售、记录表单已接入本地事务 + outbox + `_sync` ack
-- 当前重点：真实设备 Network 验收、冲突/失败/待上传入口体验、多端并发回归
+- 当前重点：真实设备 Network 验收、冲突/失败/待上传入口体验、多端并发回归；图片附件已进入业务 Local-First 收口，重点核对压缩、持久化、云端展示解析与失效重选入口
 - 固定路线：scope registry → 本地 projection/repository → 本地读 → 本地事务 + outbox → `_sync` 幂等 ack → 同步状态 UX → Network 验收
 - 下一版本 UX 种子：在当前弱成功反馈基线上，为短时可逆动作补 `Undo / 可撤销`，优先覆盖首页完成/跳过、销售取消、回收站恢复
 
@@ -56,17 +56,36 @@
 - 云对象核心写方法统一支持 `_sync.clientMutationId / deviceId / baseVersions / clientEntityIds / clientTimestamp`，返回 `ack / clientMutationId / touchedEntities / resyncScopes / conflict`
 - 同一 mutation 重放不得重复创建、重复收款、重复推进状态；永久删除后本地移除，并防止后续 pull 复活旧数据
 - 同步 UX 区分 `pending_sync`、`sync_failed`、`conflict`、`synced`、`pending_upload`，并提供对应入口
+- 业务图片同样遵守 Local-First：选择后先压缩并保存本地持久引用，业务记录立即保存；同步 worker 再上传附件并把本地引用替换成云端 `fileID`
+- 图片附件不得保存 `chooseImage` 临时路径作为长期事实；H5 `blob:` 只能在当前会话内转成持久/可上传引用，失效时必须引导回原记录重新选图
+- 附件上传必须有 in-flight 去重；页面自动同步、手动同步、网络恢复 flush 不得重复上传同一批本地图片
+- 附件上传失败不得阻塞业务记录保存；保留本地引用、保留 `pending_upload`，写入 `_upload_error`，由同步状态入口继续处理
+- 图片展示不得直接把 `cloud://` / `unicloud://` 传给 `<image>` 或 `previewImage`；必须先解析 display URL，解析失败时显示占位，不回退到云协议原文
+- 图片 display URL 异步解析必须防旧请求覆盖新状态；图片列表增删、切页、重进表单时保留 latest token / 当前数组引用校验
 
 ## Scope 与在线优先边界
 
 - 首页只处理 `home` scope：`dogs`、`tasks`、`health_records`、`medication_tasks`；不得预拉财务、销售、窝、代理人、协议等非首页数据
 - 主要 local-first scope：`dog-list`、`dog-detail:{dogId}`、`record-entry`、`record-form-support`、`breeding-cycle:{cycleId}`、`litter:{litterId}`、`health-record:{recordId}`、`medication-task:{taskId}`、`weight-batch`、`finance-list`、`finance-detail:{type}:{id}`、`finance-report:*`、`sale-list`、`sale-detail:{id}`、`agent-list`、`kennel-dashboard`、`settings-local`、`recycle`
-- 在线优先：`uni-id-pages/*`、家庭 setup/join/invite/members、`profile/operation-log`、`profile/backup`、云存储上传、token/账号资料/改密/绑定手机/注销账号；断网时必须明确提示“当前功能需要联网”
+- 在线优先：`uni-id-pages/*`、家庭 setup/join/invite/members、`profile/operation-log`、`profile/backup`、账号头像上传、token/账号资料/改密/绑定手机/注销账号；断网时必须明确提示“当前功能需要联网”
+- 云存储本身是在线能力，但业务图片附件不直接走在线优先页面流；必须先本地持久化并进入业务 outbox / `pending_upload`，再由同步 runtime 上传
 - `operation_logs` 未部署时操作日志页静默降级为空列表，不得向前端抛 `not found collection`
 - 旧重定向页：`record/health`、`record/breeding`、`finance/income-add` 只做跳转承接，不再当真实业务页维护
 - 静态无同步：`profile/about` 等纯说明页
 - 服务端定时权威：每日审计、自动关闭周期、晨间摘要只在云端执行；客户端只同步最终实体变化
-- 图片/附件第一版在线上传；业务主体可离线创建，附件失败时标记 `pending_upload`
+- 账号头像属于在线优先边界，仍可复用统一图片压缩/上传工具；离线时提示“当前功能需要联网”，不纳入业务 outbox
+
+## 图片附件红线
+
+- 统一入口使用 `src/utils/imageAttachment.ts`；业务表单图片走 `chooseLocalImages` / `prepareLocalImage` / `resolveImageDisplayUrl(s)` / `uploadLocalImage`
+- `BImageUpload`、财务图片入口、繁育/健康记录图片入口不得直接调用 `uniCloud.uploadFile`，也不得直接保存 `res.tempFilePaths`
+- 业务记录图片按“省流量优先”压缩：普通业务图片目标 `<=350KB`；健康/繁育记录图片目标 `<=450KB`；头像目标 `<=180KB`
+- 压缩采用多档尝试：记录/普通图片从长边 `1024px`、质量 `68` 起，逐步降到 `768px`、质量 `42`；头像从 `768px` 降到 `384px`
+- 若平台能读取文件大小，按目标体积提前停止；读取不到大小时保留最后一次成功压缩结果；压缩失败不得阻塞业务记录保存
+- H5 本地缓存图如需上传云端，`data:image/*` 先转 Blob URL，再以 `filePath` 调 `uniCloud.uploadFile`；前端上传不要用 `fileContent`
+- 云端已上传引用包括 `cloud://`、`unicloud://`、HTTP(S)、mock URL，不得重复上传；本地引用上传成功后必须同步替换本地记录和 outbox payload
+- `pending_upload` 状态应区分“等待上传”和“需要处理”：本地缓存可上传时自动/手动推进上传；临时路径失效时提供进入原记录表单的处理入口
+- 同步状态页和备份页不得把内部 `attachment.*` 当普通用户问题暴露；非开发模式只展示可理解的记录入口和处理动作
 
 ## 高频业务红线
 
@@ -116,12 +135,14 @@
 - 改销售：核对可售候选过滤、同犬只进行中唯一性、未结算退款拦截、退款/定金取消金额边界、销售列表/详情归一化
 - 改通知 / 晨间摘要 / 推送：核对 `families.settings` 与北京时间 `HH:MM` 分钟级命中
 - 改家庭协作 / 云对象 / 详情页刷新：核对 `operation_logs`、多集合写入边界、北京时间按天换算、重复请求与 latest token
+- 改图片 / 附件：核对本地持久保存、目标体积压缩、云 fileID 展示解析、`pending_upload` 入口、失效图片重选入口、附件上传 in-flight 去重、outbox payload 引用替换
 - 改完后：验证来源页承接、局部移除、scope TTL、in-flight 去重、outbox 重放、冲突/失败/待上传状态
 
 ## 测试 / 验收
 
 - 常规回归：`pnpm type-check`、`pnpm test`
 - Local-First 必测：`tests/localdb`、核心云对象 `_sync` 幂等测试、页面 source contract 中 scope 与本地读写约束
+- 图片附件必测：`tests/utils/imageAttachment.test.ts`、`tests/utils/imageUploadFlow.test.ts`、`tests/localdb/runtime-outbox.test.ts`、`tests/utils/backupPage.test.ts`、`tests/localdb/repository.test.ts`
 - Network 验收：进入首页不拉非首页 scope；TTL 内切页不重复 pull；同一 scope 并发只发一个请求；手动刷新只强制当前 scope
 - 从零验证需同时清 UniCloud 业务数据与本地 IndexedDB/SQLite/localStorage；清库方式见 `docs/测试清库.md`
 - 清云端测试数据使用 `dev-reset-service`；默认只清业务/同步数据，显式 `RESET_TEST_DATA_AND_AUTH` 才清账号数据

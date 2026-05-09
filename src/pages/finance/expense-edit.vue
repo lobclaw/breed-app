@@ -123,8 +123,8 @@
       <!-- 照片预览 -->
       <view v-if="photos.length" class="photo-preview-row">
         <view v-for="(p, i) in photos" :key="i" class="photo-thumb-wrap">
-          <image :src="p" class="photo-thumb" mode="aspectFill" />
-          <view class="photo-thumb-del" @click.stop="photos.splice(i, 1)">
+          <image v-if="resolveImageSafeSrc(p, photoDisplayUrls[i])" :src="resolveImageSafeSrc(p, photoDisplayUrls[i])" class="photo-thumb" mode="aspectFill" />
+          <view class="photo-thumb-del" @click.stop="removePhoto(i)">
             <text class="material-icons-round" style="font-size:14px;color:#fff;">close</text>
           </view>
         </view>
@@ -197,7 +197,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, watch } from 'vue'
 import { onLoad, onShow } from '@dcloudio/uni-app'
 import { useAuth } from '@/composables/useAuth'
 import { usePageSync } from '@/composables/usePageSync'
@@ -210,6 +210,7 @@ import {
   normalizeExpenseCategories,
 } from '@/constants/financeCategories'
 import { buildTimestampFromDayOffset, formatDateInputValue } from '@/utils/date'
+import { chooseLocalImages, resolveImageDisplayUrls, resolveImageSafeSrc } from '@/utils/imageAttachment'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BExpenseCategorySheet from '@/components/form/BExpenseCategorySheet.vue'
@@ -232,6 +233,7 @@ usePageSync({
 const amountInput = ref('')
 const submitting = ref(false)
 const photos = ref<string[]>([])
+const photoDisplayUrls = ref<string[]>([])
 const loading = ref(true)
 const showCategorySheet = ref(false)
 const showLinkSheet = ref(false)
@@ -364,15 +366,27 @@ function onCycleSelected(cycle: any) {
   linkedCycle.value = cycle
 }
 
-function addPhoto() {
-  uni.chooseImage({
-    count: 3,
-    sizeType: ['compressed'],
-    sourceType: ['album', 'camera'],
-    success: (res) => {
-      photos.value = [...photos.value, ...res.tempFilePaths]
-    },
-  })
+watch(photos, async () => {
+  const currentPhotos = photos.value
+  const urls = await resolveImageDisplayUrls(currentPhotos)
+  if (currentPhotos !== photos.value) return
+  photoDisplayUrls.value = urls
+}, { immediate: true })
+
+async function addPhoto() {
+  try {
+    const result = await chooseLocalImages(3)
+    photos.value = [...photos.value, ...result.paths]
+    if (result.warnings.length) {
+      uni.showToast({ title: result.warnings[0], icon: 'none' })
+    }
+  } catch (error) {
+    uni.showToast({ title: error instanceof Error ? error.message : '选择图片失败', icon: 'none' })
+  }
+}
+
+function removePhoto(index: number) {
+  photos.value = photos.value.filter((_, i) => i !== index)
 }
 
 async function refreshCategoryOptions() {

@@ -56,14 +56,15 @@
             </view>
             <!-- 图片预览 -->
             <view v-if="record.images?.length" class="image-gallery">
-              <image
-                v-for="(img, idx) in record.images"
-                :key="idx"
-                :src="img"
-                class="image-thumb"
-                mode="aspectFill"
-                @click="previewImage(img)"
-              />
+              <template v-for="(img, idx) in record.images" :key="idx">
+                <image
+                  v-if="resolveImageSafeSrc(img, imageDisplayUrls[idx])"
+                  :src="resolveImageSafeSrc(img, imageDisplayUrls[idx])"
+                  class="image-thumb"
+                  mode="aspectFill"
+                  @click="previewImage(idx)"
+                />
+              </template>
             </view>
             <view class="info-row">
               <text class="info-row-label">备注</text>
@@ -135,6 +136,7 @@ import BSkeleton from '@/components/feedback/BSkeleton.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 import BModal from '@/components/layout/BModal.vue'
 import { formatFinanceAmount } from '@/utils/financeDisplay'
+import { resolveImageDisplayUrls, resolveImageSafeSrc } from '@/utils/imageAttachment'
 
 const { currentFamily } = useAuth()
 usePageSync({
@@ -146,6 +148,7 @@ usePageSync({
 
 const record = ref<any>(null)
 const loading = ref(true)
+const imageDisplayUrls = ref<string[]>([])
 const submitBannerMessage = ref('')
 const showDeleteConfirm = ref(false)
 let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
@@ -175,6 +178,7 @@ async function loadRecord() {
   }
   localSyncRuntime.setCurrentFamilyId(familyId)
   record.value = await getLocalExpenseDetail(familyId, recordId)
+  imageDisplayUrls.value = await resolveImageDisplayUrls(record.value?.images || [])
   loading.value = false
   hasLoadedOnce = true
 }
@@ -183,10 +187,13 @@ async function refreshRecord() {
   await loadRecord()
 }
 
-function previewImage(url: string) {
+async function previewImage(index: number) {
+  const urls = imageDisplayUrls.value.length
+    ? imageDisplayUrls.value
+    : await resolveImageDisplayUrls(record.value?.images || [])
   uni.previewImage({
-    current: url,
-    urls: record.value?.images || [url],
+    current: urls[index] || index,
+    urls,
   })
 }
 
