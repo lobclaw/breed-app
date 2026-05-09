@@ -100,6 +100,7 @@
 import { ref, computed } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import { useCloudCall } from '@/composables/useCloudCall'
+import { useOnlineOnlyGuard } from '@/composables/useOnlineOnlyGuard'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BTag from '@/components/base/BTag.vue'
@@ -127,6 +128,7 @@ let confirmAction: (() => Promise<void>) | null = null
 const { run: updateRole } = useCloudCall('family-service', 'updateMemberRole', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 const { run: removeMember } = useCloudCall('family-service', 'removeMember', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
 const { run: doUpdateFamilyName } = useCloudCall('family-service', 'updateFamilyName', { successMode: 'silent', loadingMode: 'local', throwOnError: true })
+const { ensureOnline } = useOnlineOnlyGuard()
 
 function roleLabel(role: string) {
   const labels: Record<string, string> = { creator: '创建者', admin: '管理员', helper: '协助者' }
@@ -144,7 +146,8 @@ function formatDate(ts?: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-function editFamilyName() {
+async function editFamilyName() {
+  if (!(await ensureOnline())) return
   nameInput.value = familyName.value
   showNameModal.value = true
 }
@@ -154,6 +157,7 @@ async function onNameConfirm() {
 
   const nextName = nameInput.value.trim()
   if (!nextName) return
+  if (!(await ensureOnline())) return
 
   const previousName = currentFamily.value?.name || ''
   if (nextName === previousName) {
@@ -183,6 +187,7 @@ async function onNameConfirm() {
 }
 
 async function changeRole(member: any) {
+  if (!(await ensureOnline())) return
   const newRole = member.role === 'admin' ? 'helper' : 'admin'
   const label = newRole === 'admin' ? '管理员' : '协助者'
   confirmTitle.value = '更改角色'
@@ -197,6 +202,7 @@ async function changeRole(member: any) {
 }
 
 async function remove(member: any) {
+  if (!(await ensureOnline())) return
   confirmTitle.value = '确认移除'
   confirmContent.value = '移除后该成员将无法访问家庭数据'
   confirmText.value = '确认移除'
@@ -209,12 +215,14 @@ async function remove(member: any) {
 }
 
 async function handleConfirm() {
+  if (!(await ensureOnline())) return
   if (confirmAction) {
     await confirmAction()
   }
 }
 
-function goToInvite() {
+async function goToInvite() {
+  if (!(await ensureOnline())) return
   uni.navigateTo({ url: '/pages/family/invite' })
 }
 </script>

@@ -246,6 +246,7 @@ import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import { useAuth } from '@/composables/useAuth'
+import { useOnlineOnlyGuard } from '@/composables/useOnlineOnlyGuard'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BModal from '@/components/layout/BModal.vue'
@@ -274,6 +275,7 @@ const repairResult = ref({
   warningCount: 0,
 })
 const BACKUP_INFO_CACHE_PREFIX = 'breed_backup_info:'
+const BACKUP_HISTORY_CACHE_PREFIX = 'breed_backup_history:'
 const RESTORE_SYNC_COLLECTIONS: BusinessCollectionName[] = [
   'dogs',
   'breeding_cycles',
@@ -346,6 +348,7 @@ const syncStatus = ref({
 })
 
 const { currentFamily, navigateToLogin } = useAuth()
+const { ensureOnline } = useOnlineOnlyGuard()
 const { run: getBackupInfo } = useCloudCall<{ data: BackupInfoResponse }>('family-service', 'getBackupInfo')
 const { run: getBackupHistory } = useCloudCall<{ data: { files: BackupHistoryFile[] } }>('family-service', 'getBackupHistory', {
   showLoading: false,
@@ -480,6 +483,11 @@ function getBackupInfoCacheKey() {
   return familyId ? `${BACKUP_INFO_CACHE_PREFIX}${familyId}` : ''
 }
 
+function getBackupHistoryCacheKey() {
+  const familyId = currentFamily.value?._id || ''
+  return familyId ? `${BACKUP_HISTORY_CACHE_PREFIX}${familyId}` : ''
+}
+
 function normalizeBackupInfo(data: BackupInfoResponse = {}): BackupInfoCache {
   return {
     lastBackupDate: data.last_backup ?? data.lastBackupDate ?? null,
@@ -521,6 +529,33 @@ function hydrateBackupInfoFromCache() {
   const cached = readCachedBackupInfo()
   if (!cached) return
   applyBackupInfo(cached)
+}
+
+function readCachedBackupHistory() {
+  const key = getBackupHistoryCacheKey()
+  if (!key) return []
+  try {
+    const raw = uni.getStorageSync(key)
+    if (!raw) return []
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+    return Array.isArray(parsed?.files) ? parsed.files : []
+  } catch {
+    return []
+  }
+}
+
+function cacheBackupHistory(files: BackupHistoryFile[]) {
+  const key = getBackupHistoryCacheKey()
+  if (!key) return
+  uni.setStorageSync(key, JSON.stringify({
+    files,
+    cachedAt: Date.now(),
+  }))
+}
+
+function hydrateBackupHistoryFromCache() {
+  const files = readCachedBackupHistory()
+  backupHistory.value = files
 }
 
 function formatDateForFileName(ts = Date.now()): string {
@@ -582,6 +617,7 @@ async function loadSyncSnapshot() {
 }
 
 async function loadBackupInfo() {
+  if (!(await ensureOnline({ showToast: false }))) return
   const res = await getBackupInfo()
   const backupInfo = normalizeBackupInfo(res?.data)
   applyBackupInfo(backupInfo)
@@ -595,19 +631,26 @@ async function loadInfo() {
 }
 
 async function loadBackupHistory() {
+  if (!(await ensureOnline({ showToast: false }))) {
+    hydrateBackupHistoryFromCache()
+    backupHistoryLoading.value = false
+    return
+  }
   backupHistoryLoading.value = true
   try {
     const res = await getBackupHistory()
     const files = res?.data?.files
     backupHistory.value = Array.isArray(files) ? files : []
+    cacheBackupHistory(backupHistory.value)
   } catch {
-    backupHistory.value = []
+    hydrateBackupHistoryFromCache()
   } finally {
     backupHistoryLoading.value = false
   }
 }
 
 async function toggleAutoBackup() {
+  if (!(await ensureOnline())) return
   autoBackup.value = !autoBackup.value
   const cached = readCachedBackupInfo()
   cacheBackupInfo({
@@ -737,6 +780,7 @@ async function trySaveExportFile(result: ExportFileResult) {
 
 async function downloadExportResult() {
   if (!exportResult.value || exportResultDownloading.value) return
+  if (!(await ensureOnline())) return
   exportResultDownloading.value = true
   try {
     await saveExportFile(exportResult.value)
@@ -750,6 +794,7 @@ async function downloadExportResult() {
 
 async function downloadBackupHistory(file: BackupHistoryFile) {
   if (!file?.fileID || exportResultDownloading.value) return
+  if (!(await ensureOnline())) return
   exportResultDownloading.value = true
   try {
     await saveExportFile({
@@ -783,14 +828,16 @@ function copyExportResultLink() {
   })
 }
 
-function confirmRestoreBackup(file: BackupHistoryFile) {
+async function confirmRestoreBackup(file: BackupHistoryFile) {
   if (restoringBackup.value) return
+  if (!(await ensureOnline())) return
   restoreTarget.value = file
   showRestoreConfirm.value = true
 }
 
 async function handleRestoreConfirm() {
   if (restoringBackup.value) return
+  if (!(await ensureOnline())) return
   const target = restoreTarget.value || backupHistory.value[0]
   if (!target?.fileID) {
     uni.showToast({ title: '暂无可恢复的备份', icon: 'none' })
@@ -825,6 +872,7 @@ async function handleRestoreConfirm() {
 
 async function retrySyncNow() {
   if (retryingSync.value) return
+  if (!(await ensureOnline())) return
   if (hasAuthExpiredIssue.value || isCurrentLoginExpired()) {
     promptLoginExpired()
     return
@@ -865,6 +913,7 @@ async function retrySyncNow() {
 
 async function autoSyncPendingAttachments() {
   if (!syncStatusReady.value || !hasPendingUploadIssue.value || hasStaleUploadIssue.value || retryingSync.value) return
+  if (!(await ensureOnline({ showToast: false }))) return
   const familyId = currentFamily.value?._id || ''
   if (!familyId) return
   retryingSync.value = true
@@ -880,6 +929,7 @@ async function autoSyncPendingAttachments() {
 
 async function runExport(format: ExportFormat, mode: ExportMode) {
   if (backingUp.value || exporting.value || repairing.value || restoringBackup.value) return
+  if (!(await ensureOnline())) return
   const ready = await ensureBackupReady()
   if (!ready) return
 
@@ -929,8 +979,9 @@ function startBackup() {
   runExport('json', 'backup')
 }
 
-function startExport() {
+async function startExport() {
   if (backingUp.value || exporting.value || repairing.value || restoringBackup.value) return
+  if (!(await ensureOnline())) return
   showExportSheet.value = true
 }
 
@@ -939,13 +990,15 @@ function chooseExportFormat(format: 'json' | 'csv') {
   runExport(format, 'export')
 }
 
-function startRepair() {
+async function startRepair() {
   if (restoringBackup.value) return
+  if (!(await ensureOnline())) return
   showRepairConfirm.value = true
 }
 
 async function handleRepairConfirm() {
   if (repairing.value) return
+  if (!(await ensureOnline())) return
   const ready = await ensureBackupReady()
   if (!ready) return
 
@@ -978,6 +1031,7 @@ function goToSyncStatus() {
 
 onShow(() => {
   hydrateBackupInfoFromCache()
+  hydrateBackupHistoryFromCache()
   void loadInfo().then(() => autoSyncPendingAttachments())
   loadBackupHistory()
 })

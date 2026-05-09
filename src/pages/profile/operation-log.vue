@@ -36,6 +36,11 @@
       </scroll-view>
     </view>
 
+    <view v-if="offlineCacheMode" class="offline-cache-banner">
+      <text class="material-icons-round offline-cache-banner__icon">cloud_off</text>
+      <text class="offline-cache-banner__text">离线，仅显示本地缓存和待同步操作</text>
+    </view>
+
     <view v-if="displayLogs.length" class="timeline">
       <view v-for="group in groupedLogs" :key="group.key" class="timeline-group">
         <view class="timeline-group__header">
@@ -88,7 +93,7 @@
       </view>
     </view>
 
-    <view v-if="hasMore && displayLogs.length && !loadingMore" class="load-more" @click="loadMore">
+    <view v-if="hasMore && displayLogs.length && !loadingMore && !offlineCacheMode" class="load-more" @click="loadMore">
       <text>加载更多</text>
     </view>
 
@@ -229,6 +234,7 @@ import { computed, ref } from 'vue'
 import { onLoad, onReachBottom } from '@dcloudio/uni-app'
 import { useCloudCall } from '@/composables/useCloudCall'
 import { useAuth } from '@/composables/useAuth'
+import { useOnlineOnlyGuard } from '@/composables/useOnlineOnlyGuard'
 import { getLocalOperationStatusText } from '@/localdb/local-operation-log'
 import { localSyncRuntime } from '@/localdb/runtime'
 import {
@@ -237,12 +243,18 @@ import {
   getBeijingDayStart,
   getBeijingMonthRange,
 } from '@/utils/date'
+import {
+  buildOperationLogFilterSignature,
+  readOperationLogCacheEntry,
+  writeOperationLogCacheEntry,
+  type OperationLogDateRangeValue,
+} from '@/utils/operationLogCache'
 import { mergeOperationLogs } from '@/utils/operationLogMerge'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
 
-type LogDateRangeValue = 'all' | 'today' | 'this_week' | 'this_month' | 'custom'
+type LogDateRangeValue = OperationLogDateRangeValue
 type ActiveFilterChipKey = 'dateRange' | 'members' | 'actions'
 
 interface FilterOption {
@@ -283,6 +295,7 @@ const loadingMore = ref(false)
 const logs = ref<LogItem[]>([])
 const localLogs = ref<LogItem[]>([])
 const hasMore = ref(false)
+const offlineCacheMode = ref(false)
 const page = ref(1)
 const pageSize = 20
 
@@ -303,6 +316,7 @@ const showDraftStartDatePicker = ref(false)
 const showDraftEndDatePicker = ref(false)
 
 const { currentFamily } = useAuth()
+const { ensureOnline } = useOnlineOnlyGuard()
 
 const dateRangeOptions: Array<{ label: string; value: LogDateRangeValue }> = [
   { label: '全部', value: 'all' },
@@ -626,6 +640,43 @@ function processLocalLog(raw: Record<string, any>): LogItem {
   }
 }
 
+function getOperationLogFilterSignature() {
+  return buildOperationLogFilterSignature({
+    range: activeDateRange.value,
+    customStartDate: activeCustomStartDate.value,
+    customEndDate: activeCustomEndDate.value,
+    actorUserIds: normalizeSelection(activeMemberIds.value),
+    actionTypes: normalizeSelection(activeActionTypes.value),
+  })
+}
+
+function readOperationLogCache(familyId: string, signature: string): { logs: LogItem[], hasMore: boolean } | null {
+  const cached = readOperationLogCacheEntry(familyId, signature)
+  if (!cached) return null
+  return {
+    logs: cached.rawLogs.map(processLog),
+    hasMore: Boolean(cached.hasMore),
+  }
+}
+
+function cacheOperationLogs(familyId: string, signature: string, rawItems: Array<Record<string, any>>, nextHasMore: boolean) {
+  writeOperationLogCacheEntry(familyId, signature, rawItems, nextHasMore)
+}
+
+function applyCachedOperationLogs(familyId: string, signature: string) {
+  const cached = readOperationLogCache(familyId, signature)
+  if (!cached) {
+    logs.value = []
+    hasMore.value = false
+    offlineCacheMode.value = true
+    return false
+  }
+  logs.value = cached.logs
+  hasMore.value = false
+  offlineCacheMode.value = true
+  return true
+}
+
 function setDraftDateRange(value: LogDateRangeValue) {
   draftDateRange.value = value
   if (value !== 'custom') return
@@ -683,6 +734,7 @@ async function loadLogs(reset = true) {
   try {
     const range = getFilterRange(activeDateRange.value, activeCustomStartDate.value, activeCustomEndDate.value)
     const familyId = currentFamily.value?._id || ''
+    let signature = ''
     if (familyId) {
       const localRows = await localSyncRuntime.getLocalOperationLogs(familyId, {
         start: range.start,
@@ -691,6 +743,16 @@ async function loadLogs(reset = true) {
         actionTypes: activeActionTypes.value.length > 0 ? activeActionTypes.value : undefined,
       })
       localLogs.value = (localRows || []).map((item: any) => processLocalLog(item))
+      signature = getOperationLogFilterSignature()
+    }
+    if (!(await ensureOnline({ showToast: false }))) {
+      if (familyId && signature) applyCachedOperationLogs(familyId, signature)
+      else {
+        logs.value = []
+        hasMore.value = false
+        offlineCacheMode.value = true
+      }
+      return
     }
     const res = await fetchLogs({
       start: range.start,
@@ -703,13 +765,20 @@ async function loadLogs(reset = true) {
 
     if (res) {
       const data = res as Record<string, any>
-      const items = ((data.list as Array<Record<string, any>>) || []).map(processLog)
+      const rawItems = (data.list as Array<Record<string, any>>) || []
+      const items = rawItems.map(processLog)
       if (reset) {
         logs.value = items
+        offlineCacheMode.value = false
       } else {
         logs.value.push(...items)
       }
       hasMore.value = Boolean(data.hasMore)
+      if (reset && familyId && signature) {
+        cacheOperationLogs(familyId, signature, rawItems, hasMore.value)
+      }
+    } else if (reset && familyId && signature) {
+      applyCachedOperationLogs(familyId, signature)
     }
   } finally {
     loading.value = false
@@ -786,8 +855,13 @@ function clearAllFilters() {
   loadLogs(true)
 }
 
-function loadMore() {
+async function loadMore() {
   if (loading.value || loadingMore.value || !hasMore.value) return
+  if (!(await ensureOnline())) {
+    offlineCacheMode.value = true
+    hasMore.value = false
+    return
+  }
   page.value += 1
   loadLogs(false)
 }
@@ -850,6 +924,27 @@ onReachBottom(() => {
 
   &__chip-icon {
     color: inherit;
+  }
+}
+
+.offline-cache-banner {
+  margin: 0 var(--space-page) 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-card);
+  background: rgba(73, 141, 214, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  &__icon {
+    font-size: 18px;
+    color: var(--blue);
+  }
+
+  &__text {
+    font-size: 12px;
+    color: var(--text-2);
+    font-weight: 600;
   }
 }
 

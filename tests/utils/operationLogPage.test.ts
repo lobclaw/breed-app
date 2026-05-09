@@ -14,5 +14,25 @@ describe('operation log page contract', () => {
     expect(source).toContain('mergeOperationLogs')
     expect(source).toContain('syncStatusText')
     expect(source).toContain('displayLogs')
+    expect(source).toContain('buildOperationLogFilterSignature')
+    expect(source).toContain('readOperationLogCacheEntry')
+    expect(source).toContain('writeOperationLogCacheEntry')
+    expect(source).toContain('applyCachedOperationLogs')
+    expect(source).toContain('offlineCacheMode')
+  })
+
+  it('操作日志离线缓存签名应交给稳定缓存工具生成', () => {
+    const source = readSource('src/pages/profile/operation-log.vue')
+
+    expect(source).toContain('buildOperationLogFilterSignature({')
+    expect(source).toContain('range: activeDateRange.value')
+    expect(source).toContain('actorUserIds: normalizeSelection(activeMemberIds.value)')
+    expect(source).toContain('actionTypes: normalizeSelection(activeActionTypes.value)')
+    expect(source).not.toContain('function getOperationLogFilterSignature(range')
+
+    const signatureBlock = source.match(/function getOperationLogFilterSignature\(\) \{[\s\S]*?\n\}/)?.[0] || ''
+    expect(signatureBlock).toContain('buildOperationLogFilterSignature')
+    expect(signatureBlock).not.toContain('range.start')
+    expect(signatureBlock).not.toContain('range.end')
   })
 })

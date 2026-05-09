@@ -4,6 +4,7 @@
  */
 import { ref } from 'vue'
 import { createCloudBusinessError, isCloudConnectTimeout } from '@/utils/cloudError'
+import { isNetworkAvailable, ONLINE_ONLY_MESSAGE } from '@/utils/network'
 
 interface CloudCallOptions {
   /** 成功后的提示文字（不设置则不提示） */
@@ -29,20 +30,6 @@ interface CloudCallResult<T> {
   error: ReturnType<typeof ref<string | null>>
   /** 执行云对象方法 */
   run: (...args: any[]) => Promise<T | null>
-}
-
-async function isNetworkAvailable() {
-  try {
-    const result = await new Promise<any>((resolve) => {
-      uni.getNetworkType({
-        success: resolve,
-        fail: () => resolve({ networkType: 'unknown' }),
-      })
-    })
-    return result?.networkType !== 'none'
-  } catch {
-    return true
-  }
 }
 
 /**
@@ -91,7 +78,7 @@ export function useCloudCall<T = any>(
   async function run(...args: any[]): Promise<T | null> {
     const online = await isNetworkAvailable()
     if (!online) {
-      const msg = '当前功能需要联网'
+      const msg = ONLINE_ONLY_MESSAGE
       error.value = msg
       if (showError) {
         uni.showToast({ title: msg, icon: 'none', duration: 2000 })
