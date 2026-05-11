@@ -221,7 +221,7 @@ V1 保持三级角色：
 ### 6.2 关键入口约束
 
 - 收入统一从 `pages/finance/expense-add.vue?type=income` 进入
-- `income-add.vue` 视为弃用
+- 旧 `income-add.vue` 已移除
 - 从首页进入繁育流程时必须带 `dogId + dogName + cycleId + taskId + locked=true`
 
 ### 6.3 回收站
@@ -296,7 +296,7 @@ V1 保持三级角色：
 ### 7.6 财务入口与统计
 
 - 统一记账入口为 `pages/finance/expense-add.vue?type=income`
-- `income-add.vue` 视为弃用，只做跳转承接，不再维护第二套收入写路径
+- 旧 `income-add.vue` 已移除，不再维护第二套收入写路径
 - 手动收入类型固定为 `销售 / 定金保留 / 领养 / 其他`
 - 财务首页筛选结构固定为“顶部 `全部 / 收入 / 支出` + 统一高级筛选入口”
 - 已生效筛选条件必须显式显示为 chips，并支持单个清除与一键清空

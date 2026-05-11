@@ -19,235 +19,244 @@
       </view>
     </view>
 
-    <!-- Step 1: 生产信息 -->
-    <view v-if="step === 1" class="form-area">
-      <!-- 种母信息卡 -->
-      <view class="form-section">
-        <view class="section-title">
-          <view class="section-dot" style="background: var(--rose);" />
-          <text>种母信息</text>
-        </view>
-        <BBreedingContextCard
-          :dog="selectedDam"
-          :stage-label="selectedDamStageTag?.label || ''"
-          :stage-tone="selectedDamStageTag?.tone || 'pregnant'"
-          :meta-text="selectedDamContextText"
-          :readonly="cycleLocked"
-          empty-meta="怀孕中的种母"
-          @click="openDamPicker"
-        />
-      </view>
-
-      <!-- 生产信息 -->
-      <view class="form-section">
-        <view class="section-title">
-          <view class="section-dot" style="background: var(--primary);" />
-          <text>生产信息</text>
-        </view>
-
-        <view class="form-field">
-          <text class="field-label">实际生产日期</text>
-          <view class="field-input-wrap" @click="showBirthDatePicker = true">
-            <text class="field-input-text" :class="{ 'field-input-text--empty': !form.birth_date }">
-              {{ form.birth_date ? birthDateStr : '请选择' }}
-            </text>
-            <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
+    <scroll-view
+      scroll-y
+      scroll-with-animation
+      class="form-scroll"
+      enhanced
+      :show-scrollbar="false"
+      :scroll-top="formScrollTop"
+    >
+      <!-- Step 1: 生产信息 -->
+      <view v-if="step === 1" class="form-area">
+        <!-- 种母信息卡 -->
+        <view class="form-section">
+          <view class="section-title">
+            <view class="section-dot" style="background: var(--rose);" />
+            <text>种母信息</text>
           </view>
-          <view class="date-chips">
-            <view
-              v-for="chip in dateChips"
-              :key="chip.label"
-              class="date-chip"
-              :class="{ 'date-chip--active': chip.active }"
-              @click="form.birth_date = buildTimestampFromDayOffset(chip.offset)"
-            >
-              <text>{{ chip.label }}</text>
-            </view>
-          </view>
+          <BBreedingContextCard
+            :dog="selectedDam"
+            :stage-label="selectedDamStageTag?.label || ''"
+            :stage-tone="selectedDamStageTag?.tone || 'pregnant'"
+            :meta-text="selectedDamContextText"
+            :readonly="cycleLocked"
+            empty-meta="怀孕中的种母"
+            @click="openDamPicker"
+          />
         </view>
 
-        <view class="form-field">
-          <text class="field-label">生产方式</text>
-          <view class="pill-select">
-            <view
-              v-for="t in birthTypes"
-              :key="t"
-              class="pill-select__item"
-              :class="{ 'pill-select__item--active': form.birth_type === t }"
-              @click="form.birth_type = t"
-            >
-              <text>{{ t }}</text>
-            </view>
-          </view>
-        </view>
-
-        <view class="form-field">
-          <text class="field-label">费用 <text class="optional">（选填）</text></text>
-          <view class="field-wrapper">
-            <text class="field-prefix">¥</text>
-            <input v-model="costInput" class="field-input" type="digit" placeholder="如剖腹产费用" />
-          </view>
-        </view>
-      </view>
-    </view>
-
-    <!-- Step 2: 录入幼崽 -->
-    <view v-if="step === 2" class="form-area">
-      <view class="form-section">
-        <view class="section-title">
-          <view class="section-dot" style="background: var(--rose);" />
-          <text>幼崽录入</text>
-          <view class="count-badge">
-            <text>已添加 {{ puppies.length }} 只</text>
-          </view>
-        </view>
-
-        <view v-for="(puppy, idx) in puppies" :key="idx" class="puppy-card">
-          <view class="puppy-card-header">
-            <text class="puppy-number">幼崽 {{ idx + 1 }}</text>
-            <view class="puppy-header-right">
-              <view class="toggle-row">
-                <text class="toggle-label-text">存活</text>
-                <view class="toggle" :class="{ 'toggle--off': puppy.alive === false }" @click="puppy.alive = !puppy.alive">
-                  <view class="toggle-knob" />
-                </view>
-              </view>
-              <view v-if="puppies.length > 1" class="puppy-delete" @click="removePuppy(idx)">
-                <text class="material-icons-round" style="font-size: 18px;">close</text>
-              </view>
-            </view>
+        <!-- 生产信息 -->
+        <view class="form-section">
+          <view class="section-title">
+            <view class="section-dot" style="background: var(--primary);" />
+            <text>生产信息</text>
           </view>
 
-          <view class="puppy-fields">
-            <view class="form-field">
-              <text class="field-label">性别</text>
-              <view class="pill-select">
-                <view class="pill-select__item" :class="{ 'pill-select__item--active': puppy.gender === '母' }" @click="puppy.gender = '母'">
-                  <text>母</text>
-                </view>
-                <view class="pill-select__item" :class="{ 'pill-select__item--active': puppy.gender === '公' }" @click="puppy.gender = '公'">
-                  <text>公</text>
-                </view>
-              </view>
-            </view>
-
-            <view class="form-field">
-              <text class="field-label">出生体重</text>
-              <view class="field-wrapper">
-                <input v-model="puppy.weight" class="field-input" type="digit" placeholder="克" style="padding-right: 32px;" />
-                <text class="field-suffix">g</text>
-              </view>
-            </view>
-
-            <view class="form-field full-width">
-              <text class="field-label">标识/昵称 <text class="optional">（选填）</text></text>
-              <input v-model="puppy.name" class="field-input" :placeholder="getDefaultPuppyName(idx)" />
-              <text class="field-help">未填写时将自动生成默认名称</text>
-            </view>
-          </view>
-        </view>
-
-        <!-- 添加幼崽 -->
-        <view class="add-puppy-card" @click="addPuppy">
-          <text class="material-icons-round" style="font-size: 22px; color: var(--primary);">add</text>
-          <text style="font-size: 14px; font-weight: 700; color: var(--primary);">添加下一只</text>
-        </view>
-      </view>
-    </view>
-
-    <!-- Step 3: 确认 -->
-    <view v-if="step === 3" class="form-area">
-      <view class="form-section">
-        <view class="section-title">
-          <view class="section-dot" style="background: var(--rose);" />
-          <text>生产摘要</text>
-        </view>
-        <view class="summary-card">
-          <view class="summary-row">
-            <text class="summary-label">母犬</text>
-            <text class="summary-value">{{ damDisplayName }}</text>
-          </view>
-          <view class="summary-row">
-            <text class="summary-label">生产日期</text>
-            <text class="summary-value">{{ birthDateStr }}</text>
-          </view>
-          <view class="summary-row">
-            <text class="summary-label">生产方式</text>
-            <text class="summary-value">{{ form.birth_type }}</text>
-          </view>
-          <view class="summary-row">
-            <text class="summary-label">幼崽</text>
-            <text class="summary-value summary-value--highlight">
-              共 {{ puppies.length }} 只（{{ maleCount }}公{{ femaleCount }}母）· 存活 {{ aliveCount }} 只
-            </text>
-          </view>
-          <view class="summary-row">
-            <text class="summary-label">费用</text>
-            <text class="summary-value">¥{{ costInput || '0' }}</text>
-          </view>
-        </view>
-      </view>
-
-      <view class="form-section">
-        <view class="section-title">
-          <view class="section-dot" style="background: var(--green);" />
-          <text>幼崽详情</text>
-        </view>
-        <view v-for="(puppy, idx) in puppies" :key="idx" class="puppy-summary-item">
-          <view class="puppy-summary-icon">
-            <text style="font-size: 14px;">{{ puppy.alive === false ? '💀' : puppy.gender === '公' ? '♂' : '♀' }}</text>
-          </view>
-          <text class="puppy-summary-text">
-            {{ puppy.name || getDefaultPuppyName(idx) }}
-            <text style="color: var(--text-3);"> · {{ puppy.gender }}{{ puppy.weight ? ` · ${puppy.weight}g` : '' }}{{ puppy.alive === false ? ' · 死胎' : '' }}</text>
-          </text>
-          <text class="material-icons-round" style="font-size: 16px; color: var(--primary);">check_circle</text>
-        </view>
-      </view>
-
-      <view class="form-section">
-        <view class="section-title">
-          <view class="section-dot" style="background: var(--primary);" />
-          <text>后续安排</text>
-        </view>
-
-        <view class="followup-card">
           <view class="form-field">
-            <text class="field-label">经验心得 <text class="optional">（选填）</text></text>
-            <textarea
-              v-model="form.birth_notes"
-              class="field-textarea"
-              maxlength="300"
-              placeholder="记录生产过程、照护要点或后续观察重点"
-            />
+            <text class="field-label">实际生产日期</text>
+            <view class="field-input-wrap" @click="showBirthDatePicker = true">
+              <text class="field-input-text" :class="{ 'field-input-text--empty': !form.birth_date }">
+                {{ form.birth_date ? birthDateStr : '请选择' }}
+              </text>
+              <text class="material-icons-round" style="font-size: 18px; color: var(--text-3);">calendar_today</text>
+            </view>
+            <view class="date-chips">
+              <view
+                v-for="chip in dateChips"
+                :key="chip.label"
+                class="date-chip"
+                :class="{ 'date-chip--active': chip.active }"
+                @click="form.birth_date = buildTimestampFromDayOffset(chip.offset)"
+              >
+                <text>{{ chip.label }}</text>
+              </view>
+            </view>
           </view>
 
-          <view class="form-field" style="margin-bottom: 0;">
-            <view class="check-row" @click="form.create_first_deworming_task = !form.create_first_deworming_task">
-              <view class="check-row__box" :class="{ 'check-row__box--checked': form.create_first_deworming_task }">
-                <text v-if="form.create_first_deworming_task" class="check-row__icon material-icons-round">check</text>
-              </view>
-              <view class="check-row__content">
-                <text class="check-row__label">首次驱虫提醒</text>
-                <text class="check-row__desc">仅创建待办，后续补录时再选择具体驱虫类型</text>
-              </view>
-            </view>
-
-            <view class="check-row" @click="form.create_first_vaccination_task = !form.create_first_vaccination_task">
-              <view class="check-row__box" :class="{ 'check-row__box--checked': form.create_first_vaccination_task }">
-                <text v-if="form.create_first_vaccination_task" class="check-row__icon material-icons-round">check</text>
-              </view>
-              <view class="check-row__content">
-                <text class="check-row__label">首次疫苗提醒</text>
-                <text class="check-row__desc">仅创建待办，后续补录时再选择具体疫苗类型</text>
+          <view class="form-field">
+            <text class="field-label">生产方式</text>
+            <view class="pill-select">
+              <view
+                v-for="t in birthTypes"
+                :key="t"
+                class="pill-select__item"
+                :class="{ 'pill-select__item--active': form.birth_type === t }"
+                @click="form.birth_type = t"
+              >
+                <text>{{ t }}</text>
               </view>
             </view>
+          </view>
 
-            <text class="field-help field-help--tight">幼崽昵称未填写时将自动生成默认名称</text>
+          <view class="form-field">
+            <text class="field-label">费用 <text class="optional">（选填）</text></text>
+            <view class="field-wrapper">
+              <text class="field-prefix">¥</text>
+              <input v-model="costInput" class="field-input" type="digit" placeholder="如剖腹产费用" />
+            </view>
           </view>
         </view>
       </view>
-    </view>
+
+      <!-- Step 2: 录入幼崽 -->
+      <view v-if="step === 2" class="form-area">
+        <view class="form-section">
+          <view class="section-title">
+            <view class="section-dot" style="background: var(--rose);" />
+            <text>幼崽录入</text>
+            <view class="count-badge">
+              <text>已添加 {{ puppies.length }} 只</text>
+            </view>
+          </view>
+
+          <view v-for="(puppy, idx) in puppies" :key="idx" class="puppy-card">
+            <view class="puppy-card-header">
+              <text class="puppy-number">幼崽 {{ idx + 1 }}</text>
+              <view class="puppy-header-right">
+                <view class="toggle-row">
+                  <text class="toggle-label-text">存活</text>
+                  <view class="toggle" :class="{ 'toggle--off': puppy.alive === false }" @click="puppy.alive = !puppy.alive">
+                    <view class="toggle-knob" />
+                  </view>
+                </view>
+                <view v-if="puppies.length > 1" class="puppy-delete" @click="removePuppy(idx)">
+                  <text class="material-icons-round" style="font-size: 18px;">close</text>
+                </view>
+              </view>
+            </view>
+
+            <view class="puppy-fields">
+              <view class="form-field">
+                <text class="field-label">性别</text>
+                <view class="pill-select">
+                  <view class="pill-select__item" :class="{ 'pill-select__item--active': puppy.gender === '母' }" @click="puppy.gender = '母'">
+                    <text>母</text>
+                  </view>
+                  <view class="pill-select__item" :class="{ 'pill-select__item--active': puppy.gender === '公' }" @click="puppy.gender = '公'">
+                    <text>公</text>
+                  </view>
+                </view>
+              </view>
+
+              <view class="form-field">
+                <text class="field-label">出生体重</text>
+                <view class="field-wrapper">
+                  <input v-model="puppy.weight" class="field-input" type="digit" placeholder="克" style="padding-right: 32px;" />
+                  <text class="field-suffix">g</text>
+                </view>
+              </view>
+
+              <view class="form-field full-width">
+                <text class="field-label">标识/昵称 <text class="optional">（选填）</text></text>
+                <input v-model="puppy.name" class="field-input" :placeholder="getDefaultPuppyName(idx)" />
+                <text class="field-help">未填写时将自动生成默认名称</text>
+              </view>
+            </view>
+          </view>
+
+          <!-- 添加幼崽 -->
+          <view class="add-puppy-card" @click="addPuppy">
+            <text class="material-icons-round" style="font-size: 22px; color: var(--primary);">add</text>
+            <text style="font-size: 14px; font-weight: 700; color: var(--primary);">添加下一只</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- Step 3: 确认 -->
+      <view v-if="step === 3" class="form-area">
+        <view class="form-section">
+          <view class="section-title">
+            <view class="section-dot" style="background: var(--rose);" />
+            <text>生产摘要</text>
+          </view>
+          <view class="summary-card">
+            <view class="summary-row">
+              <text class="summary-label">母犬</text>
+              <text class="summary-value">{{ damDisplayName }}</text>
+            </view>
+            <view class="summary-row">
+              <text class="summary-label">生产日期</text>
+              <text class="summary-value">{{ birthDateStr }}</text>
+            </view>
+            <view class="summary-row">
+              <text class="summary-label">生产方式</text>
+              <text class="summary-value">{{ form.birth_type }}</text>
+            </view>
+            <view class="summary-row">
+              <text class="summary-label">幼崽</text>
+              <text class="summary-value summary-value--highlight">
+                共 {{ puppies.length }} 只（{{ maleCount }}公{{ femaleCount }}母）· 存活 {{ aliveCount }} 只
+              </text>
+            </view>
+            <view class="summary-row">
+              <text class="summary-label">费用</text>
+              <text class="summary-value">¥{{ costInput || '0' }}</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="form-section">
+          <view class="section-title">
+            <view class="section-dot" style="background: var(--green);" />
+            <text>幼崽详情</text>
+          </view>
+          <view v-for="(puppy, idx) in puppies" :key="idx" class="puppy-summary-item">
+            <view class="puppy-summary-icon">
+              <text style="font-size: 14px;">{{ puppy.alive === false ? '💀' : puppy.gender === '公' ? '♂' : '♀' }}</text>
+            </view>
+            <text class="puppy-summary-text">
+              {{ puppy.name || getDefaultPuppyName(idx) }}
+              <text style="color: var(--text-3);"> · {{ puppy.gender }}{{ puppy.weight ? ` · ${puppy.weight}g` : '' }}{{ puppy.alive === false ? ' · 死胎' : '' }}</text>
+            </text>
+            <text class="material-icons-round" style="font-size: 16px; color: var(--primary);">check_circle</text>
+          </view>
+        </view>
+
+        <view class="form-section">
+          <view class="section-title">
+            <view class="section-dot" style="background: var(--primary);" />
+            <text>后续安排</text>
+          </view>
+
+          <view class="followup-card">
+            <view class="form-field">
+              <text class="field-label">经验心得 <text class="optional">（选填）</text></text>
+              <textarea
+                v-model="form.birth_notes"
+                class="field-textarea"
+                maxlength="300"
+                placeholder="记录生产过程、照护要点或后续观察重点"
+              />
+            </view>
+
+            <view class="form-field" style="margin-bottom: 0;">
+              <view class="check-row" @click="form.create_first_deworming_task = !form.create_first_deworming_task">
+                <view class="check-row__box" :class="{ 'check-row__box--checked': form.create_first_deworming_task }">
+                  <text v-if="form.create_first_deworming_task" class="check-row__icon material-icons-round">check</text>
+                </view>
+                <view class="check-row__content">
+                  <text class="check-row__label">首次驱虫提醒</text>
+                  <text class="check-row__desc">仅创建待办，后续补录时再选择具体驱虫类型</text>
+                </view>
+              </view>
+
+              <view class="check-row" @click="form.create_first_vaccination_task = !form.create_first_vaccination_task">
+                <view class="check-row__box" :class="{ 'check-row__box--checked': form.create_first_vaccination_task }">
+                  <text v-if="form.create_first_vaccination_task" class="check-row__icon material-icons-round">check</text>
+                </view>
+                <view class="check-row__content">
+                  <text class="check-row__label">首次疫苗提醒</text>
+                  <text class="check-row__desc">仅创建待办，后续补录时再选择具体疫苗类型</text>
+                </view>
+              </view>
+
+              <text class="field-help field-help--tight">幼崽昵称未填写时将自动生成默认名称</text>
+            </view>
+          </view>
+        </view>
+      </view>
+    </scroll-view>
 
     <!-- 底部按钮 -->
     <view class="btn-footer">
@@ -296,7 +305,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, nextTick, onMounted, watch } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useAuth } from '@/composables/useAuth'
 import { usePageSync } from '@/composables/usePageSync'
@@ -327,7 +336,9 @@ const submitState = ref<'idle' | 'submitting' | 'success'>('idle')
 const costInput = ref('')
 const showBirthDatePicker = ref(false)
 const previewLitterNumber = ref(1)
+const formScrollTop = ref(0)
 let previewLitterRequestToken = 0
+const FORM_SCROLL_BOTTOM_STEP = 100000
 
 const form = reactive({
   birth_date: null as number | null,
@@ -424,8 +435,18 @@ function applyDefaultDamSelection() {
   selectedDam.value = defaultDam
 }
 
-function addPuppy() {
+function scrollFormToTop() {
+  formScrollTop.value = 0
+}
+
+function scrollFormToBottom() {
+  formScrollTop.value += FORM_SCROLL_BOTTOM_STEP
+}
+
+async function addPuppy() {
   puppies.push({ name: '', gender: '母', weight: '', alive: true })
+  await nextTick()
+  scrollFormToBottom()
 }
 
 function removePuppy(idx: number) {
@@ -570,6 +591,11 @@ watch(() => form.birth_date, () => {
   void refreshPreviewLitterNumber()
 })
 
+watch(step, async () => {
+  await nextTick()
+  scrollFormToTop()
+})
+
 onLoad((query) => {
   cycleId.value = normalizeQueryValue(query?.cycleId || query?.cycle_id || query?.id)
   cycleLocked.value = !!cycleId.value
@@ -601,7 +627,13 @@ onMounted(async () => {
 
 <style lang="scss" scoped>
 .page {
-  padding-bottom: 100px;
+  min-height: 100vh;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-bottom: 0;
+  background: var(--bg);
 }
 
 /* 顶栏 */
@@ -610,6 +642,7 @@ onMounted(async () => {
   align-items: center;
   padding: 8px var(--space-page) 12px;
   gap: 12px;
+  flex-shrink: 0;
 }
 
 .back-btn {
@@ -660,8 +693,14 @@ onMounted(async () => {
 }
 
 /* 表单区域 */
+.form-scroll {
+  flex: 1;
+  min-height: 0;
+  height: 0;
+}
+
 .form-area {
-  padding: 0 var(--space-page);
+  padding: 0 var(--space-page) 18px;
 }
 
 .form-section {
@@ -1135,15 +1174,14 @@ onMounted(async () => {
 
 /* 底部按钮 */
 .btn-footer {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
   display: flex;
   gap: 10px;
   padding: 16px var(--space-page);
   padding-bottom: calc(16px + env(safe-area-inset-bottom));
   background: var(--bg);
+  flex-shrink: 0;
+  position: relative;
+  z-index: 2;
 }
 
 .btn-back {

@@ -40,6 +40,5 @@ describe('sync scope registry', () => {
     expect(resolveSyncScopeForRoute('pages/profile/backup')?.mode).toBe('online-first')
     expect(resolveSyncScopeForRoute('pages/record/health')?.mode).toBe('redirect-deprecated')
     expect(resolveSyncScopeForRoute('pages/record/breeding')?.mode).toBe('redirect-deprecated')
-    expect(resolveSyncScopeForRoute('pages/finance/income-add')?.mode).toBe('redirect-deprecated')
   })
 })

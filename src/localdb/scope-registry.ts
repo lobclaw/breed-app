@@ -233,7 +233,7 @@ export const SYNC_SCOPE_REGISTRY: SyncScopeDefinition[] = [
     mode: 'redirect-deprecated',
     ttlMs: 0,
     collections: [],
-    routeMatchers: ['pages/record/health', 'pages/record/breeding', 'pages/finance/income-add'],
+    routeMatchers: ['pages/record/health', 'pages/record/breeding'],
   },
   {
     key: 'static-none',

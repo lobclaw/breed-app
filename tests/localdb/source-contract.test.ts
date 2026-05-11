@@ -323,10 +323,6 @@ describe('local-first source contract', () => {
         forbiddenReads: ['getLitterProfit'],
       },
       {
-        file: 'src/pages/finance/income-add.vue',
-        forbiddenReads: ['useCloudCall', 'cloudCall(', 'uniCloud.database('],
-      },
-      {
         file: 'src/pages/dog/add.vue',
         forbiddenReads: ['useCloudCall', 'cloudCall(', 'loadFamily'],
       },

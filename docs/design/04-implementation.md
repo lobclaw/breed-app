@@ -171,7 +171,7 @@ Local-First Foundation：
 - 备份页缓存最近备份信息/历史用于进入页面先展示；备份、恢复、导出、修复、下载云文件、自动备份开关仍要求联网
 - 低频页面、日期选择器与繁育摘要展示统一读取 timestamp 后按北京时间格式化/计算日历差值，避免海外设备本地时区影响业务日期展示
 - 在线优先页已补断网联网提示
-- 旧入口 `pages/record/health`、`pages/record/breeding`、`pages/finance/income-add` 已归类为 `redirect-deprecated`
+- 旧入口 `pages/record/health`、`pages/record/breeding` 已归类为 `redirect-deprecated`
 
 ## 7. 当前重点页面
 

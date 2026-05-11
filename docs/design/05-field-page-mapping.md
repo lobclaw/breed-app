@@ -220,7 +220,7 @@
 ### 已收敛的口径
 
 - 收入入口统一为 `pages/finance/expense-add.vue?type=income`
-- `income-add.vue` 视为弃用
+- 旧 `income-add.vue` 已移除
 - 健康提醒改为建议型，默认不自动续链
 - 繁育表单不再使用旧“下次提醒”字段
 - 首页批量健康完成要求真实写入 `health_record`

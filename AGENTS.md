@@ -71,7 +71,7 @@
 - 操作日志是云端审计账本，不迁入完整 local-first；离线只展示本地 pending 操作与最近日志缓存，并弱提示
 - 备份页保持 online-first：备份、恢复、导出、修复、下载云文件和自动备份开关都必须联网；只允许缓存只读信息
 - `operation_logs` 未部署时操作日志页静默降级为空列表，不向前端抛 `not found collection`
-- 旧重定向页：`record/health`、`record/breeding`、`finance/income-add` 只做跳转承接
+- 旧重定向页：`record/health`、`record/breeding` 只做跳转承接
 - 静态无同步：`profile/about` 等纯说明页
 - 服务端定时权威：每日审计、自动关闭周期、晨间摘要只在云端执行；客户端只同步最终实体变化
 
@@ -97,7 +97,7 @@
 - 健康提醒默认建议型；只有显式 `create_task=true` 或勾选“创建下次待办”才生成任务
 - 疾病康复统一走 `health-service.recoverIllnesses`；同犬同未康复病名不得重复创建
 - 同犬同药名只允许一个进行中用药任务；覆盖语义是“取消旧任务 + 创建新任务”
-- 收入统一入口为 `pages/finance/expense-add.vue?type=income`；`income-add.vue` 弃用
+- 收入统一入口为 `pages/finance/expense-add.vue?type=income`；旧 `income-add.vue` 已移除
 - 销售候选必须先走本地投影过滤；完成交易允许 `received_amount` 为空，未结算成交不得退款
 
 ## UI / 路由红线

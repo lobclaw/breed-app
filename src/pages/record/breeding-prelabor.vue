@@ -123,7 +123,6 @@
       </view>
 
       <view class="fixed-bottom">
-        <text v-if="submitDisabledHint" class="prelabor-monitor__submit-hint">{{ submitDisabledHint }}</text>
         <BSubmitButton
           :loading="submitState === 'submitting'"
           :success="submitState === 'success'"
@@ -238,11 +237,6 @@ const hasObservationContent = computed(() => {
     || notes.value.trim().length > 0
 })
 const canSubmit = computed(() => !!selectedDog.value && hasObservationContent.value && submitState.value !== 'submitting')
-const submitDisabledHint = computed(() => {
-  if (submitState.value === 'submitting' || canSubmit.value) return ''
-  if (!selectedDog.value) return '请选择种母'
-  return ''
-})
 
 const headerSubtitle = computed(() => '记录体温与临产征兆')
 
@@ -927,16 +921,6 @@ async function handleSave() {
     font-size: 14px;
     font-weight: 500;
     color: var(--text-1);
-  }
-
-  &__submit-hint {
-    display: block;
-    margin-bottom: 8px;
-    text-align: center;
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-3);
-    line-height: 1.4;
   }
 }
 </style>

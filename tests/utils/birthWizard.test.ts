@@ -60,4 +60,28 @@ describe('birth-wizard source contract', () => {
     expect(source).not.toContain('class="btn-next btn-next--submit"')
     expect(source).not.toContain('&--submit {')
   })
+
+  it('底部按钮应参与页面布局，不遮挡 Step 2 滚动内容', () => {
+    expect(source).toContain('class="form-scroll"')
+    expect(source).toContain('.form-scroll')
+    expect(source).toContain('height: 100vh;')
+    expect(source).toContain('flex-direction: column;')
+    const footerStyle = source.slice(source.indexOf('.btn-footer {'), source.indexOf('.btn-back {'))
+    expect(footerStyle).toContain('flex-shrink: 0;')
+    expect(footerStyle).not.toContain('position: fixed')
+    expect(source).not.toContain('btn-footer-spacer')
+  })
+
+  it('添加下一只后应自动滚动到底部并在切换步骤时回到顶部', () => {
+    expect(source).toContain(':scroll-top="formScrollTop"')
+    expect(source).toContain('scroll-with-animation')
+    expect(source).toContain('const formScrollTop = ref(0)')
+    expect(source).toContain('const FORM_SCROLL_BOTTOM_STEP = 100000')
+    expect(source).toContain('async function addPuppy()')
+    expect(source).toContain('await nextTick()')
+    expect(source).toContain('scrollFormToBottom()')
+    expect(source).toContain('formScrollTop.value += FORM_SCROLL_BOTTOM_STEP')
+    expect(source).toContain('watch(step, async () => {')
+    expect(source).toContain('scrollFormToTop()')
+  })
 })
