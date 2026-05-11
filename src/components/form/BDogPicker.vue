@@ -29,8 +29,19 @@
           <BEntityIcon :role="singleDog.role" :size="20" color="#fff" />
         </view>
         <view class="b-dog-card__info">
-          <text class="b-dog-card__name">{{ singleDog.name }}</text>
-          <text class="b-dog-card__meta">{{ singleDog.breed || '马尔济斯' }}<template v-if="singleDog.gender"> · {{ singleDog.gender }}</template></text>
+          <view class="b-dog-card__title-row">
+            <text class="b-dog-card__name">{{ singleDog.name }}</text>
+            <text
+              v-if="props.showBreedingStage && dogBreedingStageTag(singleDog)"
+              class="b-dog-picker__stage-tag"
+              :class="`b-dog-picker__stage-tag--${dogBreedingStageTag(singleDog)?.tone}`"
+            >
+              {{ dogBreedingStageTag(singleDog)?.text }}
+            </text>
+          </view>
+          <text class="b-dog-card__meta">
+            {{ dogExtraMetaText(singleDog) || `${singleDog.breed || '马尔济斯'}${singleDog.gender ? ` · ${singleDog.gender}` : ''}` }}
+          </text>
         </view>
         <text v-if="readonly" class="material-icons-round" style="font-size: 18px; color: var(--text-4);">lock</text>
         <text v-else class="material-icons-round" style="font-size: 18px; color: var(--text-4);">chevron_right</text>
@@ -689,6 +700,13 @@ function formatAge(birthTs?: number | null) {
 
   &__info {
     flex: 1;
+    min-width: 0;
+  }
+
+  &__title-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     min-width: 0;
   }
 

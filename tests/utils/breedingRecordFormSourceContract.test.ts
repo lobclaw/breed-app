@@ -45,4 +45,13 @@ describe('breeding record form source contract', () => {
     expect(source).toContain("const hasPrenatalCheckContent = computed(() => {\n  return !!String(details.results || '').trim() || images.value.length > 0\n})")
     expect(source).toContain("if (breedingType.value === 'prenatal_check') return hasPrenatalCheckContent.value")
   })
+
+  it('锁定犬只或编辑繁育记录时应在标题和犬只卡展示周期上下文', () => {
+    expect(source).toContain('return `${selectedDog.value.name} · ${actionPrefix}${typeLabel.value}`')
+    expect(source).toContain('const selectedCycleContextText = computed')
+    expect(source).toContain('const breedingDogExtraMetaMap = computed')
+    expect(source).toContain('getLocalBreedingCycleDetail')
+    expect(source).toContain('`第${cycleNumber}次繁育`')
+    expect(source).toContain('`预产期 ${parts.month}月${parts.day}日`')
+  })
 })

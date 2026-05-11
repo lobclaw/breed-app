@@ -67,6 +67,7 @@ describe('local-first source contract', () => {
     expect(pickerSource).toContain('showBreedingStage?: boolean')
     expect(pickerSource).toContain('showBreedingStage: false')
     expect(pickerSource).toContain('props.showBreedingStage && dogBreedingStageTag(dog)')
+    expect(pickerSource).toContain('<view class="b-dog-card__title-row">')
     expect(pickerSource).toContain('function dogBreedingStageTag')
     expect(pickerSource).toContain('发情第${day}天')
     expect(pickerSource).toContain('怀孕第${day}天')
@@ -96,7 +97,8 @@ describe('local-first source contract', () => {
 
     expect(formSource).toContain('listLocalLatestHeatDatesByDogIds')
     expect(formSource).toContain(':extra-meta-map="latestHeatMetaMap"')
-    expect(formSource.match(/:extra-meta-map="latestHeatMetaMap"/g)?.length).toBe(2)
+    expect(formSource).toContain(':extra-meta-map="breedingDogExtraMetaMap"')
+    expect(formSource.match(/:extra-meta-map="breedingDogExtraMetaMap"/g)?.length).toBe(2)
     expect(formSource).toContain("&& ['heat', 'follicle_check', 'mating'].includes(breedingType.value)")
     expect(formSource).toContain('function hasCurrentHeatStatus')
     expect(formSource).toContain('if (currentHeatDogIds.has(dogId)) return map')

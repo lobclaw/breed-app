@@ -211,7 +211,10 @@ const notes = ref('')
 const symptoms = ['刨窝/做窝', '焦躁不安', '食欲减退', '喘气加快', '阴道分泌物', '可见宫缩', '乳汁分泌', '拒食']
 
 const isEdit = computed(() => !!recordId.value)
-const pageTitle = computed(() => isEdit.value ? '编辑临产监测' : '录入临产监测')
+const pageTitle = computed(() => {
+  if (selectedDog.value?.name) return `${selectedDog.value.name} · ${isEdit.value ? '编辑临产监测' : '临产监测'}`
+  return isEdit.value ? '编辑临产监测' : '录入临产监测'
+})
 
 const { submitState, submitButtonText, markSubmitting, markSuccess, resetSubmitState } = useRecordSubmitState({
   idleLabel: computed(() => isEdit.value ? '保存修改' : '保存记录'),
@@ -260,7 +263,7 @@ const dueText = computed(() => {
 })
 
 const headerSubtitle = computed(() => {
-  return selectedDog.value ? '记录体温与临产征兆' : '先选择怀孕中的种母'
+  return selectedDog.value ? (selectedDogMeta.value || '记录体温与临产征兆') : '先选择怀孕中的种母'
 })
 
 const selectedDogMeta = computed(() => {
