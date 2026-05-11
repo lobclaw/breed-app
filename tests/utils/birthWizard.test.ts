@@ -61,6 +61,12 @@ describe('birth-wizard source contract', () => {
     expect(source).not.toContain('&--submit {')
   })
 
+  it('Step 1 未选择种母时下一步按钮应保持禁用态', () => {
+    expect(source).toContain("if (step.value === 1) return !!cycleId.value && !!form.birth_date")
+    expect(source).toContain(':disabled="!canNext"')
+    expect(source).not.toContain(':disabled="step === 1 ? !form.birth_date : !canNext"')
+  })
+
   it('底部按钮应参与页面布局，不遮挡 Step 2 滚动内容', () => {
     expect(source).toContain('class="form-scroll"')
     expect(source).toContain('.form-scroll')

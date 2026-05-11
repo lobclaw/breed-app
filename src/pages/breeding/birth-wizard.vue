@@ -266,7 +266,7 @@
       <button
         v-if="step < 3"
         class="btn-next"
-        :disabled="step === 1 ? !form.birth_date : !canNext"
+        :disabled="!canNext"
         @click="goNext"
       >
         <text>{{ step === 1 ? '下一步：录入幼崽' : '下一步：确认' }}</text>
