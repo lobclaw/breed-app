@@ -113,9 +113,11 @@ import { computed, reactive, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useAuth } from '@/composables/useAuth'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
+import { getLocalBreedingRecordDetail } from '@/localdb/domain-repository'
 import { localSyncRuntime } from '@/localdb/runtime'
 import { isAuthTokenError } from '@/utils/cloudError'
 import { getBeijingDateParts } from '@/utils/date'
+import { buildBreedingRecordEditUrl } from '@/utils/recordFormRoutes'
 
 interface SyncIssue {
   _id: string
@@ -132,6 +134,7 @@ const loading = ref(false)
 const retryingIssues = ref(false)
 const syncingScope = ref(false)
 const issues = ref<SyncIssue[]>([])
+const issueActionUrls = ref<Record<string, string>>({})
 const syncStatus = reactive({
   pending: 0,
   processing: 0,
@@ -326,15 +329,38 @@ function isStaleImageIssue(issue: SyncIssue) {
 }
 
 function issueActionUrl(issue: SyncIssue) {
+  return issueActionUrls.value[issue._id] || ''
+}
+
+function buildStaticIssueActionUrl(issue: SyncIssue) {
   if (issue.status !== 'pending_upload' || !issue.recordId) return ''
   const id = encodeURIComponent(issue.recordId)
   const suffix = `id=${id}&focus=images`
   if (issue.collection === 'expenses') return `/pages/finance/expense-edit?${suffix}`
   if (issue.collection === 'incomes') return `/pages/finance/income-edit?${suffix}`
   if (issue.collection === 'health_records') return `/pages/record/health-edit?${suffix}`
-  if (issue.collection === 'breeding_records') return `/pages/record/breeding-edit?${suffix}`
   if (issue.collection === 'dogs') return `/pages/dog/add?${suffix}`
   return ''
+}
+
+async function resolveIssueActionUrls(items: SyncIssue[]) {
+  const familyId = currentFamily.value?._id || ''
+  const next: Record<string, string> = {}
+
+  await Promise.all(items.map(async (issue) => {
+    const staticUrl = buildStaticIssueActionUrl(issue)
+    if (staticUrl) {
+      next[issue._id] = staticUrl
+      return
+    }
+    if (issue.status !== 'pending_upload' || issue.collection !== 'breeding_records' || !issue.recordId || !familyId) return
+
+    const record = await getLocalBreedingRecordDetail(familyId, issue.recordId).catch(() => null)
+    const url = buildBreedingRecordEditUrl(record?.type, issue.recordId, { focus: 'images' })
+    if (url) next[issue._id] = url
+  }))
+
+  issueActionUrls.value = next
 }
 
 function handleIssueClick(issue: SyncIssue) {
@@ -362,6 +388,7 @@ async function loadStatus() {
       ...normalizeIssues(currentStatus?.pendingUploadIssues as Array<Record<string, any>>),
       ...normalizeIssues(currentIssues as Array<Record<string, any>>),
     ]
+    await resolveIssueActionUrls(issues.value)
 
     if (syncStatus.activeScope) {
       const currentScope = await localSyncRuntime.getScopeStatus(syncStatus.activeScope)

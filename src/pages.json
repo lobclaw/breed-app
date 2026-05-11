@@ -190,13 +190,6 @@
 			}
 		},
 		{
-			"path": "pages/record/breeding-edit",
-			"style": {
-				"navigationBarTitleText": "编辑繁育记录",
-				"navigationStyle": "custom"
-			}
-		},
-		{
 			"path": "pages/record/health-edit",
 			"style": {
 				"navigationBarTitleText": "编辑健康记录",

@@ -1559,6 +1559,7 @@ export async function listLocalPreLaborTemperatureHistory(familyId: string, dogI
 
   return records
     .map((row) => ({
+      id: String(row._id || ''),
       temp: Number(row?.details?.temperature || 0),
       label: '',
       time: Number(row.date || row.created_at || 0),

@@ -3,7 +3,7 @@
 -->
 <template>
   <view class="prelabor-monitor">
-    <BPageHeader title="录入临产监测" :subtitle="headerSubtitle" />
+    <BPageHeader :title="pageTitle" :subtitle="headerSubtitle" />
 
     <view class="prelabor-monitor__dog-card" :class="{ 'prelabor-monitor__dog-card--locked': dogLocked }" @click="openDogPicker">
       <view class="prelabor-monitor__dog-card-bg" />
@@ -169,7 +169,7 @@ import { useAuth } from '@/composables/useAuth'
 import { usePageSync } from '@/composables/usePageSync'
 import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
 import { useRecordSubmitState } from '@/composables/useRecordSubmitState'
-import { getLocalBreedingCycleDetail, listLocalPreLaborTemperatureHistory } from '@/localdb/domain-repository'
+import { getLocalBreedingCycleDetail, getLocalBreedingRecordDetail, listLocalPreLaborTemperatureHistory } from '@/localdb/domain-repository'
 import { localSyncRuntime } from '@/localdb/runtime'
 import { useDogStore } from '@/stores/dogStore'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
@@ -178,9 +178,10 @@ import BDogPicker from '@/components/form/BDogPicker.vue'
 import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
 import { formatTimeInputValue, getBeijingDateParts, getBeijingDayDiff } from '@/utils/date'
 import { getBirthCycleIdFromDog, getBreedingDogPickerEmptyState, getEligibleBreedingDogs } from '@/utils/breedingDogEligibility'
-import { resolveBreedingRouteQuery } from '@/utils/recordFormRoutes'
+import { resolveBreedingRouteQuery, resolveRecordFormEditId } from '@/utils/recordFormRoutes'
 
 interface TempRecord {
+  id?: string
   temp: number
   label: string
   time: number
@@ -194,6 +195,7 @@ const dogStore = useDogStore()
 usePageSync({ routePath: 'pages/record/breeding-prelabor' })
 
 const routeQuery = ref<Record<string, string>>({})
+const recordId = ref('')
 const selectedDog = ref<any>(null)
 const dogLocked = ref(false)
 const dogPickerVisible = ref(false)
@@ -208,9 +210,12 @@ const notes = ref('')
 
 const symptoms = ['刨窝/做窝', '焦躁不安', '食欲减退', '喘气加快', '阴道分泌物', '可见宫缩', '乳汁分泌', '拒食']
 
+const isEdit = computed(() => !!recordId.value)
+const pageTitle = computed(() => isEdit.value ? '编辑临产监测' : '录入临产监测')
+
 const { submitState, submitButtonText, markSubmitting, markSuccess, resetSubmitState } = useRecordSubmitState({
-  idleLabel: '保存记录',
-  successLabel: '已保存',
+  idleLabel: computed(() => isEdit.value ? '保存修改' : '保存记录'),
+  successLabel: computed(() => isEdit.value ? '已更新' : '已保存'),
 })
 
 const candidateDogs = computed(() => getEligibleBreedingDogs(dogStore.list, 'pre_labor'))
@@ -270,11 +275,12 @@ const expectedDueSummary = computed(() => {
 })
 
 const trendItems = computed<TempRecord[]>(() => {
-  const items = [...tempHistory.value]
+  const items = tempHistory.value.filter(item => !isEdit.value || item.id !== recordId.value)
   if (currentTemp.value !== null) {
     items.push({
+      id: isEdit.value ? recordId.value : undefined,
       temp: currentTemp.value,
-      label: '现在',
+      label: isEdit.value ? '本条' : '现在',
       time: recordTime.value,
       symptoms: [...selectedSymptoms.value],
     })
@@ -282,7 +288,10 @@ const trendItems = computed<TempRecord[]>(() => {
   return items.slice(-4)
 })
 
-const lastHistoryRecord = computed(() => tempHistory.value[tempHistory.value.length - 1] || null)
+const lastHistoryRecord = computed(() => {
+  const items = tempHistory.value.filter(item => !isEdit.value || item.id !== recordId.value)
+  return items[items.length - 1] || null
+})
 const lastRecordLabel = computed(() => lastHistoryRecord.value ? `上次监测 · ${lastHistoryRecord.value.label}` : '本次监测')
 const lastRecordSummary = computed(() => {
   const record = lastHistoryRecord.value
@@ -298,10 +307,15 @@ const showLaborAlert = computed(() => {
 
 onLoad((query) => {
   routeQuery.value = { ...(query || {}) } as Record<string, string>
+  recordId.value = resolveRecordFormEditId(routeQuery.value)
 })
 
 onMounted(async () => {
   await dogStore.ensure().catch(() => {})
+  if (isEdit.value) {
+    await loadEditState()
+    return
+  }
   applyRouteQuery()
   if (!selectedDog.value && candidateDogs.value.length === 1) {
     selectedDog.value = candidateDogs.value[0]
@@ -348,6 +362,31 @@ function applyRouteQuery() {
   dogLocked.value = resolved.dogLocked
 }
 
+async function loadEditState() {
+  const familyId = currentFamily.value?._id || ''
+  const record = await getLocalBreedingRecordDetail(familyId, recordId.value).catch(() => null)
+  if (!record || record.type !== 'pre_labor') {
+    uni.showToast({ title: '临产记录不存在', icon: 'none' })
+    return
+  }
+
+  selectedDog.value = {
+    _id: record.dog_id,
+    name: record.dog_name || '',
+    gender: '母',
+    role: '种狗',
+  }
+  dogLocked.value = true
+  cycleId.value = record.cycle_id || ''
+  recordTime.value = Number(record.date || Date.now())
+
+  const details = record.details || {}
+  notes.value = mergePreLaborNotes(record.notes || '', details)
+  const temp = Number(details.temperature ?? details.temp)
+  temperature.value = Number.isFinite(temp) && temp > 0 ? String(temp) : ''
+  selectedSymptoms.value = resolvePreLaborSymptoms(details)
+}
+
 function openDogPicker() {
   if (dogLocked.value) return
   dogPickerVisible.value = true
@@ -362,6 +401,7 @@ async function loadTempHistory(dogId: string) {
   try {
     const records = await listLocalPreLaborTemperatureHistory(currentFamily.value?._id || '', dogId)
     tempHistory.value = records.map((record: any) => ({
+      id: record.id || record._id || '',
       temp: record.temp || 0,
       label: formatTimeLabel(record.time),
       time: record.time,
@@ -412,6 +452,40 @@ function toggleSymptom(symptom: string) {
   } else {
     selectedSymptoms.value.push(symptom)
   }
+}
+
+function resolvePreLaborSymptoms(details: Record<string, any>) {
+  const values = Array.isArray(details.symptoms)
+    ? details.symptoms.map((item: any) => String(item || '').trim()).filter(Boolean)
+    : []
+  const next = new Set(values)
+  if (details.nesting_behavior) next.add('刨窝/做窝')
+  if (String(details.appetite_change || '').includes('食欲减退')) next.add('食欲减退')
+  String(details.other_signs || '')
+    .split(/[、,\/]/)
+    .map(item => item.trim())
+    .filter(Boolean)
+    .forEach(item => next.add(item))
+  return symptoms.filter(item => next.has(item))
+}
+
+function mergePreLaborNotes(recordNotes: string, details: Record<string, any>) {
+  const existingNotes = String(recordNotes || '').trim()
+  const unmatchedSigns = getUnmatchedPreLaborSigns(details)
+  if (unmatchedSigns.length === 0) return existingNotes
+
+  const signText = `其他征兆：${unmatchedSigns.join('、')}`
+  if (!existingNotes) return signText
+  if (existingNotes.includes(signText)) return existingNotes
+  return `${existingNotes}\n${signText}`
+}
+
+function getUnmatchedPreLaborSigns(details: Record<string, any>) {
+  const values = String(details.other_signs || '')
+    .split(/[、,\/]/)
+    .map(item => item.trim())
+    .filter(Boolean)
+  return values.filter(item => !symptoms.includes(item))
 }
 
 function onDateTimeConfirm(value: number | string) {
@@ -472,17 +546,26 @@ async function handleSave() {
 
   markSubmitting()
   try {
-    await localSyncRuntime.addBreedingRecordLocally(currentFamily.value?._id || '', {
-      type: 'pre_labor',
-      dog_id: selectedDog.value?._id || '',
-      cycle_id: cycleId.value || undefined,
-      date: recordTime.value,
-      details: buildDetailPayload(),
-      notes: notes.value || null,
-    })
+    if (isEdit.value) {
+      await localSyncRuntime.updateBreedingRecordLocally(currentFamily.value?._id || '', {
+        id: recordId.value,
+        date: recordTime.value,
+        details: buildDetailPayload(),
+        notes: notes.value || null,
+      })
+    } else {
+      await localSyncRuntime.addBreedingRecordLocally(currentFamily.value?._id || '', {
+        type: 'pre_labor',
+        dog_id: selectedDog.value?._id || '',
+        cycle_id: cycleId.value || undefined,
+        date: recordTime.value,
+        details: buildDetailPayload(),
+        notes: notes.value || null,
+      })
+    }
     markSuccess()
     queueSubmitFeedback({
-      message: '已保存临产监测',
+      message: isEdit.value ? '已更新临产监测' : '已保存临产监测',
       homeSection: 'breeding',
       homeAnchorKey: 'breeding-step:birth',
       refreshHome: true,

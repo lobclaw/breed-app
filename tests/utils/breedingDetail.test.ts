@@ -42,4 +42,9 @@ describe('breeding-detail source contract', () => {
     expect(source).toContain('height: 78px;')
     expect(source).not.toContain('aspect-ratio: 1;')
   })
+
+  it('编辑入口应按繁育记录类型直达对应表单页并排除生产记录', () => {
+    expect(source).toContain('buildBreedingRecordEditUrl(record.value.type, recordId)')
+    expect(source).toContain('当前记录暂不支持编辑')
+  })
 })

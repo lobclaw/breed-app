@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  buildBreedingRecordEditUrl,
   resolveBatchDogs,
+  resolveBreedingRecordEditBaseUrl,
   resolveBreedingRouteQuery,
   resolveHealthCreateRouteQuery,
   resolveMedicationRouteQuery,
@@ -14,6 +16,14 @@ describe('recordFormRoutes', () => {
     expect(resolveRecordFormEditId({ id: 'record-new' })).toBe('record-new')
     expect(resolveRecordFormEditId({ recordId: 'record-camel' })).toBe('record-camel')
     expect(resolveRecordFormEditId({ record_id: 'record-snake' })).toBe('record-snake')
+  })
+
+  it('繁育编辑入口按记录类型直达对应表单页', () => {
+    expect(resolveBreedingRecordEditBaseUrl('heat')).toBe('/pages/record/breeding-heat')
+    expect(resolveBreedingRecordEditBaseUrl('pre_labor')).toBe('/pages/record/breeding-prelabor')
+    expect(resolveBreedingRecordEditBaseUrl('heat_observation')).toBe('/pages/record/heat-observation')
+    expect(resolveBreedingRecordEditBaseUrl('birth')).toBe('')
+    expect(buildBreedingRecordEditUrl('pre_labor', 'record-1', { focus: 'images' })).toBe('/pages/record/breeding-prelabor?id=record-1&focus=images')
   })
 
   it('兼容 taskId 与 taskIds 批量来源参数', () => {

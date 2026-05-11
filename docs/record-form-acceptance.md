@@ -206,7 +206,7 @@
 
 路径：
 - `繁育记录详情 -> 编辑`
-- 也可直接打开 `/pages/record/breeding-edit?id=<recordId>`
+- 编辑入口按记录类型直接进入对应新增页，例如 `/pages/record/breeding-prelabor?id=<recordId>`
 
 检查点：
 - 各主链类型编辑页字段与对应新增页一致

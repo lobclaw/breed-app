@@ -1,6 +1,17 @@
 type QueryValue = string | undefined
 type QueryLike = Record<string, QueryValue>
 
+const BREEDING_RECORD_EDIT_ROUTES: Record<string, string> = {
+  heat: '/pages/record/breeding-heat',
+  follicle_check: '/pages/record/breeding-follicle',
+  mating: '/pages/record/breeding-mating',
+  pregnancy_check: '/pages/record/breeding-pregnancy',
+  prenatal_check: '/pages/record/breeding-prenatal',
+  pre_labor: '/pages/record/breeding-prelabor',
+  abnormal_termination: '/pages/record/breeding-termination',
+  heat_observation: '/pages/record/heat-observation',
+}
+
 export interface MedicationRouteIllnessLink {
   dogId: string
   illnessRecordId: string
@@ -35,6 +46,21 @@ export function resolveSourceTaskIds(query: QueryLike = {}) {
 
 export function resolveRecordFormEditId(query: QueryLike = {}) {
   return getString(query.id || query.recordId || query.record_id)
+}
+
+export function resolveBreedingRecordEditBaseUrl(type: string | undefined) {
+  return BREEDING_RECORD_EDIT_ROUTES[getString(type)] || ''
+}
+
+export function buildBreedingRecordEditUrl(type: string | undefined, recordId: string | undefined, query: QueryLike = {}) {
+  const baseUrl = resolveBreedingRecordEditBaseUrl(type)
+  const id = getString(recordId)
+  if (!baseUrl || !id) return ''
+
+  const params = [`id=${encodeURIComponent(id)}`]
+  const focus = getString(query.focus)
+  if (focus) params.push(`focus=${encodeURIComponent(focus)}`)
+  return `${baseUrl}?${params.join('&')}`
 }
 
 export function resolveBatchDogs(query: QueryLike = {}) {

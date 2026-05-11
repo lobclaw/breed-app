@@ -459,6 +459,7 @@ import { getLocalBreedingRecordDetail } from '@/localdb/domain-repository'
 import { localSyncRuntime } from '@/localdb/runtime'
 import { consumeSubmitFeedback, queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
 import { resolveImageDisplayUrls, resolveImageSafeSrc } from '@/utils/imageAttachment'
+import { buildBreedingRecordEditUrl } from '@/utils/recordFormRoutes'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSubmitBanner from '@/components/feedback/BSubmitBanner.vue'
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
@@ -496,7 +497,7 @@ const typeMap: Record<string, { label: string; tagColor: any; cardColor: any }> 
 const typeLabel = computed(() => typeMap[record.value?.type]?.label || record.value?.type || '未知')
 const tagColor = computed(() => typeMap[record.value?.type]?.tagColor || 'green')
 const cardColor = computed(() => typeMap[record.value?.type]?.cardColor || 'green')
-const canEdit = computed(() => !loading.value && !!record.value && record.value.type !== 'heat_observation')
+const canEdit = computed(() => !loading.value && !!record.value && Boolean(buildBreedingRecordEditUrl(record.value.type, recordId)))
 const canDelete = computed(() => !loading.value && !!record.value && record.value.type === 'heat_observation')
 const hasMoreActions = computed(() => canDelete.value)
 const recordImageRefs = computed(() => {
@@ -630,7 +631,12 @@ async function loadRecord() {
 
 function goEdit() {
   showMore.value = false
-  uni.navigateTo({ url: `/pages/record/breeding-edit?id=${recordId}` })
+  const url = buildBreedingRecordEditUrl(record.value?.type, recordId)
+  if (!url) {
+    uni.showToast({ title: '当前记录暂不支持编辑', icon: 'none' })
+    return
+  }
+  uni.navigateTo({ url })
 }
 
 function goToCycle() {
