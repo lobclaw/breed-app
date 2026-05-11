@@ -352,6 +352,7 @@ import BModal from '@/components/layout/BModal.vue'
 import BEmpty from '@/components/feedback/BEmpty.vue'
 import { buildMedicationDetailUrl } from '@/utils/dogDetailNavigation'
 import { getBeijingDayDiff, getBeijingOrdinalDay } from '@/utils/date'
+import { buildHealthRecordEditUrl } from '@/utils/recordFormRoutes'
 
 const record = ref<any>(null)
 const loading = ref(true)
@@ -391,7 +392,7 @@ const pageTitle = computed(() => {
   if (record.value?.type === 'illness') return `${dogName} · 疾病详情`
   return `${dogName} · 健康记录详情`
 })
-const canEdit = computed(() => !loading.value && !!record.value)
+const canEdit = computed(() => !loading.value && !!record.value && Boolean(buildHealthRecordEditUrl(record.value.type, recordId)))
 const isIllnessRecord = computed(() => record.value?.type === 'illness')
 const illnessStatus = computed(() => record.value?.details?.treatment_status || '观察中')
 const isRecoveredIllness = computed(() => isIllnessRecord.value && illnessStatus.value === '已康复')
@@ -597,7 +598,12 @@ function resolveHealthRecordId(query?: Record<string, unknown> | null) {
 
 function goEdit() {
   showMore.value = false
-  uni.navigateTo({ url: `/pages/record/health-edit?id=${recordId}` })
+  const url = buildHealthRecordEditUrl(record.value?.type, recordId)
+  if (!url) {
+    uni.showToast({ title: '当前记录暂不支持编辑', icon: 'none' })
+    return
+  }
+  uni.navigateTo({ url })
 }
 
 function goToMedicationDetail(taskId: string) {

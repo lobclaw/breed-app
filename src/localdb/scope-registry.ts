@@ -58,7 +58,7 @@ export const SYNC_SCOPE_REGISTRY: SyncScopeDefinition[] = [
     collections: ['dogs', 'breeding_cycles', 'litters', 'health_records', 'medication_protocols'],
     routeMatchers: [
       'pages/record/index',
-      /^pages\/record\/(breeding-heat|breeding-follicle|breeding-mating|breeding-pregnancy|breeding-prenatal|breeding-prelabor|breeding-termination|health-vaccination|health-deworming|health-illness|health-medication|heat-observation|prelabor-monitor|health-edit)$/,
+      /^pages\/record\/(breeding-heat|breeding-follicle|breeding-mating|breeding-pregnancy|breeding-prenatal|breeding-prelabor|breeding-termination|health-vaccination|health-deworming|health-illness|health-medication|heat-observation|prelabor-monitor)$/,
     ],
   },
   {

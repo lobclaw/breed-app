@@ -12,6 +12,12 @@ const BREEDING_RECORD_EDIT_ROUTES: Record<string, string> = {
   heat_observation: '/pages/record/heat-observation',
 }
 
+const HEALTH_RECORD_EDIT_ROUTES: Record<string, string> = {
+  vaccination: '/pages/record/health-vaccination',
+  deworming: '/pages/record/health-deworming',
+  illness: '/pages/record/health-illness',
+}
+
 export interface MedicationRouteIllnessLink {
   dogId: string
   illnessRecordId: string
@@ -54,6 +60,21 @@ export function resolveBreedingRecordEditBaseUrl(type: string | undefined) {
 
 export function buildBreedingRecordEditUrl(type: string | undefined, recordId: string | undefined, query: QueryLike = {}) {
   const baseUrl = resolveBreedingRecordEditBaseUrl(type)
+  const id = getString(recordId)
+  if (!baseUrl || !id) return ''
+
+  const params = [`id=${encodeURIComponent(id)}`]
+  const focus = getString(query.focus)
+  if (focus) params.push(`focus=${encodeURIComponent(focus)}`)
+  return `${baseUrl}?${params.join('&')}`
+}
+
+export function resolveHealthRecordEditBaseUrl(type: string | undefined) {
+  return HEALTH_RECORD_EDIT_ROUTES[getString(type)] || ''
+}
+
+export function buildHealthRecordEditUrl(type: string | undefined, recordId: string | undefined, query: QueryLike = {}) {
+  const baseUrl = resolveHealthRecordEditBaseUrl(type)
   const id = getString(recordId)
   if (!baseUrl || !id) return ''
 

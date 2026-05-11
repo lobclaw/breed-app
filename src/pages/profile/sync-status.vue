@@ -113,11 +113,11 @@ import { computed, reactive, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useAuth } from '@/composables/useAuth'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
-import { getLocalBreedingRecordDetail } from '@/localdb/domain-repository'
+import { getLocalBreedingRecordDetail, getLocalHealthRecordDetail } from '@/localdb/domain-repository'
 import { localSyncRuntime } from '@/localdb/runtime'
 import { isAuthTokenError } from '@/utils/cloudError'
 import { getBeijingDateParts } from '@/utils/date'
-import { buildBreedingRecordEditUrl } from '@/utils/recordFormRoutes'
+import { buildBreedingRecordEditUrl, buildHealthRecordEditUrl } from '@/utils/recordFormRoutes'
 
 interface SyncIssue {
   _id: string
@@ -338,7 +338,6 @@ function buildStaticIssueActionUrl(issue: SyncIssue) {
   const suffix = `id=${id}&focus=images`
   if (issue.collection === 'expenses') return `/pages/finance/expense-edit?${suffix}`
   if (issue.collection === 'incomes') return `/pages/finance/income-edit?${suffix}`
-  if (issue.collection === 'health_records') return `/pages/record/health-edit?${suffix}`
   if (issue.collection === 'dogs') return `/pages/dog/add?${suffix}`
   return ''
 }
@@ -353,14 +352,25 @@ async function resolveIssueActionUrls(items: SyncIssue[]) {
       next[issue._id] = staticUrl
       return
     }
-    if (issue.status !== 'pending_upload' || issue.collection !== 'breeding_records' || !issue.recordId || !familyId) return
+    if (issue.status !== 'pending_upload' || !issue.recordId || !familyId) return
 
-    const record = await getLocalBreedingRecordDetail(familyId, issue.recordId).catch(() => null)
-    const url = buildBreedingRecordEditUrl(record?.type, issue.recordId, { focus: 'images' })
+    const url = await buildRecordIssueActionUrl(familyId, issue)
     if (url) next[issue._id] = url
   }))
 
   issueActionUrls.value = next
+}
+
+async function buildRecordIssueActionUrl(familyId: string, issue: SyncIssue) {
+  if (issue.collection === 'breeding_records') {
+    const record = await getLocalBreedingRecordDetail(familyId, issue.recordId || '').catch(() => null)
+    return buildBreedingRecordEditUrl(record?.type, issue.recordId, { focus: 'images' })
+  }
+  if (issue.collection === 'health_records') {
+    const record = await getLocalHealthRecordDetail(familyId, issue.recordId || '').catch(() => null)
+    return buildHealthRecordEditUrl(record?.type, issue.recordId, { focus: 'images' })
+  }
+  return ''
 }
 
 function handleIssueClick(issue: SyncIssue) {

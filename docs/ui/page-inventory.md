@@ -493,7 +493,6 @@ pages/record/expense               # R-16 支出录入
 pages/record/income                # R-17 收入录入
 pages/record/breeding-detail       # R-20 繁育记录详情
 pages/record/health-detail         # R-22 健康记录详情
-pages/record/health-edit           # R-23 健康记录编辑
 pages/record/medication-task-detail # R-24 用药任务详情
 pages/record/medication-task-edit  # R-25 用药任务编辑
 pages/finance/index                # F-1 财务主页

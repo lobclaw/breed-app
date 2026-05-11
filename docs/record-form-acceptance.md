@@ -56,7 +56,7 @@
 
 路径：
 - `健康记录详情 -> 编辑`
-- 也可直接打开 `/pages/record/health-edit?id=<recordId>`
+- 编辑入口按记录类型直接进入对应新增页，例如 `/pages/record/health-vaccination?id=<recordId>`
 
 检查点：
 - 页面标题为“编辑健康记录”
@@ -252,13 +252,13 @@
 
 ## 6. 路由兼容
 
-### 6.1 健康编辑兼容
+### 6.1 健康编辑同页入口
 
 直接验证以下 URL 仍能打开：
 
-- `/pages/record/health-edit?id=<recordId>`
-- `/pages/record/health-edit?recordId=<recordId>`
-- `/pages/record/health-edit?record_id=<recordId>`
+- `/pages/record/health-vaccination?id=<recordId>`
+- `/pages/record/health-deworming?recordId=<recordId>`
+- `/pages/record/health-illness?record_id=<recordId>`
 
 ### 6.2 用药创建兼容
 

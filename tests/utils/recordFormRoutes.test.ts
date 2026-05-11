@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest'
 
 import {
   buildBreedingRecordEditUrl,
+  buildHealthRecordEditUrl,
   resolveBatchDogs,
   resolveBreedingRecordEditBaseUrl,
   resolveBreedingRouteQuery,
   resolveHealthCreateRouteQuery,
+  resolveHealthRecordEditBaseUrl,
   resolveMedicationRouteQuery,
   resolveRecordFormEditId,
   resolveSourceTaskIds,
@@ -24,6 +26,14 @@ describe('recordFormRoutes', () => {
     expect(resolveBreedingRecordEditBaseUrl('heat_observation')).toBe('/pages/record/heat-observation')
     expect(resolveBreedingRecordEditBaseUrl('birth')).toBe('')
     expect(buildBreedingRecordEditUrl('pre_labor', 'record-1', { focus: 'images' })).toBe('/pages/record/breeding-prelabor?id=record-1&focus=images')
+  })
+
+  it('健康编辑入口按记录类型直达对应表单页', () => {
+    expect(resolveHealthRecordEditBaseUrl('vaccination')).toBe('/pages/record/health-vaccination')
+    expect(resolveHealthRecordEditBaseUrl('deworming')).toBe('/pages/record/health-deworming')
+    expect(resolveHealthRecordEditBaseUrl('illness')).toBe('/pages/record/health-illness')
+    expect(resolveHealthRecordEditBaseUrl('medication')).toBe('')
+    expect(buildHealthRecordEditUrl('illness', 'record-2', { focus: 'images' })).toBe('/pages/record/health-illness?id=record-2&focus=images')
   })
 
   it('兼容 taskId 与 taskIds 批量来源参数', () => {

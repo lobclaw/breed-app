@@ -351,7 +351,7 @@ import {
   listLocalLatestVaccinationDatesByDogIds,
 } from '@/localdb/domain-repository'
 import { localSyncRuntime } from '@/localdb/runtime'
-import { resolveHealthCreateRouteQuery, type MedicationRouteIllnessLink } from '@/utils/recordFormRoutes'
+import { buildHealthRecordEditUrl, resolveHealthCreateRouteQuery, type MedicationRouteIllnessLink } from '@/utils/recordFormRoutes'
 import { useDogStore } from '@/stores/dogStore'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 import BFormOptions from '@/components/form/BFormOptions.vue'
@@ -1156,10 +1156,15 @@ function handleDuplicateIllnessClose() {
 
 function handleDuplicateIllnessConfirm() {
   if (duplicateIllnessRecordId.value) {
+    const url = buildHealthRecordEditUrl('illness', duplicateIllnessRecordId.value)
+    if (!url) {
+      handleDuplicateIllnessClose()
+      return
+    }
     if (duplicateIllnessUseRedirect.value) {
-      uni.redirectTo({ url: `/pages/record/health-edit?id=${duplicateIllnessRecordId.value}` })
+      uni.redirectTo({ url })
     } else {
-      uni.navigateTo({ url: `/pages/record/health-edit?id=${duplicateIllnessRecordId.value}` })
+      uni.navigateTo({ url })
     }
   }
   handleDuplicateIllnessClose()
