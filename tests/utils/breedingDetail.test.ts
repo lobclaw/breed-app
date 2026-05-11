@@ -47,4 +47,13 @@ describe('breeding-detail source contract', () => {
     expect(source).toContain('buildBreedingRecordEditUrl(record.value.type, recordId)')
     expect(source).toContain('当前记录暂不支持编辑')
   })
+
+  it('标题和关联周期信息应展示犬只与繁育次数上下文', () => {
+    expect(source).toContain('<BPageHeader :title="pageTitle">')
+    expect(source).toContain('`${dogName} · ${typeLabel.value}详情`')
+    expect(source).toContain('const cycleLinkText = computed')
+    expect(source).toContain('`第${cycleNumber}次繁育`')
+    expect(source).not.toContain('function goToCycle')
+    expect(source).not.toContain('@click="goToCycle"')
+  })
 })

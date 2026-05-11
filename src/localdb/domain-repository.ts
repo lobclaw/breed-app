@@ -2609,7 +2609,7 @@ function attachLitterNumbers(litters: Array<Record<string, any>>) {
 
 export async function getLocalBreedingRecordDetail(familyId: string, recordId: string) {
   if (!familyId || !recordId) return null
-  const [record, tasks, dog] = await Promise.all([
+  const [record, tasks, dog, cycleSiblings] = await Promise.all([
     localDb.findById<BreedingRecord>('breeding_records', recordId),
     localDb.query<any>('tasks', row =>
       row.family_id === familyId
@@ -2619,12 +2619,16 @@ export async function getLocalBreedingRecordDetail(familyId: string, recordId: s
       { sort: sortByRecent },
     ),
     localDb.query<any>('dogs', row => row.family_id === familyId && !row.deleted_at),
+    localDb.query<any>('breeding_cycles', row => row.family_id === familyId && !row.deleted_at),
   ])
   if (!record || record.family_id !== familyId) return null
   const dogMap = new Map(dog.map(item => [item._id, item]))
+  const numberedCycles = attachCycleNumbers(cycleSiblings)
+  const currentCycle = numberedCycles.find(item => item._id === record.cycle_id) || null
   return {
     ...record,
     dog_name: (record as any).dog_name || dogMap.get(record.dog_id)?.name || '',
+    cycle_number: currentCycle?.cycle_number || (record as any).cycle_number || null,
     extra_arrangement: tasks[0]
       ? {
         task_id: tasks[0]._id,

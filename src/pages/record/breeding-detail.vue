@@ -1,6 +1,6 @@
 <template>
   <view class="page">
-    <BPageHeader title="繁育记录详情">
+    <BPageHeader :title="pageTitle">
       <template #right>
         <view class="header-actions">
           <view v-if="canEdit" class="header-action" @click="goEdit">
@@ -399,12 +399,7 @@
           <view class="info-rows">
             <view class="info-row">
               <text class="info-row-label">所属周期</text>
-              <view class="info-row-value">
-                <view class="link-text-row" @click="goToCycle">
-                  <text class="link-text">查看繁育周期</text>
-                  <text class="material-icons-round" style="font-size: 16px; color: var(--primary);">chevron_right</text>
-                </view>
-              </view>
+              <text class="info-row-value">{{ cycleLinkText }}</text>
             </view>
             <view class="info-row" v-if="record.created_by_name">
               <text class="info-row-label">创建人</text>
@@ -495,6 +490,11 @@ const typeMap: Record<string, { label: string; tagColor: any; cardColor: any }> 
 }
 
 const typeLabel = computed(() => typeMap[record.value?.type]?.label || record.value?.type || '未知')
+const pageTitle = computed(() => {
+  if (!record.value) return '繁育记录详情'
+  const dogName = record.value?.dog_name || '未知犬只'
+  return `${dogName} · ${typeLabel.value}详情`
+})
 const tagColor = computed(() => typeMap[record.value?.type]?.tagColor || 'green')
 const cardColor = computed(() => typeMap[record.value?.type]?.cardColor || 'green')
 const canEdit = computed(() => !loading.value && !!record.value && Boolean(buildBreedingRecordEditUrl(record.value.type, recordId)))
@@ -507,6 +507,10 @@ const recordImageRefs = computed(() => {
 const showRecordImages = computed(() => {
   return ['pregnancy_check', 'prenatal_check'].includes(record.value?.type)
     && recordImageRefs.value.length > 0
+})
+const cycleLinkText = computed(() => {
+  const cycleNumber = Number(record.value?.cycle_number || 0)
+  return cycleNumber > 0 ? `第${cycleNumber}次繁育` : '繁育周期'
 })
 
 watch(recordImageRefs, async (images) => {
@@ -637,12 +641,6 @@ function goEdit() {
     return
   }
   uni.navigateTo({ url })
-}
-
-function goToCycle() {
-  if (record.value?.cycle_id) {
-    uni.navigateTo({ url: `/pages/breeding/cycle?id=${record.value.cycle_id}` })
-  }
 }
 
 async function previewImage(index: number) {
@@ -1017,20 +1015,6 @@ onShow(() => {
   font-weight: 700;
   color: var(--text-3);
   letter-spacing: 0.5px;
-}
-
-/* ==================== LINK ==================== */
-.link-text-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  transition: transform 0.12s ease;
-  &:active { transform: scale(0.95); }
-}
-.link-text {
-  color: var(--primary);
-  font-size: 13px;
-  font-weight: 600;
 }
 
 /* ==================== CREATED INFO ==================== */

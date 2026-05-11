@@ -106,6 +106,8 @@
 - `BSheet`、`BModal`、`BDeleteConfirm` 打开时锁滚动，关闭时先退场动画再卸载
 - 表单互斥选项用 pill-select；Segmented Control 只用于视图 / 标签切换；表单底部主 CTA 用 `BSubmitButton`
 - 提交反馈统一为“局部 loading + 弱成功反馈 + 来源页承接”；提交按钮固定默认 / 提交中 / 成功瞬态三态，成功瞬态 `520ms`
+- 繁育/健康记录采用“同类型新增编辑同页”：无 `id` 为新增，有 `id/recordId/record_id` 为编辑；不得新增或恢复 `breeding-edit`、`health-edit` 这类独立编辑页
+- 记录详情页、重复记录提示、同步状态页附件处理入口都必须按记录 `type` 直达对应类型页；生产 `birth` 不走普通繁育编辑页，需单独设计窝次/幼犬编辑链路
 - `BDogPicker` 默认不展示繁育阶段；健康/财务/销售选择器不得被繁育状态污染
 - `BDogPicker` 的健康状态标签仅在疾病记录、用药任务等健康上下文显式传入 `showHealthStatusTags` 时展示
 - 详情页首屏优先可见可点；避免遮挡内容的 sticky / 负 margin；操作入口收口为一个稳定主操作入口 + 一个 more

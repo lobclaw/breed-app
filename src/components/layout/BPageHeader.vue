@@ -56,6 +56,7 @@ function goBack() {
 
   &__center {
     flex: 1;
+    min-width: 0;
   }
 
   &__title {
@@ -64,6 +65,9 @@ function goBack() {
     font-weight: 800;
     color: var(--text-1);
     display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   &__subtitle {

@@ -5,6 +5,7 @@ import {
   findLocalDuplicateIllnesses,
   findLocalDuplicateMedicationTasks,
   getLocalBreedingCycleDetail,
+  getLocalBreedingRecordDetail,
   getLocalDogDetail,
   getLocalDogFinanceSummary,
   getLocalExpenseDetail,
@@ -1890,6 +1891,58 @@ describe('local domain repository', () => {
       _id: 'cycle_number_2',
       cycleNumber: 2,
       statusLabel: '怀孕中',
+    })
+  })
+
+  it('繁育记录详情应带出所属周期的动态繁育次数', async () => {
+    const now = new Date('2026-05-07T10:00:00+08:00').getTime()
+    await localDb.replaceTable('dogs', [{
+      _id: 'dog_record_cycle_number',
+      family_id: 'fam_record_cycle_number',
+      name: '肉肉',
+      gender: '母',
+      role: '种狗',
+      disposition: '在养',
+      updated_at: now,
+    }])
+    await localDb.replaceTable('breeding_cycles', [{
+      _id: 'record_cycle_number_1',
+      family_id: 'fam_record_cycle_number',
+      dam_id: 'dog_record_cycle_number',
+      dam_name: '肉肉',
+      status: '失败',
+      start_date: now - (30 * 86400000),
+      created_at: now - (30 * 86400000),
+      updated_at: now - (30 * 86400000),
+    }, {
+      _id: 'record_cycle_number_2',
+      family_id: 'fam_record_cycle_number',
+      dam_id: 'dog_record_cycle_number',
+      dam_name: '肉肉',
+      status: '怀孕中',
+      start_date: now,
+      created_at: now,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('breeding_records', [{
+      _id: 'record_cycle_number_detail',
+      family_id: 'fam_record_cycle_number',
+      cycle_id: 'record_cycle_number_2',
+      dog_id: 'dog_record_cycle_number',
+      type: 'pregnancy_check',
+      date: now,
+      details: { confirmed: false },
+      created_by: 'user_1',
+      created_at: now,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('tasks', [])
+
+    const detail = await getLocalBreedingRecordDetail('fam_record_cycle_number', 'record_cycle_number_detail')
+
+    expect(detail).toMatchObject({
+      dog_name: '肉肉',
+      cycle_number: 2,
     })
   })
 
