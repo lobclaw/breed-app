@@ -133,6 +133,8 @@ describe('dog detail breeding tab source contract', () => {
     expect(source).toContain("meta: matingTs ? `${formatDate(matingTs)} 配种${matingCountText}` : '配种日期未记录'")
     expect(source).toContain('const recordTs = externalSireMatingRecords.value.map')
     expect(source).toContain('dog-detail__rec-icon dog-detail__rec-icon--rose')
+    expect(source).toContain('&--rose { background: linear-gradient(135deg, var(--rose), var(--amber));')
+    expect(source).not.toContain('#ea3e77, #f0789a')
     expect(source).toContain('<text class="material-icons-round">pets</text>')
     expect(source).toContain("return `${month}-${day}`")
     expect(source).not.toContain("return `${d.getMonth() + 1}/${d.getDate()}`")

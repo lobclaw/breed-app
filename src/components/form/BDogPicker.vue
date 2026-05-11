@@ -29,19 +29,8 @@
           <BEntityIcon :role="singleDog.role" :size="20" color="#fff" />
         </view>
         <view class="b-dog-card__info">
-          <view class="b-dog-card__title-row">
-            <text class="b-dog-card__name">{{ singleDog.name }}</text>
-            <text
-              v-if="props.showBreedingStage && dogBreedingStageTag(singleDog)"
-              class="b-dog-picker__stage-tag"
-              :class="`b-dog-picker__stage-tag--${dogBreedingStageTag(singleDog)?.tone}`"
-            >
-              {{ dogBreedingStageTag(singleDog)?.text }}
-            </text>
-          </view>
-          <text class="b-dog-card__meta">
-            {{ dogExtraMetaText(singleDog) || `${singleDog.breed || '马尔济斯'}${singleDog.gender ? ` · ${singleDog.gender}` : ''}` }}
-          </text>
+          <text class="b-dog-card__name">{{ singleDog.name }}</text>
+          <text class="b-dog-card__meta">{{ singleDog.breed || '马尔济斯' }}<template v-if="singleDog.gender"> · {{ singleDog.gender }}</template></text>
         </view>
         <text v-if="readonly" class="material-icons-round" style="font-size: 18px; color: var(--text-4);">lock</text>
         <text v-else class="material-icons-round" style="font-size: 18px; color: var(--text-4);">chevron_right</text>
@@ -219,6 +208,8 @@ const props = withDefaults(defineProps<{
   showBreedingStage?: boolean
   /** 是否在名字右侧展示当前疾病/用药标签 */
   showHealthStatusTags?: boolean
+  /** 头像配色变体 */
+  avatarVariant?: 'default' | 'sire'
 }>(), {
   modelValue: undefined,
   visible: undefined,
@@ -237,6 +228,7 @@ const props = withDefaults(defineProps<{
   extraMetaMap: () => ({}),
   showBreedingStage: false,
   showHealthStatusTags: false,
+  avatarVariant: 'default',
 })
 
 const emit = defineEmits<{
@@ -655,6 +647,7 @@ function selectFilter(value: string) {
 }
 
 function avatarColorClass(dog: Dog) {
+  if (props.avatarVariant === 'sire') return 'b-dog-picker__avatar--blue'
   if (dog.role === '幼崽') return 'b-dog-picker__avatar--amber'
   if (dog.role === '外部种公') return 'b-dog-picker__avatar--blue'
   if (dog.gender === '母') return 'b-dog-picker__avatar--rose'
@@ -700,13 +693,6 @@ function formatAge(birthTs?: number | null) {
 
   &__info {
     flex: 1;
-    min-width: 0;
-  }
-
-  &__title-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
     min-width: 0;
   }
 
@@ -909,7 +895,7 @@ function formatAge(birthTs?: number | null) {
   justify-content: center;
   flex-shrink: 0;
 
-  &--rose { background: linear-gradient(135deg, #ea3e77, #f0789a); }
+  &--rose { background: linear-gradient(135deg, var(--rose), var(--amber)); }
   &--amber { background: linear-gradient(135deg, #e89b3e, #f0b868); }
   &--blue { background: linear-gradient(135deg, #4a8dd4, #72a8e0); }
   &--teal { background: linear-gradient(135deg, #3da88e, #5cc0a8); }

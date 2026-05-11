@@ -3667,7 +3667,7 @@ onShow(() => {
   border-radius: 50%;
   background: linear-gradient(135deg, var(--primary), var(--amber));
   &--primary { background: linear-gradient(135deg, var(--primary), var(--amber)); box-shadow: 0 4px 14px rgba(234, 62, 119, 0.2); }
-  &--rose { background: linear-gradient(135deg, #ea3e77, #f0789a); box-shadow: 0 4px 14px rgba(234, 62, 119, 0.2); }
+  &--rose { background: linear-gradient(135deg, var(--rose), var(--amber)); box-shadow: 0 4px 14px rgba(234, 62, 119, 0.2); }
   &--amber { background: linear-gradient(135deg, #e89b3e, #f0b868); box-shadow: 0 4px 14px rgba(232, 155, 62, 0.2); }
   &--blue { background: linear-gradient(135deg, #4a8dd4, #72a8e0); box-shadow: 0 4px 14px rgba(74, 141, 212, 0.2); }
   &--teal { background: linear-gradient(135deg, #3da88e, #5cc0a8); box-shadow: 0 4px 14px rgba(61, 168, 142, 0.2); }

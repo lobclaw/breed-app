@@ -5,7 +5,7 @@
       <view class="back-btn" @click="onBack">
         <text class="material-icons-round" style="font-size: 20px; color: var(--text-1);">arrow_back_ios_new</text>
       </view>
-      <text class="page-title">记录生产</text>
+      <text class="page-title">录入生产</text>
       <view class="step-dots">
         <view
           v-for="i in 3"
@@ -27,15 +27,14 @@
           <view class="section-dot" style="background: var(--rose);" />
           <text>母犬信息</text>
         </view>
-        <BDogPicker
-          v-model="selectedDam"
-          :candidate-dogs="birthCandidateDogs"
-          title="选择种母"
+        <BBreedingContextCard
+          :dog="selectedDam"
+          :stage-label="selectedDamStageTag?.label || ''"
+          :stage-tone="selectedDamStageTag?.tone || 'pregnant'"
+          :meta-text="selectedDamContextText"
           :readonly="cycleLocked"
-          placeholder="点击选择种母"
-          :empty-title="birthPickerEmptyState.title"
-          :empty-description="birthPickerEmptyState.description"
-          :show-breeding-stage="true"
+          empty-meta="怀孕中的种母"
+          @click="openDamPicker"
         />
       </view>
 
@@ -283,6 +282,17 @@
     value-type="timestamp"
     @confirm="onBirthDateConfirm"
   />
+
+  <BDogPicker
+    v-model:visible="damPickerVisible"
+    title="选择种母"
+    :selected-ids="selectedDamIds"
+    :candidate-dogs="birthCandidateDogs"
+    :empty-title="birthPickerEmptyState.title"
+    :empty-description="birthPickerEmptyState.description"
+    :show-breeding-stage="true"
+    @select="onDamSelect"
+  />
 </template>
 
 <script setup lang="ts">
@@ -291,18 +301,23 @@ import { onLoad } from '@dcloudio/uni-app'
 import { useAuth } from '@/composables/useAuth'
 import { usePageSync } from '@/composables/usePageSync'
 import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
+import { getLocalBreedingCycleFormContext } from '@/localdb/domain-repository'
 import { findLocal, queryLocal } from '@/localdb/repository'
 import { localSyncRuntime } from '@/localdb/runtime'
 import { useDogStore } from '@/stores/dogStore'
 import { getBirthCycleIdFromDog, getBreedingDogPickerEmptyState, getEligibleBreedingDogs } from '@/utils/breedingDogEligibility'
+import { buildBreedingCycleMetaText, buildBreedingStageTag, buildBreedingStageTagFromContext } from '@/utils/breedingContext'
 import { buildTimestampFromDayOffset, formatDateInputValue, getBeijingCalendarDayDiff } from '@/utils/date'
 import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
+import BBreedingContextCard from '@/components/record/BBreedingContextCard.vue'
 
 const cycleId = ref('')
 const damName = ref('')
 const selectedDam = ref<any>(null)
 const cycleLocked = ref(false)
+const damPickerVisible = ref(false)
+const cycleFormContext = ref<any>(null)
 const { currentFamily } = useAuth()
 const dogStore = useDogStore()
 usePageSync({ routePath: 'pages/breeding/birth-wizard' })
@@ -343,6 +358,9 @@ const birthCandidateDogs = computed(() => getEligibleBreedingDogs(dogStore.list,
 const birthPickerEmptyState = computed(() => getBreedingDogPickerEmptyState('birth', dogStore.list, birthCandidateDogs.value))
 const damDisplayName = computed(() => damName.value || selectedDam.value?.name || '未选择母犬')
 const defaultPuppyDamName = computed(() => damDisplayName.value === '未选择母犬' ? '母犬' : damDisplayName.value)
+const selectedDamIds = computed(() => selectedDam.value?._id ? [selectedDam.value._id] : [])
+const selectedDamContextText = computed(() => buildBreedingCycleMetaText(cycleFormContext.value))
+const selectedDamStageTag = computed(() => buildBreedingStageTagFromContext(cycleFormContext.value) || buildBreedingStageTag(selectedDam.value, cycleId.value))
 
 const birthDateStr = computed(() => {
   return formatDateInputValue(form.birth_date)
@@ -390,6 +408,15 @@ function onBirthDateConfirm(value: number | string) {
   form.birth_date = value
 }
 
+function openDamPicker() {
+  if (cycleLocked.value) return
+  damPickerVisible.value = true
+}
+
+function onDamSelect(dog: any) {
+  selectedDam.value = dog
+}
+
 function addPuppy() {
   puppies.push({ name: '', gender: '母', weight: '', alive: true })
 }
@@ -432,6 +459,19 @@ async function loadDamNameFromLocalCycle() {
     statuses: validDog?.statuses || [{ type: '怀孕中', cycleId: cycleId.value }],
   }
   void refreshPreviewLitterNumber()
+}
+
+async function refreshCycleFormContext() {
+  const familyId = currentFamily.value?._id || ''
+  const targetCycleId = cycleId.value
+  if (!familyId || !targetCycleId) {
+    cycleFormContext.value = null
+    return
+  }
+  cycleFormContext.value = null
+  const context = await getLocalBreedingCycleFormContext(familyId, targetCycleId).catch(() => null)
+  if (cycleId.value !== targetCycleId) return
+  cycleFormContext.value = context
 }
 
 async function refreshPreviewLitterNumber() {
@@ -514,6 +554,10 @@ watch(selectedDam, (dog) => {
   damName.value = String(dog.name || '').trim()
   void refreshPreviewLitterNumber()
 }, { deep: true })
+
+watch(cycleId, () => {
+  void refreshCycleFormContext()
+})
 
 watch(() => form.birth_date, () => {
   void refreshPreviewLitterNumber()
@@ -657,7 +701,7 @@ onLoad((query) => {
   width: 42px;
   height: 42px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #ea3e77, #e89b3e);
+  background: linear-gradient(135deg, var(--rose), var(--amber));
   display: flex;
   align-items: center;
   justify-content: center;

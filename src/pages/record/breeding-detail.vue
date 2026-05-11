@@ -140,7 +140,7 @@
               <view class="info-row" v-if="getMatingSireName(record.details)">
                 <text class="info-row-label">种公</text>
                 <view class="info-row-value">
-                  <view class="mini-avatar">
+                  <view class="mini-avatar mini-avatar--sire">
                     <BEntityIcon :size="14" color="#fff" />
                   </view>
                   <text>{{ getMatingSireName(record.details) }}</text>
@@ -989,6 +989,10 @@ onShow(() => {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+}
+
+.mini-avatar--sire {
+  background: linear-gradient(135deg, #4a8dd4, #72a8e0);
 }
 
 /* ==================== SECTION LABEL ==================== */

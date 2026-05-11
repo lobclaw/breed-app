@@ -5,6 +5,7 @@ import {
   findLocalDuplicateIllnesses,
   findLocalDuplicateMedicationTasks,
   getLocalBreedingCycleDetail,
+  getLocalBreedingCycleFormContext,
   getLocalBreedingRecordDetail,
   getLocalDogDetail,
   getLocalDogFinanceSummary,
@@ -1943,6 +1944,111 @@ describe('local domain repository', () => {
     expect(detail).toMatchObject({
       dog_name: '肉肉',
       cycle_number: 2,
+    })
+  })
+
+  it('繁育表单周期上下文应按母犬历史补齐次数并返回当前发情日期', async () => {
+    const now = new Date('2026-05-07T10:00:00+08:00').getTime()
+    await localDb.replaceTable('breeding_cycles', [{
+      _id: 'form_context_cycle_1',
+      family_id: 'fam_form_context',
+      dam_id: 'dam_form_context',
+      dam_name: '肉肉',
+      status: '失败',
+      start_date: now - (30 * 86400000),
+      created_at: now - (30 * 86400000),
+      updated_at: now - (30 * 86400000),
+    }, {
+      _id: 'form_context_cycle_2',
+      family_id: 'fam_form_context',
+      dam_id: 'dam_form_context',
+      dam_name: '肉肉',
+      status: '发情中',
+      start_date: now,
+      created_at: now,
+      updated_at: now,
+    }])
+    await localDb.replaceTable('breeding_records', [{
+      _id: 'form_context_heat',
+      family_id: 'fam_form_context',
+      cycle_id: 'form_context_cycle_2',
+      dog_id: 'dam_form_context',
+      type: 'heat',
+      date: now + 3600000,
+      details: { start_date: now + 3600000 },
+      created_by: 'user_1',
+      created_at: now + 3600000,
+      updated_at: now + 3600000,
+    }])
+
+    const context = await getLocalBreedingCycleFormContext('fam_form_context', 'form_context_cycle_2')
+
+    expect(context).toMatchObject({
+      cycle_id: 'form_context_cycle_2',
+      cycle_number: 2,
+      status: '发情中',
+      heat_date: now + 3600000,
+      expected_due_date: null,
+    })
+  })
+
+  it('繁育表单周期上下文应优先返回配种记录预产期，缺失时按配种日期推导', async () => {
+    const now = new Date('2026-05-08T10:00:00+08:00').getTime()
+    await localDb.replaceTable('breeding_cycles', [{
+      _id: 'form_context_due_explicit',
+      family_id: 'fam_form_due',
+      dam_id: 'dam_form_due',
+      dam_name: '波妞',
+      status: '怀孕中',
+      start_date: now - (8 * 86400000),
+      mated_at: now,
+      created_at: now - (8 * 86400000),
+      updated_at: now,
+    }, {
+      _id: 'form_context_due_infer',
+      family_id: 'fam_form_due',
+      dam_id: 'dam_form_due',
+      dam_name: '波妞',
+      status: '怀孕中',
+      start_date: now - (4 * 86400000),
+      created_at: now - (4 * 86400000),
+      updated_at: now,
+    }])
+    await localDb.replaceTable('breeding_records', [{
+      _id: 'form_context_mating_explicit',
+      family_id: 'fam_form_due',
+      cycle_id: 'form_context_due_explicit',
+      dog_id: 'dam_form_due',
+      type: 'mating',
+      date: now,
+      details: { expected_due_date: now + (60 * 86400000) },
+      created_by: 'user_1',
+      created_at: now,
+      updated_at: now,
+    }, {
+      _id: 'form_context_mating_infer',
+      family_id: 'fam_form_due',
+      cycle_id: 'form_context_due_infer',
+      dog_id: 'dam_form_due',
+      type: 'mating',
+      date: now + 3600000,
+      details: {},
+      created_by: 'user_1',
+      created_at: now + 3600000,
+      updated_at: now + 3600000,
+    }])
+
+    const explicit = await getLocalBreedingCycleFormContext('fam_form_due', 'form_context_due_explicit')
+    const inferred = await getLocalBreedingCycleFormContext('fam_form_due', 'form_context_due_infer')
+
+    expect(explicit).toMatchObject({
+      cycle_number: 1,
+      expected_due_date: now + (60 * 86400000),
+    })
+    expect(inferred).toMatchObject({
+      cycle_number: 2,
+      mated_at: now + 3600000,
+      expected_due_date: now + 3600000 + (59 * 86400000),
     })
   })
 

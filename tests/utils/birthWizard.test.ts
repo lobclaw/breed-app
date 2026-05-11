@@ -18,13 +18,20 @@ describe('birth-wizard source contract', () => {
   })
 
   it('自由入口应通过种母选择解析怀孕周期，不在加载时直接提示缺少周期', () => {
+    expect(source).toContain('<text class="page-title">录入生产</text>')
+    expect(source).toContain('BBreedingContextCard')
+    expect(source).toContain(':meta-text="selectedDamContextText"')
+    expect(source).toContain('empty-meta="怀孕中的种母"')
     expect(source).toContain('<BDogPicker')
+    expect(source).toContain('v-model:visible="damPickerVisible"')
     expect(source).toContain(":candidate-dogs=\"birthCandidateDogs\"")
     expect(source).toContain(':show-breeding-stage="true"')
     expect(source).toContain("getEligibleBreedingDogs(dogStore.list, 'birth')")
     expect(source).toContain('getBirthCycleIdFromDog(dog)')
     expect(source).toContain('cycleId.value = birthCycleId')
     expect(source).toContain(":readonly=\"cycleLocked\"")
+    expect(source).toContain('getLocalBreedingCycleFormContext')
+    expect(source).toContain('buildBreedingCycleMetaText')
 
     const onLoadSource = source.slice(source.indexOf('onLoad((query) => {'))
     expect(onLoadSource).not.toContain("uni.showToast({ title: '缺少周期信息'")

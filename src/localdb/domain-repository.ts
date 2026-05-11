@@ -2607,6 +2607,53 @@ function attachLitterNumbers(litters: Array<Record<string, any>>) {
   return litters
 }
 
+export interface BreedingCycleFormContext {
+  cycle_id: string
+  cycle_number: number | null
+  status: string
+  dam_id: string
+  dam_name: string
+  heat_date: number | null
+  start_date: number | null
+  mated_at: number | null
+  expected_due_date: number | null
+}
+
+export async function getLocalBreedingCycleFormContext(familyId: string, cycleId: string): Promise<BreedingCycleFormContext | null> {
+  if (!familyId || !cycleId) return null
+  const [cycle, cycleSiblings, records] = await Promise.all([
+    localDb.findById<BreedingCycle & { deleted_at?: number | null }>('breeding_cycles', cycleId),
+    localDb.query<any>('breeding_cycles', row => row.family_id === familyId && !row.deleted_at),
+    localDb.query<BreedingRecord & { deleted_at?: number | null }>('breeding_records', row =>
+      row.family_id === familyId && row.cycle_id === cycleId && !row.deleted_at,
+    ),
+  ])
+
+  if (!cycle || cycle.family_id !== familyId || cycle.deleted_at) return null
+  const numberedCycles = attachCycleNumbers(cycleSiblings)
+  const currentCycle = numberedCycles.find(item => item._id === cycleId) || cycle
+  const heatRecords = records
+    .filter(record => record.type === 'heat')
+    .sort((left, right) => Number(left.date || left.created_at || 0) - Number(right.date || right.created_at || 0))
+  const latestMating = records
+    .filter(record => record.type === 'mating')
+    .sort((left, right) => Number(right.date || right.created_at || 0) - Number(left.date || left.created_at || 0))[0]
+  const matingDate = Number((currentCycle as any).mated_at || latestMating?.date || 0)
+  const expectedDueDate = Number(latestMating?.details?.expected_due_date || 0) || (matingDate > 0 ? matingDate + 59 * 86400000 : 0)
+
+  return {
+    cycle_id: cycleId,
+    cycle_number: Number((currentCycle as any).cycle_number || 0) || null,
+    status: String((currentCycle as any).status || ''),
+    dam_id: String((currentCycle as any).dam_id || ''),
+    dam_name: String((currentCycle as any).dam_name || ''),
+    heat_date: Number(heatRecords[0]?.date || (currentCycle as any).start_date || 0) || null,
+    start_date: Number((currentCycle as any).start_date || 0) || null,
+    mated_at: matingDate > 0 ? matingDate : null,
+    expected_due_date: expectedDueDate > 0 ? expectedDueDate : null,
+  }
+}
+
 export async function getLocalBreedingRecordDetail(familyId: string, recordId: string) {
   if (!familyId || !recordId) return null
   const [record, tasks, dog, cycleSiblings] = await Promise.all([

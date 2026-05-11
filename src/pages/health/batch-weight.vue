@@ -673,7 +673,7 @@ onLoad((query) => {
   width: 42px;
   height: 42px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #ea3e77, #e89b3e);
+  background: linear-gradient(135deg, var(--rose), var(--amber));
   display: flex;
   align-items: center;
   justify-content: center;

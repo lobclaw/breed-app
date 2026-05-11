@@ -5,21 +5,16 @@
   <view class="prelabor-monitor">
     <BPageHeader :title="pageTitle" :subtitle="headerSubtitle" />
 
-    <view class="prelabor-monitor__dog-card" :class="{ 'prelabor-monitor__dog-card--locked': dogLocked }" @click="openDogPicker">
-      <view class="prelabor-monitor__dog-card-bg" />
-      <view class="prelabor-monitor__dog-info">
-        <view class="prelabor-monitor__dog-avatar">
-          <text class="material-icons-round">pets</text>
-        </view>
-        <view class="prelabor-monitor__dog-detail">
-          <view class="prelabor-monitor__dog-title-row">
-            <text class="prelabor-monitor__dog-name">{{ selectedDog?.name || '选择种母' }}</text>
-            <text v-if="selectedDog" class="prelabor-monitor__dog-stage-tag">{{ getPregnancyDayText(selectedDog) }}</text>
-          </view>
-          <text class="prelabor-monitor__dog-meta">{{ selectedDogMeta }}</text>
-        </view>
-      </view>
-      <text class="material-icons-round prelabor-monitor__dog-arrow">{{ dogLocked ? 'lock' : 'chevron_right' }}</text>
+    <view class="prelabor-monitor__context-selector">
+      <BBreedingContextCard
+        :dog="selectedDog"
+        :stage-label="selectedDogStageTag?.label || ''"
+        :stage-tone="selectedDogStageTag?.tone || 'pregnant'"
+        :meta-text="selectedDogMeta"
+        :readonly="dogLocked"
+        empty-meta="怀孕中的种母"
+        @click="openDogPicker"
+      />
     </view>
 
     <view class="prelabor-monitor__content">
@@ -169,14 +164,16 @@ import { useAuth } from '@/composables/useAuth'
 import { usePageSync } from '@/composables/usePageSync'
 import { queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
 import { useRecordSubmitState } from '@/composables/useRecordSubmitState'
-import { getLocalBreedingCycleDetail, getLocalBreedingRecordDetail, listLocalPreLaborTemperatureHistory } from '@/localdb/domain-repository'
+import { getLocalBreedingCycleFormContext, getLocalBreedingRecordDetail, listLocalPreLaborTemperatureHistory } from '@/localdb/domain-repository'
 import { localSyncRuntime } from '@/localdb/runtime'
 import { useDogStore } from '@/stores/dogStore'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BDogPicker from '@/components/form/BDogPicker.vue'
 import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
+import BBreedingContextCard from '@/components/record/BBreedingContextCard.vue'
 import { formatTimeInputValue, getBeijingDateParts, getBeijingDayDiff } from '@/utils/date'
+import { buildBreedingCycleMetaText, buildBreedingStageTag, buildBreedingStageTagFromContext } from '@/utils/breedingContext'
 import { getBirthCycleIdFromDog, getBreedingDogPickerEmptyState, getEligibleBreedingDogs } from '@/utils/breedingDogEligibility'
 import { resolveBreedingRouteQuery, resolveRecordFormEditId } from '@/utils/recordFormRoutes'
 
@@ -200,7 +197,7 @@ const selectedDog = ref<any>(null)
 const dogLocked = ref(false)
 const dogPickerVisible = ref(false)
 const cycleId = ref('')
-const cycleDetail = ref<any>(null)
+const cycleFormContext = ref<any>(null)
 const tempHistory = ref<TempRecord[]>([])
 const temperature = ref('')
 const recordTime = ref(Date.now())
@@ -211,10 +208,7 @@ const notes = ref('')
 const symptoms = ['刨窝/做窝', '焦躁不安', '食欲减退', '喘气加快', '阴道分泌物', '可见宫缩', '乳汁分泌', '拒食']
 
 const isEdit = computed(() => !!recordId.value)
-const pageTitle = computed(() => {
-  if (selectedDog.value?.name) return `${selectedDog.value.name} · ${isEdit.value ? '编辑临产监测' : '临产监测'}`
-  return isEdit.value ? '编辑临产监测' : '录入临产监测'
-})
+const pageTitle = computed(() => isEdit.value ? '编辑临产监测' : '录入临产监测')
 
 const { submitState, submitButtonText, markSubmitting, markSuccess, resetSubmitState } = useRecordSubmitState({
   idleLabel: computed(() => isEdit.value ? '保存修改' : '保存记录'),
@@ -243,39 +237,14 @@ const hasObservationContent = computed(() => {
 })
 const canSubmit = computed(() => !!selectedDog.value && hasObservationContent.value && submitState.value !== 'submitting')
 
-const expectedDueDate = computed(() => {
-  const records = cycleDetail.value?.records || []
-  const latestMating = [...records]
-    .filter((record: any) => record?.type === 'mating')
-    .sort((left: any, right: any) => Number(right.date || right.created_at || 0) - Number(left.date || left.created_at || 0))[0]
-  const date = Number(latestMating?.details?.expected_due_date || 0)
-  if (date > 0) return date
-  const matingDate = Number(cycleDetail.value?.cycle?.mated_at || latestMating?.date || 0)
-  return matingDate > 0 ? matingDate + 59 * 86400000 : null
-})
-
-const dueText = computed(() => {
-  if (!expectedDueDate.value) return ''
-  const diff = getBeijingDayDiff(expectedDueDate.value, Date.now())
-  if (diff > 0) return `距预产期${diff}天`
-  if (diff === 0) return '预产期今天'
-  return `预产期已过${Math.abs(diff)}天`
-})
-
-const headerSubtitle = computed(() => {
-  return selectedDog.value ? (selectedDogMeta.value || '记录体温与临产征兆') : '先选择怀孕中的种母'
-})
+const headerSubtitle = computed(() => '记录体温与临产征兆')
 
 const selectedDogMeta = computed(() => {
-  if (!selectedDog.value) return '怀孕中的种母会显示在这里'
-  return expectedDueSummary.value || buildDogDueMeta(selectedDog.value) || '待同步预产期'
+  if (!selectedDog.value) return '怀孕中的种母'
+  return buildBreedingCycleMetaText(cycleFormContext.value) || buildDogDueMeta(selectedDog.value) || '待同步预产期'
 })
 
-const expectedDueSummary = computed(() => {
-  if (!expectedDueDate.value) return ''
-  const parts = getBeijingDateParts(expectedDueDate.value)
-  return [`预产期 ${parts.month}月${parts.day}日`, dueText.value].filter(Boolean).join(' · ')
-})
+const selectedDogStageTag = computed(() => buildBreedingStageTagFromContext(cycleFormContext.value) || buildBreedingStageTag(selectedDog.value, cycleId.value))
 
 const trendItems = computed<TempRecord[]>(() => {
   const items = tempHistory.value.filter(item => !isEdit.value || item.id !== recordId.value)
@@ -341,8 +310,8 @@ watch(
 watch(
   [() => currentFamily.value?._id || '', cycleId],
   ([familyId, id]) => {
+    cycleFormContext.value = null
     if (!familyId || !id) {
-      cycleDetail.value = null
       return
     }
     void loadCycleContext()
@@ -416,7 +385,10 @@ async function loadTempHistory(dogId: string) {
 }
 
 async function loadCycleContext() {
-  cycleDetail.value = await getLocalBreedingCycleDetail(currentFamily.value?._id || '', cycleId.value).catch(() => null)
+  const targetCycleId = cycleId.value
+  const context = await getLocalBreedingCycleFormContext(currentFamily.value?._id || '', targetCycleId).catch(() => null)
+  if (cycleId.value !== targetCycleId) return
+  cycleFormContext.value = context
 }
 
 function formatTimeLabel(ts: number): string {
@@ -499,12 +471,6 @@ function onDateTimeConfirm(value: number | string) {
 function getPregnancyStatus(dog: Record<string, any> | null | undefined) {
   const statuses = dog && Array.isArray(dog.statuses) ? dog.statuses : []
   return statuses.find((item: any) => item?.type === '怀孕中') || null
-}
-
-function getPregnancyDayText(dog: Record<string, any> | null | undefined) {
-  const status = getPregnancyStatus(dog)
-  const day = Number(status?.progress?.current || 0)
-  return Number.isFinite(day) && day > 0 ? `怀孕第${Math.floor(day)}天` : '怀孕中'
 }
 
 function buildDogDueMeta(dog: Record<string, any> | null | undefined) {
@@ -605,115 +571,8 @@ async function handleSave() {
     color: var(--text-3);
   }
 
-  &__dog-card {
+  &__context-selector {
     margin: 0 var(--space-page) 12px;
-    padding: 14px 16px;
-    border-radius: 16px;
-    background: var(--card);
-    box-shadow: var(--shadow);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    position: relative;
-    overflow: hidden;
-    transition: all 0.15s ease;
-
-    &:active {
-      transform: scale(0.975);
-      box-shadow: 0 1px 6px rgba(234, 62, 119, 0.04);
-    }
-
-    &--locked:active {
-      transform: none;
-    }
-  }
-
-  &__dog-card-bg {
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(135deg, var(--rose-soft) 0%, transparent 40%);
-    pointer-events: none;
-  }
-
-  &__dog-info {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    min-width: 0;
-    position: relative;
-    z-index: 1;
-  }
-
-  &__dog-avatar {
-    width: 42px;
-    height: 42px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, var(--rose), var(--amber));
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-
-    .material-icons-round {
-      font-size: 22px;
-      color: #fff;
-    }
-  }
-
-  &__dog-detail {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-  }
-
-  &__dog-title-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
-  }
-
-  &__dog-name {
-    font-size: 15px;
-    font-weight: 700;
-    color: var(--text-1);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  &__dog-stage-tag {
-    max-width: 74px;
-    padding: 2px 6px;
-    border-radius: 999px;
-    background: var(--primary-soft);
-    color: var(--primary);
-    font-size: 10px;
-    font-weight: 700;
-    line-height: 1.25;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    flex-shrink: 0;
-  }
-
-  &__dog-meta {
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--text-3);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  &__dog-arrow {
-    font-size: 20px;
-    color: var(--text-4);
-    position: relative;
-    z-index: 1;
-    margin-left: 12px;
-    flex-shrink: 0;
   }
 
   &__content {

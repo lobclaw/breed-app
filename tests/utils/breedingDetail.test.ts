@@ -49,8 +49,22 @@ describe('breeding-detail source contract', () => {
   })
 
   it('标题和关联周期信息应展示犬只与繁育次数上下文', () => {
+    const matingSection = source.slice(
+      source.indexOf("<!-- 配种 -->"),
+      source.indexOf("<!-- 发情观察 -->"),
+    )
+    const damRow = matingSection.slice(
+      matingSection.indexOf('info-row-label">种母'),
+      matingSection.indexOf('info-row-label">种公'),
+    )
+    const sireRow = matingSection.slice(
+      matingSection.indexOf('info-row-label">种公'),
+      matingSection.indexOf('info-row-label">配种日期'),
+    )
     expect(source).toContain('<BPageHeader :title="pageTitle">')
     expect(source).toContain('`${dogName} · ${typeLabel.value}详情`')
+    expect(damRow).not.toContain('mini-avatar--sire')
+    expect(sireRow).toContain('mini-avatar--sire')
     expect(source).toContain('const cycleLinkText = computed')
     expect(source).toContain('`第${cycleNumber}次繁育`')
     expect(source).not.toContain('function goToCycle')

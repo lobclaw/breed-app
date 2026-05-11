@@ -77,27 +77,17 @@
     </view>
 
     <view v-else class="form-body" :class="{ 'heat-observation__content': breedingType === 'heat_observation' }">
-      <template v-if="isEdit">
-        <view class="field-group">
-          <view class="field-label"><text>记录类型</text></view>
-          <view class="type-display">
-            <text>{{ typeLabel }}</text>
-          </view>
-        </view>
-      </template>
-
       <template v-if="breedingType === 'heat_observation'">
         <view class="field-group">
           <view class="field-label"><text>选择种母</text></view>
-          <BDogPicker
-            v-model="selectedDog"
-            :candidate-dogs="breedingCandidateDogs"
-            title="选择种母"
+          <BBreedingContextCard
+            :dog="selectedDog"
+            :stage-label="selectedDogStageTag?.label || ''"
+            :stage-tone="selectedDogStageTag?.tone || 'pregnant'"
+            :meta-text="selectedCycleContextText"
             :readonly="dogLocked"
-            :empty-title="breedingPickerEmptyState.title"
-            :empty-description="breedingPickerEmptyState.description"
-            :extra-meta-map="breedingDogExtraMetaMap"
-            :show-breeding-stage="true"
+            empty-meta="发情中的种母"
+            @click="openDogPicker"
           />
         </view>
 
@@ -198,16 +188,15 @@
             :extra-meta-map="latestHeatMetaMap"
             :show-breeding-stage="true"
           />
-          <BDogPicker
+          <BBreedingContextCard
             v-else
-            v-model="selectedDog"
-            :candidate-dogs="breedingCandidateDogs"
-            title="选择种母"
+            :dog="selectedDog"
+            :stage-label="selectedDogStageTag?.label || ''"
+            :stage-tone="selectedDogStageTag?.tone || 'pregnant'"
+            :meta-text="selectedCycleContextText"
             :readonly="dogLocked"
-            :empty-title="breedingPickerEmptyState.title"
-            :empty-description="breedingPickerEmptyState.description"
-            :extra-meta-map="breedingDogExtraMetaMap"
-            :show-breeding-stage="true"
+            :empty-meta="singleDogContextEmptyMeta"
+            @click="openDogPicker"
           />
         </view>
 
@@ -268,7 +257,7 @@
         <template v-if="breedingType === 'mating'">
           <view class="field-group">
             <view class="field-label"><text>选择种公</text></view>
-            <BDogPicker v-model="selectedSire" genderFilter="公" :includeExternalSires="true" title="选择种公" :show-breeding-stage="true" />
+            <BDogPicker v-model="selectedSire" genderFilter="公" :includeExternalSires="true" title="选择种公" :show-breeding-stage="true" avatar-variant="sire" />
           </view>
 
           <view class="field-group">
@@ -485,6 +474,19 @@
       value-type="timestamp"
       @confirm="onDueDateConfirm"
     />
+
+    <BDogPicker
+      v-if="shouldShowSingleDogContext"
+      v-model:visible="dogPickerVisible"
+      title="选择种母"
+      :selected-ids="selectedDogIds"
+      :candidate-dogs="breedingCandidateDogs"
+      :extra-meta-map="latestHeatMetaMap"
+      :empty-title="breedingPickerEmptyState.title"
+      :empty-description="breedingPickerEmptyState.description"
+      :show-breeding-stage="true"
+      @select="onDogSelect"
+    />
   </view>
 </template>
 
@@ -494,7 +496,7 @@ import { useAuth } from '@/composables/useAuth'
 import { useRecordSubmitState } from '@/composables/useRecordSubmitState'
 import { buildRecordFeedbackMessage, queueSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@/composables/useSubmitFeedback'
 import {
-  getLocalBreedingCycleDetail,
+  getLocalBreedingCycleFormContext,
   getLocalBreedingRecordDetail,
   listLocalLatestHeatDatesByDogIds,
   getLocalNextMatingNumberPreview,
@@ -504,7 +506,8 @@ import { localSyncRuntime } from '@/localdb/runtime'
 import { resolveBreedingRouteQuery } from '@/utils/recordFormRoutes'
 import { getDefaultExtraArrangementDate, type ExtraArrangementKind } from '@/utils/breedingExtraArrangement'
 import { getBreedingDogPickerEmptyState, getEligibleBreedingDogs } from '@/utils/breedingDogEligibility'
-import { buildTimestampFromDayOffset, formatDateInputValue, getBeijingDateParts } from '@/utils/date'
+import { buildTimestampFromDayOffset, formatDateInputValue } from '@/utils/date'
+import { buildBreedingCycleMetaText, buildBreedingStageTag, buildBreedingStageTagFromContext } from '@/utils/breedingContext'
 import { useDogStore } from '@/stores/dogStore'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
@@ -512,6 +515,7 @@ import BDogPicker from '@/components/form/BDogPicker.vue'
 import BExtraArrangementSection from '@/components/form/BExtraArrangementSection.vue'
 import BImageUpload from '@/components/form/BImageUpload.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
+import BBreedingContextCard from '@/components/record/BBreedingContextCard.vue'
 
 type BreedingRecordType =
   | 'heat'
@@ -569,6 +573,7 @@ const selectedDog = ref<any>(null)
 const selectedDogs = ref<any[]>([])
 const selectedSire = ref<any>(null)
 const dogLocked = ref(false)
+const dogPickerVisible = ref(false)
 const cycleId = ref('')
 const prefillTaskId = ref('')
 const prefillTaskIsPersisted = ref(false)
@@ -595,7 +600,7 @@ const latestHeatRequestToken = ref(0)
 const cycleStatusRequestToken = ref(0)
 const latestHeatDates = ref<Record<string, number>>({})
 const currentCycleStatus = ref('')
-const currentCycleDetail = ref<any>(null)
+const cycleFormContext = ref<any>(null)
 
 const matingMethods = ['人工授精', '自然交配']
 const follicleResults = ['发育中', '已成熟', '发育不良', '其他']
@@ -608,12 +613,9 @@ const symptoms = ['主动靠近公犬', '接受爬跨', '翘尾侧偏', '频繁�
 const dogStore = useDogStore()
 
 const pageTitle = computed(() => {
-  if (selectedDog.value?.name && breedingType.value) {
-    const actionPrefix = isEdit.value ? '编辑' : ''
-    return `${selectedDog.value.name} · ${actionPrefix}${typeLabel.value}`
-  }
-  if (isEdit.value) return breedingType.value === 'heat_observation' ? '编辑发情观察' : '编辑繁育记录'
-  return breedingType.value ? createTitles[breedingType.value] : '录入繁育记录'
+  const title = breedingType.value ? createTitles[breedingType.value] : '录入繁育记录'
+  if (isEdit.value) return title.replace(/^录入/, '编辑')
+  return title
 })
 
 const typeLabel = computed(() => {
@@ -622,18 +624,23 @@ const typeLabel = computed(() => {
 })
 
 const pageSubtitle = computed(() => {
-  if (!selectedDog.value) return ''
-  if (selectedCycleContextText.value) return selectedCycleContextText.value
-  if (breedingType.value !== 'heat_observation') return ''
-  return `${selectedDog.value.gender || ''} · ${roleDisplayText(selectedDog.value.role)}`
+  if (!breedingType.value) return ''
+  return subtitleMap[breedingType.value] || ''
 })
 
-function roleDisplayText(role?: string | null) {
-  if (role === '种狗') return '种犬'
-  return role || ''
+const subtitleMap: Record<BreedingRecordType, string> = {
+  heat: '记录发情开始日期',
+  follicle_check: '记录卵泡数量与检查结果',
+  mating: '记录配种方式与预产期',
+  pregnancy_check: '记录孕检结果与胎儿数',
+  prenatal_check: '记录产检结果与图片',
+  pre_labor: '记录体温与临产征兆',
+  abnormal_termination: '记录繁育终止原因',
+  heat_observation: '记录发情状态与行为征兆',
 }
 
 const isHeatMultiCreate = computed(() => !isEdit.value && breedingType.value === 'heat' && !dogLocked.value)
+const shouldShowSingleDogContext = computed(() => !isHeatMultiCreate.value)
 const shouldShowLatestHeatMeta = computed(() => {
   return !isEdit.value
     && !dogLocked.value
@@ -667,24 +674,26 @@ const latestHeatMetaMap = computed(() => {
   }, {})
 })
 
-const selectedCycleContextText = computed(() => {
-  if (!cycleId.value) return ''
-  const cycleNumber = Number(currentCycleDetail.value?.cycle?.cycle_number || currentRecord.value?.cycle_number || 0)
-  const parts = [
-    cycleNumber > 0 ? `第${cycleNumber}次繁育` : '繁育周期',
-    buildCycleSecondaryText(),
-  ].filter(Boolean)
-  return parts.join(' · ')
+const selectedLatestHeatText = computed(() => {
+  const dogId = selectedDog.value?._id
+  if (!dogId) return ''
+  const text = formatDateOnly(latestHeatDates.value[dogId])
+  return text ? `上次发情：${text}` : ''
 })
 
-const breedingDogExtraMetaMap = computed(() => {
-  const map = { ...latestHeatMetaMap.value }
-  const dogId = selectedDog.value?._id
-  if (dogId && selectedCycleContextText.value) {
-    map[dogId] = selectedCycleContextText.value
-  }
-  return map
+const selectedCycleContextText = computed(() => {
+  return buildBreedingCycleMetaText(cycleFormContext.value) || selectedLatestHeatText.value
 })
+
+const singleDogContextEmptyMeta = computed(() => {
+  if (breedingType.value === 'heat_observation') return '发情中的种母'
+  if (breedingType.value === 'follicle_check' || breedingType.value === 'mating') return '未配种的种母'
+  if (breedingType.value === 'pregnancy_check' || breedingType.value === 'prenatal_check' || breedingType.value === 'pre_labor' || breedingType.value === 'abnormal_termination') return '怀孕中的种母'
+  return '繁育周期信息'
+})
+
+const selectedDogStageTag = computed(() => buildBreedingStageTagFromContext(cycleFormContext.value) || buildBreedingStageTag(selectedDog.value, cycleId.value))
+const selectedDogIds = computed(() => selectedDog.value?._id ? [selectedDog.value._id] : [])
 
 const selectedDogCycleStatus = computed(() => {
   const statuses = Array.isArray(selectedDog.value?.statuses) ? selectedDog.value.statuses : []
@@ -825,10 +834,6 @@ interface BreedingSkeletonBlock {
 const skeletonBlocks = computed<BreedingSkeletonBlock[]>(() => {
   const blocks: BreedingSkeletonBlock[] = []
 
-  if (isEdit.value) {
-    blocks.push({ kind: 'display', labelWidth: 'short' })
-  }
-
   if (breedingType.value === 'heat_observation') {
     return [
       ...blocks,
@@ -888,6 +893,7 @@ function resetDetails() {
   selectedDogs.value = []
   selectedSire.value = null
   dogLocked.value = false
+  dogPickerVisible.value = false
   cycleId.value = ''
   prefillTaskId.value = ''
   prefillTaskIsPersisted.value = false
@@ -938,34 +944,15 @@ async function refreshCurrentCycleStatus() {
   const id = cycleId.value
   if (!id) {
     currentCycleStatus.value = ''
-    currentCycleDetail.value = null
+    cycleFormContext.value = null
     return
   }
 
-  const detail = await getLocalBreedingCycleDetail(currentFamily.value?._id || '', id).catch(() => null)
+  cycleFormContext.value = null
+  const context = await getLocalBreedingCycleFormContext(currentFamily.value?._id || '', id).catch(() => null)
   if (requestToken !== cycleStatusRequestToken.value) return
-  currentCycleDetail.value = detail
-  currentCycleStatus.value = detail?.cycle?.status || ''
-}
-
-function buildCycleSecondaryText() {
-  const dueDate = getCycleExpectedDueDate()
-  if (dueDate) {
-    const parts = getBeijingDateParts(dueDate)
-    return `预产期 ${parts.month}月${parts.day}日`
-  }
-  return currentCycleStatus.value || ''
-}
-
-function getCycleExpectedDueDate() {
-  const records = currentCycleDetail.value?.records || []
-  const latestMating = [...records]
-    .filter((record: any) => record?.type === 'mating')
-    .sort((left: any, right: any) => Number(right.date || right.created_at || 0) - Number(left.date || left.created_at || 0))[0]
-  const explicitDueDate = Number(latestMating?.details?.expected_due_date || 0)
-  if (explicitDueDate > 0) return explicitDueDate
-  const matingDate = Number(currentCycleDetail.value?.cycle?.mated_at || latestMating?.date || 0)
-  return matingDate > 0 ? matingDate + 59 * 86400000 : null
+  cycleFormContext.value = context
+  currentCycleStatus.value = context?.status || ''
 }
 
 async function refreshLatestHeatDates() {
@@ -991,6 +978,18 @@ function setDateChip(chip: 'today' | 'yesterday' | 'dayBefore') {
   dateChipActive.value = chip
   const offsetMap = { today: 0, yesterday: -1, dayBefore: -2 }
   date.value = buildTimestampFromDayOffset(offsetMap[chip])
+}
+
+function openDogPicker() {
+  if (dogLocked.value) return
+  dogPickerVisible.value = true
+}
+
+function onDogSelect(dog: any) {
+  selectedDog.value = dog
+  const statuses = Array.isArray(dog?.statuses) ? dog.statuses : []
+  const breedingStatus = statuses.find((status: any) => status?.type === '发情中' || status?.type === '怀孕中')
+  cycleId.value = breedingStatus?.cycleId || ''
 }
 
 function onDateConfirm(value: number | string) {
@@ -1650,18 +1649,6 @@ watch(
 @keyframes breeding-record-skeleton-shimmer {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
-}
-
-.type-display {
-  height: 48px;
-  border-radius: 14px;
-  background: var(--card-dim);
-  padding: 0 16px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-1);
-  display: flex;
-  align-items: center;
 }
 
 .display-field {
