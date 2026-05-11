@@ -12,14 +12,6 @@
       <BDogPicker v-model="selectedDog" roleFilter="种狗" genderFilter="母" title="选择种母" :show-breeding-stage="true" />
     </view>
 
-    <view class="prelabor-monitor__datetime-field">
-      <view class="field-label"><text>记录日期</text></view>
-      <view class="form-input form-input--picker" @click="showDateTimePicker = true">
-        <text>{{ recordDateTimeStr || '请选择日期时间' }}</text>
-        <text class="material-icons-round form-input__suffix">calendar_today</text>
-      </view>
-    </view>
-
     <!-- 主要内容 -->
     <view class="prelabor-monitor__content">
 
@@ -67,6 +59,10 @@
         </view>
       </view>
 
+      <view class="prelabor-monitor__requirement-hint">
+        <text>填写体温、选择征兆或补充说明，至少一项即可保存</text>
+      </view>
+
       <!-- 体温输入 -->
       <view class="prelabor-monitor__section">
         <view class="prelabor-monitor__label">
@@ -83,8 +79,8 @@
             />
             <text class="prelabor-monitor__temp-unit">°C</text>
           </view>
-          <view class="prelabor-monitor__temp-right">
-            <text class="prelabor-monitor__temp-time-label">测量时间</text>
+          <view class="prelabor-monitor__temp-right" @click="showDateTimePicker = true">
+            <text class="prelabor-monitor__temp-time-label">记录时间</text>
             <text class="prelabor-monitor__temp-time">{{ displayTime }}</text>
           </view>
         </view>
@@ -129,7 +125,12 @@
 
       <!-- 时间 + 保存 -->
       <view class="prelabor-monitor__bottom">
-        <view class="prelabor-monitor__save-btn" @click="handleSave">
+        <text v-if="submitDisabledHint" class="prelabor-monitor__submit-hint">{{ submitDisabledHint }}</text>
+        <view
+          class="prelabor-monitor__save-btn"
+          :class="{ 'prelabor-monitor__save-btn--disabled': !canSubmit || submitting }"
+          @click="handleSave"
+        >
           <text class="prelabor-monitor__save-text">{{ submitting ? '提交中...' : '保存记录' }}</text>
         </view>
       </view>
@@ -138,7 +139,7 @@
     <BDateTimePicker
       v-model:visible="showDateTimePicker"
       :model-value="recordTime"
-      mode="date"
+      mode="datetime"
       value-type="timestamp"
       @confirm="onDateTimeConfirm"
     />
@@ -173,8 +174,7 @@ const temperature = ref('')
 const recordTime = ref<number>(Date.now())
 const submitting = ref(false)
 const showDateTimePicker = ref(false)
-const displayTime = computed(() => formatTimeInputValue(recordTime.value))
-const recordDateTimeStr = computed(() => formatDateInputValue(recordTime.value))
+const displayTime = computed(() => `${formatDateInputValue(recordTime.value)} ${formatTimeInputValue(recordTime.value)}`)
 
 // 历史体温趋势（最近4-6次）
 const tempHistory = ref<TempRecord[]>([])
@@ -211,6 +211,23 @@ const lastRecordSummary = computed(() => {
   if (!tempHistory.value.length) return ''
   const last = tempHistory.value[tempHistory.value.length - 1]
   return `${last.temp.toFixed(1)}°C`
+})
+const currentTemp = computed(() => {
+  const raw = temperature.value.trim()
+  if (!raw) return null
+  const value = Number(raw)
+  return Number.isFinite(value) ? value : null
+})
+const hasObservationContent = computed(() => {
+  return currentTemp.value !== null
+    || selectedSymptoms.value.length > 0
+    || notes.value.trim().length > 0
+})
+const canSubmit = computed(() => !!selectedDog.value && hasObservationContent.value && !submitting.value)
+const submitDisabledHint = computed(() => {
+  if (submitting.value || canSubmit.value) return ''
+  if (!selectedDog.value) return '请选择种母'
+  return '填写体温、选择征兆或补充说明后可保存'
 })
 
 const showLaborAlert = computed(() => {
@@ -288,8 +305,12 @@ async function handleSave() {
     uni.showToast({ title: '请选择犬只', icon: 'none' })
     return
   }
-  const temp = parseFloat(temperature.value)
-  if (!temp || temp < 35 || temp > 42) {
+  if (!hasObservationContent.value) {
+    uni.showToast({ title: '请填写体温、征兆或补充说明', icon: 'none' })
+    return
+  }
+  const temp = currentTemp.value
+  if (temp !== null && (temp < 35 || temp > 42)) {
     uni.showToast({ title: '请输入有效体温', icon: 'none' })
     return
   }
@@ -301,8 +322,8 @@ async function handleSave() {
       dog_id: selectedDog.value._id,
       date: recordTime.value,
       details: {
-        temperature: temp,
         symptoms: selectedSymptoms.value,
+        ...(temp !== null ? { temperature: temp } : {}),
       },
       notes: notes.value || null,
     })
@@ -331,19 +352,25 @@ async function handleSave() {
     padding: 0 var(--space-page) 12px;
   }
 
-  &__datetime-field {
-    padding: 0 var(--space-page) 12px;
-  }
-
   /* 内容 */
   &__content {
     padding: 0 var(--space-page) 32px;
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 16px;
   }
 
   &__section {}
+
+  &__requirement-hint {
+    padding: 9px 12px;
+    border-radius: 12px;
+    background: rgba(234, 62, 119, 0.07);
+    color: var(--text-2);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.45;
+  }
 
   /* 标签 */
   &__label {
@@ -604,7 +631,17 @@ async function handleSave() {
   /* 底部 */
   &__bottom {
     display: flex;
+    flex-direction: column;
     margin-top: 4px;
+  }
+
+  &__submit-hint {
+    margin-bottom: 8px;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-3);
+    line-height: 1.4;
   }
 
   &__save-btn {
@@ -618,6 +655,11 @@ async function handleSave() {
     box-shadow: 0 4px 16px rgba(234, 62, 119, 0.25);
     transition: all 0.12s ease;
     &:active { transform: scale(0.94); opacity: 0.85; }
+
+    &--disabled {
+      opacity: 0.45;
+      box-shadow: none;
+    }
   }
 
   &__save-text {

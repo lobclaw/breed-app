@@ -265,14 +265,14 @@
 
       <view class="field-group">
         <view class="field-label">
-          <text>备注</text>
+          <text>补充说明</text>
           <text class="field-label__optional">（选填）</text>
         </view>
         <textarea
           v-model="notes"
           class="form-textarea"
           :auto-height="true"
-          :placeholder="resolvedType === 'illness' ? '描述症状详情...' : '输入备注信息...'"
+          :placeholder="resolvedType === 'illness' ? '描述症状详情...' : '补充未覆盖的记录情况'"
         />
       </view>
     </view>

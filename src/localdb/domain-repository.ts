@@ -1571,21 +1571,41 @@ export async function listLocalPreLaborTemperatureHistory(familyId: string, dogI
 }
 
 function normalizePreLaborSymptoms(details: Record<string, any>) {
-  const symptoms = Array.isArray(details.symptoms) ? details.symptoms : []
-  const normalized = symptoms
-    .map((item: any) => String(item || '').trim())
+  const legacyLabelMap: Record<string, string> = {
+    刨窝: '刨窝/做窝',
+    焦躁: '焦躁不安',
+    喘气: '喘气加快',
+    分泌物: '阴道分泌物',
+    宫缩: '可见宫缩',
+    乳汁: '乳汁分泌',
+  }
+  const normalize = (item: any) => {
+    const label = String(item || '').trim()
+    return legacyLabelMap[label] || label
+  }
+
+  if (Array.isArray(details.symptoms)) {
+    return details.symptoms
+      .map(normalize)
+      .filter(Boolean)
+  }
+
+  const normalized = String(details.symptoms || '')
+    .split(/[、，,\s]+/)
+    .map(normalize)
     .filter(Boolean)
 
   if (details.nesting_behavior && !normalized.includes('刨窝/做窝')) {
     normalized.push('刨窝/做窝')
   }
-  if (details.appetite_change && !normalized.includes(String(details.appetite_change))) {
-    normalized.push(String(details.appetite_change))
+  const appetiteChange = normalize(details.appetite_change)
+  if (appetiteChange && !normalized.includes(appetiteChange)) {
+    normalized.push(appetiteChange)
   }
   if (details.other_signs) {
     String(details.other_signs)
-      .split(/[、,，\s]+/)
-      .map(item => item.trim())
+      .split(/[、，,\s]+/)
+      .map(normalize)
       .filter(Boolean)
       .forEach((item) => {
         if (!normalized.includes(item)) normalized.push(item)

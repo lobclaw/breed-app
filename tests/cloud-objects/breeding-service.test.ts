@@ -854,7 +854,7 @@ describe('breeding-service', () => {
       expect(records).toHaveLength(0)
     })
 
-    it('发情观察缺少分泌物状态时应拒绝', async () => {
+    it('发情观察缺少分泌物状态时仍可保存', async () => {
       const now = Date.now()
       seedCollection('breeding_cycles', [{
         _id: 'cycle_heat_missing_discharge',
@@ -867,7 +867,7 @@ describe('breeding-service', () => {
       }])
 
       const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
-      await expect(breedingService.addBreedingRecord.call(ctx, {
+      const res = await breedingService.addBreedingRecord.call(ctx, {
         type: 'heat_observation',
         dog_id: 'dam_1',
         cycle_id: 'cycle_heat_missing_discharge',
@@ -876,7 +876,40 @@ describe('breeding-service', () => {
           vulva_status: '开始软化',
           symptoms: ['接受爬跨'],
         },
-      })).rejects.toThrow('发情观察必须填写分泌物状态')
+      })
+
+      expect(res.data.recordId).toBeTruthy()
+      const { data: records } = await db.collection('breeding_records')
+        .where({ cycle_id: 'cycle_heat_missing_discharge', type: 'heat_observation' })
+        .get()
+      expect(records).toHaveLength(1)
+      expect(records[0].details?.vulva_status).toBe('开始软化')
+      expect(records[0].details?.discharge_status).toBeUndefined()
+    })
+
+    it('发情观察缺少外阴状态时应拒绝', async () => {
+      const now = Date.now()
+      seedCollection('breeding_cycles', [{
+        _id: 'cycle_heat_missing_vulva',
+        dam_id: 'dam_1',
+        dam_name: '花花',
+        family_id: familyId,
+        status: '发情中',
+        created_at: now,
+        updated_at: now,
+      }])
+
+      const ctx = createCloudObjectContext({ familyId, uid: 'user_1' })
+      await expect(breedingService.addBreedingRecord.call(ctx, {
+        type: 'heat_observation',
+        dog_id: 'dam_1',
+        cycle_id: 'cycle_heat_missing_vulva',
+        date: now,
+        details: {
+          discharge_status: '鲜红较多',
+          symptoms: ['接受爬跨'],
+        },
+      })).rejects.toThrow('发情观察必须填写外阴状态')
     })
 
     it('不应删除主链繁育记录', async () => {

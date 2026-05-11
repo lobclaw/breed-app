@@ -93,6 +93,38 @@ function getMatingSireName(record?: BreedingRecord | null) {
   return String(details.sire_name || details.male_name || '').trim()
 }
 
+function normalizePreLaborSymptoms(details: Record<string, any> = {}) {
+  const legacyLabelMap: Record<string, string> = {
+    刨窝: '刨窝/做窝',
+    焦躁: '焦躁不安',
+    喘气: '喘气加快',
+    分泌物: '阴道分泌物',
+    宫缩: '可见宫缩',
+    乳汁: '乳汁分泌',
+  }
+  const normalize = (item: any) => {
+    const label = String(item || '').trim()
+    return legacyLabelMap[label] || label
+  }
+
+  if (Array.isArray(details.symptoms)) {
+    return details.symptoms.map(normalize).filter(Boolean)
+  }
+
+  const normalized = String(details.symptoms || '').split(/[、，,\s]+/).map(normalize).filter(Boolean)
+  if (details.nesting_behavior && !normalized.includes('刨窝/做窝')) normalized.push('刨窝/做窝')
+  const appetiteChange = normalize(details.appetite_change)
+  if (appetiteChange && !normalized.includes(appetiteChange)) normalized.push(appetiteChange)
+  String(details.other_signs || '')
+    .split(/[、，,\s]+/)
+    .map(normalize)
+    .filter(Boolean)
+    .forEach((item) => {
+      if (!normalized.includes(item)) normalized.push(item)
+    })
+  return normalized
+}
+
 function buildSubtitle(cycle?: BreedingCycle | null, records: BreedingRecord[] = [], now = Date.now()) {
   if (!cycle) return ''
   const parts = []
@@ -216,9 +248,10 @@ export function buildActiveCycleSummaryViewModel(
 
   if (preLaborRecord?.date) {
     const temperature = preLaborRecord.details?.temperature
+    const symptoms = normalizePreLaborSymptoms(preLaborRecord.details || {})
     const signal = temperature !== undefined && temperature !== null
       ? `体温 ${temperature}°C`
-      : `刨窝行为${preLaborRecord.details?.nesting_behavior ? '有' : '无'}`
+      : symptoms.length > 0 ? `${symptoms.length}项征兆` : '临产监测'
     recordItems.push({
       key: 'pre_labor',
       kind: 'record',

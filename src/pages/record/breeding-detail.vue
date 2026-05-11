@@ -284,24 +284,16 @@
                 </view>
               </view>
               <view class="info-row">
-                <text class="info-row-label">记录日期</text>
-                <text class="info-row-value">{{ formatDate(record.date) }}</text>
+                <text class="info-row-label">记录时间</text>
+                <text class="info-row-value">{{ formatDateTime(record.date) }}</text>
               </view>
               <view class="info-row" v-if="record.details?.temperature !== undefined && record.details?.temperature !== null">
                 <text class="info-row-label">体温</text>
                 <text class="info-row-value">{{ record.details.temperature }}°C</text>
               </view>
-              <view class="info-row">
-                <text class="info-row-label">刨窝行为</text>
-                <text class="info-row-value">{{ record.details?.nesting_behavior ? '有' : '无' }}</text>
-              </view>
-              <view class="info-row" v-if="record.details?.appetite_change">
-                <text class="info-row-label">食欲变化</text>
-                <text class="info-row-value">{{ record.details.appetite_change }}</text>
-              </view>
-              <view class="info-row" v-if="record.details?.other_signs">
-                <text class="info-row-label">其他征兆</text>
-                <text class="info-row-value">{{ record.details.other_signs }}</text>
+              <view class="info-row" v-if="preLaborSymptomText">
+                <text class="info-row-label">观察到的征兆</text>
+                <text class="info-row-value">{{ preLaborSymptomText }}</text>
               </view>
             </template>
 
@@ -365,7 +357,7 @@
               <text class="info-row-value" style="color: var(--green);">¥{{ formatAmount(record.cost) }}</text>
             </view>
             <view class="info-row">
-              <text class="info-row-label">备注</text>
+              <text class="info-row-label">补充说明</text>
               <text class="info-row-value" :style="{ color: record.notes ? 'var(--text-1)' : 'var(--text-3)' }">{{ record.notes || '—' }}</text>
             </view>
             <view v-if="showRecordImages" class="image-section">
@@ -508,6 +500,28 @@ const showRecordImages = computed(() => {
   return ['pregnancy_check', 'prenatal_check'].includes(record.value?.type)
     && recordImageRefs.value.length > 0
 })
+const preLaborSymptoms = computed(() => {
+  if (record.value?.type !== 'pre_labor') return []
+  return normalizePreLaborSymptoms(record.value?.details || {})
+})
+const preLaborSymptomText = computed(() => preLaborSymptoms.value.join('、'))
+const preLaborSummaryMeta = computed(() => {
+  if (preLaborSymptoms.value.length > 0) return `${preLaborSymptoms.value.length}项征兆`
+  if (record.value?.details?.temperature !== undefined && record.value?.details?.temperature !== null) return '仅体温'
+  if (record.value?.notes) return '有补充'
+  return '监测中'
+})
+const heatObservationSummaryMeta = computed(() => {
+  const details = record.value?.details || {}
+  const discharge = String(details.discharge_status || '').trim()
+  if (discharge) return discharge
+  const vulva = String(details.vulva_status || '').trim()
+  if (vulva) return vulva
+  const symptoms = Array.isArray(details.symptoms) ? details.symptoms.filter(Boolean) : []
+  if (symptoms.length > 0) return `${symptoms.length}项征兆`
+  if (record.value?.notes) return '有补充'
+  return '观察记录'
+})
 const cycleLinkText = computed(() => {
   const cycleNumber = Number(record.value?.cycle_number || 0)
   return cycleNumber > 0 ? `第${cycleNumber}次繁育` : '繁育周期'
@@ -592,8 +606,8 @@ const summaryMeta = computed(() => {
   if (record.value?.type === 'pregnancy_check' && getPregnancyPuppyCount(record.value?.details)) {
     return `${getPregnancyPuppyCount(record.value?.details)}只`
   }
-  if (record.value?.type === 'heat_observation') return '观察日志'
-  if (record.value?.type === 'pre_labor') return record.value?.details?.nesting_behavior ? '有刨窝' : '监测中'
+  if (record.value?.type === 'heat_observation') return heatObservationSummaryMeta.value
+  if (record.value?.type === 'pre_labor') return preLaborSummaryMeta.value
   if (record.value?.type === 'birth' && record.value?.details?.born_alive !== undefined) {
     return `存活${record.value.details.born_alive || 0}只`
   }
@@ -602,7 +616,52 @@ const summaryMeta = computed(() => {
   }
   return typeLabel.value
 })
-const summaryDateText = computed(() => record.value?.type === 'heat_observation' ? formatDateTime(record.value?.date) : formatDate(record.value?.date))
+const summaryDateText = computed(() => ['heat_observation', 'pre_labor'].includes(record.value?.type) ? formatDateTime(record.value?.date) : formatDate(record.value?.date))
+
+function normalizePreLaborSymptoms(details: Record<string, any> = {}) {
+  const legacyLabelMap: Record<string, string> = {
+    刨窝: '刨窝/做窝',
+    焦躁: '焦躁不安',
+    喘气: '喘气加快',
+    分泌物: '阴道分泌物',
+    宫缩: '可见宫缩',
+    乳汁: '乳汁分泌',
+  }
+  const normalize = (item: any) => {
+    const label = String(item || '').trim()
+    return legacyLabelMap[label] || label
+  }
+
+  if (Array.isArray(details.symptoms)) {
+    return details.symptoms
+      .map(normalize)
+      .filter(Boolean)
+  }
+
+  const normalized = String(details.symptoms || '')
+    .split(/[、，,\s]+/)
+    .map(normalize)
+    .filter(Boolean)
+
+  if (details.nesting_behavior && !normalized.includes('刨窝/做窝')) {
+    normalized.push('刨窝/做窝')
+  }
+  const appetiteChange = normalize(details.appetite_change)
+  if (appetiteChange && !normalized.includes(appetiteChange)) {
+    normalized.push(appetiteChange)
+  }
+  if (details.other_signs) {
+    String(details.other_signs)
+      .split(/[、，,\s]+/)
+      .map(normalize)
+      .filter(Boolean)
+      .forEach((item) => {
+        if (!normalized.includes(item)) normalized.push(item)
+      })
+  }
+
+  return normalized
+}
 
 function formatDate(ts: number | undefined): string {
   if (!ts) return '—'

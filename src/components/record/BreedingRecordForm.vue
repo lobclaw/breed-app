@@ -118,6 +118,7 @@
         <view class="heat-observation__section">
           <view class="heat-observation__label">
             <text class="heat-observation__label-text">分泌物状态</text>
+            <text class="heat-observation__label-optional">（选填）</text>
           </view>
           <view class="heat-observation__segments heat-observation__segments--grid">
             <view
@@ -135,6 +136,7 @@
         <view class="heat-observation__section">
           <view class="heat-observation__label">
             <text class="heat-observation__label-text">行为征兆</text>
+            <text class="heat-observation__label-optional">（选填）</text>
           </view>
           <view class="heat-observation__symptom-grid">
             <view
@@ -500,7 +502,7 @@ import {
 import { localSyncRuntime } from '@/localdb/runtime'
 import { resolveBreedingRouteQuery } from '@/utils/recordFormRoutes'
 import { getDefaultExtraArrangementDate, type ExtraArrangementKind } from '@/utils/breedingExtraArrangement'
-import { getBreedingDogPickerEmptyState, getEligibleBreedingDogs } from '@/utils/breedingDogEligibility'
+import { getBreedingDogPickerEmptyState, getEligibleBreedingDogs, selectDefaultBreedingDog } from '@/utils/breedingDogEligibility'
 import { buildTimestampFromDayOffset, formatDateInputValue } from '@/utils/date'
 import { buildBreedingCycleMetaText, buildBreedingStageTag, buildBreedingStageTagFromContext } from '@/utils/breedingContext'
 import { useDogStore } from '@/stores/dogStore'
@@ -726,13 +728,14 @@ const dateLabel = computed(() => {
 })
 
 const costLabel = computed(() => breedingType.value === 'mating' ? '借配费用' : '费用')
-const notesLabel = computed(() => breedingType.value === 'heat' ? '记录备注' : '备注')
+const notesLabel = computed(() => '补充说明')
 const notesPlaceholder = computed(() => {
-  if (breedingType.value === 'heat') return '记录观察到的症状、行为变化等'
-  if (breedingType.value === 'follicle_check') return '补充检查说明'
-  if (breedingType.value === 'mating') return '配种情况、注意事项等'
-  if (breedingType.value === 'pregnancy_check') return '检查结果详情、医生建议等'
-  return '补充说明'
+  if (breedingType.value === 'heat') return '补充观察到的症状、行为变化等'
+  if (breedingType.value === 'follicle_check') return '补充医生建议、设备读数或复查安排'
+  if (breedingType.value === 'mating') return '补充配种情况或注意事项'
+  if (breedingType.value === 'pregnancy_check') return '补充检查结果详情或医生建议'
+  if (breedingType.value === 'prenatal_check') return '补充医生建议、设备读数或复查安排'
+  return '补充未覆盖的记录情况'
 })
 
 const showCostField = computed(() => {
@@ -795,7 +798,7 @@ const hasPrenatalCheckContent = computed(() => {
 const canSubmit = computed(() => {
   if (submitState.value === 'submitting') return false
   if (breedingType.value === 'heat_observation') {
-    return !!selectedDog.value && !!vulvaStatus.value && !!dischargeStatus.value
+    return !!selectedDog.value && !!vulvaStatus.value
   }
   if (isHeatMultiCreate.value) {
     return selectedDogs.value.length > 0 && !!date.value
@@ -985,7 +988,14 @@ function onDogSelect(dog: any) {
   selectedDog.value = dog
   const statuses = Array.isArray(dog?.statuses) ? dog.statuses : []
   const breedingStatus = statuses.find((status: any) => status?.type === '发情中' || status?.type === '怀孕中')
-  cycleId.value = breedingStatus?.cycleId || ''
+  cycleId.value = breedingStatus?.cycleId || breedingStatus?.cycle_id || ''
+}
+
+function applyDefaultDogSelection() {
+  if (isEdit.value || isHeatMultiCreate.value || dogLocked.value || selectedDog.value || !breedingType.value) return
+  const defaultDog = selectDefaultBreedingDog(dogStore.list, breedingType.value)
+  if (!defaultDog) return
+  onDogSelect(defaultDog)
 }
 
 function onDateConfirm(value: number | string) {
@@ -1062,8 +1072,8 @@ function buildDetails() {
 
   if (breedingType.value === 'heat_observation') {
     built.vulva_status = vulvaStatus.value
-    built.discharge_status = dischargeStatus.value
-    built.symptoms = selectedSymptoms.value
+    if (dischargeStatus.value) built.discharge_status = dischargeStatus.value
+    if (selectedSymptoms.value.length > 0) built.symptoms = selectedSymptoms.value
   }
 
   return built
@@ -1162,6 +1172,7 @@ async function loadCreateState() {
 
   if (!dogLocked.value && breedingType.value) {
     await dogStore.ensure().catch(() => {})
+    applyDefaultDogSelection()
   }
 
   if (prefillTaskId.value) {

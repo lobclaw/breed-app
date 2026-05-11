@@ -9,6 +9,8 @@ type PickerCopy = {
 const BREEDING_STATUS_TYPES = new Set<DeriveStatus['type']>(['发情中', '怀孕中', '哺乳中'])
 const BLOCKED_HEAT_STATUSES = new Set<DeriveStatus['type']>(['发情中', '怀孕中', '哺乳中'])
 const BLOCKED_UNMATED_STATUSES = new Set<DeriveStatus['type']>(['怀孕中', '哺乳中'])
+const PREGNANT_DEFAULT_TYPES = new Set<BreedingRecordType>(['pregnancy_check', 'prenatal_check', 'pre_labor', 'birth'])
+const HEAT_CYCLE_DEFAULT_TYPES = new Set<BreedingRecordType>(['heat_observation', 'follicle_check', 'mating'])
 
 function isBreedingDam(dog: DogWithStatus) {
   return dog.role === '种狗' && dog.gender === '母'
@@ -35,10 +37,23 @@ function hasQualifiedCycleStatus(dog: DogWithStatus, allowedStatuses: DeriveStat
   return getBreedingStatuses(dog).some(status => allowedStatuses.includes(status.type) && !!getStatusCycleId(status))
 }
 
+function getQualifiedStatus(dog: DogWithStatus | Record<string, any>, statusType: DeriveStatus['type']) {
+  const statuses = Array.isArray(dog?.statuses) ? dog.statuses : []
+  return statuses.find((status: any) => status?.type === statusType && !!getStatusCycleId(status))
+}
+
+function getStatusProgressCurrent(status: DeriveStatus | Record<string, any> | null | undefined) {
+  const current = Number(status?.progress?.current || 0)
+  return Number.isFinite(current) && current > 0 ? current : 0
+}
+
+function getStatusActivityTs(status: DeriveStatus | Record<string, any> | null | undefined) {
+  const activityTs = Number(status?.activityTs || 0)
+  return Number.isFinite(activityTs) && activityTs > 0 ? activityTs : 0
+}
+
 export function getBirthCycleIdFromDog(dog: DogWithStatus | Record<string, any> | null | undefined) {
-  const rawStatuses = dog?.statuses
-  const statuses = Array.isArray(rawStatuses) ? rawStatuses : []
-  const pregnantStatus = statuses.find(status => status?.type === '怀孕中' && !!getStatusCycleId(status))
+  const pregnantStatus = getQualifiedStatus(dog || {}, '怀孕中')
   return pregnantStatus ? getStatusCycleId(pregnantStatus) : ''
 }
 
@@ -74,6 +89,28 @@ export function isEligibleBreedingDog(dog: DogWithStatus, type: BreedingRecordTy
 
 export function getEligibleBreedingDogs(dogs: DogWithStatus[], type: BreedingRecordType) {
   return (dogs || []).filter(dog => isEligibleBreedingDog(dog, type))
+}
+
+export function selectDefaultBreedingDog(dogs: DogWithStatus[], type: BreedingRecordType) {
+  const eligibleDogs = getEligibleBreedingDogs(dogs || [], type)
+  if (eligibleDogs.length === 0 || type === 'heat' || type === 'abnormal_termination') return null
+
+  const targetStatusType = PREGNANT_DEFAULT_TYPES.has(type)
+    ? '怀孕中'
+    : HEAT_CYCLE_DEFAULT_TYPES.has(type)
+      ? '发情中'
+      : ''
+
+  if (!targetStatusType) return null
+
+  return eligibleDogs
+    .map(dog => ({ dog, status: getQualifiedStatus(dog, targetStatusType) }))
+    .filter(item => !!item.status)
+    .sort((left, right) => {
+      const progressDiff = getStatusProgressCurrent(right.status) - getStatusProgressCurrent(left.status)
+      if (progressDiff !== 0) return progressDiff
+      return getStatusActivityTs(right.status) - getStatusActivityTs(left.status)
+    })[0]?.dog || null
 }
 
 export function getBreedingDogPickerEmptyState(

@@ -140,9 +140,6 @@ function validateDetails(type, details = {}) {
   if (type === 'heat_observation' && !details.vulva_status) {
     throw new Error('发情观察必须填写外阴状态')
   }
-  if (type === 'heat_observation' && !details.discharge_status) {
-    throw new Error('发情观察必须填写分泌物状态')
-  }
   if (type === 'follicle_check' && details.left_count === undefined) {
     throw new Error('卵泡检查必须填写左侧数量')
   }

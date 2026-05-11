@@ -105,11 +105,17 @@
 - 公共样式统一放 `src/styles/common.scss` 并由 `App.vue` 全局导入；页面 `scoped style` 只写差异
 - `BSheet`、`BModal`、`BDeleteConfirm` 打开时锁滚动，关闭时先退场动画再卸载
 - 表单互斥选项用 pill-select；Segmented Control 只用于视图 / 标签切换；表单底部主 CTA 用 `BSubmitButton`
+- 表单单选用粉色实底 pill；多选用浅底卡片 + check + 粉色文字；不得把多选做成单选实底样式
 - 提交反馈统一为“局部 loading + 弱成功反馈 + 来源页承接”；提交按钮固定默认 / 提交中 / 成功瞬态三态，成功瞬态 `520ms`
 - 繁育/健康记录采用“同类型新增编辑同页”：无 `id` 为新增，有 `id/recordId/record_id` 为编辑；不得新增或恢复 `breeding-edit`、`health-edit` 这类独立编辑页
 - 记录详情页、重复记录提示、同步状态页附件处理入口都必须按记录 `type` 直达对应类型页；生产 `birth` 不走普通繁育编辑页，需单独设计窝次/幼犬编辑链路
 - `BDogPicker` 默认不展示繁育阶段；健康/财务/销售选择器不得被繁育状态污染
 - `BDogPicker` 的健康状态标签仅在疾病记录、用药任务等健康上下文显式传入 `showHealthStatusTags` 时展示
+- 繁育单犬上下文统一用 `BBreedingContextCard`，卡片自身承载“选择种母”标题；外层不再额外加“选择种母”字段 label；多犬发情批量创建继续用 `BDogPicker multiple` 并保留外层字段 label
+- 繁育上下文卡副信息只表达候选范围或周期信息，如 `发情中的种母`、`未配种的种母`、`怀孕中的种母`、`发情中或怀孕中的种母`；不得使用“选择后显示繁育周期信息”这类实现说明
+- 繁育上下文阶段标签按周期 context 优先计算，发情显示 `发情第N天`，怀孕显示 `怀孕第N天`；只有周期 context 缺失时才退回犬只状态粗标签
+- 繁育字段标题不使用小圆点；小圆点只用于详情页/页面中的大分区标题，如 `核心信息`、`关联信息`
+- 犬只头像颜色语义固定：种母/母犬用 `linear-gradient(135deg, var(--rose), var(--amber))`，种公/外部种公用蓝色，幼崽用琥珀/幼崽语义色；主按钮和选中态纯粉不等同于种母头像色
 - 详情页首屏优先可见可点；避免遮挡内容的 sticky / 负 margin；操作入口收口为一个稳定主操作入口 + 一个 more
 - `/pages/profile/index` 定位为犬舍总览页；原“我的”菜单收纳进左侧抽屉
 - 路由参数改口径时保留旧入口兼容，至少兼容 `recordId/record_id`、`taskId/task_id/medication_task_id`、`cycleId/cycle_id`

@@ -60,6 +60,10 @@
         </view>
       </view>
 
+      <view class="prelabor-monitor__requirement-hint">
+        <text>填写体温、选择征兆或补充说明，至少一项即可保存</text>
+      </view>
+
       <view class="prelabor-monitor__section">
         <view class="prelabor-monitor__label">
           <text class="prelabor-monitor__label-text">本次体温</text>
@@ -78,7 +82,7 @@
             <text class="prelabor-monitor__temp-unit" :class="{ 'prelabor-monitor__temp-unit--empty': !temperature.trim() }">°C</text>
           </view>
           <view class="prelabor-monitor__temp-right" @click="showDateTimePicker = true">
-            <text class="prelabor-monitor__temp-time-label">测量时间</text>
+            <text class="prelabor-monitor__temp-time-label">记录时间</text>
             <view class="prelabor-monitor__temp-time-row">
               <text class="prelabor-monitor__temp-time">{{ displayTime }}</text>
               <text class="material-icons-round prelabor-monitor__temp-time-icon">schedule</text>
@@ -119,6 +123,7 @@
       </view>
 
       <view class="fixed-bottom">
+        <text v-if="submitDisabledHint" class="prelabor-monitor__submit-hint">{{ submitDisabledHint }}</text>
         <BSubmitButton
           :loading="submitState === 'submitting'"
           :success="submitState === 'success'"
@@ -171,7 +176,7 @@ import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
 import BBreedingContextCard from '@/components/record/BBreedingContextCard.vue'
 import { formatTimeInputValue, getBeijingDateParts, getBeijingDayDiff } from '@/utils/date'
 import { buildBreedingCycleMetaText, buildBreedingStageTag, buildBreedingStageTagFromContext } from '@/utils/breedingContext'
-import { getBirthCycleIdFromDog, getBreedingDogPickerEmptyState, getEligibleBreedingDogs } from '@/utils/breedingDogEligibility'
+import { getBirthCycleIdFromDog, getBreedingDogPickerEmptyState, getEligibleBreedingDogs, selectDefaultBreedingDog } from '@/utils/breedingDogEligibility'
 import { resolveBreedingRouteQuery, resolveRecordFormEditId } from '@/utils/recordFormRoutes'
 
 interface TempRecord {
@@ -233,6 +238,11 @@ const hasObservationContent = computed(() => {
     || notes.value.trim().length > 0
 })
 const canSubmit = computed(() => !!selectedDog.value && hasObservationContent.value && submitState.value !== 'submitting')
+const submitDisabledHint = computed(() => {
+  if (submitState.value === 'submitting' || canSubmit.value) return ''
+  if (!selectedDog.value) return '请选择种母'
+  return '填写体温、选择征兆或补充说明后可保存'
+})
 
 const headerSubtitle = computed(() => '记录体温与临产征兆')
 
@@ -286,9 +296,12 @@ onMounted(async () => {
     return
   }
   applyRouteQuery()
-  if (!selectedDog.value && candidateDogs.value.length === 1) {
-    selectedDog.value = candidateDogs.value[0]
-    cycleId.value = getBirthCycleIdFromDog(candidateDogs.value[0])
+  if (!selectedDog.value) {
+    const defaultDog = selectDefaultBreedingDog(dogStore.list, 'pre_labor')
+    if (defaultDog) {
+      selectedDog.value = defaultDog
+      cycleId.value = getBirthCycleIdFromDog(defaultDog)
+    }
   }
 })
 
@@ -427,18 +440,35 @@ function toggleSymptom(symptom: string) {
 }
 
 function resolvePreLaborSymptoms(details: Record<string, any>) {
-  const values = Array.isArray(details.symptoms)
-    ? details.symptoms.map((item: any) => String(item || '').trim()).filter(Boolean)
-    : []
-  const next = new Set(values)
+  if (Array.isArray(details.symptoms)) {
+    const values = details.symptoms
+      .map((item: any) => normalizePreLaborSymptomLabel(item))
+      .filter(Boolean)
+    return symptoms.filter(item => values.includes(item))
+  }
+
+  const next = new Set<string>()
   if (details.nesting_behavior) next.add('刨窝/做窝')
   if (String(details.appetite_change || '').includes('食欲减退')) next.add('食欲减退')
   String(details.other_signs || '')
     .split(/[、,\/]/)
-    .map(item => item.trim())
+    .map(item => normalizePreLaborSymptomLabel(item))
     .filter(Boolean)
     .forEach(item => next.add(item))
   return symptoms.filter(item => next.has(item))
+}
+
+function normalizePreLaborSymptomLabel(value: any) {
+  const label = String(value || '').trim()
+  const legacyLabelMap: Record<string, string> = {
+    刨窝: '刨窝/做窝',
+    焦躁: '焦躁不安',
+    喘气: '喘气加快',
+    分泌物: '阴道分泌物',
+    宫缩: '可见宫缩',
+    乳汁: '乳汁分泌',
+  }
+  return legacyLabelMap[label] || label
 }
 
 function mergePreLaborNotes(recordNotes: string, details: Record<string, any>) {
@@ -573,10 +603,20 @@ async function handleSave() {
   }
 
   &__content {
-    padding: 0 var(--space-page) 114px;
+    padding: 0 var(--space-page) 132px;
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 16px;
+  }
+
+  &__requirement-hint {
+    padding: 9px 12px;
+    border-radius: 12px;
+    background: rgba(234, 62, 119, 0.07);
+    color: var(--text-2);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.45;
   }
 
   &__label {
@@ -887,6 +927,16 @@ async function handleSave() {
     font-size: 14px;
     font-weight: 500;
     color: var(--text-1);
+  }
+
+  &__submit-hint {
+    display: block;
+    margin-bottom: 8px;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-3);
+    line-height: 1.4;
   }
 }
 </style>

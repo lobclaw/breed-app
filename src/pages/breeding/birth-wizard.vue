@@ -21,11 +21,11 @@
 
     <!-- Step 1: 生产信息 -->
     <view v-if="step === 1" class="form-area">
-      <!-- 母犬信息卡 -->
+      <!-- 种母信息卡 -->
       <view class="form-section">
         <view class="section-title">
           <view class="section-dot" style="background: var(--rose);" />
-          <text>母犬信息</text>
+          <text>种母信息</text>
         </view>
         <BBreedingContextCard
           :dog="selectedDam"
@@ -296,7 +296,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { useAuth } from '@/composables/useAuth'
 import { usePageSync } from '@/composables/usePageSync'
@@ -305,7 +305,7 @@ import { getLocalBreedingCycleFormContext } from '@/localdb/domain-repository'
 import { findLocal, queryLocal } from '@/localdb/repository'
 import { localSyncRuntime } from '@/localdb/runtime'
 import { useDogStore } from '@/stores/dogStore'
-import { getBirthCycleIdFromDog, getBreedingDogPickerEmptyState, getEligibleBreedingDogs } from '@/utils/breedingDogEligibility'
+import { getBirthCycleIdFromDog, getBreedingDogPickerEmptyState, getEligibleBreedingDogs, selectDefaultBreedingDog } from '@/utils/breedingDogEligibility'
 import { buildBreedingCycleMetaText, buildBreedingStageTag, buildBreedingStageTagFromContext } from '@/utils/breedingContext'
 import { buildTimestampFromDayOffset, formatDateInputValue, getBeijingCalendarDayDiff } from '@/utils/date'
 import BDateTimePicker from '@/components/form/BDateTimePicker.vue'
@@ -415,6 +415,13 @@ function openDamPicker() {
 
 function onDamSelect(dog: any) {
   selectedDam.value = dog
+}
+
+function applyDefaultDamSelection() {
+  if (cycleLocked.value || selectedDam.value) return
+  const defaultDam = selectDefaultBreedingDog(dogStore.list, 'birth')
+  if (!defaultDam) return
+  selectedDam.value = defaultDam
 }
 
 function addPuppy() {
@@ -585,6 +592,11 @@ onLoad((query) => {
   form.birth_date = buildTimestampFromDayOffset(0)
   void refreshPreviewLitterNumber()
 })
+
+onMounted(async () => {
+  await dogStore.ensure().catch(() => {})
+  applyDefaultDamSelection()
+})
 </script>
 
 <style lang="scss" scoped>
@@ -684,7 +696,7 @@ onLoad((query) => {
   margin-left: auto;
 }
 
-/* 母犬信息卡 */
+/* 种母信息卡 */
 .dog-info-card {
   background: var(--card-dim);
   border-radius: var(--radius-row);
