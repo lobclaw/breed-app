@@ -1562,10 +1562,36 @@ export async function listLocalPreLaborTemperatureHistory(familyId: string, dogI
       temp: Number(row?.details?.temperature || 0),
       label: '',
       time: Number(row.date || row.created_at || 0),
+      symptoms: normalizePreLaborSymptoms(row?.details || {}),
     }))
     .filter(item => item.temp > 0 && item.time > 0)
     .sort((left, right) => left.time - right.time)
     .slice(-6)
+}
+
+function normalizePreLaborSymptoms(details: Record<string, any>) {
+  const symptoms = Array.isArray(details.symptoms) ? details.symptoms : []
+  const normalized = symptoms
+    .map((item: any) => String(item || '').trim())
+    .filter(Boolean)
+
+  if (details.nesting_behavior && !normalized.includes('刨窝/做窝')) {
+    normalized.push('刨窝/做窝')
+  }
+  if (details.appetite_change && !normalized.includes(String(details.appetite_change))) {
+    normalized.push(String(details.appetite_change))
+  }
+  if (details.other_signs) {
+    String(details.other_signs)
+      .split(/[、,，\s]+/)
+      .map(item => item.trim())
+      .filter(Boolean)
+      .forEach((item) => {
+        if (!normalized.includes(item)) normalized.push(item)
+      })
+  }
+
+  return normalized
 }
 
 function formatDogAgeText(birthTs?: number | null) {
