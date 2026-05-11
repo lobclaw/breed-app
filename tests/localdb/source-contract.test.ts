@@ -231,10 +231,6 @@ describe('local-first source contract', () => {
         forbiddenReads: ['getActiveLitters', 'batchAddWeights', 'useCloudCall'],
       },
       {
-        file: 'src/pages/record/prelabor-monitor.vue',
-        forbiddenReads: ['uniCloud.database(', "useCloudCall('breeding-service', 'addBreedingRecord'"],
-      },
-      {
         file: 'src/pages/record/health.vue',
         forbiddenReads: ['useCloudCall', 'cloudCall(', 'uniCloud.database('],
       },

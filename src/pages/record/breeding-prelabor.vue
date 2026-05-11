@@ -241,7 +241,7 @@ const canSubmit = computed(() => !!selectedDog.value && hasObservationContent.va
 const submitDisabledHint = computed(() => {
   if (submitState.value === 'submitting' || canSubmit.value) return ''
   if (!selectedDog.value) return '请选择种母'
-  return '填写体温、选择征兆或补充说明后可保存'
+  return ''
 })
 
 const headerSubtitle = computed(() => '记录体温与临产征兆')

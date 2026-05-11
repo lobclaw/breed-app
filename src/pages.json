@@ -169,13 +169,6 @@
 			}
 		},
 		{
-			"path": "pages/record/prelabor-monitor",
-			"style": {
-				"navigationBarTitleText": "临产监测",
-				"navigationStyle": "custom"
-			}
-		},
-		{
 			"path": "pages/record/breeding-detail",
 			"style": {
 				"navigationBarTitleText": "繁育记录详情",

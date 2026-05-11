@@ -1424,10 +1424,14 @@ watch(
 
 <style lang="scss" scoped>
 .field-hint {
-  margin-top: 6px;
+  margin-top: 8px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: rgba(234, 62, 119, 0.07);
   font-size: 12px;
-  line-height: 1.4;
-  color: var(--text-3);
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--text-2);
 }
 
 .record-form-skeleton {
