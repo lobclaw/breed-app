@@ -79,7 +79,6 @@
     <view v-else class="form-body" :class="{ 'heat-observation__content': breedingType === 'heat_observation' }">
       <template v-if="breedingType === 'heat_observation'">
         <view class="field-group">
-          <view class="field-label"><text>选择种母</text></view>
           <BBreedingContextCard
             :dog="selectedDog"
             :stage-label="selectedDogStageTag?.label || ''"
@@ -101,7 +100,6 @@
 
         <view class="heat-observation__section">
           <view class="heat-observation__label">
-            <view class="heat-observation__label-dot" />
             <text class="heat-observation__label-text">外阴状态</text>
           </view>
           <view class="heat-observation__segments">
@@ -119,7 +117,6 @@
 
         <view class="heat-observation__section">
           <view class="heat-observation__label">
-            <view class="heat-observation__label-dot" />
             <text class="heat-observation__label-text">分泌物状态</text>
           </view>
           <view class="heat-observation__segments heat-observation__segments--grid">
@@ -137,7 +134,6 @@
 
         <view class="heat-observation__section">
           <view class="heat-observation__label">
-            <view class="heat-observation__label-dot" />
             <text class="heat-observation__label-text">行为征兆</text>
           </view>
           <view class="heat-observation__symptom-grid">
@@ -160,7 +156,6 @@
 
         <view class="heat-observation__section">
           <view class="heat-observation__label">
-            <view class="heat-observation__label-dot" />
             <text class="heat-observation__label-text">补充说明</text>
             <text class="heat-observation__label-optional">（选填）</text>
           </view>
@@ -175,7 +170,7 @@
 
       <template v-else>
         <view class="field-group">
-          <view class="field-label"><text>选择种母</text></view>
+          <view v-if="isHeatMultiCreate" class="field-label"><text>选择种母</text></view>
           <BDogPicker
             v-if="isHeatMultiCreate"
             v-model="selectedDogs"
@@ -688,7 +683,8 @@ const selectedCycleContextText = computed(() => {
 const singleDogContextEmptyMeta = computed(() => {
   if (breedingType.value === 'heat_observation') return '发情中的种母'
   if (breedingType.value === 'follicle_check' || breedingType.value === 'mating') return '未配种的种母'
-  if (breedingType.value === 'pregnancy_check' || breedingType.value === 'prenatal_check' || breedingType.value === 'pre_labor' || breedingType.value === 'abnormal_termination') return '怀孕中的种母'
+  if (breedingType.value === 'abnormal_termination') return '发情中或怀孕中的种母'
+  if (breedingType.value === 'pregnancy_check' || breedingType.value === 'prenatal_check' || breedingType.value === 'pre_labor') return '怀孕中的种母'
   return '繁育周期信息'
 })
 
@@ -1794,14 +1790,6 @@ watch(
   margin-bottom: 8px;
 }
 
-.heat-observation__label-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--rose);
-  flex-shrink: 0;
-}
-
 .heat-observation__label-text {
   font-size: 12px;
   font-weight: 700;
@@ -1827,9 +1815,8 @@ watch(
 .heat-observation__segment {
   min-height: 42px;
   padding: 0 16px;
-  border-radius: 14px;
-  border: 1px solid var(--line);
-  background: var(--card);
+  border-radius: 999px;
+  background: var(--card-dim);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1837,13 +1824,18 @@ watch(
 }
 
 .heat-observation__segment--active {
-  background: var(--primary-soft);
-  border-color: var(--primary);
+  background: var(--primary);
+  box-shadow: var(--shadow-today);
 }
 
 .heat-observation__segment-text {
   font-size: 14px;
+  font-weight: 700;
   color: var(--text-2);
+}
+
+.heat-observation__segment--active .heat-observation__segment-text {
+  color: #fff;
 }
 
 .heat-observation__symptom-grid {
@@ -1855,8 +1847,7 @@ watch(
 .heat-observation__symptom {
   min-height: 42px;
   border-radius: 14px;
-  border: 1px solid var(--line);
-  background: var(--card);
+  background: var(--card-dim);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1865,13 +1856,17 @@ watch(
 }
 
 .heat-observation__symptom--selected {
-  border-color: var(--primary);
   background: var(--primary-soft);
 }
 
 .heat-observation__symptom-text {
   font-size: 13px;
+  font-weight: 700;
   color: var(--text-2);
+}
+
+.heat-observation__symptom--selected .heat-observation__symptom-text {
+  color: var(--primary);
 }
 
 .heat-observation__textarea {

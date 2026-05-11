@@ -57,14 +57,28 @@ describe('breeding record form source contract', () => {
     expect(source).toContain('const selectedLatestHeatText = computed')
     expect(source).toContain('const singleDogContextEmptyMeta = computed')
     expect(source).toContain(':empty-meta="singleDogContextEmptyMeta"')
+    expect(source).toContain("if (breedingType.value === 'abnormal_termination') return '发情中或怀孕中的种母'")
     expect(source).toContain('return buildBreedingCycleMetaText(cycleFormContext.value) || selectedLatestHeatText.value')
     expect(source).toContain('getLocalBreedingCycleFormContext')
     expect(source).toContain('buildBreedingCycleMetaText')
     expect(source).toContain('avatar-variant="sire"')
     expect(source).toContain('v-if="isHeatMultiCreate"')
     expect(source).toContain('v-if="shouldShowSingleDogContext"')
+    expect(source).toContain('<view v-if="isHeatMultiCreate" class="field-label"><text>选择种母</text></view>')
     expect(source).not.toContain('getLocalBreedingCycleDetail')
     expect(source).not.toContain('breedingDogExtraMetaMap')
     expect(source).not.toContain('选择后显示繁育周期信息')
+  })
+
+  it('发情观察字段组不应使用小圆点标题', () => {
+    expect(source).toContain('heat-observation__label')
+    expect(source).not.toContain('heat-observation__label-dot')
+  })
+
+  it('发情观察单选和多选应使用不同选中样式', () => {
+    expect(source).toContain('.heat-observation__segment--active {\n  background: var(--primary);')
+    expect(source).toContain('.heat-observation__segment--active .heat-observation__segment-text {\n  color: #fff;')
+    expect(source).toContain('.heat-observation__symptom--selected {\n  background: var(--primary-soft);')
+    expect(source).toContain('.heat-observation__symptom--selected .heat-observation__symptom-text {\n  color: var(--primary);')
   })
 })

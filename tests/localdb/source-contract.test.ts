@@ -122,6 +122,7 @@ describe('local-first source contract', () => {
     expect(formSource).toContain('BBreedingContextCard')
     expect(formSource).toContain('v-if="isHeatMultiCreate"')
     expect(prelaborSource).toContain('BBreedingContextCard')
+    expect(prelaborSource).not.toContain('prelabor-monitor__label-dot')
     expect(contextCardSource).toContain('b-breeding-context-card')
     expect(contextCardSource).toContain("readonly ? 'lock' : 'chevron_right'")
     expect(contextCardSource).toContain("emptyMeta: '繁育周期信息'")

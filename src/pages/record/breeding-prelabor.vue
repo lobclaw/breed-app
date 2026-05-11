@@ -62,7 +62,6 @@
 
       <view class="prelabor-monitor__section">
         <view class="prelabor-monitor__label">
-          <view class="prelabor-monitor__label-dot" />
           <text class="prelabor-monitor__label-text">本次体温</text>
         </view>
         <view class="prelabor-monitor__temp-card">
@@ -90,7 +89,6 @@
 
       <view class="prelabor-monitor__section">
         <view class="prelabor-monitor__label">
-          <view class="prelabor-monitor__label-dot" />
           <text class="prelabor-monitor__label-text">观察到的征兆</text>
         </view>
         <view class="prelabor-monitor__symptom-grid">
@@ -109,7 +107,6 @@
 
       <view class="prelabor-monitor__section">
         <view class="prelabor-monitor__label">
-          <view class="prelabor-monitor__label-dot" />
           <text class="prelabor-monitor__label-text">补充说明</text>
           <text class="prelabor-monitor__label-optional">（选填）</text>
         </view>
@@ -587,14 +584,6 @@ async function handleSave() {
     align-items: center;
     gap: 8px;
     margin-bottom: 8px;
-  }
-
-  &__label-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--rose);
-    flex-shrink: 0;
   }
 
   &__label-text {
