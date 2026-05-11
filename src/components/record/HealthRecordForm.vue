@@ -10,7 +10,7 @@
       >
         <view class="health-form-skeleton__label" :class="{ 'health-form-skeleton__label--short': block.labelWidth === 'short' }" />
 
-        <template v-if="block.kind === 'picker' || block.kind === 'input' || block.kind === 'display'">
+        <template v-if="block.kind === 'picker' || block.kind === 'input'">
           <view class="health-form-skeleton__control health-form-skeleton__shimmer" />
         </template>
 
@@ -60,13 +60,6 @@
           :extra-meta-map="latestHealthMetaMap"
           :show-health-status-tags="shouldShowHealthStatusTags"
         />
-      </view>
-
-      <view v-else class="field-group">
-        <view class="field-label"><text>记录类型</text></view>
-        <view class="type-display">
-          <text>{{ typeLabel }}</text>
-        </view>
       </view>
 
       <template v-if="resolvedType === 'vaccination'">
@@ -399,7 +392,7 @@ const latestDewormingRequestToken = ref(0)
 const latestDewormingDates = ref<Record<string, number>>({})
 
 const resolvedType = computed<HealthRecordType | ''>(() => {
-  return (isEdit.value ? currentRecord.value?.type : props.type) || ''
+  return (isEdit.value ? currentRecord.value?.type || props.type : props.type) || ''
 })
 
 const typeLabels: Record<HealthRecordType, string> = {
@@ -409,13 +402,9 @@ const typeLabels: Record<HealthRecordType, string> = {
 }
 
 const pageTitle = computed(() => {
+  if (isEdit.value && resolvedType.value) return `编辑${typeLabels[resolvedType.value]}记录`
   if (isEdit.value) return '编辑健康记录'
   return resolvedType.value ? `录入${typeLabels[resolvedType.value]}记录` : '录入健康记录'
-})
-
-const typeLabel = computed(() => {
-  if (!resolvedType.value) return ''
-  return typeLabels[resolvedType.value]
 })
 
 const dateLabel = computed(() => {
@@ -605,7 +594,7 @@ const canSubmit = computed(() => {
   return !!String(details.primary_condition || details.condition || '').trim()
 })
 
-type HealthSkeletonBlockKind = 'picker' | 'choice' | 'options-card' | 'input' | 'textarea' | 'display'
+type HealthSkeletonBlockKind = 'picker' | 'choice' | 'options-card' | 'input' | 'textarea'
 
 interface HealthSkeletonBlock {
   kind: HealthSkeletonBlockKind
@@ -619,8 +608,6 @@ const skeletonBlocks = computed<HealthSkeletonBlock[]>(() => {
 
   if (!isEdit.value) {
     blocks.push({ kind: 'picker' })
-  } else {
-    blocks.push({ kind: 'display', labelWidth: 'short' })
   }
 
   if (resolvedType.value === 'vaccination') {
@@ -1491,18 +1478,6 @@ watch(
 @keyframes health-record-skeleton-shimmer {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
-}
-
-.type-display {
-  height: 48px;
-  border-radius: 14px;
-  background: var(--card-dim);
-  padding: 0 16px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-1);
-  display: flex;
-  align-items: center;
 }
 
 .med-prompt {

@@ -1450,7 +1450,7 @@ const heroAvatarClass = computed(() => {
   if (d.role === '幼崽') return 'dog-detail__hero-avatar--amber'
   if (d.role === '外部种公') return 'dog-detail__hero-avatar--blue'
   if (d.gender === '母') return 'dog-detail__hero-avatar--rose'
-  if (d.gender === '公') return 'dog-detail__hero-avatar--teal'
+  if (d.gender === '公') return 'dog-detail__hero-avatar--blue'
   return 'dog-detail__hero-avatar--primary'
 })
 

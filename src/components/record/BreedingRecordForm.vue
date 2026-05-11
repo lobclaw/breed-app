@@ -21,6 +21,16 @@
           </view>
         </template>
 
+        <template v-else-if="block.kind === 'mating-info'">
+          <view class="record-form-skeleton__control record-form-skeleton__shimmer" />
+          <view class="record-form-skeleton__chip-row">
+            <view v-for="chip in 3" :key="chip" class="record-form-skeleton__chip record-form-skeleton__shimmer" />
+          </view>
+          <view class="record-form-skeleton__choice-row record-form-skeleton__choice-row--mating">
+            <view v-for="option in 2" :key="option" class="record-form-skeleton__choice record-form-skeleton__shimmer" />
+          </view>
+        </template>
+
         <template v-else-if="block.kind === 'inline'">
           <view class="record-form-skeleton__inline-row">
             <view v-for="cell in 2" :key="cell" class="record-form-skeleton__inline-cell record-form-skeleton__shimmer" />
@@ -54,6 +64,13 @@
             </view>
             <view class="record-form-skeleton__panel-hint record-form-skeleton__shimmer" />
           </view>
+        </template>
+
+        <template v-else-if="block.kind === 'mating-summary'">
+          <view class="record-form-skeleton__mating-summary-grid">
+            <view v-for="item in 3" :key="item" class="record-form-skeleton__mating-summary-card record-form-skeleton__shimmer" />
+          </view>
+          <view class="record-form-skeleton__panel-hint record-form-skeleton__shimmer" />
         </template>
 
         <template v-else-if="block.kind === 'textarea'">
@@ -197,7 +214,7 @@
           />
         </view>
 
-        <view class="field-group">
+        <view v-if="breedingType !== 'mating'" class="field-group">
           <view class="field-label"><text>{{ dateLabel }}</text></view>
           <view class="form-input form-input--picker" @click="showDatePicker = true">
             <text>{{ dateStr || '请选择日期' }}</text>
@@ -252,14 +269,23 @@
         </template>
 
         <template v-if="breedingType === 'mating'">
-          <view class="field-group">
-            <view class="field-label"><text>选择种公</text></view>
+          <view class="field-group mating-section">
+            <view class="field-label mating-section__label"><text>配种对象</text></view>
             <BDogPicker v-model="selectedSire" genderFilter="公" :includeExternalSires="true" title="选择种公" :show-breeding-stage="true" avatar-variant="sire" />
           </view>
 
-          <view class="field-group">
-            <view class="field-label"><text>配种方式</text></view>
-            <view class="pill-select">
+          <view class="field-group mating-info">
+            <view class="field-label"><text>配种信息</text></view>
+            <view class="form-input form-input--picker" @click="showDatePicker = true">
+              <text>{{ dateStr || '请选择日期' }}</text>
+              <text class="material-icons-round form-input__suffix">calendar_today</text>
+            </view>
+            <view class="date-chips mating-info__chips">
+              <text class="date-chip" :class="{ active: dateChipActive === 'today' }" @click="setDateChip('today')">今天</text>
+              <text class="date-chip" :class="{ active: dateChipActive === 'yesterday' }" @click="setDateChip('yesterday')">昨天</text>
+              <text class="date-chip" :class="{ active: dateChipActive === 'dayBefore' }" @click="setDateChip('dayBefore')">前天</text>
+            </view>
+            <view class="pill-select mating-info__methods">
               <view
                 v-for="method in matingMethods"
                 :key="method"
@@ -272,31 +298,27 @@
             </view>
           </view>
 
-          <view class="field-group">
-            <view class="field-label"><text>第几脚</text></view>
-            <view class="display-field">
-              <text>{{ matingNumberPreviewText }}</text>
-            </view>
-          </view>
-
-          <view class="field-group">
+          <view class="field-group mating-calculation">
             <view class="field-label"><text>系统自动计算</text></view>
-            <view class="auto-card">
-              <view class="auto-card__row">
-                <text class="material-icons-round auto-card__icon">event_available</text>
-                <text class="auto-card__label">预计孕检日</text>
-                <text class="auto-card__value">{{ estimatedCheckDate }}</text>
+            <view class="mating-summary">
+              <view class="mating-summary__item">
+                <text class="mating-summary__label">第几脚</text>
+                <text class="mating-summary__value">{{ matingNumberShortText }}</text>
               </view>
-              <view class="auto-card__row" @click="showDueDatePicker = true">
-                <text class="material-icons-round auto-card__icon">child_friendly</text>
-                <text class="auto-card__label">预计预产期</text>
-                <text class="auto-card__value" :style="manualDueDate ? 'color: var(--primary);' : ''">{{ estimatedDueDate }}</text>
-                <text class="material-icons-round auto-card__edit">edit</text>
+              <view class="mating-summary__item">
+                <text class="mating-summary__label">孕检</text>
+                <text class="mating-summary__value">{{ estimatedCheckDate }}</text>
               </view>
-              <view class="auto-card__hint">
-                <text class="material-icons-round auto-card__hint-icon">info_outline</text>
-                <text>可手动修改预产期</text>
+              <view class="mating-summary__item mating-summary__item--editable" @click="showDueDatePicker = true">
+                <text class="mating-summary__label">预产</text>
+                <view class="mating-summary__editable-value">
+                  <text class="mating-summary__value" :class="{ 'mating-summary__value--primary': manualDueDate }">{{ estimatedDueDate }}</text>
+                  <text class="material-icons-round mating-summary__edit">edit</text>
+                </view>
               </view>
+            </view>
+            <view class="mating-calculation__hint">
+              <text>第几脚与孕检日只读，预产期可手动修改</text>
             </view>
           </view>
         </template>
@@ -758,7 +780,7 @@ const estimatedDueDate = computed(() => {
   return `${targetDate.getMonth() + 1}月${targetDate.getDate()}日`
 })
 
-const matingNumberPreviewText = computed(() => `第 ${details.mating_number || 1} 脚（本周期自动计算）`)
+const matingNumberShortText = computed(() => `第 ${details.mating_number || 1} 脚`)
 
 const showTempWarning = computed(() => {
   const temperature = parseFloat(details.temperature)
@@ -814,6 +836,8 @@ const canSubmit = computed(() => {
 type BreedingSkeletonBlockKind =
   | 'picker'
   | 'date'
+  | 'mating-info'
+  | 'mating-summary'
   | 'inline'
   | 'choice'
   | 'display'
@@ -845,6 +869,22 @@ const skeletonBlocks = computed<BreedingSkeletonBlock[]>(() => {
     ]
   }
 
+  if (breedingType.value === 'mating') {
+    blocks.push(
+      { kind: 'picker' },
+      { kind: 'picker' },
+      { kind: 'mating-info' },
+      { kind: 'mating-summary' },
+    )
+
+    if (showCostField.value) {
+      blocks.push({ kind: 'input' })
+    }
+
+    blocks.push({ kind: 'textarea' }, { kind: 'extra' })
+    return blocks
+  }
+
   blocks.push({ kind: 'picker' }, { kind: 'date' })
 
   if (breedingType.value === 'follicle_check') {
@@ -852,13 +892,6 @@ const skeletonBlocks = computed<BreedingSkeletonBlock[]>(() => {
       { kind: 'inline' },
       { kind: 'inline' },
       { kind: 'choice', count: 4 },
-    )
-  } else if (breedingType.value === 'mating') {
-    blocks.push(
-      { kind: 'picker' },
-      { kind: 'choice', count: 2 },
-      { kind: 'display' },
-      { kind: 'auto-card' },
     )
   } else if (breedingType.value === 'pregnancy_check') {
     blocks.push(
@@ -1469,6 +1502,7 @@ watch(
 .record-form-skeleton__toggle,
 .record-form-skeleton__symptom,
 .record-form-skeleton__chip,
+.record-form-skeleton__mating-summary-card,
 .record-form-skeleton__panel-icon,
 .record-form-skeleton__panel-line {
   background: linear-gradient(
@@ -1516,6 +1550,14 @@ watch(
 
 .record-form-skeleton__choice-row--grid .record-form-skeleton__choice {
   width: calc(50% - 4px);
+}
+
+.record-form-skeleton__choice-row--mating {
+  margin-top: 4px;
+}
+
+.record-form-skeleton__choice-row--mating .record-form-skeleton__choice {
+  width: 94px;
 }
 
 .record-form-skeleton__choice {
@@ -1595,6 +1637,21 @@ watch(
   width: 42%;
   height: 10px;
   border-radius: 999px;
+}
+
+.record-form-skeleton__mating-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.record-form-skeleton__mating-summary-card {
+  min-height: 58px;
+  border-radius: 14px;
+}
+
+.record-form-skeleton__mating-summary-grid + .record-form-skeleton__panel-hint {
+  margin-top: 8px;
 }
 
 .record-form-skeleton__textarea {
@@ -1677,6 +1734,109 @@ watch(
 
 .inline-fields {
   gap: 10px;
+}
+
+.mating-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.mating-section__label {
+  margin-bottom: 6px;
+}
+
+.mating-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.mating-info__chips {
+  margin-top: 8px;
+}
+
+.mating-info__methods {
+  margin-top: 12px;
+}
+
+.mating-info__methods :deep(.pill-select__item) {
+  min-width: 94px;
+  text-align: center;
+}
+
+.mating-calculation {
+  display: flex;
+  flex-direction: column;
+}
+
+.mating-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mating-summary__item {
+  min-width: 0;
+  min-height: 58px;
+  padding: 10px 8px;
+  border-radius: 14px;
+  background: var(--card-dim);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+}
+
+.mating-summary__item--editable {
+  background: rgba(234, 62, 119, 0.08);
+  transition: transform 0.15s ease;
+
+  &:active {
+    transform: scale(0.97);
+  }
+}
+
+.mating-summary__label {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.mating-summary__value {
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.25;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mating-summary__value--primary {
+  color: var(--primary);
+}
+
+.mating-summary__editable-value {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.mating-summary__edit {
+  font-size: 13px;
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.mating-calculation__hint {
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--text-3);
 }
 
 .toggle-row {

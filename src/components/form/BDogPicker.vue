@@ -524,7 +524,8 @@ function roleLabel(role: string) {
 function dogMetaText(dog: Dog) {
   const parts = [normalizeBreed(dog)]
   if (dog.gender) parts.push(dog.gender)
-  parts.push(formatAge(dog.birth_date) || '未知')
+  const ageText = formatAge(dog.birth_date)
+  if (ageText) parts.push(ageText)
   parts.push(roleLabel(dog.role))
   return parts.join(' · ')
 }
@@ -651,6 +652,7 @@ function avatarColorClass(dog: Dog) {
   if (dog.role === '幼崽') return 'b-dog-picker__avatar--amber'
   if (dog.role === '外部种公') return 'b-dog-picker__avatar--blue'
   if (dog.gender === '母') return 'b-dog-picker__avatar--rose'
+  if (dog.gender === '公') return 'b-dog-picker__avatar--blue'
   return 'b-dog-picker__avatar--teal'
 }
 
