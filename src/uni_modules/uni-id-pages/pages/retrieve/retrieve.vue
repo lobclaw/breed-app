@@ -82,7 +82,7 @@
 							},
 							{
 								pattern: /^1\d{10}$/,
-								errorMessage: '手机号码格式不正确',
+								errorMessage: '请输入正确的手机号',
 							}
 						]
 					},

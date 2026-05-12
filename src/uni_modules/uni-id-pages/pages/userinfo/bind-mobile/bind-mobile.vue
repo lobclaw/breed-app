@@ -51,7 +51,7 @@
 				if(! /^1\d{10}$/.test(this.formData.mobile)){
 					this.focusMobile = true 
 					return uni.showToast({
-						title: '手机号码格式不正确',
+						title: '请输入正确的手机号',
 						icon: 'none',
 						duration: 3000
 					});

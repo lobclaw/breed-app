@@ -1,12 +1,12 @@
 <template>
 	<view class="root" v-if="agreements.length">
 		<template v-if="needAgreements">
-			<checkbox-group class="agreement-check-group" @change="setAgree">
-				<label class="checkbox-box">
-					<checkbox class="agreement-checkbox" :checked="isAgree" />
-					<text class="agreement-prefix">已阅读并同意</text>
-				</label>
-			</checkbox-group>
+			<view class="agreement-check-group" @tap.stop="setAgree">
+				<view class="agreement-checkbox" :class="{ 'agreement-checkbox--checked': isAgree }">
+					<text v-if="isAgree" class="agreement-checkbox__mark">&#10003;</text>
+				</view>
+				<text class="agreement-prefix">已阅读并同意</text>
+			</view>
 			<view class="agreement-links">
 				<view class="item" v-for="(agreement,index) in agreements" :key="index">
 					<view class="agreement-hit" @tap.stop="navigateTo(agreement)">
@@ -124,7 +124,7 @@
 			hasAnd(agreements, index) {
 				return agreements.length - 1 > index
 			},
-			setAgree(e) {
+			setAgree() {
 				this.isAgree = !this.isAgree
 				this.$emit('setAgree', this.isAgree)
 			}
@@ -170,22 +170,34 @@
 		align-items: center;
 		flex: 0 0 auto;
 		min-width: 0;
-	}
-
-	.checkbox-box ,.uni-label-pointer{
-		align-items: center;
-		display: flex;
-		flex-direction: row;
 		min-height: 30px;
-		padding-right: 2px;
-		flex-shrink: 0;
+		padding-right: 1px;
 	}
 
 	.agreement-checkbox {
-		margin-right: 2px;
-		transform: scale(0.56);
-		transform-origin: center;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 12px;
+		height: 12px;
+		margin-right: 3px;
+		border: 1px solid var(--text-4, #d8cbbd);
+		border-radius: 50%;
+		background: #FFFFFF;
+		box-sizing: border-box;
 		flex-shrink: 0;
+	}
+
+	.agreement-checkbox--checked {
+		border-color: var(--primary, #ea3e77);
+		background: var(--primary, #ea3e77);
+	}
+
+	.agreement-checkbox__mark {
+		color: #FFFFFF;
+		font-size: 9px;
+		font-weight: 800;
+		line-height: 12px;
 	}
 
 	.agreement-prefix {
@@ -216,19 +228,6 @@
 		color: var(--primary, #ea3e77);
 		font-weight: 700;
 		cursor: pointer;
-	}
-
-	.agreement-checkbox ::v-deep .uni-checkbox-input{
-		border-radius: 100%;
-		width: 18px;
-		height: 18px;
-		border-color: var(--text-4, #d8cbbd);
-	}
-
-	.agreement-checkbox ::v-deep .uni-checkbox-input.uni-checkbox-input-checked{
-		border-color: var(--primary, #ea3e77);
-		color: #FFFFFF !important;
-		background-color: var(--primary, #ea3e77);
 	}
 
 	.content,

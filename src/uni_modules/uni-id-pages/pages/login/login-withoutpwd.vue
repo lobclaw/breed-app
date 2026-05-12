@@ -250,7 +250,7 @@
 				if (!this.isPhone) {
 					this.focusPhone = true
 					return uni.showToast({
-						title: "手机号码格式不正确",
+						title: "请输入正确的手机号",
 						icon: 'none',
 						duration: 3000
 					});
@@ -302,7 +302,7 @@
 				if (!this.isPhone) {
 					this.focusPhone = true
 					return uni.showToast({
-						title: '手机号格式不正确',
+						title: '请输入正确的手机号',
 						icon: 'none',
 						duration: 3000
 					});
