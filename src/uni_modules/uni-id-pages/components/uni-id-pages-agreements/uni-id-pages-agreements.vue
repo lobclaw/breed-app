@@ -1,13 +1,13 @@
 <template>
 	<view class="root" v-if="agreements.length">
 		<template v-if="needAgreements">
-			<checkbox-group @change="setAgree">
+			<checkbox-group class="agreement-check-group" @change="setAgree">
 				<label class="checkbox-box">
-					<checkbox :checked="isAgree" style="transform: scale(0.5);margin-right: -6px;" />
-					<text class="text">已阅读并同意</text>
+					<checkbox class="agreement-checkbox" :checked="isAgree" />
+					<text class="agreement-prefix">已阅读并同意</text>
 				</label>
 			</checkbox-group>
-			<view class="content">
+			<view class="agreement-links">
 				<view class="item" v-for="(agreement,index) in agreements" :key="index">
 					<view class="agreement-hit" @tap.stop="navigateTo(agreement)">
 						<text class="agreement text">{{agreement.title}}</text>
@@ -155,12 +155,21 @@
 		flex-direction: row;
 		align-items: center;
 		justify-content: center;
-		flex-wrap: nowrap;
+		flex-wrap: wrap;
 		width: 100%;
+		padding: 0 4px;
 		min-height: 30px;
-		margin-top: 16px;
+		margin-top: 14px;
 		font-size: 12px;
 		color: var(--text-3, #b8a08a);
+	}
+
+	.agreement-check-group {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		flex: 0 0 auto;
+		min-width: 0;
 	}
 
 	.checkbox-box ,.uni-label-pointer{
@@ -168,8 +177,22 @@
 		display: flex;
 		flex-direction: row;
 		min-height: 30px;
-		padding-right: 4px;
+		padding-right: 2px;
 		flex-shrink: 0;
+	}
+
+	.agreement-checkbox {
+		margin-right: 2px;
+		transform: scale(0.56);
+		transform-origin: center;
+		flex-shrink: 0;
+	}
+
+	.agreement-prefix {
+		color: var(--text-3, #b8a08a);
+		font-size: 12px;
+		line-height: 30px;
+		white-space: nowrap;
 	}
 
 	.item {
@@ -195,26 +218,27 @@
 		cursor: pointer;
 	}
 
-	.checkbox-box ::v-deep .uni-checkbox-input{
+	.agreement-checkbox ::v-deep .uni-checkbox-input{
 		border-radius: 100%;
 		width: 18px;
 		height: 18px;
 		border-color: var(--text-4, #d8cbbd);
 	}
 
-	.checkbox-box ::v-deep .uni-checkbox-input.uni-checkbox-input-checked{
+	.agreement-checkbox ::v-deep .uni-checkbox-input.uni-checkbox-input-checked{
 		border-color: var(--primary, #ea3e77);
 		color: #FFFFFF !important;
 		background-color: var(--primary, #ea3e77);
 	}
 
-	.content{
-		flex-wrap: nowrap;
+	.content,
+	.agreement-links{
+		flex-wrap: wrap;
 		flex-direction: row;
-		flex: 1;
+		flex: 0 0 auto;
 		min-width: 0;
 		justify-content: center;
-		overflow: hidden;
+		overflow: visible;
 	}
 
 	.root ::v-deep .uni-popup__error{

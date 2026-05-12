@@ -1,18 +1,25 @@
 // 导入配置
 import config from '@/uni_modules/uni-id-pages/config.js'
-// uni-id的云对象
-const uniIdCo = uniCloud.importObject('uni-id-co', {
-  customUI: true
-})
 // 用户配置的登录方式、是否打开调试模式
 const {
   loginTypes,
   debug
 } = config
 
+function getUniIdCo () {
+  if (typeof uniCloud === 'undefined' || !uniCloud.importObject) {
+    return null
+  }
+  return uniCloud.importObject('uni-id-co', {
+    customUI: true
+  })
+}
+
 export default async function () {
   // 有打开调试模式的情况下
   if (debug) {
+    const uniIdCo = getUniIdCo()
+    if (!uniIdCo) return
     // 1. 检查本地uni-id-pages中配置的登录方式，服务器端是否已经配置正确。否则提醒并引导去配置
     // 调用云对象，获取服务端已正确配置的登录方式
     const {
@@ -58,8 +65,14 @@ export default async function () {
 
   // 3. 绑定clientDB错误事件
   // clientDB对象
-  const db = uniCloud.database()
-  db.on('error', onDBError)
+  // #ifndef H5
+  const db = typeof uniCloud !== 'undefined' && uniCloud.database
+    ? uniCloud.database()
+    : null
+  if (db && typeof db.on === 'function') {
+    db.on('error', onDBError)
+  }
+  // #endif
   // clientDB的错误提示
   function onDBError ({
     code, // 错误码详见https://uniapp.dcloud.net.cn/uniCloud/clientdb?id=returnvalue
@@ -71,7 +84,7 @@ export default async function () {
   // db.off('error', onDBError)
 
   // 4. 同步客户端push_clientid至device表
-  if (uniCloud.onRefreshToken) {
+  if (typeof uniCloud !== 'undefined' && uniCloud.onRefreshToken) {
     uniCloud.onRefreshToken(() => {
       // console.log('onRefreshToken');
       if (uni.getPushClientId) {
@@ -80,9 +93,12 @@ export default async function () {
             // console.log(e)
             const pushClientId = e.cid
             // console.log(pushClientId);
-            const res = await uniIdCo.setPushCid({
-              pushClientId
-            })
+            const uniIdCo = getUniIdCo()
+            if (uniIdCo) {
+              const res = await uniIdCo.setPushCid({
+                pushClientId
+              })
+            }
             // console.log('getPushClientId', res);
           },
           fail (e) {

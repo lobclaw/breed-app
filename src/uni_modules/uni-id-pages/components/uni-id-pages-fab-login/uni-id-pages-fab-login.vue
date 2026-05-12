@@ -1,9 +1,12 @@
 <template>
-	<view>
+		<view>
 		<view class="fab-login-box">
 			<view class="item" v-for="(item,index) in servicesList" :key="index"
 				@click="item.path?toPage(item.path):login_before(item.id,false)">
-				<image class="logo" :src="item.logo" mode="scaleToFill"></image>
+				<view v-if="getServiceIcon(item.id)" class="login-icon" :class="'login-icon--' + item.id">
+					<text class="material-icons-round login-icon__glyph">{{ getServiceIcon(item.id) }}</text>
+				</view>
+				<image v-else class="logo" :src="item.logo" mode="scaleToFill"></image>
 				<text class="login-title">{{item.text}}</text>
 			</view>
 		</view>
@@ -195,6 +198,14 @@
 			})
 		},
 		methods: {
+			getServiceIcon(id) {
+				const icons = {
+					univerify: 'phone_iphone',
+					username: 'lock_person',
+					smsCode: 'sms'
+				}
+				return icons[id] || ''
+			},
 			getParentComponent(){
 				// #ifndef H5
 				return this.$parent;
@@ -550,13 +561,14 @@
 	.fab-login-box {
 		flex-direction: row;
 		flex-wrap: nowrap;
-		width: 100%;
+		width: auto;
 		justify-content: center;
 		gap: 56rpx;
 		position: fixed;
-		left: 0;
+		left: 50%;
 		bottom: calc(env(safe-area-inset-bottom, 0px) + 18px);
-		padding: 0 48rpx;
+		padding: 0;
+		transform: translateX(-50%);
 	}
 
 	.item {
@@ -572,9 +584,8 @@
 	/* #ifndef APP-NVUE */
 	@media screen and (min-width: 690px) {
 		.fab-login-box {
-			max-width: 500px;
 			left: 50%;
-			margin-left: -250px;
+			transform: translateX(-50%);
 		}
 		.item {
 			height: 70px;
@@ -595,9 +606,57 @@
 		padding: 8rpx;
 	}
 
+	.login-icon {
+		/* #ifndef APP-NVUE */
+		display: flex;
+		/* #endif */
+		width: 52rpx;
+		height: 52rpx;
+		max-width: 34px;
+		max-height: 34px;
+		border-radius: 100%;
+		border: 1px solid rgba(234, 62, 119, 0.12);
+		background: rgba(255, 255, 255, 0.86);
+		box-shadow: 0 4px 14px rgba(234, 62, 119, 0.06);
+		align-items: center;
+		justify-content: center;
+	}
+
+	.login-icon__glyph {
+		font-size: 17px;
+		line-height: 20px;
+	}
+
+	.login-icon--univerify {
+		border-color: rgba(61, 168, 160, 0.16);
+		background: var(--teal-soft, #f0fffe);
+	}
+
+	.login-icon--univerify .login-icon__glyph {
+		color: var(--teal, #3da8a0);
+	}
+
+	.login-icon--username {
+		border-color: rgba(234, 62, 119, 0.14);
+		background: var(--primary-soft, #fff0f2);
+	}
+
+	.login-icon--username .login-icon__glyph {
+		color: var(--primary, #ea3e77);
+	}
+
+	.login-icon--smsCode {
+		border-color: rgba(74, 141, 212, 0.14);
+		background: var(--blue-soft, #f0f7ff);
+	}
+
+	.login-icon--smsCode .login-icon__glyph {
+		color: var(--blue, #4a8dd4);
+	}
+
 	.login-title {
 		text-align: center;
-		margin-top: 8px;
+		margin-top: 7px;
 		color: var(--text-3, #b8a08a);
 		font-size: 11px;
 		line-height: 16px;

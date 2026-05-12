@@ -38,6 +38,13 @@ function restoreFamilyFromCache(): Family | null {
   }
 }
 
+function shouldSkipAuthProbeInH5Dev(): boolean {
+  // #ifdef H5
+  return typeof window !== 'undefined' && window.location.hostname === 'localhost'
+  // #endif
+  return false
+}
+
 type LoadFamilyResult = 'loaded' | 'no_family' | 'error'
 
 export function useAuth() {
@@ -79,6 +86,11 @@ export function useAuth() {
       currentFamily.value = null
       cacheFamily(null)
     })
+
+    if (shouldSkipAuthProbeInH5Dev()) {
+      isInitialized.value = true
+      return
+    }
 
     try {
       const info = uniCloud.getCurrentUserInfo()

@@ -44,16 +44,19 @@
 			<template v-else>
 				<view class="auth-field">
 					<text class="auth-field__label">手机号</text>
-					<view class="phone-box">
+					<view class="phone-box" :class="{ 'phone-box--focused': focusPhone }">
 						<view @click="chooseArea" class="auth-field__prefix area">+86</view>
-						<uni-easyinput trim="both" :focus="focusPhone" @blur="focusPhone = false" class="input-box" type="number"
-							:inputBorder="false" v-model="phone" maxlength="11" placeholder="请输入手机号" />
+						<uni-easyinput trim="both" :focus="focusPhone" @focus="focusPhone = true" @blur="focusPhone = false" class="input-box" type="number"
+							:inputBorder="false" primaryColor="#c0c4cc" v-model="phone" maxlength="11" placeholder="请输入手机号" />
 					</view>
 				</view>
 				<view class="link-box auth-mode-row">
-					<text class="link" @click="toPwdLogin">↔ 密码登录</text>
+					<view class="link-action" @click="toPwdLogin">
+						<text class="material-icons-round link-action__icon">swap_horiz</text>
+						<text class="link-action__text">密码登录</text>
+					</view>
 				</view>
-				<button class="uni-btn" type="primary" @click="toSmsPage">验证并登录</button>
+				<button class="uni-btn" type="primary" :disabled="!isPhone" @click="toSmsPage">验证并登录</button>
 				<uni-id-pages-agreements scope="register" ref="agreements"></uni-id-pages-agreements>
 			</template>
 		</view>
@@ -264,6 +267,13 @@
 		background: rgba(255, 255, 255, 0.92);
 		box-shadow: 0 4px 14px rgba(234, 62, 119, 0.035);
 		overflow: hidden;
+		transition: border-color 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+	}
+
+	.phone-box--focused {
+		border-color: rgba(234, 62, 119, 0.48);
+		background: var(--card, #fff);
+		box-shadow: 0 6px 18px rgba(234, 62, 119, 0.1);
 	}
 
 	.area {
@@ -300,9 +310,25 @@
 		box-sizing: border-box;
 		/* #endif */
 		flex: 1;
+		border: none !important;
 		border-color: transparent !important;
 		background: transparent !important;
 		box-shadow: none;
+	}
+
+	.phone-box ::v-deep .uni-easyinput__content {
+		border: none !important;
+		border-radius: 0 !important;
+		background: transparent !important;
+		box-shadow: none !important;
+	}
+
+	.phone-box ::v-deep .uni-easyinput__content.is-focused,
+	.phone-box ::v-deep .uni-easyinput__content:focus-within,
+	.phone-box ::v-deep .uni-easyinput.input-box:focus-within {
+		border: none !important;
+		background: transparent !important;
+		box-shadow: none !important;
 	}
 
 	.quickLogin {
@@ -328,7 +354,7 @@
 	}
 
 	.auth-mode-row {
-		margin-top: 4px;
+		margin-top: 2px;
 	}
 
 	@media screen and (min-width: 690px) {

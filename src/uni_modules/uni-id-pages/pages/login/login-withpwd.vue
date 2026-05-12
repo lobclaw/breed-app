@@ -33,7 +33,10 @@
 			</view>
 			<view class="link-box">
 				<view class="link-box__group" v-if="!config.isAdmin">
-					<text class="link" @click="toSmsLogin">↔ 验证码登录</text>
+					<view class="link-action" @click="toSmsLogin">
+						<text class="material-icons-round link-action__icon">swap_horiz</text>
+						<text class="link-action__text">验证码登录</text>
+					</view>
 				</view>
 				<view class="link-box__group" v-if="!config.isAdmin">
 					<text class="link" @click="toRetrievePwd">找回密码</text>

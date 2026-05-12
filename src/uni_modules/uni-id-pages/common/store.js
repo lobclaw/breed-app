@@ -1,9 +1,29 @@
 import pagesJson from '@/pages.json'
 import config from '@/uni_modules/uni-id-pages/config.js'
 
-const uniIdCo = uniCloud.importObject("uni-id-co")
-const db = uniCloud.database();
-const usersTable = db.collection('uni-id-users')
+function getUniIdCo(options) {
+	if (typeof uniCloud === 'undefined' || !uniCloud.importObject) {
+		return null
+	}
+	return uniCloud.importObject("uni-id-co", options)
+}
+
+function getUsersTable() {
+	if (typeof uniCloud === 'undefined' || !uniCloud.database) {
+		return null
+	}
+	const db = uniCloud.database()
+	return db && typeof db.collection === 'function'
+		? db.collection('uni-id-users')
+		: null
+}
+
+function getCurrentUserInfo() {
+	if (typeof uniCloud === 'undefined' || !uniCloud.getCurrentUserInfo) {
+		return {}
+	}
+	return uniCloud.getCurrentUserInfo() || {}
+}
 
 let hostUserInfo = uni.getStorageSync('uni-id-pages-userInfo')||{}
 
@@ -17,6 +37,11 @@ export const mutations = {
 	// data不为空，表示传递要更新的值(注意不是覆盖是合并),什么也不传时，直接查库获取更新
 	async updateUserInfo(data = false) {
 		if (data) {
+			const usersTable = getUsersTable()
+			if (!usersTable) {
+				this.setUserInfo(data)
+				return data
+			}
 			usersTable.where('_id==$env.uid').update(data).then(e => {
 				// console.log(e);
 				if (e.result.updated) {
@@ -36,15 +61,21 @@ export const mutations = {
 			})
 
 		} else {
-      // 不等待联网查询，立即更新用户_id确保store.userInfo中的_id是最新的
-      const _id = uniCloud.getCurrentUserInfo().uid
-      this.setUserInfo({_id},{cover:true})
-      // 查库获取用户信息，更新store.userInfo
-			const uniIdCo = uniCloud.importObject("uni-id-co", {
-				customUI: true
-			})
-			try {
-				let res = await usersTable.where("'_id' == $cloudEnv_uid")
+	      // 不等待联网查询，立即更新用户_id确保store.userInfo中的_id是最新的
+	      const _id = getCurrentUserInfo().uid
+	      if (_id) {
+	        this.setUserInfo({_id},{cover:true})
+	      }
+	      // 查库获取用户信息，更新store.userInfo
+				const usersTable = getUsersTable()
+				const uniIdCo = getUniIdCo({
+					customUI: true
+				})
+				if (!usersTable || !uniIdCo) {
+					return
+				}
+				try {
+					let res = await usersTable.where("'_id' == $cloudEnv_uid")
 					.field('mobile,nickname,username,email,avatar_file')
 					.get()
 
@@ -72,7 +103,8 @@ export const mutations = {
 	},
 	async logout() {
 		// 1. 已经过期就不需要调用服务端的注销接口	2.即使调用注销接口失败，不能阻塞客户端
-		if(uniCloud.getCurrentUserInfo().tokenExpired > Date.now()){
+		const uniIdCo = getUniIdCo()
+		if(uniIdCo && getCurrentUserInfo().tokenExpired > Date.now()){
 			try{
 				await uniIdCo.logout()
 			}catch(e){
