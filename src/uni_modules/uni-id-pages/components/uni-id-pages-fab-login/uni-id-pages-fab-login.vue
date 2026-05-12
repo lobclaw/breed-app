@@ -52,7 +52,7 @@
 						"id": "username",
 						"text": "手机号密码",
 						"logo": "/uni_modules/uni-id-pages/static/login/uni-fab-login/user.png",
-						"path": "/uni_modules/uni-id-pages/pages/login/login-withpwd"
+						"path": "/uni_modules/uni-id-pages/pages/login/login-withoutpwd?type=username"
 					},
 					{
 						"id": "smsCode",
@@ -190,12 +190,8 @@
 			}
 			//	console.log(servicesList);
 
-			//去掉当前页面对应的登录选项
-			const activeType = this.getParentComponent()?.type
-			this.servicesList = servicesList.filter(item => {
-				let path = item.path ? item.path.split('?')[0] : '';
-				return item.id !== activeType && path != this.getRoute(1)
-			})
+			allServicesList = servicesList
+			this.updateServicesList()
 		},
 		methods: {
 			getServiceIcon(id) {
@@ -225,6 +221,20 @@
 				}
 				return '/' + pages[pages.length - n].route
 			},
+			updateServicesList(activeType) {
+				const currentRoute = this.getRoute(1)
+				const loginType = activeType || this.getParentComponent()?.type
+				this.servicesList = allServicesList.filter(item => {
+					const path = item.path ? item.path.split('?')[0] : ''
+					if (item.id === loginType) {
+						return false
+					}
+					if (currentRoute == '/uni_modules/uni-id-pages/pages/login/login-withoutpwd' && path == currentRoute) {
+						return true
+					}
+					return path != currentRoute
+				})
+			},
 			toPage(path,index = 0) {
 				console.log('比较', this.getRoute(1),this.getRoute(2), path)
 				if (this.getRoute(1) == path.split('?')[0] && this.getRoute(1) ==
@@ -232,6 +242,7 @@
 					//如果要被打开的页面已经打开，且这个页面是 /uni_modules/uni-id-pages/pages/index/index 则把类型参数传给他
 					let loginType = path.split('?')[1].split('=')[1]
 					uni.$emit('uni-id-pages-setLoginType', loginType)
+					this.updateServicesList(loginType)
 				} else if (this.getRoute(2) == path) { // 如果上一个页面就是，马上要打开的页面，直接返回。防止重复开启
 					uni.navigateBack();
 				} else if (this.getRoute(1) != path) {
