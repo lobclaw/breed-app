@@ -196,7 +196,7 @@
 		display: flex;
 		/* #endif */
 		flex-direction: column;
-		gap: 10px;
+		gap: 12px;
 	}
 
 	.short-code-form__captcha {
@@ -214,7 +214,7 @@
 		right: 6px;
 		width: 260rpx;
 		max-width: 110px;
-		height: 48px;
+		height: 54px;
 		/* #ifndef APP-NVUE */
 		display: flex;
 		/* #endif */
@@ -239,12 +239,22 @@
 	.input-box {
 		margin: 0;
 		padding: 0;
-		height: 48px;
-		min-height: 48px;
+		height: 54px;
+		min-height: 54px;
 		border-radius: var(--radius-row, 14px);
-		border: 1px solid rgba(216, 203, 189, 0.72);
-		background-color: rgba(255, 255, 255, 0.96);
-		font-size: 14px;
+		border: 1px solid rgba(234, 62, 119, 0.08);
+		background-color: rgba(255, 255, 255, 0.92);
+		font-size: 15px;
+	}
+
+	.box ::v-deep .uni-easyinput__content {
+		border-color: rgba(234, 62, 119, 0.08) !important;
+		background-color: rgba(255, 255, 255, 0.92) !important;
+	}
+
+	.box ::v-deep .uni-easyinput__content-input {
+		padding-right: 118px;
+		font-size: 15px;
 	}
 
 	.box ::v-deep .content-clear-icon {

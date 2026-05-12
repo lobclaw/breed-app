@@ -1,52 +1,53 @@
 <!-- 找回密码页 -->
 <template>
 	<view class="uni-content">
-		<match-media :min-width="690">
+		<view class="auth-nav">
+			<text class="auth-nav__action" @click="goBack">‹</text>
+			<text class="auth-nav__help" @click="showHelp">帮助</text>
+		</view>
 		<view class="login-logo">
 			<image :src="logo"></image>
 		</view>
-		<!-- 顶部文字 -->
-		<text class="title title-box">通过手机验证码找回密码</text>
-		</match-media>
-		<uni-forms ref="form" :value="formData" err-show-type="toast">
-			<view class="auth-field">
-				<text class="auth-field__label">手机号</text>
-				<uni-forms-item name="phone">
-					<uni-easyinput :focus="focusPhone" @blur="focusPhone = false" class="input-box" :disabled="lock" type="number" :inputBorder="false" trim="both"
-						v-model="formData.phone" maxlength="11" placeholder="请输入手机号">
-					</uni-easyinput>
-				</uni-forms-item>
-			</view>
-			<view class="auth-field">
-				<text class="auth-field__label">短信验证码</text>
-				<uni-forms-item name="code">
-					<uni-id-pages-sms-form ref="shortCode" :phone="formData.phone" type="reset-pwd-by-sms" v-model="formData.code">
-					</uni-id-pages-sms-form>
-				</uni-forms-item>
-			</view>
-			<view class="auth-field">
-				<text class="auth-field__label">新密码</text>
-				<uni-forms-item name="password">
-					<uni-easyinput :focus="focusPassword" @blur="focusPassword = false" class="input-box" type="password" :inputBorder="false" v-model="formData.password" trim="both"
-						placeholder="请输入新密码"></uni-easyinput>
-				</uni-forms-item>
-			</view>
-			<view class="auth-field">
-				<text class="auth-field__label">确认密码</text>
-				<uni-forms-item name="password2">
-					<uni-easyinput :focus="focusPassword2" @blur="focusPassword2 = false" class="input-box" type="password" :inputBorder="false" v-model="formData.password2" trim="both"
-						placeholder="请再次输入新密码"></uni-easyinput>
-				</uni-forms-item>
-			</view>
-			<button class="uni-btn send-btn-box" type="primary" @click="submit">提交</button>
-			<match-media :min-width="690">
-				<view class="link-box">
+		<view class="auth-panel">
+			<text class="title">找回密码</text>
+			<text class="tip">通过手机号验证后重置密码</text>
+			<uni-forms class="auth-form" ref="form" :value="formData" err-show-type="toast">
+				<view class="auth-field">
+					<text class="auth-field__label">手机号</text>
+					<uni-forms-item name="phone">
+						<uni-easyinput :focus="focusPhone" @blur="focusPhone = false" class="input-box" :disabled="lock" type="number" :inputBorder="false" trim="both"
+							v-model="formData.phone" maxlength="11" placeholder="请输入手机号">
+						</uni-easyinput>
+					</uni-forms-item>
+				</view>
+				<view class="auth-field">
+					<text class="auth-field__label">短信验证码</text>
+					<uni-forms-item name="code">
+						<uni-id-pages-sms-form ref="shortCode" :phone="formData.phone" type="reset-pwd-by-sms" v-model="formData.code">
+						</uni-id-pages-sms-form>
+					</uni-forms-item>
+				</view>
+				<view class="auth-field">
+					<text class="auth-field__label">新密码</text>
+					<uni-forms-item name="password">
+						<uni-easyinput :focus="focusPassword" @blur="focusPassword = false" class="input-box" type="password" :inputBorder="false" v-model="formData.password" trim="both"
+							placeholder="请输入新密码"></uni-easyinput>
+					</uni-forms-item>
+				</view>
+				<view class="auth-field">
+					<text class="auth-field__label">确认密码</text>
+					<uni-forms-item name="password2">
+						<uni-easyinput :focus="focusPassword2" @blur="focusPassword2 = false" class="input-box" type="password" :inputBorder="false" v-model="formData.password2" trim="both"
+							placeholder="请再次输入新密码"></uni-easyinput>
+					</uni-forms-item>
+				</view>
+				<button class="uni-btn send-btn-box" type="primary" @click="submit">提交</button>
+				<view class="link-box auth-retrieve-links">
 					<text class="link" @click="retrieveByEmail">通过邮箱验证码找回密码</text>
-					<view></view>
-          <text class="link" @click="backLogin">返回登录</text>
-        </view>
-			</match-media>
-		</uni-forms>
+					<text class="link" @click="backLogin">返回登录</text>
+				</view>
+			</uni-forms>
+		</view>
 		<uni-popup-captcha @confirm="submit" v-model="formData.captcha" scene="reset-pwd-by-sms" ref="popup"></uni-popup-captcha>
 	</view>
 </template>
@@ -215,9 +216,23 @@
 					url: '/uni_modules/uni-id-pages/pages/retrieve/retrieve-by-email'
 				})
 			},
+			goBack() {
+				const pages = getCurrentPages()
+				if (pages.length > 1) {
+					uni.navigateBack()
+				} else {
+					this.backLogin()
+				}
+			},
+			showHelp() {
+				uni.showToast({
+					title: '请填写验证码并设置新密码',
+					icon: 'none'
+				})
+			},
 			backLogin () {
 				uni.redirectTo({
-					url: '/uni_modules/uni-id-pages/pages/login/login-withpwd'
+					url: '/uni_modules/uni-id-pages/pages/login/login-withoutpwd'
 				})
 			}
 		}

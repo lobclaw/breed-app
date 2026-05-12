@@ -68,6 +68,12 @@
   width: 100%;
 }
 
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
 .title {
   display: flex;
   padding: 0;
@@ -252,6 +258,11 @@
   flex-direction: row;
   align-items: center;
   gap: 4px;
+}
+
+.auth-retrieve-links {
+  margin-top: 16px;
+  align-items: center;
 }
 
 .uni-btn {
