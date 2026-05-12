@@ -11,9 +11,18 @@
       </view>
 
       <text class="family-setup__title">创建你的犬舍</text>
-      <text class="family-setup__desc">为你的犬舍取一个名字，开始管理繁育事务</text>
+      <text class="family-setup__desc">填写犬舍名称和你的显示称呼，开始管理繁育事务</text>
 
       <!-- 输入框 -->
+      <view class="family-setup__input-wrap">
+        <input
+          v-model="memberNickname"
+          class="family-setup__input"
+          placeholder="我的称呼"
+          maxlength="20"
+        />
+      </view>
+
       <view class="family-setup__input-wrap">
         <input
           v-model="familyName"
@@ -64,6 +73,7 @@ import BButton from '@/components/base/BButton.vue'
 const { createFamily } = useAuth()
 const familyName = ref('')
 const inviteCode = ref('')
+const memberNickname = ref(buildDefaultMemberNickname())
 const creating = ref(false)
 
 const { run: joinFamily } = useCloudCall('family-service', 'joinFamily', {
@@ -74,12 +84,22 @@ const { run: joinFamily } = useCloudCall('family-service', 'joinFamily', {
 
 const canSubmit = computed(() => familyName.value.trim() || inviteCode.value.trim())
 
+function buildDefaultMemberNickname() {
+  const userInfo = uni.getStorageSync('uni-id-pages-userInfo') || {}
+  const mobile = String(userInfo.mobile || '').trim()
+  return mobile.length >= 4 ? `用户${mobile.slice(-4)}` : '用户'
+}
+
+function getMemberNickname() {
+  return memberNickname.value.trim() || buildDefaultMemberNickname()
+}
+
 async function create() {
   if (!canSubmit.value) return
   creating.value = true
   try {
     if (inviteCode.value.trim()) {
-      await joinFamily({ invite_code: inviteCode.value.trim() })
+      await joinFamily({ invite_code: inviteCode.value.trim(), nickname: getMemberNickname() })
       queueSubmitFeedback({
         message: '已加入家庭',
         targetRoute: '/pages/home/index',
@@ -87,7 +107,7 @@ async function create() {
       await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)
       uni.reLaunch({ url: '/pages/home/index' })
     } else {
-      await createFamily(familyName.value.trim())
+      await createFamily({ name: familyName.value.trim(), nickname: getMemberNickname() })
       queueSubmitFeedback({
         message: '已创建家庭',
         targetRoute: '/pages/home/index',
@@ -151,6 +171,10 @@ async function create() {
   border-radius: var(--radius-card);
   padding: 14px 16px;
   border: 1.5px solid var(--text-4);
+}
+
+.family-setup__input-wrap + .family-setup__input-wrap {
+  margin-top: 12px;
 }
 
 .family-setup__input {

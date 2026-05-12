@@ -1,20 +1,25 @@
 <!-- 短信验证码登录页 -->
 <template>
-	<view class="uni-content">
+	<view class="uni-content auth-login-page">
+		<view class="auth-nav">
+			<text class="auth-nav__action" @click="goBack">‹</text>
+			<text class="auth-nav__help" @click="showHelp">帮助</text>
+		</view>
 		<view class="login-logo">
 			<image :src="logo"></image>
 		</view>
-		<!-- 顶部文字 -->
-		<text class="title">请输入验证码</text>
-		<text class="tip">先输入图形验证码，再获取短信验证码</text>
-		<uni-forms>
-			<view class="auth-field">
-				<text class="auth-field__label">短信验证码</text>
-				<uni-id-pages-sms-form focusCaptchaInput v-model="code" type="login-by-sms" ref="smsCode" :phone="phone">
-				</uni-id-pages-sms-form>
-			</view>
-			<button class="uni-btn send-btn" type="primary" @click="submit">登录</button>
-		</uni-forms>
+		<view class="auth-panel">
+			<text class="title">输入验证码</text>
+			<text class="tip">验证码已发送至 {{ phone }}</text>
+			<uni-forms>
+				<view class="auth-field">
+					<text class="auth-field__label">短信验证码</text>
+					<uni-id-pages-sms-form focusCaptchaInput v-model="code" type="login-by-sms" ref="smsCode" :phone="phone">
+					</uni-id-pages-sms-form>
+				</view>
+				<button class="uni-btn send-btn" type="primary" @click="submit">登录</button>
+			</uni-forms>
+		</view>
 		<uni-popup-captcha @confirm="submit" v-model="captcha" scene="login-by-sms" ref="popup"></uni-popup-captcha>
 	</view>
 </template>
@@ -51,6 +56,15 @@
 			// #endif
 		},
 		methods: {
+			goBack() {
+				uni.navigateBack()
+			},
+			showHelp() {
+				uni.showToast({
+					title: '请填写短信验证码',
+					icon: 'none'
+				})
+			},
 			submit() { //完成并提交
 				const uniIdCo = uniCloud.importObject("uni-id-co", {
 					errorOptions: {

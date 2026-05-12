@@ -1,5 +1,7 @@
 <template>
 	<view class="captcha-box">
+		<input @blur="focusCaptchaInput = false" :focus="focusCaptchaInput" type="text" class="captcha"
+			:inputBorder="false" maxlength="4" v-model="val" placeholder="验证码">
 		<view class="captcha-img-box" @click="getImageCaptcha">
 			<uni-icons class="loding" size="20px" color="#BBB" v-if="loging" type="spinner-cycle"></uni-icons>
 			<image v-if="captchaBase64" class="captcha-img" :class="{opacity:loging}" :src="captchaBase64"
@@ -8,8 +10,6 @@
 				<text v-if="!loging">点击刷新</text>
 			</view>
 		</view>
-		<input @blur="focusCaptchaInput = false" :focus="focusCaptchaInput" type="text" class="captcha"
-			:inputBorder="false" maxlength="4" v-model="val" placeholder="验证码">
 	</view>
 </template>
 

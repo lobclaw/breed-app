@@ -1,42 +1,47 @@
 <!-- 账号密码登录页 -->
 <template>
-	<view class="uni-content">
+	<view class="uni-content auth-login-page">
+		<view class="auth-nav">
+			<text class="auth-nav__action" @click="goBack">‹</text>
+			<text class="auth-nav__help" @click="showHelp">帮助</text>
+		</view>
 		<view class="login-logo">
 			<image :src="logo"></image>
 		</view>
-		<!-- 顶部文字 -->
-		<text class="title title-box">账号密码登录</text>
-		<uni-forms>
-			<view class="auth-field">
-				<text class="auth-field__label">账号</text>
-				<uni-forms-item name="username">
-					<uni-easyinput :focus="focusUsername" @blur="focusUsername = false" class="input-box"
-						:inputBorder="false" v-model="username" placeholder="手机号 / 用户名 / 邮箱" trim="all" />
-				</uni-forms-item>
+
+		<view class="auth-panel">
+			<text class="title title-box">手机号密码登录</text>
+			<uni-forms>
+				<view class="auth-field">
+					<text class="auth-field__label">手机号</text>
+					<uni-forms-item name="username">
+						<uni-easyinput :focus="focusUsername" @blur="focusUsername = false" class="input-box"
+							:inputBorder="false" v-model="username" placeholder="请输入手机号" trim="all" />
+					</uni-forms-item>
+				</view>
+				<view class="auth-field">
+					<text class="auth-field__label">密码</text>
+					<uni-forms-item name="password">
+							<uni-easyinput :focus="focusPassword" @blur="focusPassword = false" class="input-box" clearable
+							               type="password" :inputBorder="false" v-model="password" placeholder="请输入密码" trim="all" />
+					</uni-forms-item>
+				</view>
+			</uni-forms>
+			<view class="auth-field" v-if="needCaptcha">
+				<text class="auth-field__label">验证码</text>
+				<uni-captcha focus ref="captcha" scene="login-by-pwd" v-model="captcha" />
 			</view>
-			<view class="auth-field">
-				<text class="auth-field__label">密码</text>
-				<uni-forms-item name="password">
-						<uni-easyinput :focus="focusPassword" @blur="focusPassword = false" class="input-box" clearable
-						               type="password" :inputBorder="false" v-model="password" placeholder="请输入密码" trim="all" />
-				</uni-forms-item>
+			<view class="link-box">
+				<view class="link-box__group" v-if="!config.isAdmin">
+					<text class="link" @click="toSmsLogin">↔ 验证码登录</text>
+				</view>
+				<view class="link-box__group" v-if="!config.isAdmin">
+					<text class="link" @click="toRetrievePwd">找回密码</text>
+				</view>
 			</view>
-		</uni-forms>
-		<view class="auth-field" v-if="needCaptcha">
-			<text class="auth-field__label">验证码</text>
-			<uni-captcha focus ref="captcha" scene="login-by-pwd" v-model="captcha" />
-		</view>
-		<!-- 带选择框的隐私政策协议组件 -->
-		<uni-id-pages-agreements scope="login" ref="agreements"></uni-id-pages-agreements>
-		<button class="uni-btn" type="primary" @click="pwdLogin">登录</button>
-		<!-- 忘记密码 -->
-		<view class="link-box">
-			<view class="link-box__group" v-if="!config.isAdmin">
-				<text class="forget">忘记了？</text>
-				<text class="link" @click="toRetrievePwd">找回密码</text>
-			</view>
-			<text class="link" @click="toRegister">{{config.isAdmin ? '注册管理员账号': '注册账号'}}</text>
-			<!-- <text class="link" @click="toRegister" v-if="!config.isAdmin">注册账号</text> -->
+			<button class="uni-btn" type="primary" @click="pwdLogin">登录</button>
+			<!-- 带选择框的隐私政策协议组件 -->
+			<uni-id-pages-agreements scope="login" ref="agreements"></uni-id-pages-agreements>
 		</view>
 		<!-- 悬浮登录方式组件 -->
 		<uni-id-pages-fab-login ref="uniFabLogin"></uni-id-pages-fab-login>
@@ -52,8 +57,8 @@
 		mixins: [mixin],
 		data() {
 			return {
-				"password": "m123456789",
-				"username": "mooling",
+				"password": "",
+				"username": "",
 				"captcha": "",
 				"needCaptcha": false,
 				"focusUsername": false,
@@ -98,7 +103,15 @@
 				if (!this.username.length) {
 					this.focusUsername = true
 					return uni.showToast({
-						title: '请输入手机号/用户名/邮箱',
+						title: '请输入手机号',
+						icon: 'none',
+						duration: 3000
+					});
+				}
+				if (!/^1\d{10}$/.test(this.username)) {
+					this.focusUsername = true
+					return uni.showToast({
+						title: '手机号格式不正确',
 						icon: 'none',
 						duration: 3000
 					});
@@ -121,13 +134,7 @@
 					"captcha": this.captcha
 				}
 
-				if (/^1\d{10}$/.test(this.username)) {
-					data.mobile = this.username
-				} else if (/@/.test(this.username)) {
-					data.email = this.username
-				} else {
-					data.username = this.username
-				}
+				data.mobile = this.username
 
 				uni.showLoading({
 					title: '登录中...',
@@ -154,14 +161,25 @@
 					uni.hideLoading()
 				})
 			},
-			/* 前往注册 */
-			toRegister() {
+			toSmsLogin() {
 				uni.navigateTo({
-					url: this.config.isAdmin ? '/uni_modules/uni-id-pages/pages/register/register-admin' :
-						'/uni_modules/uni-id-pages/pages/register/register',
-					fail(e) {
-						console.error(e);
-					}
+					url: '/uni_modules/uni-id-pages/pages/login/login-withoutpwd?type=smsCode'
+				})
+			},
+			goBack() {
+				const pages = getCurrentPages()
+				if (pages.length > 1) {
+					uni.navigateBack()
+				} else {
+					uni.redirectTo({
+						url: '/uni_modules/uni-id-pages/pages/login/login-withoutpwd?type=smsCode'
+					})
+				}
+			},
+			showHelp() {
+				uni.showToast({
+					title: '可用短信验证码登录后设置密码',
+					icon: 'none'
 				})
 			}
 		}

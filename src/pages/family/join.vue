@@ -16,6 +16,17 @@
 
         <!-- 邀请码输入 -->
         <view class="code-input-area">
+          <view class="member-name-wrap">
+            <input
+              v-model="memberNickname"
+              class="member-name-input"
+              type="text"
+              placeholder="我的称呼"
+              maxlength="20"
+              :adjust-position="true"
+            />
+          </view>
+
           <view class="code-input-wrap">
             <input
               v-model="code"
@@ -69,6 +80,7 @@ import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BButton from '@/components/base/BButton.vue'
 
 const code = ref('')
+const memberNickname = ref(buildDefaultMemberNickname())
 const joining = ref(false)
 
 const { run: joinFamily } = useCloudCall<{ data: any }>('family-service', 'joinFamily', {
@@ -77,10 +89,20 @@ const { run: joinFamily } = useCloudCall<{ data: any }>('family-service', 'joinF
   throwOnError: true,
 })
 
+function buildDefaultMemberNickname() {
+  const userInfo = uni.getStorageSync('uni-id-pages-userInfo') || {}
+  const mobile = String(userInfo.mobile || '').trim()
+  return mobile.length >= 4 ? `用户${mobile.slice(-4)}` : '用户'
+}
+
+function getMemberNickname() {
+  return memberNickname.value.trim() || buildDefaultMemberNickname()
+}
+
 async function doJoin() {
   joining.value = true
   try {
-    const res = await joinFamily({ invite_code: code.value })
+    const res = await joinFamily({ invite_code: code.value, nickname: getMemberNickname() })
     if (res?.data) {
       queueSubmitFeedback({
         message: `已加入「${res.data.familyName}」`,
@@ -144,6 +166,22 @@ async function doJoin() {
   flex-direction: column;
   align-items: center;
   gap: 6px;
+}
+
+.member-name-wrap {
+  width: 100%;
+}
+
+.member-name-input {
+  width: 100%;
+  height: 48px;
+  padding: 0 16px;
+  border: 1px solid rgba(216, 203, 189, 0.7);
+  border-radius: var(--radius-row);
+  background: var(--card);
+  color: var(--text-1);
+  font-size: 15px;
+  text-align: center;
 }
 
 .code-input-wrap {

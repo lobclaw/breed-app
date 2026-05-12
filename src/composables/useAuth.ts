@@ -168,8 +168,8 @@ export function useAuth() {
   /**
    * 创建家庭
    */
-  async function createFamily(name: string) {
-    const result = await cloudCall<{ data: { familyId: string } }>('family-service', 'createFamily', name)
+  async function createFamily(input: string | { name: string; nickname?: string }) {
+    const result = await cloudCall<{ data: { familyId: string } }>('family-service', 'createFamily', input)
     await loadFamily()
     return result.data.familyId
   }
@@ -187,7 +187,7 @@ export function useAuth() {
    * 跳转到登录页
    */
   function navigateToLogin() {
-    uni.navigateTo({ url: '/uni_modules/uni-id-pages/pages/login/login-withpwd' })
+    uni.navigateTo({ url: '/uni_modules/uni-id-pages/pages/login/login-withoutpwd' })
   }
 
   return {

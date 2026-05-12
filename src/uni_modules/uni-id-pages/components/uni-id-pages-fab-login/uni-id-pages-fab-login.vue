@@ -47,13 +47,13 @@
 			return {
 				servicesList: [{
 						"id": "username",
-						"text": "账号登录",
+						"text": "手机号密码",
 						"logo": "/uni_modules/uni-id-pages/static/login/uni-fab-login/user.png",
 						"path": "/uni_modules/uni-id-pages/pages/login/login-withpwd"
 					},
 					{
 						"id": "smsCode",
-						"text": "短信验证码",
+						"text": "验证码登录",
 						"logo": "/uni_modules/uni-id-pages/static/login/uni-fab-login/sms.png",
 						"path": "/uni_modules/uni-id-pages/pages/login/login-withoutpwd?type=smsCode"
 					},
@@ -82,7 +82,7 @@
 					},
 					{
 						"id": "univerify",
-						"text": "一键登录",
+						"text": "本机号码",
 						"logo": "/uni_modules/uni-id-pages/static/app/uni-fab-login/univerify.png",
 					},
 					{
@@ -146,8 +146,8 @@
 			}
 		},
 		async created() {
-			let servicesList = this.servicesList
 			let loginTypes = config.loginTypes
+			let servicesList = this.servicesList
 
 			servicesList = servicesList.filter(item => {
 
@@ -166,7 +166,7 @@
 				// #endif
 
 				return loginTypes.includes(item.id)
-			})
+			}).sort((a, b) => loginTypes.indexOf(a.id) - loginTypes.indexOf(b.id))
 			//处理一键登录
 			if (loginTypes.includes('univerify')) {
 				this.univerifyStyle.privacyTerms.privacyItems = this.agreements
@@ -188,9 +188,10 @@
 			//	console.log(servicesList);
 
 			//去掉当前页面对应的登录选项
+			const activeType = this.getParentComponent()?.type
 			this.servicesList = servicesList.filter(item => {
 				let path = item.path ? item.path.split('?')[0] : '';
-				return path != this.getRoute(1)
+				return item.id !== activeType && path != this.getRoute(1)
 			})
 		},
 		methods: {
@@ -425,10 +426,15 @@
 						success: res => {
 							this.login(res.authResult, 'univerify')
 						},
-						fail(err) {
+						fail: err => {
 							console.log(err)
-							if(!clickAnotherButtons){
-								uni.navigateBack()
+							if (!clickAnotherButtons) {
+								const parent = this.getParentComponent()
+								if (parent && parent.fallbackToSmsLogin) {
+									parent.fallbackToSmsLogin()
+								} else {
+									uni.navigateBack()
+								}
 							}
 							// uni.showToast({
 							// 	title: JSON.stringify(err),
@@ -543,18 +549,23 @@
 
 	.fab-login-box {
 		flex-direction: row;
-		flex-wrap: wrap;
-		width: 750rpx;
-		justify-content: space-around;
+		flex-wrap: nowrap;
+		width: 100%;
+		justify-content: center;
+		gap: 56rpx;
 		position: fixed;
 		left: 0;
+		bottom: calc(env(safe-area-inset-bottom, 0px) + 18px);
+		padding: 0 48rpx;
 	}
 
 	.item {
 		flex-direction: column;
 		justify-content: center;
 		align-items: center;
-		height: 200rpx;
+		width: 128rpx;
+		min-width: 74px;
+		height: 104rpx;
 		cursor: pointer;
 	}
 
@@ -562,35 +573,34 @@
 	@media screen and (min-width: 690px) {
 		.fab-login-box {
 			max-width: 500px;
-			margin-left: calc(50% - 250px);
+			left: 50%;
+			margin-left: -250px;
 		}
 		.item {
-			height: 160rpx;
-		}
-	}
-
-	@media screen and (max-width: 690px) {
-		.fab-login-box {
-			bottom: 10rpx;
+			height: 70px;
 		}
 	}
 
 	/* #endif */
 
 	.logo {
-		width: 60rpx;
-		height: 60rpx;
-		max-width: 40px;
-		max-height: 40px;
+		width: 52rpx;
+		height: 52rpx;
+		max-width: 34px;
+		max-height: 34px;
 		border-radius: 100%;
-		border: solid 1px #F6F6F6;
+		border: solid 1px rgba(234, 62, 119, 0.1);
+		background: var(--primary-soft, #fff0f2);
+		box-shadow: 0 4px 14px rgba(234, 62, 119, 0.06);
+		padding: 8rpx;
 	}
 
 	.login-title {
 		text-align: center;
-		margin-top: 6px;
-		color: #999;
-		font-size: 10px;
-		width: 80px;
+		margin-top: 8px;
+		color: var(--text-3, #b8a08a);
+		font-size: 11px;
+		line-height: 16px;
+		width: 88px;
 	}
 </style>

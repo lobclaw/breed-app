@@ -99,6 +99,18 @@
       "name": "",
       "codeExpiresIn": 180, 
       "scene": {
+        "login-by-sms": {
+          "templateId": "",
+          "codeExpiresIn": 180
+        },
+        "reset-pwd-by-sms": {
+          "templateId": "",
+          "codeExpiresIn": 180
+        },
+        "set-pwd-by-sms": {
+          "templateId": "",
+          "codeExpiresIn": 180
+        },
         "bind-mobile-by-sms": {
           "templateId": "", 
           "codeExpiresIn": 240 
@@ -106,7 +118,9 @@
       }
     },
     "univerify": {
-      "appid": ""
+      "appid": "",
+      "apiKey": "",
+      "apiSecret": ""
     }
   }
 }

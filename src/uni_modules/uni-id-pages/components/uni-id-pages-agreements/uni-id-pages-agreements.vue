@@ -4,12 +4,14 @@
 			<checkbox-group @change="setAgree">
 				<label class="checkbox-box">
 					<checkbox :checked="isAgree" style="transform: scale(0.5);margin-right: -6px;" />
-					<text class="text">同意</text>
+					<text class="text">已阅读并同意</text>
 				</label>
 			</checkbox-group>
 			<view class="content">
 				<view class="item" v-for="(agreement,index) in agreements" :key="index">
-					<text class="agreement text" @click="navigateTo(agreement)">{{agreement.title}}</text>
+					<view class="agreement-hit" @tap.stop="navigateTo(agreement)">
+						<text class="agreement text">{{agreement.title}}</text>
+					</view>
 					<text class="text and" v-if="hasAnd(agreements,index)" space="nbsp"> 和 </text>
 				</view>
 			</view>
@@ -20,7 +22,9 @@
 				<view class="content">
 					<text class="text">请先阅读并同意</text>
 					<view class="item" v-for="(agreement,index) in agreements" :key="index">
-						<text class="agreement text" @click="navigateTo(agreement)">{{agreement.title}}</text>
+						<view class="agreement-hit" @tap.stop="navigateTo(agreement)">
+							<text class="agreement text">{{agreement.title}}</text>
+						</view>
 						<text class="text and" v-if="hasAnd(agreements,index)" space="nbsp"> 和 </text>
 					</view>
 				</view>
@@ -95,10 +99,25 @@
 				url,
 				title
 			}) {
+				if (!url) {
+					return uni.showToast({
+						title: '协议页面暂不可打开',
+						icon: 'none'
+					})
+				}
+				const targetUrl = url.substring(0, 1) === '/'
+					? url
+					: '/uni_modules/uni-id-pages/pages/common/webview/webview?url=' + encodeURIComponent(url) + '&title=' + encodeURIComponent(title)
 				uni.navigateTo({
-					url: '/uni_modules/uni-id-pages/pages/common/webview/webview?url=' + url + '&title=' + title,
+					url: targetUrl,
 					success: res => {},
-					fail: () => {},
+					fail: (error) => {
+						console.error('[agreements] navigate failed', targetUrl, error)
+						uni.showToast({
+							title: '协议页面暂不可打开',
+							icon: 'none'
+						})
+					},
 					complete: () => {}
 				});
 			},
@@ -134,27 +153,41 @@
 	/* #endif */
 	.root {
 		flex-direction: row;
-		align-items: flex-start;
-		flex-wrap: wrap;
-		min-height: 36px;
-		margin-top: 2px;
+		align-items: center;
+		justify-content: center;
+		flex-wrap: nowrap;
+		width: 100%;
+		min-height: 30px;
+		margin-top: 16px;
 		font-size: 12px;
-		color: var(--text-2, #8b7355);
+		color: var(--text-3, #b8a08a);
 	}
 
 	.checkbox-box ,.uni-label-pointer{
 		align-items: center;
 		display: flex;
 		flex-direction: row;
-		min-height: 32px;
+		min-height: 30px;
 		padding-right: 4px;
+		flex-shrink: 0;
 	}
 
 	.item {
 		flex-direction: row;
+		align-items: center;
+		flex: 0 0 auto;
 	}
 	.text{
-		line-height: 32px;
+		line-height: 30px;
+		white-space: nowrap;
+	}
+	.agreement-hit {
+		min-height: 30px;
+		padding: 0 2px;
+		flex-direction: row;
+		align-items: center;
+		cursor: pointer;
+		flex: 0 0 auto;
 	}
 	.agreement {
 		color: var(--primary, #ea3e77);
@@ -176,10 +209,12 @@
 	}
 
 	.content{
-		flex-wrap: wrap;
+		flex-wrap: nowrap;
 		flex-direction: row;
 		flex: 1;
 		min-width: 0;
+		justify-content: center;
+		overflow: hidden;
 	}
 
 	.root ::v-deep .uni-popup__error{

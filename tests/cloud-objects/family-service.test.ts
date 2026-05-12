@@ -42,6 +42,38 @@ describe('family-service', () => {
   })
 
   describe('createFamily', () => {
+    it('创建家庭时应写入创建者家庭称呼', async () => {
+      const ctx = createCloudObjectContext()
+      ;(ctx as any).familyId = null
+
+      const result = await familyService.createFamily.call(ctx, {
+        name: '测试犬舍',
+        nickname: '主理人',
+      })
+
+      const { data } = await db.collection('families').doc(result.data.familyId).get()
+      expect(data[0].members[0]).toMatchObject({
+        user_id: 'test_uid',
+        role: 'creator',
+        status: 'active',
+        nickname: '主理人',
+      })
+    })
+
+    it('创建家庭未传称呼时应按手机号尾号生成默认称呼', async () => {
+      seedCollection('uni-id-users', [{
+        _id: 'test_uid',
+        mobile: '13812345678',
+      }])
+      const ctx = createCloudObjectContext()
+      ;(ctx as any).familyId = null
+
+      const result = await familyService.createFamily.call(ctx, '测试犬舍')
+
+      const { data } = await db.collection('families').doc(result.data.familyId).get()
+      expect(data[0].members[0].nickname).toBe('用户5678')
+    })
+
     it('应创建家庭并将用户设为创建者', async () => {
       const ctx = createCloudObjectContext({ familyId: null })
 
@@ -90,6 +122,40 @@ describe('family-service', () => {
     it('已有家庭的用户不能再创建', () => {
       const ctx = createCloudObjectContext({ familyId: 'existing_family' })
       expect(ctx.familyId).toBeTruthy()
+    })
+  })
+
+  describe('joinFamily', () => {
+    it('通过邀请码加入家庭时应写入成员称呼', async () => {
+      seedCollection('families', [{
+        _id: familyId,
+        name: '小白犬舍',
+        creator_id: 'user_1',
+        invite_code: 'ABC123',
+        invite_expires: Date.now() + DAY_MS,
+        members: [
+          { user_id: 'user_1', role: 'creator', status: 'active', joined_at: 1000 },
+        ],
+        care_rules: [],
+        settings: {},
+        created_at: 1000,
+        updated_at: 1000,
+      }])
+      const ctx = createCloudObjectContext({ uid: 'helper_1', role: null })
+      ;(ctx as any).familyId = null
+
+      await familyService.joinFamily.call(ctx, {
+        invite_code: 'ABC123',
+        nickname: '护理员',
+      })
+
+      const { data } = await db.collection('families').doc(familyId).get()
+      const member = data[0].members.find((item: any) => item.user_id === 'helper_1')
+      expect(member).toMatchObject({
+        role: 'helper',
+        status: 'active',
+        nickname: '护理员',
+      })
     })
   })
 

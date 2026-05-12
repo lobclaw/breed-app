@@ -1,54 +1,62 @@
 <!-- 免密登录页 -->
 <template>
-	<view class="uni-content">
+	<view class="uni-content auth-login-page">
+		<view class="auth-nav">
+			<text class="auth-nav__spacer"></text>
+			<text class="auth-nav__help" @click="showHelp">帮助</text>
+		</view>
 		<view class="login-logo">
 			<image :src="logo"></image>
 		</view>
-		<!-- 顶部文字 -->
-		<text class="title">请选择登录方式</text>
-		<!-- 快捷登录框 当url带参数时有效 -->
-		<template v-if="['apple','weixin', 'weixinMobile', 'huawei', 'huaweiMobile'].includes(type)">
-			<text class="tip">将根据第三方账号服务平台的授权范围获取你的信息</text>
-			<view class="quickLogin">
-				<image v-if="type !== 'weixinMobile' && type !== 'huaweiMobile'" @click="quickLogin" :src="imgSrc" mode="widthFix"
-					class="quickLoginBtn"></image>
-				<view v-else style="position: relative">
-					<button v-if="type ==='weixinMobile'" type="primary" open-type="getPhoneNumber" @getphonenumber="quickLogin"
-					        class="uni-btn">微信授权手机号登录</button>
-					<!-- #ifdef APP-HARMONY -->
-					<app-harmony-get-phone-number
-						v-if="type === 'huaweiMobile'"
-						@getphonenumber="quickLogin"
-					>
-						<button class="quickLoginBtn" style="padding: 0; display: flex">
+
+		<view class="auth-panel">
+			<text class="title">{{ pageTitle }}</text>
+			<text class="tip">{{ pageTip }}</text>
+			<!-- 快捷登录框 当url带参数时有效 -->
+			<template v-if="['apple','weixin', 'weixinMobile', 'huawei', 'huaweiMobile'].includes(type)">
+				<view class="quickLogin">
+					<image v-if="type !== 'weixinMobile' && type !== 'huaweiMobile'" @click="quickLogin" :src="imgSrc" mode="widthFix"
+						class="quickLoginBtn"></image>
+					<view v-else style="position: relative">
+						<button v-if="type ==='weixinMobile'" type="primary" open-type="getPhoneNumber" @getphonenumber="quickLogin"
+						        class="uni-btn">微信授权手机号登录</button>
+						<!-- #ifdef APP-HARMONY -->
+						<app-harmony-get-phone-number
+							v-if="type === 'huaweiMobile'"
+							@getphonenumber="quickLogin"
+						>
+							<button class="quickLoginBtn" style="padding: 0; display: flex">
+								<image :src="imgSrc" mode="widthFix"></image>
+							</button>
+						</app-harmony-get-phone-number>
+						<!-- #endif -->
+						<!-- #ifdef MP-HARMONY -->
+						<button v-if="type === 'huaweiMobile'" open-type="getPhoneNumber" @getphonenumber="quickLogin"
+						        class="quickLoginBtn" style="padding: 0; display: flex">
 							<image :src="imgSrc" mode="widthFix"></image>
 						</button>
-					</app-harmony-get-phone-number>
-					<!-- #endif -->
-					<!-- #ifdef MP-HARMONY -->
-					<button v-if="type === 'huaweiMobile'" open-type="getPhoneNumber" @getphonenumber="quickLogin"
-					        class="quickLoginBtn" style="padding: 0; display: flex">
-						<image :src="imgSrc" mode="widthFix"></image>
-					</button>
-					<!-- #endif -->
-					<view v-if="this.needAgreements && !this.agree" class="mobile-login-agreement-layer" @click="showAgreementModal"></view>
+						<!-- #endif -->
+						<view v-if="this.needAgreements && !this.agree" class="mobile-login-agreement-layer" @click="showAgreementModal"></view>
+					</view>
+					<uni-id-pages-agreements scope="register" ref="agreements"></uni-id-pages-agreements>
 				</view>
+			</template>
+			<template v-else>
+				<view class="auth-field">
+					<text class="auth-field__label">手机号</text>
+					<view class="phone-box">
+						<view @click="chooseArea" class="auth-field__prefix area">+86</view>
+						<uni-easyinput trim="both" :focus="focusPhone" @blur="focusPhone = false" class="input-box" type="number"
+							:inputBorder="false" v-model="phone" maxlength="11" placeholder="请输入手机号" />
+					</view>
+				</view>
+				<view class="link-box auth-mode-row">
+					<text class="link" @click="toPwdLogin">↔ 密码登录</text>
+				</view>
+				<button class="uni-btn" type="primary" @click="toSmsPage">验证并登录</button>
 				<uni-id-pages-agreements scope="register" ref="agreements"></uni-id-pages-agreements>
-			</view>
-		</template>
-		<template v-else>
-			<text class="tip">未注册的账号验证通过后将自动注册</text>
-			<view class="auth-field">
-				<text class="auth-field__label">手机号</text>
-				<view class="phone-box">
-					<view @click="chooseArea" class="auth-field__prefix area">+86</view>
-					<uni-easyinput trim="both" :focus="focusPhone" @blur="focusPhone = false" class="input-box" type="number"
-						:inputBorder="false" v-model="phone" maxlength="11" placeholder="请输入手机号" />
-				</view>
-			</view>
-			<uni-id-pages-agreements scope="register" ref="agreements"></uni-id-pages-agreements>
-			<button class="uni-btn" type="primary" @click="toSmsPage">获取验证码</button>
-		</template>
+			</template>
+		</view>
 		<!-- 固定定位的快捷登录按钮 -->
 		<uni-id-pages-fab-login ref="uniFabLogin"></uni-id-pages-fab-login>
 	</view>
@@ -83,6 +91,14 @@
 					huaweiMobile: '/uni_modules/uni-id-pages/static/login/huawei-mobile.png',
 				}
 				return images[this.type]
+			},
+			pageTitle() {
+				return '登录后体验完整功能'
+			},
+			pageTip() {
+				return this.type == 'univerify'
+					? '使用本机号码快速登录，也可以切换其他账号'
+					: '未注册的手机号验证通过后将自动注册'
 			}
 		},
 		async onLoad(e) {
@@ -103,6 +119,9 @@
 			})
 			uni.$on('uni-id-pages-setLoginType', type => {
 				this.type = type
+				if (type != 'univerify') {
+					this.focusPhone = true
+				}
 			})
 		},
 		onShow() {
@@ -136,14 +155,7 @@
 					},
 					fail: (err) => {
 						console.log(err);
-						if (config.loginTypes.length > 1) {
-							this.$refs.uniFabLogin.login_before(config.loginTypes[1])
-						} else {
-							uni.showModal({
-								content: err.message,
-								showCancel: false
-							});
-						}
+						this.fallbackToSmsLogin()
 					}
 				})
 			}
@@ -152,9 +164,14 @@
 		methods: {
 			showCurrentWebview(){
 				// 恢复当前页面窗体的显示 一键登录，默认不显示当前窗口
-				currentWebview.setStyle({
+				currentWebview?.setStyle({
 					"top": 0
 				})
+			},
+			fallbackToSmsLogin() {
+				this.showCurrentWebview()
+				this.type = 'smsCode'
+				this.focusPhone = true
 			},
 			showAgreementModal () {
 				this.$refs.agreements.popup()
@@ -190,7 +207,13 @@
 			//去密码登录页
 			toPwdLogin() {
 				uni.navigateTo({
-					url: '../login/password'
+					url: '/uni_modules/uni-id-pages/pages/login/login-withpwd'
+				})
+			},
+			showHelp() {
+				uni.showToast({
+					title: '请使用手机号登录',
+					icon: 'none'
 				})
 			},
 			chooseArea() {
@@ -209,7 +232,7 @@
 
 	@media screen and (min-width: 690px) {
 		.uni-content {
-			height: 350px;
+			height: auto;
 		}
 	}
 
@@ -234,7 +257,13 @@
 		/* #endif */
 		flex-direction: row;
 		align-items: center;
-		gap: 10px;
+		width: 100%;
+		height: 54px;
+		border: 1px solid rgba(234, 62, 119, 0.08);
+		border-radius: var(--radius-row, 14px);
+		background: rgba(255, 255, 255, 0.92);
+		box-shadow: 0 4px 14px rgba(234, 62, 119, 0.035);
+		overflow: hidden;
 	}
 
 	.area {
@@ -243,22 +272,37 @@
 
 	.area::after {
 		content: "";
-		border: 3px solid transparent;
+		border: 4px solid transparent;
 		border-top-color: var(--text-2);
-		top: 11px;
+		top: 12px;
 		left: 6px;
 		position: relative;
+	}
+
+	.area::before {
+		content: "";
+		position: absolute;
+		top: 15px;
+		right: -1px;
+		width: 1px;
+		height: 24px;
+		background: rgba(216, 203, 189, 0.56);
 	}
 
 	/* #ifdef MP */
 	// 解决小程序端开启虚拟节点virtualHost引起的 class = input-box丢失的问题 [详情参考](https://uniapp.dcloud.net.cn/matter.html#%E5%90%84%E5%AE%B6%E5%B0%8F%E7%A8%8B%E5%BA%8F%E5%AE%9E%E7%8E%B0%E6%9C%BA%E5%88%B6%E4%B8%8D%E5%90%8C-%E5%8F%AF%E8%83%BD%E5%AD%98%E5%9C%A8%E7%9A%84%E5%B9%B3%E5%8F%B0%E5%85%BC%E5%AE%B9%E9%97%AE%E9%A2%98)
 	.phone-box ::v-deep .uni-easyinput__content,
+	.phone-box ::v-deep .uni-easyinput__content.is-focused,
+	.phone-box ::v-deep .uni-easyinput__content:focus-within,
 	/* #endif */
 	.input-box {
 		/* #ifndef APP-NVUE */
 		box-sizing: border-box;
 		/* #endif */
 		flex: 1;
+		border-color: transparent !important;
+		background: transparent !important;
+		box-shadow: none;
 	}
 
 	.quickLogin {
@@ -280,7 +324,11 @@
 	}
 
 	.tip {
-		margin-bottom: 18px;
+		margin-bottom: 28px;
+	}
+
+	.auth-mode-row {
+		margin-top: 4px;
 	}
 
 	@media screen and (min-width: 690px) {

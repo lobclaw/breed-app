@@ -49,6 +49,25 @@ function entriesToObject(entries) {
   return target
 }
 
+function normalizeMemberNickname(value) {
+  return String(value || '').trim().slice(0, 32)
+}
+
+async function buildDefaultMemberNickname(uid) {
+  try {
+    const { data } = await db.collection('uni-id-users')
+      .doc(uid)
+      .field({ mobile: true, nickname: true, username: true })
+      .get()
+    const user = data?.[0] || data || {}
+    const mobile = String(user.mobile || '').trim()
+    if (mobile.length >= 4) return `用户${mobile.slice(-4)}`
+    return normalizeMemberNickname(user.nickname || user.username) || '用户'
+  } catch (error) {
+    return '用户'
+  }
+}
+
 const DEFAULT_NOTIFICATION_TYPES = {
   breeding: true,
   vaccination: true,
@@ -1044,9 +1063,11 @@ module.exports = {
 
   /**
    * 创建家庭
-   * @param {string} name - 家庭/犬舍名称
+   * @param {string|object} input - 家庭/犬舍名称，或 { name, nickname }
    */
-  async createFamily(name) {
+  async createFamily(input) {
+    const name = typeof input === 'object' ? input?.name : input
+    const nickname = typeof input === 'object' ? input?.nickname : ''
     if (!name || !name.trim()) {
       throw new Error('请输入家庭名称')
     }
@@ -1057,6 +1078,7 @@ module.exports = {
     }
 
     const now = Date.now()
+    const memberNickname = normalizeMemberNickname(nickname) || await buildDefaultMemberNickname(this.uid)
     const familyData = {
       name: name.trim(),
       creator_id: this.uid,
@@ -1064,6 +1086,7 @@ module.exports = {
         user_id: this.uid,
         role: 'creator',
         status: 'active',
+        nickname: memberNickname,
         joined_at: now,
       }],
       care_rules: [],
@@ -1456,15 +1479,18 @@ module.exports = {
 
   /**
    * 通过邀请码加入家庭
+   * @param {string|object} input - 邀请码，或 { invite_code, nickname }
    */
-  async joinFamily(inviteCode) {
-    const normalizedInviteCode = typeof inviteCode === 'string'
-      ? inviteCode.trim()
-      : String(inviteCode?.invite_code || inviteCode?.code || '').trim()
+  async joinFamily(input) {
+    const normalizedInviteCode = typeof input === 'string'
+      ? input.trim()
+      : String(input?.invite_code || input?.code || '').trim()
+    const nickname = typeof input === 'object' ? input?.nickname : ''
     if (!normalizedInviteCode) throw new Error('请输入邀请码')
     if (this.familyId) throw new Error('您已加入家庭，V1 暂不支持多家庭')
 
     const now = Date.now()
+    const memberNickname = normalizeMemberNickname(nickname) || await buildDefaultMemberNickname(this.uid)
 
     const { data: families } = await db.collection('families')
       .where({
@@ -1486,6 +1512,7 @@ module.exports = {
       existing.status = 'active'
       existing.joined_at = now
       existing.removed_at = null
+      existing.nickname = memberNickname
       await db.collection('families').doc(family._id).update({
         members: family.members,
         updated_at: now,
@@ -1497,6 +1524,7 @@ module.exports = {
           user_id: this.uid,
           role: 'helper',
           status: 'active',
+          nickname: memberNickname,
           joined_at: now,
         }),
         updated_at: now,

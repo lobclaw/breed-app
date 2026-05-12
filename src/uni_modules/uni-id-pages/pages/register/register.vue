@@ -88,8 +88,13 @@
 				logo: "/static/logo.png"
 			}
 		},
+		onLoad() {
+			uni.redirectTo({
+				url: '/uni_modules/uni-id-pages/pages/login/login-withoutpwd?type=smsCode'
+			})
+		},
 		onReady() {
-			this.$refs.form.setRules(this.rules)
+			this.$refs.form && this.$refs.form.setRules(this.rules)
 		},
 		onShow() {
 			// #ifdef H5

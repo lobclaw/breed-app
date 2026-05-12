@@ -457,7 +457,7 @@
 
 - `name`
 - `creator_id`
-- `members`
+- `members`：成员项至少包含 `user_id / role / status / nickname / joined_at`，其中 `nickname` 是该成员在当前家庭内的显示称呼
 - `care_rules`
 - `settings`
 - `invite_code`

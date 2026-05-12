@@ -39,6 +39,10 @@
             "enum": ["active", "removed"],
             "description": "成员状态"
           },
+          "nickname": {
+            "bsonType": "string",
+            "description": "成员在当前家庭内的显示称呼"
+          },
           "joined_at": {
             "bsonType": "number",
             "description": "加入时间（时间戳毫秒）"
