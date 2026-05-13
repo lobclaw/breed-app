@@ -16,26 +16,19 @@
 				</view>
 			</view>
 		</template>
-		<!-- 弹出式 -->
-		<uni-popup v-if="needAgreements||needPopupAgreements" ref="popupAgreement" type="center">
-			<uni-popup-dialog confirmText="同意" @confirm="popupConfirm">
-				<view class="content">
-					<text class="text">请先阅读并同意</text>
-					<view class="item" v-for="(agreement,index) in agreements" :key="index">
-						<view class="agreement-hit" @tap.stop="navigateTo(agreement)">
-							<text class="agreement text">{{agreement.title}}</text>
-						</view>
-						<text class="text and" v-if="hasAnd(agreements,index)" space="nbsp"> 和 </text>
-					</view>
-				</view>
-			</uni-popup-dialog>
-		</uni-popup>
+		<uni-id-pages-agreement-modal
+			v-if="needAgreements||needPopupAgreements"
+			ref="agreementModal"
+			:agreements="agreements"
+			@confirm="popupConfirm"
+			@cancel="popupCancel"
+			@link="navigateTo"
+		></uni-id-pages-agreement-modal>
 	</view>
 </template>
 
 <script>
 	import config from '@/uni_modules/uni-id-pages/config.js'
-	let retryFun = ()=>console.log('为定义')
 	/**
 		* uni-id-pages-agreements
 		* @description 用户服务协议和隐私政策条款组件
@@ -67,13 +60,21 @@
 				default(){
 					return 'register'
 				}
-			},
+			}
 		},
 		methods: {
 			popupConfirm(){
 				this.isAgree = true
-				retryFun()
+				this.$emit('setAgree', true)
+				const retryFun = this.retryFun
+				this.retryFun = null
+				if (typeof retryFun === 'function') {
+					retryFun()
+				}
 				// this.$emit('popupConfirm')
+			},
+			popupCancel(){
+				this.retryFun = null
 			},
 			popup(Fun){
 				this.needPopupAgreements = true
@@ -82,16 +83,25 @@
 				//::TODO 鸿蒙元服务暂不支持 createAnimation，等支持后再打开
 				// #ifdef MP-HARMONY
 					return uni.showModal({
-						title: "提示",
-						content: `请先阅读并同意${this.agreements.map(item=>`“${item.title}”`).join('和')}`,
+						title: "用户协议及隐私政策",
+						content: `已阅读并同意${this.agreements.map(item=>`“${item.title}”`).join('和')}`,
+						confirmText: '同意并继续',
+						cancelText: '不同意',
+						success: (res) => {
+							if (res.confirm) {
+								this.popupConfirm()
+							} else {
+								this.popupCancel()
+							}
+						}
 					})
 				// #endif
 				// #ifndef MP-HARMONY
 				this.$nextTick(()=>{
 					if(Fun){
-						retryFun = Fun
+						this.retryFun = Fun
 					}
-					this.$refs.popupAgreement.open()
+					this.$refs.agreementModal.open()
 				})
 				// #endif
 			},
@@ -136,7 +146,8 @@
 			return {
 				isAgree: false,
 				needAgreements:true,
-				needPopupAgreements:false
+				needPopupAgreements:false,
+				retryFun: null
 			};
 		}
 	}
@@ -230,7 +241,6 @@
 		cursor: pointer;
 	}
 
-	.content,
 	.agreement-links{
 		flex-wrap: wrap;
 		flex-direction: row;
@@ -238,9 +248,5 @@
 		min-width: 0;
 		justify-content: center;
 		overflow: visible;
-	}
-
-	.root ::v-deep .uni-popup__error{
-		color: #333333;
 	}
 </style>

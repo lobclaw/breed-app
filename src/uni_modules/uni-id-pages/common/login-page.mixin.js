@@ -7,7 +7,8 @@ const mixin = {
 		return {
 			config,
 			uniIdRedirectUrl: '',
-			isMounted: false
+			isMounted: false,
+			agreementAccepted: false
 		}
 	},
 	onUnload() {
@@ -65,6 +66,9 @@ const mixin = {
 		},
 		agree: {
 			get() {
+				if (this.agreementAccepted) {
+					return true
+				}
 				if (this.isMounted) {
 					if (this.$refs.agreements) {
 						return this.$refs.agreements.isAgree
@@ -74,6 +78,7 @@ const mixin = {
 				}
 			},
 			set(agree) {
+				this.agreementAccepted = agree
 				if (this.$refs.agreements) {
 					this.$refs.agreements.isAgree = agree
 				} else {
@@ -83,6 +88,9 @@ const mixin = {
 		}
 	},
 	methods: {
+		onAgreementChange(agree) {
+			this.agreementAccepted = agree
+		},
 		loginSuccess(e) {
 			mutations.loginSuccess({
 				...e,

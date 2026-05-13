@@ -38,7 +38,7 @@
 						<!-- #endif -->
 						<view v-if="this.needAgreements && !this.agree" class="mobile-login-agreement-layer" @click="showAgreementModal"></view>
 					</view>
-					<uni-id-pages-agreements scope="register" ref="agreements"></uni-id-pages-agreements>
+					<uni-id-pages-agreements scope="register" ref="agreements" @setAgree="onAgreementChange"></uni-id-pages-agreements>
 				</view>
 			</template>
 			<template v-else>
@@ -82,7 +82,7 @@
 				</view>
 				<button v-if="loginMode === 'smsCode'" class="uni-btn" :class="{ 'uni-btn--inactive': !isPhone }" type="primary" @click="toSmsPage">验证并登录</button>
 				<button v-else class="uni-btn" :class="{ 'uni-btn--inactive': !canPasswordLogin }" type="primary" @click="pwdLogin">登录</button>
-				<uni-id-pages-agreements :scope="agreementScope" :key="agreementScope" ref="agreements"></uni-id-pages-agreements>
+				<uni-id-pages-agreements :scope="agreementScope" :key="agreementScope" ref="agreements" @setAgree="onAgreementChange"></uni-id-pages-agreements>
 			</template>
 		</view>
 		<!-- 固定定位的快捷登录按钮 -->
