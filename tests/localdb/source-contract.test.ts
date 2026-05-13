@@ -13,8 +13,15 @@ describe('local-first source contract', () => {
     expect(source).not.toContain('localSyncRuntime.resume(')
     expect(source).toContain('localSyncRuntime.setCurrentFamilyId(familyId)')
     expect(source).toContain('resolveSyncScopeForRoute(options.routePath, query)')
+    expect(source).toContain('async function persistActiveScope(scope: string)')
+    expect(source).toContain('if (!familyId || !scope) return')
+    const runtimeSource = readWorkspaceFile('src/localdb/runtime.ts')
+    expect(runtimeSource).toContain('if (!this.currentFamilyId) return')
+    expect(runtimeSource).toContain("if (!this.currentFamilyId) return ''")
     const routeBranch = source.slice(source.indexOf('const resolved = resolveSyncScopeForRoute'))
-    expect(routeBranch.indexOf('scopeKey = resolved?.key ||')).toBeLessThan(routeBranch.indexOf('await localSyncRuntime.setActiveScope(scopeKey)'))
+    expect(routeBranch.indexOf('scopeKey = resolved?.key ||')).toBeLessThan(routeBranch.indexOf('await persistActiveScope(scopeKey)'))
+    const persistBranch = source.slice(source.indexOf('async function persistActiveScope'))
+    expect(persistBranch.indexOf('localSyncRuntime.setCurrentFamilyId(familyId)')).toBeLessThan(persistBranch.indexOf('await localSyncRuntime.setActiveScope(scope)'))
   })
 
   it('应确保纯选择组件不再直接读取云端', () => {

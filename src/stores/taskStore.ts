@@ -67,7 +67,9 @@ interface TaskStoreSnapshot {
   batchCardProgress: Record<string, PersistedBatchCardProgress>
 }
 
-const STORAGE_KEY = 'recent_actions'
+function getRecentActionStorageKey(familyId: string) {
+  return familyId ? getWorkspaceCacheKey('recent-actions', familyId) : ''
+}
 
 function getRecommendationDedupKey(url: string): string {
   if (url.startsWith('/pages/record/') || url.startsWith('/pages/health/')) {
@@ -94,7 +96,8 @@ export const useTaskStore = defineStore('tasks', {
         if (!familyId) return
         localSyncRuntime.setCurrentFamilyId(familyId)
         await localSyncRuntime.syncScope('home')
-        const res = await localSyncRuntime.getHomeCards()
+        const res = await localSyncRuntime.getHomeCards(familyId)
+        if (currentFamily.value?._id !== familyId) return
         if (res) {
           this.cards = (res.cards || []) as TaskCard[]
           this.counts = {
@@ -127,7 +130,10 @@ export const useTaskStore = defineStore('tasks', {
     /** 获取最近操作记录（本地存储） */
     getRecentActions(): string[] {
       try {
-        const raw = uni.getStorageSync(STORAGE_KEY)
+        const { currentFamily } = useAuth()
+        const storageKey = getRecentActionStorageKey(currentFamily.value?._id || '')
+        if (!storageKey) return []
+        const raw = uni.getStorageSync(storageKey)
         if (!raw) return []
         const list = JSON.parse(raw) as string[]
         const freq: Record<string, number> = {}
@@ -141,11 +147,14 @@ export const useTaskStore = defineStore('tasks', {
     /** 记录用户操作 */
     trackAction(actionKey: string) {
       try {
-        const raw = uni.getStorageSync(STORAGE_KEY)
+        const { currentFamily } = useAuth()
+        const storageKey = getRecentActionStorageKey(currentFamily.value?._id || '')
+        if (!storageKey) return
+        const raw = uni.getStorageSync(storageKey)
         const list: string[] = raw ? JSON.parse(raw) : []
         list.unshift(actionKey)
         if (list.length > 30) list.length = 30
-        uni.setStorageSync(STORAGE_KEY, JSON.stringify(list))
+        uni.setStorageSync(storageKey, JSON.stringify(list))
       } catch { /* ignore */ }
     },
 

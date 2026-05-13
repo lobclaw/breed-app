@@ -8,6 +8,9 @@ const financeIndexSource = readFileSync(resolve(testDir, '../../src/pages/financ
 const damRoiSource = readFileSync(resolve(testDir, '../../src/pages/finance/dam-roi.vue'), 'utf8')
 const litterProfitSource = readFileSync(resolve(testDir, '../../src/pages/finance/litter-profit.vue'), 'utf8')
 const statsSource = readFileSync(resolve(testDir, '../../src/pages/finance/stats.vue'), 'utf8')
+const expenseAddSource = readFileSync(resolve(testDir, '../../src/pages/finance/expense-add.vue'), 'utf8')
+const expenseEditSource = readFileSync(resolve(testDir, '../../src/pages/finance/expense-edit.vue'), 'utf8')
+const incomeEditSource = readFileSync(resolve(testDir, '../../src/pages/finance/income-edit.vue'), 'utf8')
 
 describe('finance amount page contract', () => {
   it('财务首页主金额应使用带 ¥ 的拆分渲染', () => {
@@ -27,5 +30,18 @@ describe('finance amount page contract', () => {
     expect(statsSource).toContain("formatFinanceAmount(data.netProfit, { scene: 'report' })")
     expect(statsSource).toContain("formatFinanceAmount(data.totalIncome, { scene: 'report' })")
     expect(statsSource).toContain("formatFinanceAmount(-data.totalExpense, { scene: 'report' })")
+  })
+
+  it('财务最近分类缓存应按当前家庭隔离', () => {
+    expect(expenseAddSource).toContain("getWorkspaceCacheKey('finance-recent-expense-categories', familyId)")
+    expect(expenseAddSource).toContain("getWorkspaceCacheKey('finance-recent-income-types', familyId)")
+    expect(expenseAddSource).toContain("return familyId ? getWorkspaceCacheKey('finance-recent-expense-categories', familyId) : ''")
+    expect(expenseAddSource).toContain("return familyId ? getWorkspaceCacheKey('finance-recent-income-types', familyId) : ''")
+    expect(expenseEditSource).toContain("getWorkspaceCacheKey('finance-recent-expense-categories', familyId)")
+    expect(incomeEditSource).toContain("getWorkspaceCacheKey('finance-recent-income-types', familyId)")
+    expect(expenseAddSource).not.toContain('finance_recent_expense_categories')
+    expect(expenseAddSource).not.toContain('finance_recent_income_types')
+    expect(expenseEditSource).not.toContain('finance_recent_expense_categories')
+    expect(incomeEditSource).not.toContain('finance_recent_income_types')
   })
 })

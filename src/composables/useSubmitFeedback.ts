@@ -1,3 +1,6 @@
+import { useAuth } from '@/composables/useAuth'
+import { getWorkspaceCacheKey } from '@/utils/authScopedCache'
+
 const STORAGE_KEY = 'submit_feedback_v1'
 export const SUBMIT_SUCCESS_FEEDBACK_DELAY_MS = 520
 
@@ -5,6 +8,7 @@ export type HomeFeedbackSection = 'overdue' | 'breeding' | 'reminders' | 'therap
 
 export interface SubmitFeedbackPayload {
   message: string
+  familyId?: string
   targetRoute?: string
   targetDogId?: string
   homeSection?: HomeFeedbackSection
@@ -21,6 +25,15 @@ export interface SubmitFeedbackPayload {
     label: string
     expiresAt: number
   }
+}
+
+function getCurrentFamilyId() {
+  const { currentFamily } = useAuth()
+  return currentFamily.value?._id || ''
+}
+
+function getSubmitFeedbackStorageKey(familyId = getCurrentFamilyId()) {
+  return familyId ? getWorkspaceCacheKey('submit-feedback', familyId) : ''
 }
 
 function normalizeRoute(route?: string) {
@@ -40,27 +53,38 @@ export function inferPreviousRoute() {
 }
 
 export function queueSubmitFeedback(payload: SubmitFeedbackPayload) {
+  const familyId = payload.familyId || getCurrentFamilyId()
   const nextPayload = {
     ...payload,
+    familyId,
     targetRoute: normalizeRoute(payload.targetRoute || inferPreviousRoute()),
   }
-  if (!nextPayload.targetRoute) return nextPayload
-  uni.setStorageSync(STORAGE_KEY, JSON.stringify(nextPayload))
+  const storageKey = getSubmitFeedbackStorageKey(familyId)
+  if (!nextPayload.targetRoute || !storageKey) return nextPayload
+  uni.removeStorageSync(STORAGE_KEY)
+  uni.setStorageSync(storageKey, JSON.stringify(nextPayload))
   return nextPayload
 }
 
 export function consumeSubmitFeedback(currentRoute: string) {
+  const familyId = getCurrentFamilyId()
+  const storageKey = getSubmitFeedbackStorageKey(familyId)
+  if (!storageKey) return null
   try {
-    const raw = uni.getStorageSync(STORAGE_KEY)
+    const raw = uni.getStorageSync(storageKey)
     if (!raw) return null
     const payload = JSON.parse(raw) as SubmitFeedbackPayload
+    if ((payload.familyId || '') !== familyId) {
+      uni.removeStorageSync(storageKey)
+      return null
+    }
     if (normalizeRoute(payload.targetRoute) !== normalizeRoute(currentRoute)) {
       return null
     }
-    uni.removeStorageSync(STORAGE_KEY)
+    uni.removeStorageSync(storageKey)
     return payload
   } catch {
-    uni.removeStorageSync(STORAGE_KEY)
+    uni.removeStorageSync(storageKey)
     return null
   }
 }

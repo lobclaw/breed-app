@@ -189,6 +189,7 @@ import { getLocalIncomeDetail } from '@/localdb/domain-repository'
 import { localSyncRuntime } from '@/localdb/runtime'
 import { buildTimestampFromDayOffset, formatDateInputValue } from '@/utils/date'
 import { chooseLocalImages, resolveImageDisplayUrls, resolveImageSafeSrc } from '@/utils/imageAttachment'
+import { getWorkspaceCacheKey } from '@/utils/authScopedCache'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BIncomeTypeSheet from '@/components/form/BIncomeTypeSheet.vue'
@@ -215,7 +216,11 @@ const showDogPicker = ref(false)
 const showDatePicker = ref(false)
 const dateChipActive = ref('')
 const recentIncomeTypes = ref<string[]>([])
-const RECENT_INCOME_TYPE_KEY = 'finance_recent_income_types'
+
+function getRecentIncomeTypeKey() {
+  const familyId = currentFamily.value?._id || ''
+  return familyId ? getWorkspaceCacheKey('finance-recent-income-types', familyId) : ''
+}
 const linkedDog = ref<any | null>(null)
 
 const form = reactive({
@@ -229,8 +234,11 @@ const typeIcon = computed(() => getIncomeTypeMeta(form.type).icon)
 
 function readRecentIncomeTypes() {
   try {
-    const raw = uni.getStorageSync(RECENT_INCOME_TYPE_KEY)
-    return Array.isArray(raw) ? raw.filter(item => typeof item === 'string') : []
+    const storageKey = getRecentIncomeTypeKey()
+    if (!storageKey) return []
+    const raw = uni.getStorageSync(storageKey)
+    const parsed = typeof raw === 'string' ? JSON.parse(raw || '[]') : raw
+    return Array.isArray(parsed) ? parsed.filter(item => typeof item === 'string') : []
   } catch {
     return []
   }
@@ -239,7 +247,9 @@ function readRecentIncomeTypes() {
 function saveRecentIncomeType(name: string) {
   const next = [name, ...readRecentIncomeTypes().filter(item => item !== name)].slice(0, 2)
   recentIncomeTypes.value = next
-  uni.setStorageSync(RECENT_INCOME_TYPE_KEY, next)
+  const storageKey = getRecentIncomeTypeKey()
+  if (!storageKey) return
+  uni.setStorageSync(storageKey, JSON.stringify(next))
 }
 
 const dateStr = computed(() => {

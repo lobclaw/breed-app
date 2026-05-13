@@ -87,6 +87,7 @@ export interface LocalOperationLogRow {
 
 export interface SyncStateRow {
   _id: string
+  family_id?: string
   collection: BusinessCollectionName
   last_pulled_at: number
   last_pulled_id?: string

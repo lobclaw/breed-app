@@ -11,11 +11,19 @@ interface UsePageSyncOptions {
 export function usePageSync(options: UsePageSyncOptions) {
   let scopeKey = ''
 
+  async function persistActiveScope(scope: string) {
+    const { currentFamily } = useAuth()
+    const familyId = currentFamily.value?._id || ''
+    if (!familyId || !scope) return
+    localSyncRuntime.setCurrentFamilyId(familyId)
+    await localSyncRuntime.setActiveScope(scope)
+  }
+
   async function activateScope(query: Record<string, any> = {}) {
     if (options.resolveScope) {
       scopeKey = options.resolveScope(query) || ''
       if (scopeKey) {
-        await localSyncRuntime.setActiveScope(scopeKey)
+        await persistActiveScope(scopeKey)
       }
       return scopeKey
     }
@@ -24,7 +32,7 @@ export function usePageSync(options: UsePageSyncOptions) {
     const resolved = resolveSyncScopeForRoute(options.routePath, query)
     scopeKey = resolved?.key || ''
     if (!scopeKey) return ''
-    await localSyncRuntime.setActiveScope(scopeKey)
+    await persistActiveScope(scopeKey)
     return scopeKey
   }
 

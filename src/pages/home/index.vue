@@ -919,15 +919,15 @@ function getCurrentFamilyId() {
 }
 
 async function fetchCards() {
-  return localSyncRuntime.getHomeCards()
+  return localSyncRuntime.getHomeCards(getCurrentFamilyId())
 }
 
 async function fetchDateCounts(startDate: number, endDate: number) {
-  return localSyncRuntime.getDateCounts(startDate, endDate)
+  return localSyncRuntime.getDateCounts(startDate, endDate, getCurrentFamilyId())
 }
 
 async function fetchWeekCards(startDate: number, endDate: number) {
-  return localSyncRuntime.getWeekCards(startDate, endDate)
+  return localSyncRuntime.getWeekCards(startDate, endDate, getCurrentFamilyId())
 }
 
 async function doCompleteTask(taskId: string, autoRecord?: boolean) {
@@ -2571,13 +2571,8 @@ async function confirmBatchComplete() {
 
 onShow(async () => {
   isHomeActive.value = true
-  const feedback = consumeSubmitFeedback('/pages/home/index')
   const pendingTarget = taskStore.consumePendingHomeTarget()
   let deferredTarget: HomeCardFocusTarget | '' = ''
-  if (feedback?.message) {
-    applyHomeFeedback(feedback)
-    showSubmitToast(feedback.message)
-  }
 
   // 确保家庭信息已加载
   if (!hasFamily.value || !isFamilyVerified.value) {
@@ -2596,6 +2591,11 @@ onShow(async () => {
   if (!familyId) return
   localSyncRuntime.setCurrentFamilyId(familyId)
   await localSyncRuntime.setActiveScope('home')
+  const feedback = consumeSubmitFeedback('/pages/home/index')
+  if (feedback?.message) {
+    applyHomeFeedback(feedback)
+    showSubmitToast(feedback.message)
+  }
   selectedDate.value = startOfDay(Date.now())
   viewMode.value = 'today'
   dayCards.value = []

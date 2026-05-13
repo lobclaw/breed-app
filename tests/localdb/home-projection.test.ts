@@ -85,6 +85,48 @@ describe('local home projection', () => {
     expect(result.counts.today).toBeGreaterThan(0)
   })
 
+  it('按当前家庭过滤首页投影，避免切账号后混入其他家庭事项', () => {
+    const now = new Date('2026-04-24T10:00:00+08:00').getTime()
+    const dueDate = new Date('2026-04-24T09:00:00+08:00').getTime()
+
+    const result = buildLocalHomeCards({
+      dogs: [
+        { _id: 'dog_1', family_id: 'family_1', name: '花花' },
+        { _id: 'dog_2', family_id: 'family_2', name: '奶糖' },
+      ],
+      tasks: [
+        {
+          _id: 'task_fam_1',
+          family_id: 'family_1',
+          dog_id: 'dog_1',
+          dog_name: '花花',
+          type: 'vaccination',
+          title: '疫苗',
+          status: 'pending',
+          due_date: dueDate,
+          details: { vaccine_type: '卫佳10' },
+        },
+        {
+          _id: 'task_fam_2',
+          family_id: 'family_2',
+          dog_id: 'dog_2',
+          dog_name: '奶糖',
+          type: 'deworming',
+          title: '驱虫',
+          status: 'pending',
+          due_date: dueDate,
+          details: { drug_name: '博来恩' },
+        },
+      ],
+      health_records: [],
+      medication_tasks: [],
+    }, now, 'family_2')
+
+    expect(result.cards).toHaveLength(1)
+    expect(result.cards[0].tasks?.[0]?._id).toBe('task_fam_2')
+    expect(result.cards[0].dogName || result.cards[0].dogs?.[0]?.dogName).toContain('奶糖')
+  })
+
   it('应按本地实体对重复繁育里程碑去重并给未来用药天数打点', () => {
     const now = new Date('2026-04-24T10:00:00+08:00').getTime()
     const targetDay = new Date('2026-04-26T10:00:00+08:00').getTime()

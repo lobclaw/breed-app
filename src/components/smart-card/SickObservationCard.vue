@@ -67,6 +67,8 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useAuth } from '@/composables/useAuth'
+import { getWorkspaceCacheKey } from '@/utils/authScopedCache'
 import { getHealthTypeTone } from '@/utils/themeSemantics'
 
 const props = defineProps<{ card: any }>()
@@ -87,13 +89,23 @@ const cardClasses = computed(() => [
 
 // 折叠（≥3只默认折叠）
 const COLLAPSE_KEY = 'sick_obs_collapsed'
-const _stored = uni.getStorageSync(COLLAPSE_KEY)
+const { currentFamily } = useAuth()
+function getCollapseStorageKey() {
+  const familyId = currentFamily.value?._id || ''
+  return familyId ? getWorkspaceCacheKey('sick-observation-collapse', familyId) : ''
+}
+
+const _collapseStorageKey = getCollapseStorageKey()
+const _stored = _collapseStorageKey ? uni.getStorageSync(_collapseStorageKey) : ''
 // uni.getStorageSync 返回 '' 表示 key 不存在，默认折叠；false 表示用户已展开
 const collapsed = ref(_stored === false ? false : true)
 
 function toggleCollapse() {
   collapsed.value = !collapsed.value
-  uni.setStorageSync(COLLAPSE_KEY, collapsed.value)
+  const storageKey = getCollapseStorageKey()
+  if (!storageKey) return
+  uni.removeStorageSync(COLLAPSE_KEY)
+  uni.setStorageSync(storageKey, collapsed.value)
 }
 
 function dotClass(dog: any): 'gray' | 'amber' | 'red' {

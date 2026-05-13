@@ -29,7 +29,8 @@ describe('dog detail finance tab contract', () => {
   it('最近收支应支持查看全部并跳到带犬只筛选的财务页', () => {
     expect(source).toContain('<text class="dog-detail__sec-text">最近收支</text>')
     expect(source).toContain('<text class="dog-detail__sec-link" @click="goToFinanceList()">查看全部</text>')
-    expect(source).toContain("uni.setStorageSync(FINANCE_ENTRY_DOG_FILTER_KEY, JSON.stringify({ dogId, dogName }))")
+    expect(source).toContain("const familyId = currentFamily.value?._id || ''")
+    expect(source).toContain("uni.setStorageSync(FINANCE_ENTRY_DOG_FILTER_KEY, JSON.stringify({ familyId, dogId, dogName }))")
     expect(source).toContain("url: '/pages/finance/index'")
     expect(source).toContain("return tx?._txType === 'income' ? `+${formattedAmount}` : formattedAmount")
   })

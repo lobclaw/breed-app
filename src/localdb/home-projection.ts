@@ -24,6 +24,23 @@ export interface HomeProjectionEntities {
   breeding_records?: GenericRow[]
 }
 
+function rowBelongsToFamily(row: GenericRow, familyId: string) {
+  if (!familyId) return true
+  return row?.family_id === familyId || row?._id === familyId
+}
+
+function filterEntitiesByFamily(entities: HomeProjectionEntities, familyId = ''): HomeProjectionEntities {
+  if (!familyId) return entities
+  return {
+    dogs: (entities.dogs || []).filter(row => rowBelongsToFamily(row, familyId)),
+    tasks: (entities.tasks || []).filter(row => rowBelongsToFamily(row, familyId)),
+    health_records: (entities.health_records || []).filter(row => rowBelongsToFamily(row, familyId)),
+    medication_tasks: (entities.medication_tasks || []).filter(row => rowBelongsToFamily(row, familyId)),
+    breeding_cycles: (entities.breeding_cycles || []).filter(row => rowBelongsToFamily(row, familyId)),
+    breeding_records: (entities.breeding_records || []).filter(row => rowBelongsToFamily(row, familyId)),
+  }
+}
+
 function getBeijingDayContext(now = Date.now()) {
   const parts = getBeijingDateParts(now)
   const start = getBeijingDayStart(now)
@@ -883,10 +900,11 @@ function getPendingTasksForToday(entities: HomeProjectionEntities, now = Date.no
   return { normalizedPendingTasks, todayCompletedTasks, todayStartTs, todayEndTs }
 }
 
-export function buildLocalHomeCards(entities: HomeProjectionEntities, now = Date.now()) {
-  const { normalizedPendingTasks, todayCompletedTasks, todayStartTs } = getPendingTasksForToday(entities, now)
-  const activeIllnesses = getActiveIllnesses(entities)
-  const activeMedications = getActiveMedicationTasks(entities)
+export function buildLocalHomeCards(entities: HomeProjectionEntities, now = Date.now(), familyId = '') {
+  const scopedEntities = filterEntitiesByFamily(entities, familyId)
+  const { normalizedPendingTasks, todayCompletedTasks, todayStartTs } = getPendingTasksForToday(scopedEntities, now)
+  const activeIllnesses = getActiveIllnesses(scopedEntities)
+  const activeMedications = getActiveMedicationTasks(scopedEntities)
   const medItems = computeMedItemsForDay(activeMedications, now) as GenericRow[]
   const sectioned: any = buildSectionedCards(normalizedPendingTasks, todayCompletedTasks, activeIllnesses, medItems, now)
 
@@ -895,7 +913,7 @@ export function buildLocalHomeCards(entities: HomeProjectionEntities, now = Date
   const sundayEndTs = todayStartTs + (daysToSunday * DAY_MS) + DAY_MS - 1
   const day30EndTs = todayStartTs + (30 * DAY_MS) + DAY_MS - 1
 
-  const pendingTasks = dedupeBreedingMilestones(getPendingHomeTasks(entities))
+  const pendingTasks = dedupeBreedingMilestones(getPendingHomeTasks(scopedEntities))
   const weekCount = pendingTasks.filter(task => task.due_date <= sundayEndTs).length
   const month30Count = pendingTasks.filter(task => task.due_date <= day30EndTs).length
 
@@ -916,12 +934,13 @@ export function buildLocalHomeCards(entities: HomeProjectionEntities, now = Date
   }
 }
 
-export function buildLocalDateCounts(entities: HomeProjectionEntities, startDate: number, endDate: number) {
+export function buildLocalDateCounts(entities: HomeProjectionEntities, startDate: number, endDate: number, familyId = '') {
+  const scopedEntities = filterEntitiesByFamily(entities, familyId)
   const tasks = dedupeBreedingMilestones(
-    getPendingHomeTasks(entities)
+    getPendingHomeTasks(scopedEntities)
       .filter(task => task.due_date >= startDate && task.due_date <= endDate),
   )
-  const activeMedications = getActiveMedicationTasks(entities)
+  const activeMedications = getActiveMedicationTasks(scopedEntities)
 
   const counts: Record<number, number> = {}
   for (const task of tasks) {
@@ -941,13 +960,14 @@ export function buildLocalDateCounts(entities: HomeProjectionEntities, startDate
   return counts
 }
 
-export function buildLocalWeekCards(entities: HomeProjectionEntities, startDate: number, endDate: number, now = Date.now()) {
+export function buildLocalWeekCards(entities: HomeProjectionEntities, startDate: number, endDate: number, now = Date.now(), familyId = '') {
+  const scopedEntities = filterEntitiesByFamily(entities, familyId)
   const tasks = dedupeBreedingMilestones(
-    getPendingHomeTasks(entities)
+    getPendingHomeTasks(scopedEntities)
       .filter(task => task.due_date >= startDate && task.due_date <= endDate),
   )
-  const activeIllnesses = getActiveIllnesses(entities)
-  const activeMedications = getActiveMedicationTasks(entities)
+  const activeIllnesses = getActiveIllnesses(scopedEntities)
+  const activeMedications = getActiveMedicationTasks(scopedEntities)
 
   const realTodayStart = startOfDay(now)
   const realTodayEnd = realTodayStart + DAY_MS - 1

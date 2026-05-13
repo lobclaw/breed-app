@@ -46,13 +46,15 @@ function getPendingUploadError(row: Record<string, any>) {
 
 export async function getSyncStatus(options: { familyId?: string } = {}) {
   const familyId = String(options.familyId || '')
+  const activeScopeMetaKey = familyId ? `sync:active-scope:${familyId}` : 'sync:active-scope'
   const [outbox, conflicts, syncStates, activeScope, localRows] = await Promise.all([
     localDb.getOutbox(),
     localDb.getTable<any>('sync_conflicts'),
     localDb.getTable<any>('sync_state'),
-    localDb.getLocalMeta<string>('sync:active-scope'),
+    localDb.getLocalMeta<string>(activeScopeMetaKey),
     Promise.all(BUSINESS_COLLECTIONS.map(collection => localDb.getTable<any>(collection))),
   ])
+  const scopedSyncStates = familyId ? syncStates.filter(item => item.family_id === familyId) : syncStates
   const scopedOutbox = familyId ? outbox.filter(item => item.family_id === familyId) : outbox
   const scopedMutationIds = new Set(scopedOutbox.map(item => item.client_mutation_id || item._id))
   const pendingUploadRows = localRows.flatMap((rows, index) => rows
@@ -74,7 +76,7 @@ export async function getSyncStatus(options: { familyId?: string } = {}) {
     collection,
     recordId: String(row._id || ''),
   }))
-  const recentSyncAt = syncStates.reduce((max, item) => Math.max(max, Number(item.updated_at || item.last_pulled_at || 0)), 0)
+  const recentSyncAt = scopedSyncStates.reduce((max, item) => Math.max(max, Number(item.updated_at || item.last_pulled_at || 0)), 0)
   const conflictMutationIds = new Set<string>()
   scopedOutbox
     .filter(item => item.status === 'conflict')
@@ -92,6 +94,6 @@ export async function getSyncStatus(options: { familyId?: string } = {}) {
     pendingUploadIssues,
     activeScope: activeScope || '',
     recentSyncAt,
-    lastPulledAt: syncStates.reduce((max, item) => Math.max(max, Number(item.last_pulled_at || 0)), 0),
+    lastPulledAt: scopedSyncStates.reduce((max, item) => Math.max(max, Number(item.last_pulled_at || 0)), 0),
   }
 }

@@ -2722,8 +2722,13 @@ function goToIncomeAdd() {
 
 function goToFinanceList() {
   const dogName = dog.value?.name || ''
+  const familyId = currentFamily.value?._id || ''
+  if (!familyId) {
+    uni.showToast({ title: '家庭信息加载中，请稍后再试', icon: 'none' })
+    return
+  }
   try {
-    uni.setStorageSync(FINANCE_ENTRY_DOG_FILTER_KEY, JSON.stringify({ dogId, dogName }))
+    uni.setStorageSync(FINANCE_ENTRY_DOG_FILTER_KEY, JSON.stringify({ familyId, dogId, dogName }))
   } catch {}
   uni.switchTab({
     url: '/pages/finance/index',

@@ -36,6 +36,7 @@ export const useDogStore = defineStore('dogs', {
         if (!familyId) return
         localSyncRuntime.setCurrentFamilyId(familyId)
         const fresh = await listLocalDogsWithStatus(familyId)
+        if (currentFamily.value?._id !== familyId) return
         this.list = fresh
         this.loaded = true
         this.persistForFamily(familyId)

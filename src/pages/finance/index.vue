@@ -657,6 +657,9 @@ function consumeEntryDogFilter() {
     if (!raw) return false
     uni.removeStorageSync(FINANCE_ENTRY_DOG_FILTER_KEY)
     const payload = JSON.parse(raw)
+    const payloadFamilyId = String(payload?.familyId || '')
+    const familyId = currentFamily.value?._id || ''
+    if (!familyId || !payloadFamilyId || payloadFamilyId !== familyId) return false
     return applyEntryDogFilter(payload)
   } catch {
     uni.removeStorageSync(FINANCE_ENTRY_DOG_FILTER_KEY)
@@ -1339,9 +1342,12 @@ onLoad((query) => {
 })
 
 onShow(async () => {
-  localSyncRuntime.setCurrentFamilyId(currentFamily.value?._id || '')
-  await localSyncRuntime.setActiveScope('finance-list')
-  void localSyncRuntime.syncScope('finance-list')
+  const familyId = currentFamily.value?._id || ''
+  localSyncRuntime.setCurrentFamilyId(familyId)
+  if (familyId) {
+    await localSyncRuntime.setActiveScope('finance-list')
+    void localSyncRuntime.syncScope('finance-list')
+  }
   await loadCategories()
   consumeEntryDogFilter()
   Object.assign(appliedFilters, normalizeFilters(appliedFilters))

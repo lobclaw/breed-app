@@ -99,18 +99,20 @@ async function create() {
   creating.value = true
   try {
     if (inviteCode.value.trim()) {
-      await joinFamily({ invite_code: inviteCode.value.trim(), nickname: getMemberNickname() })
+      const res = await joinFamily({ invite_code: inviteCode.value.trim(), nickname: getMemberNickname() })
       queueSubmitFeedback({
         message: '已加入家庭',
         targetRoute: '/pages/home/index',
+        familyId: String((res as any)?.data?.familyId || ''),
       })
       await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)
       uni.reLaunch({ url: '/pages/home/index' })
     } else {
-      await createFamily({ name: familyName.value.trim(), nickname: getMemberNickname() })
+      const familyId = await createFamily({ name: familyName.value.trim(), nickname: getMemberNickname() })
       queueSubmitFeedback({
         message: '已创建家庭',
         targetRoute: '/pages/home/index',
+        familyId,
       })
       await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)
       uni.reLaunch({ url: '/pages/home/index' })

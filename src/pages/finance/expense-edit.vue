@@ -211,6 +211,7 @@ import {
 } from '@/constants/financeCategories'
 import { buildTimestampFromDayOffset, formatDateInputValue } from '@/utils/date'
 import { chooseLocalImages, resolveImageDisplayUrls, resolveImageSafeSrc } from '@/utils/imageAttachment'
+import { getWorkspaceCacheKey } from '@/utils/authScopedCache'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BExpenseCategorySheet from '@/components/form/BExpenseCategorySheet.vue'
@@ -242,7 +243,11 @@ const showLitterPicker = ref(false)
 const showCyclePicker = ref(false)
 const showDatePicker = ref(false)
 const dateChipActive = ref('')
-const RECENT_EXPENSE_CATEGORY_KEY = 'finance_recent_expense_categories'
+
+function getRecentExpenseCategoryKey() {
+  const familyId = currentFamily.value?._id || ''
+  return familyId ? getWorkspaceCacheKey('finance-recent-expense-categories', familyId) : ''
+}
 
 const form = reactive({
   category: '食品',
@@ -298,7 +303,9 @@ function onDateConfirm(value: number | string) {
 
 function readRecentExpenseCategories() {
   try {
-    return JSON.parse(uni.getStorageSync(RECENT_EXPENSE_CATEGORY_KEY) || '[]')
+    const storageKey = getRecentExpenseCategoryKey()
+    if (!storageKey) return []
+    return JSON.parse(uni.getStorageSync(storageKey) || '[]')
   } catch {
     return []
   }
@@ -312,7 +319,9 @@ function saveRecentExpenseCategory(name: string) {
   const next = [name, ...recentCategories.value.filter(item => item !== name)].slice(0, 2)
   recentCategories.value = next
   try {
-    uni.setStorageSync(RECENT_EXPENSE_CATEGORY_KEY, JSON.stringify(next))
+    const storageKey = getRecentExpenseCategoryKey()
+    if (!storageKey) return
+    uni.setStorageSync(storageKey, JSON.stringify(next))
   } catch {
     // ignore
   }

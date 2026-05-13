@@ -25,6 +25,12 @@ const currentUser = ref<{ uid: string; token: string } | null>(null)
 const currentFamily = ref<Family | null>(null)
 const isInitialized = ref(false)
 const isFamilyVerified = ref(false)
+let authSessionVersion = 0
+
+function bumpAuthSessionVersion() {
+  authSessionVersion += 1
+  return authSessionVersion
+}
 
 function getTokenExpired(info: ReturnType<typeof uniCloud.getCurrentUserInfo>): number {
   const maybeInfo = info as typeof info & { tokenExpired?: number; token_expired?: number }
@@ -37,6 +43,11 @@ function getCurrentUid() {
   } catch {
     return currentUser.value?.uid || ''
   }
+}
+
+function isStaleAuthRequest(uid: string, version: number) {
+  const currentUid = currentUser.value?.uid || getCurrentUid()
+  return version !== authSessionVersion || (!!uid && !!currentUid && uid !== currentUid)
 }
 
 function cacheFamily(family: Family, uidInput?: string) {
@@ -120,6 +131,7 @@ export function useAuth() {
       const info = uniCloud.getCurrentUserInfo()
       if (info.uid) {
         const token = uni.getStorageSync('uni_id_token')
+        bumpAuthSessionVersion()
         clearCurrentSession()
         currentUser.value = { uid: info.uid, token }
         const loadResult = await loadFamily()
@@ -132,6 +144,7 @@ export function useAuth() {
 
     // 监听退出登录事件
     uni.$on('uni-id-pages-logout', () => {
+      bumpAuthSessionVersion()
       currentUser.value = null
       clearCurrentSession()
     })
@@ -146,6 +159,7 @@ export function useAuth() {
       const token = uni.getStorageSync('uni_id_token')
 
       if (info.uid && getTokenExpired(info) > Date.now()) {
+        bumpAuthSessionVersion()
         currentUser.value = { uid: info.uid, token }
         // 只探测当前 uid 的家庭身份缓存；业务响应式状态需等待 loadFamily 权限确认后恢复。
         restoreFamilyFromCache(info.uid)
@@ -165,8 +179,11 @@ export function useAuth() {
    * 加载当前用户的家庭信息
    */
   async function loadFamily(): Promise<LoadFamilyResult> {
+    const requestUid = currentUser.value?.uid || getCurrentUid()
+    const requestVersion = authSessionVersion
     try {
       const result = await cloudCall<{ data: Family | null }>('family-service', 'getFamilyInfo')
+      if (isStaleAuthRequest(requestUid, requestVersion)) return 'error'
       const family = result.data || null
       const shouldRestoreWorkspace = family ? shouldRestoreWorkspaceForFamily(family) : false
       currentFamily.value = family
@@ -181,6 +198,7 @@ export function useAuth() {
       isFamilyVerified.value = true
       return 'no_family'
     } catch (e: any) {
+      if (isStaleAuthRequest(requestUid, requestVersion)) return 'error'
       const code = getCloudErrorCode(e)
       if (code === 'NO_FAMILY') {
         removeFamilyCache()
@@ -190,6 +208,7 @@ export function useAuth() {
       }
 
       if (code === 'TOKEN_INVALID' || code === 'TOKEN_MISSING') {
+        bumpAuthSessionVersion()
         currentUser.value = null
         clearCurrentSession()
         console.warn('加载家庭信息失败:', e.message || e)

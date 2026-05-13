@@ -114,8 +114,17 @@ const EXTRA_ARRANGEMENT_TITLE_MAP: Record<string, string> = {
   other: '其他安排',
 }
 
-function buildScopeMetaKey(scopeKey: string) {
-  return `sync:scope:${scopeKey}`
+function buildFamilyMetaKey(key: string, familyId: string) {
+  return familyId ? `${key}:${familyId}` : key
+}
+
+function buildScopeMetaKey(scopeKey: string, familyId = '') {
+  return familyId ? `sync:scope:${familyId}:${scopeKey}` : `sync:scope:${scopeKey}`
+}
+
+function rowBelongsToFamily(row: Record<string, any>, familyId: string) {
+  if (!familyId) return true
+  return row?.family_id === familyId || row?._id === familyId
 }
 
 function startOfDay(ts: number) {
@@ -230,10 +239,11 @@ function buildLocalAck(syncMeta: SyncMetadata, touchedEntities: SyncAckPayload['
   }
 }
 
-function toSyncStateRow(collection: BusinessCollectionName, current?: Partial<SyncStateRow>): SyncStateRow {
+function toSyncStateRow(collection: BusinessCollectionName, familyId = '', current?: Partial<SyncStateRow>): SyncStateRow {
   const now = getNow()
   return {
-    _id: collection,
+    _id: familyId ? `${familyId}:${collection}` : collection,
+    family_id: familyId,
     collection,
     last_pulled_at: current?.last_pulled_at || 0,
     last_pulled_id: current?.last_pulled_id || '',
@@ -310,8 +320,8 @@ function formatPullFailures(failures: PullCollectionFailure[]) {
 async function doPullCollections(collections: BusinessCollectionName[], familyId: string, forceFull = false): Promise<PullCollectionsBatchResult> {
   const uniqueCollections = [...new Set(collections)]
   const statePairs = await Promise.all(uniqueCollections.map(async (collection) => {
-    const currentState = await localDb.getSyncState(collection)
-    const baseState = toSyncStateRow(collection, currentState || undefined)
+    const currentState = await localDb.getSyncState(collection, familyId)
+    const baseState = toSyncStateRow(collection, familyId, currentState || undefined)
     return {
       collection,
       baseState,
@@ -361,6 +371,7 @@ async function doPullCollections(collections: BusinessCollectionName[], familyId
       const previousCursor = Number(cursors[collection] || 0)
       const previousCursorId = String(cursorIds[collection] || '')
       const rows = normalizePulledRows(Array.isArray(payload.rows) ? payload.rows : [])
+        .filter(row => rowBelongsToFamily(row, familyId))
       accumulatedRows[collection] = [...(accumulatedRows[collection] || []), ...rows]
       const nextCursor = Number(payload.cursor || 0)
       const nextCursorId = String(payload.cursorId || '')
@@ -1136,7 +1147,7 @@ class LocalSyncRuntime {
   private currentFamilyId = ''
   private activeScopeKey = ''
   private scopeSyncPromises = new Map<string, Promise<SyncScopeResult>>()
-  private coreSyncPromise: Promise<void> | null = null
+  private coreSyncPromises = new Map<string, Promise<void>>()
   private attachmentUploadPromises = new Map<string, Promise<{ uploaded: number }>>()
 
   async init() {
@@ -1156,7 +1167,7 @@ class LocalSyncRuntime {
       // ignore
     }
 
-    const persistedActiveScope = await localDb.getLocalMeta<string>(ACTIVE_SCOPE_META_KEY)
+    const persistedActiveScope = await localDb.getLocalMeta<string>(buildFamilyMetaKey(ACTIVE_SCOPE_META_KEY, this.currentFamilyId))
     if (persistedActiveScope) {
       this.activeScopeKey = persistedActiveScope
     }
@@ -1164,7 +1175,7 @@ class LocalSyncRuntime {
 
   async resume(familyId: string) {
     if (!familyId) return
-    this.currentFamilyId = familyId
+    this.setCurrentFamilyId(familyId)
     await this.flushOutbox(familyId)
     await this.syncActiveScope()
   }
@@ -1175,15 +1186,15 @@ class LocalSyncRuntime {
     console.info('[local-sync]', scope, payload)
   }
 
-  private async getStoredScopeFreshness(scopeKey: string, fallbackScope?: ResolvedSyncScope) {
+  private async getStoredScopeFreshness(scopeKey: string, familyId = this.currentFamilyId, fallbackScope?: ResolvedSyncScope) {
     const scope = fallbackScope || createResolvedScope(scopeKey)
-    const value = await localDb.getLocalMeta<StoredScopeFreshness>(buildScopeMetaKey(scopeKey))
+    const value = await localDb.getLocalMeta<StoredScopeFreshness>(buildScopeMetaKey(scopeKey, familyId))
     return toScopeFreshness(scope, value)
   }
 
-  private async setStoredScopeFreshness(scope: ResolvedSyncScope, patch: Partial<StoredScopeFreshness>) {
-    const current = await this.getStoredScopeFreshness(scope.key, scope)
-    await localDb.upsertLocalMeta(buildScopeMetaKey(scope.key), {
+  private async setStoredScopeFreshness(scope: ResolvedSyncScope, familyId: string, patch: Partial<StoredScopeFreshness>) {
+    const current = await this.getStoredScopeFreshness(scope.key, familyId, scope)
+    await localDb.upsertLocalMeta(buildScopeMetaKey(scope.key, familyId), {
       ...current,
       ...patch,
       scopeKey: scope.key,
@@ -1194,20 +1205,25 @@ class LocalSyncRuntime {
     } satisfies StoredScopeFreshness)
   }
 
-  private async hasCollectionsData(collections: BusinessCollectionName[]) {
+  private async hasCollectionsData(collections: BusinessCollectionName[], familyId = '') {
     const uniqueCollections = [...new Set(collections)]
     const rows = await Promise.all(uniqueCollections.map(collection => localDb.getTable<any>(collection)))
-    return rows.some((items) => items.length > 0)
+    return rows.some(items => items.some(row => rowBelongsToFamily(row, familyId)))
   }
 
   async setActiveScope(scopeKey: string) {
     if (!scopeKey) return
     this.activeScopeKey = scopeKey
-    await localDb.upsertLocalMeta(ACTIVE_SCOPE_META_KEY, scopeKey)
+    if (!this.currentFamilyId) return
+    await localDb.upsertLocalMeta(buildFamilyMetaKey(ACTIVE_SCOPE_META_KEY, this.currentFamilyId), scopeKey)
   }
 
   setCurrentFamilyId(familyId: string) {
-    this.currentFamilyId = familyId || ''
+    const nextFamilyId = familyId || ''
+    if (this.currentFamilyId !== nextFamilyId) {
+      this.activeScopeKey = ''
+    }
+    this.currentFamilyId = nextFamilyId
   }
 
   async setActiveScopeFromRoute(routePath: string, query: Record<string, any> = {}) {
@@ -1219,21 +1235,23 @@ class LocalSyncRuntime {
 
   async getActiveScope() {
     if (this.activeScopeKey) return this.activeScopeKey
-    const persisted = await localDb.getLocalMeta<string>(ACTIVE_SCOPE_META_KEY)
+    if (!this.currentFamilyId) return ''
+    const persisted = await localDb.getLocalMeta<string>(buildFamilyMetaKey(ACTIVE_SCOPE_META_KEY, this.currentFamilyId))
     this.activeScopeKey = persisted || ''
     return this.activeScopeKey
   }
 
   async getScopeStatus(scopeKey: string) {
     const scope = createResolvedScope(scopeKey)
-    const freshness = await this.getStoredScopeFreshness(scopeKey, scope)
+    const freshness = await this.getStoredScopeFreshness(scopeKey, this.currentFamilyId, scope)
+    const familyId = this.currentFamilyId
     return {
       scopeKey,
       routeKey: scope.routeKey,
       mode: scope.mode,
       ttlMs: scope.ttlMs,
       collections: scope.collections,
-      inFlight: this.scopeSyncPromises.has(scopeKey),
+      inFlight: this.scopeSyncPromises.has(`${familyId}:${scopeKey}`),
       lastSyncedAt: freshness.last_synced_at,
       lastFullSyncAt: freshness.last_full_sync_at,
       lastError: freshness.last_error,
@@ -1250,7 +1268,7 @@ class LocalSyncRuntime {
 
     if (scope.mode === 'static' || scope.mode === 'redirect-deprecated') {
       const skipReason = scope.mode === 'redirect-deprecated' ? 'redirect-deprecated' : 'static-scope'
-      await this.setStoredScopeFreshness(scope, {
+      await this.setStoredScopeFreshness(scope, familyId, {
         last_skip_reason: skipReason,
         last_error: null,
       })
@@ -1265,16 +1283,17 @@ class LocalSyncRuntime {
       } satisfies SyncScopeResult
     }
 
-    if (this.scopeSyncPromises.has(scope.key)) {
+    const scopePromiseKey = `${familyId}:${scope.key}`
+    if (this.scopeSyncPromises.has(scopePromiseKey)) {
       this.logScope(scope.key, { skip: 'in-flight-dedupe' })
-      return this.scopeSyncPromises.get(scope.key) || null
+      return this.scopeSyncPromises.get(scopePromiseKey) || null
     }
 
-    const freshness = await this.getStoredScopeFreshness(scope.key, scope)
+    const freshness = await this.getStoredScopeFreshness(scope.key, familyId, scope)
     const now = getNow()
     if (!options.force && !options.skipTtl && !freshness.last_error && scope.ttlMs > 0 && freshness.last_synced_at > 0 && now - freshness.last_synced_at < scope.ttlMs) {
       const skipReason = options.reason || `ttl:${scope.ttlMs}`
-      await this.setStoredScopeFreshness(scope, {
+      await this.setStoredScopeFreshness(scope, familyId, {
         last_skip_reason: skipReason,
         last_error: null,
       })
@@ -1292,13 +1311,13 @@ class LocalSyncRuntime {
     }
 
     const runningSync = (async () => {
-      const needsFullPull = Boolean(options.forceFull) || !(await this.hasCollectionsData(scope.collections))
+      const needsFullPull = Boolean(options.forceFull) || !(await this.hasCollectionsData(scope.collections, familyId))
       await this.flushOutbox(familyId)
       const { rowsByCollection, failures } = await pullCollectionsBatch(scope.collections, familyId, needsFullPull)
       const pulledCollections = scope.collections.filter(collection => Array.isArray(rowsByCollection[collection]))
       const syncedAt = getNow()
       const lastError = failures.length > 0 ? formatPullFailures(failures) : null
-      await this.setStoredScopeFreshness(scope, failures.length > 0
+      await this.setStoredScopeFreshness(scope, familyId, failures.length > 0
         ? {
             last_error: lastError,
             last_skip_reason: null,
@@ -1326,19 +1345,19 @@ class LocalSyncRuntime {
         force: Boolean(options.force),
       } satisfies SyncScopeResult
     })().catch(async (error) => {
-      await this.setStoredScopeFreshness(scope, {
+      await this.setStoredScopeFreshness(scope, familyId, {
         last_error: error instanceof Error ? error.message : String(error || '同步失败'),
         last_skip_reason: null,
       })
       throw error
     })
 
-    this.scopeSyncPromises.set(scope.key, runningSync)
+    this.scopeSyncPromises.set(scopePromiseKey, runningSync)
 
     try {
       return await runningSync
     } finally {
-      this.scopeSyncPromises.delete(scope.key)
+      this.scopeSyncPromises.delete(scopePromiseKey)
     }
   }
 
@@ -1372,39 +1391,44 @@ class LocalSyncRuntime {
 
   async syncHome(familyId: string, options: { force?: boolean } = {}) {
     if (!familyId) return null
-    this.currentFamilyId = familyId
+    this.setCurrentFamilyId(familyId)
     return this.syncScope('home', { force: options.force })
   }
 
   async syncCore(familyId: string, options: { force?: boolean; minIntervalMs?: number } = {}) {
     if (!familyId) return
     await this.init()
-    this.currentFamilyId = familyId
+    this.setCurrentFamilyId(familyId)
     const minIntervalMs = options.minIntervalMs ?? CORE_SYNC_INTERVAL_MS
-    if (!options.force && this.coreSyncPromise) return this.coreSyncPromise
+    const corePromiseKey = familyId
+    const runningCoreSync = this.coreSyncPromises.get(corePromiseKey)
+    if (!options.force && runningCoreSync) return runningCoreSync
 
-    const meta = await localDb.getLocalMeta<{ last_synced_at?: number }>(CORE_SYNC_META_KEY)
+    const meta = await localDb.getLocalMeta<{ last_synced_at?: number }>(buildFamilyMetaKey(CORE_SYNC_META_KEY, familyId))
     const lastSyncedAt = Number(meta?.last_synced_at || 0)
     if (!options.force && lastSyncedAt > 0 && getNow() - lastSyncedAt < minIntervalMs) {
       return
     }
 
-    this.coreSyncPromise = (async () => {
+    const coreSyncPromise = (async () => {
       await this.pullCollections(familyId, CORE_SYNC_COLLECTIONS, Boolean(options.force))
-      await localDb.upsertLocalMeta(CORE_SYNC_META_KEY, {
+      await localDb.upsertLocalMeta(buildFamilyMetaKey(CORE_SYNC_META_KEY, familyId), {
         last_synced_at: getNow(),
       })
     })()
+    this.coreSyncPromises.set(corePromiseKey, coreSyncPromise)
 
     try {
-      await this.coreSyncPromise
+      await coreSyncPromise
     } finally {
-      this.coreSyncPromise = null
+      if (this.coreSyncPromises.get(corePromiseKey) === coreSyncPromise) {
+        this.coreSyncPromises.delete(corePromiseKey)
+      }
     }
   }
 
   async pullHomeCollections(familyId: string, forceFull = false) {
-    this.currentFamilyId = familyId
+    this.setCurrentFamilyId(familyId)
     const { failures } = await pullCollectionsBatch(HOME_SYNC_COLLECTIONS, familyId, forceFull)
     if (failures.length > 0) {
       throw new Error(formatPullFailures(failures))
@@ -1412,7 +1436,7 @@ class LocalSyncRuntime {
   }
 
   async pullCollections(familyId: string, collections: BusinessCollectionName[], forceFull = false) {
-    this.currentFamilyId = familyId
+    this.setCurrentFamilyId(familyId)
     const uniqueCollections = [...new Set(collections)]
     const { rowsByCollection, failures } = await pullCollectionsBatch(uniqueCollections, familyId, forceFull)
     if (failures.length > 0) {
@@ -1595,7 +1619,7 @@ class LocalSyncRuntime {
   async retryFailedOutboxNow(familyIdInput: string) {
     const familyId = getFamilyId(familyIdInput || this.currentFamilyId)
     await this.init()
-    this.currentFamilyId = familyId
+    this.setCurrentFamilyId(familyId)
     this.online = await detectOnline()
     if (!this.online) throw new Error('当前网络不可用')
 
@@ -1668,7 +1692,7 @@ class LocalSyncRuntime {
   async syncPendingAttachmentsNow(familyIdInput: string) {
     const familyId = getFamilyId(familyIdInput || this.currentFamilyId)
     await this.init()
-    this.currentFamilyId = familyId
+    this.setCurrentFamilyId(familyId)
     this.online = await detectOnline()
     if (!this.online) throw new Error('当前网络不可用')
 
@@ -2153,23 +2177,26 @@ class LocalSyncRuntime {
 
   async ensureHomeData(familyId: string) {
     await this.init()
-    this.currentFamilyId = familyId
+    this.setCurrentFamilyId(familyId)
 
-    const hasHomeData = await this.hasCollectionsData(HOME_SYNC_COLLECTIONS)
+    const hasHomeData = await this.hasCollectionsData(HOME_SYNC_COLLECTIONS, familyId)
     if (hasHomeData) return
     await this.syncScope('home', { force: true, forceFull: true })
   }
 
-  async getHomeCards() {
-    return buildLocalHomeCards(await getHomeEntities())
+  async getHomeCards(familyIdInput = '') {
+    const familyId = familyIdInput || this.currentFamilyId
+    return buildLocalHomeCards(await getHomeEntities(), Date.now(), familyId)
   }
 
-  async getDateCounts(startDate: number, endDate: number) {
-    return buildLocalDateCounts(await getHomeEntities(), startDate, endDate)
+  async getDateCounts(startDate: number, endDate: number, familyIdInput = '') {
+    const familyId = familyIdInput || this.currentFamilyId
+    return buildLocalDateCounts(await getHomeEntities(), startDate, endDate, familyId)
   }
 
-  async getWeekCards(startDate: number, endDate: number) {
-    return buildLocalWeekCards(await getHomeEntities(), startDate, endDate)
+  async getWeekCards(startDate: number, endDate: number, familyIdInput = '') {
+    const familyId = familyIdInput || this.currentFamilyId
+    return buildLocalWeekCards(await getHomeEntities(), startDate, endDate, Date.now(), familyId)
   }
 
   async enqueueMutation(type: HomeMutationType, familyId: string, payload: HomeMutationPayload, collectionScope: BusinessCollectionName[], syncMeta: SyncMetadata) {

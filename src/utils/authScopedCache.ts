@@ -5,7 +5,16 @@ export const FAMILY_CACHE_KEY_PREFIX = 'breed_family_cache:'
 export const WORKSPACE_CACHE_KEY_PREFIX = 'breed_workspace_cache:'
 export const WORKSPACE_CACHE_VERSION = 1
 
-export type WorkspaceCacheKind = 'tasks' | 'dogs' | 'protocols'
+export type WorkspaceCacheKind =
+  | 'tasks'
+  | 'dogs'
+  | 'protocols'
+  | 'recent-actions'
+  | 'finance-recent-expense-categories'
+  | 'finance-recent-income-types'
+  | 'submit-feedback'
+  | 'home-card-focus'
+  | 'sick-observation-collapse'
 
 export function getFamilyCacheKey(uid: string) {
   return `${FAMILY_CACHE_KEY_PREFIX}${uid}`

@@ -134,8 +134,8 @@ export class LocalDb {
     })
   }
 
-  async getSyncState(collection: SyncStateRow['collection']) {
-    return this.findById<SyncStateRow>('sync_state', collection)
+  async getSyncState(collection: SyncStateRow['collection'], familyId = '') {
+    return this.findById<SyncStateRow>('sync_state', familyId ? `${familyId}:${collection}` : collection)
   }
 
   async upsertSyncState(row: SyncStateRow) {

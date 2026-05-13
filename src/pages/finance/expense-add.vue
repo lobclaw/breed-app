@@ -189,6 +189,7 @@ import {
 } from '@/constants/financeCategories'
 import { buildTimestampFromDayOffset, formatDateInputValue, getBeijingCalendarDayDiff } from '@/utils/date'
 import { chooseLocalImages, resolveImageDisplayUrls, resolveImageSafeSrc } from '@/utils/imageAttachment'
+import { getWorkspaceCacheKey } from '@/utils/authScopedCache'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BExpenseCategorySheet from '@/components/form/BExpenseCategorySheet.vue'
@@ -216,8 +217,18 @@ const showLitterPicker = ref(false)
 const showCyclePicker = ref(false)
 const showDatePicker = ref(false)
 const notes = ref('')
-const RECENT_EXPENSE_CATEGORY_KEY = 'finance_recent_expense_categories'
-const RECENT_INCOME_TYPE_KEY = 'finance_recent_income_types'
+let pendingRouteDogQuery: Record<string, any> | null = null
+let routeDogLinkApplied = false
+
+function getRecentExpenseCategoryKey() {
+  const familyId = currentFamily.value?._id || ''
+  return familyId ? getWorkspaceCacheKey('finance-recent-expense-categories', familyId) : ''
+}
+
+function getRecentIncomeTypeKey() {
+  const familyId = currentFamily.value?._id || ''
+  return familyId ? getWorkspaceCacheKey('finance-recent-income-types', familyId) : ''
+}
 
 // 支出分类
 const expenseCategory = ref('食品')
@@ -265,7 +276,9 @@ const currentLinkText = computed(() => {
 
 function readRecentExpenseCategories() {
   try {
-    return JSON.parse(uni.getStorageSync(RECENT_EXPENSE_CATEGORY_KEY) || '[]')
+    const storageKey = getRecentExpenseCategoryKey()
+    if (!storageKey) return []
+    return JSON.parse(uni.getStorageSync(storageKey) || '[]')
   } catch {
     return []
   }
@@ -279,7 +292,9 @@ function syncRecentExpenseCategories() {
 
 function readRecentIncomeTypes() {
   try {
-    return JSON.parse(uni.getStorageSync(RECENT_INCOME_TYPE_KEY) || '[]')
+    const storageKey = getRecentIncomeTypeKey()
+    if (!storageKey) return []
+    return JSON.parse(uni.getStorageSync(storageKey) || '[]')
   } catch {
     return []
   }
@@ -293,7 +308,9 @@ function saveRecentExpenseCategory(name: string) {
   const next = [name, ...recentExpenseCategories.value.filter(item => item !== name)].slice(0, 2)
   recentExpenseCategories.value = next
   try {
-    uni.setStorageSync(RECENT_EXPENSE_CATEGORY_KEY, JSON.stringify(next))
+    const storageKey = getRecentExpenseCategoryKey()
+    if (!storageKey) return
+    uni.setStorageSync(storageKey, JSON.stringify(next))
   } catch {
     // ignore
   }
@@ -303,7 +320,9 @@ function saveRecentIncomeType(name: string) {
   const next = [name, ...recentIncomeTypes.value.filter(item => item !== name)].slice(0, 2)
   recentIncomeTypes.value = next
   try {
-    uni.setStorageSync(RECENT_INCOME_TYPE_KEY, JSON.stringify(next))
+    const storageKey = getRecentIncomeTypeKey()
+    if (!storageKey) return
+    uni.setStorageSync(storageKey, JSON.stringify(next))
   } catch {
     // ignore
   }
@@ -444,6 +463,27 @@ async function loadCategories() {
   syncRecentIncomeTypes()
 }
 
+async function applyRouteDogLink(query: Record<string, any> | null) {
+  if (routeDogLinkApplied || !query?.dogId) return
+  const familyId = currentFamily.value?._id || ''
+  if (!familyId) return
+  const dogId = String(query.dogId || '').trim()
+  if (!dogId) {
+    routeDogLinkApplied = true
+    return
+  }
+  const dogRow = await localDb.findById<any>('dogs', dogId)
+  routeDogLinkApplied = true
+  if (!dogRow || dogRow.family_id !== familyId || dogRow.deleted_at) return
+  const routeDogName = query?.dogName ? decodeURIComponent(String(query.dogName)) : ''
+  const dog = { _id: dogId, name: routeDogName || dogRow.name || '未命名' }
+  if (mode.value === 'income') {
+    incomeLinkedDog.value = dog
+  } else {
+    linkedDogs.value = [dog]
+  }
+}
+
 async function submit() {
   submitState.value = 'submitting'
   try {
@@ -493,21 +533,13 @@ async function submit() {
 onLoad(async (query) => {
   if (query?.type === 'income') mode.value = 'income'
   if (!query?.dogId) return
-  const dogId = String(query.dogId)
-  let dogName = query?.dogName ? decodeURIComponent(String(query.dogName)) : ''
-  if (!dogName) {
-    const dogRow = await localDb.findById<any>('dogs', dogId)
-    dogName = dogRow?.name || ''
-  }
-  if (mode.value === 'income') {
-    incomeLinkedDog.value = { _id: dogId, name: dogName || '未命名' }
-  } else {
-    linkedDogs.value = [{ _id: dogId, name: dogName || '未命名' }]
-  }
+  pendingRouteDogQuery = query as Record<string, any>
+  await applyRouteDogLink(pendingRouteDogQuery)
 })
 
-onShow(() => {
-  loadCategories()
+onShow(async () => {
+  await loadCategories()
+  await applyRouteDogLink(pendingRouteDogQuery)
 })
 </script>
 

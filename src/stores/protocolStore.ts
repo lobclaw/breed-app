@@ -45,7 +45,9 @@ export const useProtocolStore = defineStore('protocols', {
         const familyId = currentFamily.value?._id || ''
         if (!familyId) return
         localSyncRuntime.setCurrentFamilyId(familyId)
-        this.list = await listLocalMedicationProtocols(familyId)
+        const fresh = await listLocalMedicationProtocols(familyId)
+        if (currentFamily.value?._id !== familyId) return
+        this.list = fresh
         this.loaded = true
         this.persistForFamily(familyId)
         void localSyncRuntime.syncScope('settings-local')

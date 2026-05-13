@@ -647,7 +647,8 @@ describe('local sync runtime outbox diagnostics', () => {
 
   it('增量空返回不应推进 collection cursor', async () => {
     await localDb.upsertRows('sync_state', [{
-      _id: 'dogs',
+      _id: 'fam_1:dogs',
+      family_id: 'fam_1',
       collection: 'dogs',
       last_pulled_at: 200,
       last_full_sync_at: 0,
@@ -672,14 +673,15 @@ describe('local sync runtime outbox diagnostics', () => {
 
     await localSyncRuntime.pullCollections('fam_1', ['dogs'])
 
-    expect(await localDb.findById<any>('sync_state', 'dogs')).toMatchObject({
+    expect(await localDb.findById<any>('sync_state', 'fam_1:dogs')).toMatchObject({
       last_pulled_at: 200,
     })
   })
 
   it('缺失集合响应时不应当作空成功推进 cursor', async () => {
     await localDb.upsertRows('sync_state', [{
-      _id: 'dogs',
+      _id: 'fam_1:dogs',
+      family_id: 'fam_1',
       collection: 'dogs',
       last_pulled_at: 200,
       last_full_sync_at: 100,
@@ -700,7 +702,7 @@ describe('local sync runtime outbox diagnostics', () => {
       .rejects
       .toThrow('dogs: 同步响应缺少集合结果')
 
-    expect(await localDb.findById<any>('sync_state', 'dogs')).toMatchObject({
+    expect(await localDb.findById<any>('sync_state', 'fam_1:dogs')).toMatchObject({
       last_pulled_at: 200,
       last_full_sync_at: 100,
     })
@@ -753,7 +755,7 @@ describe('local sync runtime outbox diagnostics', () => {
       { collections: ['dogs'], cursors: { dogs: 300 }, cursorIds: { dogs: 'dog_page_b' } },
     ])
     expect((await localDb.getTable<any>('dogs')).map(row => row._id).sort()).toEqual(['dog_page_a', 'dog_page_b', 'dog_page_c'])
-    expect(await localDb.findById<any>('sync_state', 'dogs')).toMatchObject({
+    expect(await localDb.findById<any>('sync_state', 'fam_1:dogs')).toMatchObject({
       last_pulled_at: 300,
       last_pulled_id: 'dog_page_c',
     })
@@ -762,7 +764,8 @@ describe('local sync runtime outbox diagnostics', () => {
   it('hasMore 为 true 但分页游标未前进时应失败并停止继续拉取', async () => {
     await localDb.upsertRows('sync_state', [
       {
-        _id: 'dogs',
+        _id: 'fam_1:dogs',
+        family_id: 'fam_1',
         collection: 'dogs',
         last_pulled_at: 300,
         last_pulled_id: 'dog_page_b',
@@ -794,7 +797,7 @@ describe('local sync runtime outbox diagnostics', () => {
 
     expect(pullCollections).toHaveBeenCalledTimes(1)
     expect(await localDb.findById<any>('dogs', 'dog_page_b')).toBeNull()
-    expect(await localDb.findById<any>('sync_state', 'dogs')).toMatchObject({
+    expect(await localDb.findById<any>('sync_state', 'fam_1:dogs')).toMatchObject({
       last_pulled_at: 300,
       last_pulled_id: 'dog_page_b',
       last_full_sync_at: 100,
@@ -804,7 +807,8 @@ describe('local sync runtime outbox diagnostics', () => {
   it('批量 pull 部分失败时应保留成功集合并对直接调用抛错', async () => {
     await localDb.upsertRows('sync_state', [
       {
-        _id: 'dogs',
+        _id: 'fam_1:dogs',
+        family_id: 'fam_1',
         collection: 'dogs',
         last_pulled_at: 100,
         last_full_sync_at: 0,
@@ -812,7 +816,8 @@ describe('local sync runtime outbox diagnostics', () => {
         updated_at: 100,
       },
       {
-        _id: 'tasks',
+        _id: 'fam_1:tasks',
+        family_id: 'fam_1',
         collection: 'tasks',
         last_pulled_at: 200,
         last_full_sync_at: 0,
@@ -851,10 +856,10 @@ describe('local sync runtime outbox diagnostics', () => {
     expect(await localDb.findById<any>('dogs', 'dog_1')).toMatchObject({
       name: '糯米',
     })
-    expect(await localDb.findById<any>('sync_state', 'dogs')).toMatchObject({
+    expect(await localDb.findById<any>('sync_state', 'fam_1:dogs')).toMatchObject({
       last_pulled_at: 300,
     })
-    expect(await localDb.findById<any>('sync_state', 'tasks')).toMatchObject({
+    expect(await localDb.findById<any>('sync_state', 'fam_1:tasks')).toMatchObject({
       last_pulled_at: 200,
     })
   })
@@ -929,7 +934,7 @@ describe('local sync runtime outbox diagnostics', () => {
       }),
     }
 
-    await localDb.upsertLocalMeta('sync:scope:home', {
+    await localDb.upsertLocalMeta('sync:scope:fam_1:home', {
       scopeKey: 'home',
       routeKey: 'home',
       routePath: '',
@@ -944,7 +949,7 @@ describe('local sync runtime outbox diagnostics', () => {
     localSyncRuntime.setCurrentFamilyId('fam_1')
     await localSyncRuntime.syncScope('home', { force: true })
 
-    const partialFreshness = await localDb.getLocalMeta<any>('sync:scope:home')
+    const partialFreshness = await localDb.getLocalMeta<any>('sync:scope:fam_1:home')
     expect(partialFreshness.last_error).toBe('tasks: tasks unavailable')
     const partialSyncedAt = partialFreshness.last_synced_at
     expect(await localDb.findById<any>('dogs', 'dog_partial_1')).toMatchObject({
@@ -954,7 +959,7 @@ describe('local sync runtime outbox diagnostics', () => {
     await localSyncRuntime.syncScope('home')
 
     expect(pullCollections).toHaveBeenCalledTimes(2)
-    const retriedFreshness = await localDb.getLocalMeta<any>('sync:scope:home')
+    const retriedFreshness = await localDb.getLocalMeta<any>('sync:scope:fam_1:home')
     expect(retriedFreshness.last_error).toBeNull()
     expect(retriedFreshness.last_synced_at).toBeGreaterThanOrEqual(partialSyncedAt)
     expect(await localDb.findById<any>('tasks', 'task_retry_1')).toMatchObject({
@@ -1033,7 +1038,123 @@ describe('local sync runtime outbox diagnostics', () => {
     expect(await localDb.findById<any>('dogs', 'dog_inflight_1')).toMatchObject({
       name: '糯米',
     })
-    const freshness = await localDb.getLocalMeta<any>('sync:scope:home')
+    const freshness = await localDb.getLocalMeta<any>('sync:scope:fam_1:home')
     expect(freshness.last_error).toBe('tasks: tasks unavailable')
+  })
+
+  it('切换家庭后不复用其他家庭的同步 cursor', async () => {
+    await localDb.upsertSyncState({
+      _id: 'fam_1:dogs',
+      family_id: 'fam_1',
+      collection: 'dogs',
+      last_pulled_at: 900,
+      last_pulled_id: 'dog_fam_1',
+      last_full_sync_at: 900,
+      last_ack_at: 0,
+      updated_at: 900,
+    })
+
+    const pullCollections = vi.fn(async (input: { cursors: Record<string, number>; cursorIds: Record<string, string> }) => {
+      expect(input.cursors.dogs).toBe(0)
+      expect(input.cursorIds.dogs).toBe('')
+      return {
+        data: {
+          collections: {
+            dogs: {
+              ok: true,
+              rows: [{ _id: 'dog_fam_2', family_id: 'fam_2', name: '奶糖', updated_at: 100 }],
+              cursor: 100,
+              cursorId: 'dog_fam_2',
+              hasMore: false,
+            },
+          },
+        },
+      }
+    })
+
+    ;(globalThis as any).uniCloud = {
+      importObject: () => ({
+        pullCollections,
+      }),
+    }
+
+    await localSyncRuntime.pullCollections('fam_2', ['dogs'])
+
+    expect(await localDb.findById<any>('sync_state', 'fam_2:dogs')).toMatchObject({
+      family_id: 'fam_2',
+      collection: 'dogs',
+      last_pulled_at: 100,
+      last_pulled_id: 'dog_fam_2',
+    })
+    expect(await localDb.findById<any>('sync_state', 'fam_1:dogs')).toMatchObject({
+      last_pulled_at: 900,
+    })
+  })
+
+  it('当前家庭没有本地集合数据时应触发 full pull，即使其他家庭已有缓存', async () => {
+    await localDb.upsertRows('dogs', [{ _id: 'dog_fam_1', family_id: 'fam_1', name: '花花', updated_at: 100 }])
+
+    const pullCollections = vi.fn(async (input: { forceFull?: boolean; collections: string[] }) => {
+      expect(input.forceFull).toBe(true)
+      expect(input.collections).toEqual(['dogs', 'tasks', 'health_records', 'medication_tasks'])
+      return {
+        data: {
+          collections: {
+            dogs: { ok: true, rows: [], cursor: 0, hasMore: false },
+            tasks: { ok: true, rows: [], cursor: 0, hasMore: false },
+            health_records: { ok: true, rows: [], cursor: 0, hasMore: false },
+            medication_tasks: { ok: true, rows: [], cursor: 0, hasMore: false },
+          },
+        },
+      }
+    })
+
+    ;(globalThis as any).uniCloud = {
+      importObject: () => ({
+        pullCollections,
+      }),
+    }
+
+    localSyncRuntime.setCurrentFamilyId('fam_2')
+    await localSyncRuntime.syncScope('home', { force: true })
+
+    expect(pullCollections).toHaveBeenCalledTimes(1)
+  })
+
+  it('scope 同步期间切换家庭时应把 freshness 写回发起同步的家庭', async () => {
+    const releasePull = createDeferred()
+    const pullCollections = vi.fn(async () => {
+      await releasePull.promise
+      return {
+        data: {
+          collections: {
+            dogs: { ok: true, rows: [], cursor: 0, hasMore: false },
+            tasks: { ok: true, rows: [], cursor: 0, hasMore: false },
+            health_records: { ok: true, rows: [], cursor: 0, hasMore: false },
+            medication_tasks: { ok: true, rows: [], cursor: 0, hasMore: false },
+          },
+        },
+      }
+    })
+
+    ;(globalThis as any).uniCloud = {
+      importObject: () => ({
+        pullCollections,
+      }),
+    }
+
+    localSyncRuntime.setCurrentFamilyId('fam_1')
+    const syncPromise = localSyncRuntime.syncScope('home', { force: true })
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    localSyncRuntime.setCurrentFamilyId('fam_2')
+    releasePull.resolve()
+    await syncPromise
+
+    expect(await localDb.getLocalMeta<any>('sync:scope:fam_1:home')).toMatchObject({
+      scopeKey: 'home',
+      last_error: null,
+    })
+    expect(await localDb.getLocalMeta<any>('sync:scope:fam_2:home')).toBeNull()
   })
 })

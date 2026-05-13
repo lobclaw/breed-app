@@ -107,6 +107,7 @@ async function doJoin() {
       queueSubmitFeedback({
         message: `已加入「${res.data.familyName}」`,
         targetRoute: '/pages/home/index',
+        familyId: String(res.data.familyId || ''),
       })
       await wait(SUBMIT_SUCCESS_FEEDBACK_DELAY_MS)
       uni.switchTab({ url: '/pages/home/index' })
