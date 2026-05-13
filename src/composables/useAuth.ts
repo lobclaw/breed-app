@@ -12,34 +12,54 @@ import { localSyncRuntime } from '@/localdb/runtime'
 import { useDogStore } from '@/stores/dogStore'
 import { useProtocolStore } from '@/stores/protocolStore'
 import { useTaskStore } from '@/stores/taskStore'
+import {
+  getFamilyCacheKey,
+  isFamilyAccessibleToUid,
+  readStorageJson,
+  removeStorageKey,
+  writeStorageJson,
+} from '@/utils/authScopedCache'
 
 // 全局响应式状态（跨组件共享）
 const currentUser = ref<{ uid: string; token: string } | null>(null)
 const currentFamily = ref<Family | null>(null)
 const isInitialized = ref(false)
-
-const FAMILY_CACHE_KEY = 'breed_family_cache'
+const isFamilyVerified = ref(false)
 
 function getTokenExpired(info: ReturnType<typeof uniCloud.getCurrentUserInfo>): number {
   const maybeInfo = info as typeof info & { tokenExpired?: number; token_expired?: number }
   return maybeInfo.tokenExpired ?? maybeInfo.token_expired ?? 0
 }
 
-function cacheFamily(family: Family | null) {
-  if (family) {
-    uni.setStorageSync(FAMILY_CACHE_KEY, JSON.stringify(family))
-  } else {
-    uni.removeStorageSync(FAMILY_CACHE_KEY)
+function getCurrentUid() {
+  try {
+    return String((uniCloud as any)?.getCurrentUserInfo?.()?.uid || currentUser.value?.uid || '').trim()
+  } catch {
+    return currentUser.value?.uid || ''
   }
 }
 
-function restoreFamilyFromCache(): Family | null {
-  try {
-    const raw = uni.getStorageSync(FAMILY_CACHE_KEY)
-    return raw ? JSON.parse(raw) : null
-  } catch {
+function cacheFamily(family: Family, uidInput?: string) {
+  const uid = uidInput || currentUser.value?.uid || getCurrentUid()
+  if (!uid || !isFamilyAccessibleToUid(family, uid)) return
+  writeStorageJson(getFamilyCacheKey(uid), family)
+}
+
+function removeFamilyCache(uidInput?: string) {
+  const uid = uidInput || currentUser.value?.uid || getCurrentUid()
+  if (!uid) return
+  removeStorageKey(getFamilyCacheKey(uid))
+}
+
+function restoreFamilyFromCache(uidInput?: string): Family | null {
+  const uid = uidInput || currentUser.value?.uid || getCurrentUid()
+  if (!uid) return null
+  const family = readStorageJson<Family>(getFamilyCacheKey(uid))
+  if (!isFamilyAccessibleToUid(family, uid)) {
+    removeStorageKey(getFamilyCacheKey(uid))
     return null
   }
+  return family
 }
 
 function shouldSkipAuthProbeInH5Dev(): boolean {
@@ -67,13 +87,29 @@ export function useAuth() {
    * 初始化认证状态（App 启动时调用）
    * 监听 uni-id-pages 登录成功事件
    */
-  function clearAuthScopedLocalState() {
+  function clearCurrentSession() {
     currentFamily.value = null
-    cacheFamily(null)
+    isFamilyVerified.value = false
     localSyncRuntime.setCurrentFamilyId('')
-    useTaskStore().clearForAuthChange()
-    useDogStore().clearForAuthChange()
-    useProtocolStore().clearForAuthChange()
+    useTaskStore().clearCurrentSession()
+    useDogStore().clearCurrentSession()
+    useProtocolStore().clearCurrentSession()
+  }
+
+  function clearAuthScopedLocalState() {
+    clearCurrentSession()
+  }
+
+  function restoreWorkspaceForFamily(familyId: string) {
+    if (!familyId) return
+    useTaskStore().restoreForFamily(familyId)
+    useDogStore().restoreForFamily(familyId)
+    useProtocolStore().restoreForFamily(familyId)
+  }
+
+  function shouldRestoreWorkspaceForFamily(family: Family) {
+    const previousFamilyId = currentFamily.value?._id || ''
+    return !isFamilyVerified.value || previousFamilyId !== family._id
   }
 
   async function init() {
@@ -84,7 +120,7 @@ export function useAuth() {
       const info = uniCloud.getCurrentUserInfo()
       if (info.uid) {
         const token = uni.getStorageSync('uni_id_token')
-        clearAuthScopedLocalState()
+        clearCurrentSession()
         currentUser.value = { uid: info.uid, token }
         const loadResult = await loadFamily()
         // 登录后如果没有家庭，跳转到创建家庭页
@@ -97,7 +133,7 @@ export function useAuth() {
     // 监听退出登录事件
     uni.$on('uni-id-pages-logout', () => {
       currentUser.value = null
-      clearAuthScopedLocalState()
+      clearCurrentSession()
     })
 
     if (shouldSkipAuthProbeInH5Dev()) {
@@ -111,11 +147,8 @@ export function useAuth() {
 
       if (info.uid && getTokenExpired(info) > Date.now()) {
         currentUser.value = { uid: info.uid, token }
-        // 先从缓存恢复，页面瞬间渲染正确状态
-        const cached = restoreFamilyFromCache()
-        if (cached) {
-          currentFamily.value = cached
-        }
+        // 只探测当前 uid 的家庭身份缓存；业务响应式状态需等待 loadFamily 权限确认后恢复。
+        restoreFamilyFromCache(info.uid)
         isInitialized.value = true
         // 后台静默刷新最新数据
         loadFamily()
@@ -134,20 +167,31 @@ export function useAuth() {
   async function loadFamily(): Promise<LoadFamilyResult> {
     try {
       const result = await cloudCall<{ data: Family | null }>('family-service', 'getFamilyInfo')
-      currentFamily.value = result.data || null
-      cacheFamily(result.data || null)
-      return result.data ? 'loaded' : 'no_family'
+      const family = result.data || null
+      const shouldRestoreWorkspace = family ? shouldRestoreWorkspaceForFamily(family) : false
+      currentFamily.value = family
+      if (family) {
+        cacheFamily(family)
+        isFamilyVerified.value = true
+        if (shouldRestoreWorkspace) restoreWorkspaceForFamily(family._id)
+        return 'loaded'
+      }
+      removeFamilyCache()
+      clearCurrentSession()
+      isFamilyVerified.value = true
+      return 'no_family'
     } catch (e: any) {
       const code = getCloudErrorCode(e)
       if (code === 'NO_FAMILY') {
-        currentFamily.value = null
-        cacheFamily(null)
+        removeFamilyCache()
+        clearCurrentSession()
+        isFamilyVerified.value = true
         return 'no_family'
       }
 
       if (code === 'TOKEN_INVALID' || code === 'TOKEN_MISSING') {
         currentUser.value = null
-        clearAuthScopedLocalState()
+        clearCurrentSession()
         console.warn('加载家庭信息失败:', e.message || e)
         return 'error'
       }
@@ -163,7 +207,13 @@ export function useAuth() {
 
   function setCurrentFamily(family: Family | null) {
     currentFamily.value = family
-    cacheFamily(family)
+    if (family) {
+      cacheFamily(family)
+      isFamilyVerified.value = true
+    } else {
+      removeFamilyCache()
+      isFamilyVerified.value = true
+    }
   }
 
   async function refreshFamilyFromLocal(familyIdInput?: string): Promise<boolean> {
@@ -217,6 +267,7 @@ export function useAuth() {
   return {
     currentUser,
     currentFamily,
+    isFamilyVerified,
     isLoggedIn,
     hasFamily,
     userRole,
@@ -231,5 +282,6 @@ export function useAuth() {
     logout,
     navigateToLogin,
     clearAuthScopedLocalState,
+    clearCurrentSession,
   }
 }

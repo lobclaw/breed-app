@@ -595,7 +595,7 @@ import { buildMedicationDetailUrl } from '@/utils/dogDetailNavigation'
 import type { MedicationRouteIllnessLink } from '@/utils/recordFormRoutes'
 import { getBatchCardDogId } from '@/utils/batchCardProgress'
 
-const { hasFamily, currentFamily, loadFamily } = useAuth()
+const { hasFamily, currentFamily, isFamilyVerified, loadFamily } = useAuth()
 const taskStore = useTaskStore()
 usePageSync({ routePath: 'pages/home/index' })
 
@@ -1042,7 +1042,7 @@ function clearHomeForMissingFamily() {
   loading.value = false
   focusedHomeCardId.value = ''
   pendingHomeCardFocusTarget.value = ''
-  taskStore.clearForAuthChange()
+  taskStore.clearCurrentSession()
 }
 
 function getHomeFocusSection(target: HomeCardFocusTarget) {
@@ -1546,6 +1546,7 @@ function restorePersistedHealthBatchCards(cardList: any[] = []) {
 }
 
 function syncTaskStoreHomeCache() {
+  const familyId = getCurrentFamilyId()
   taskStore.cards = cards.value
   taskStore.counts = {
     today: counts.today,
@@ -1555,6 +1556,7 @@ function syncTaskStoreHomeCache() {
   }
   taskStore.batchCardProgress = { ...localBatchCardProgressMap.value }
   taskStore.loaded = true
+  taskStore.persistForFamily(familyId)
 }
 
 function pruneLocalBatchCardProgress(cardList: any[] = []) {
@@ -2578,7 +2580,7 @@ onShow(async () => {
   }
 
   // 确保家庭信息已加载
-  if (!hasFamily.value) {
+  if (!hasFamily.value || !isFamilyVerified.value) {
     clearHomeForMissingFamily()
     const loadResult = await loadFamily()
     if (loadResult === 'error' && !hasFamily.value) {
@@ -2597,9 +2599,9 @@ onShow(async () => {
   selectedDate.value = startOfDay(Date.now())
   viewMode.value = 'today'
   dayCards.value = []
+  hydrateHomeFromTaskStore()
 
   if (pendingTarget) {
-    hydrateHomeFromTaskStore()
     if (getHomeFocusCard(pendingTarget)) {
       scheduleHomeCardFocus(pendingTarget)
     } else {

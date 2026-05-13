@@ -159,7 +159,7 @@ describe('local operation log', () => {
       updated_at: 2,
     } as any])
     ;(globalThis as any).uni.getStorageSync = vi.fn((key: string) => {
-      if (key !== 'breed_family_cache') return ''
+      if (key !== 'breed_family_cache:user_1') return ''
       return JSON.stringify({
         _id: 'fam_1',
         members: [{ user_id: 'user_1', nickname: '缓存昵称', status: 'active' }],

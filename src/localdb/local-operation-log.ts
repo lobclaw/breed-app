@@ -1,6 +1,7 @@
 import { localDb } from '@/localdb/db'
 import { LOCAL_MUTATION_TYPES, type LocalMutationType } from '@/localdb/mutation-registry'
 import type { LocalOperationLogRow, MutationStatus, SyncMetadata } from '@/localdb/types'
+import { getFamilyCacheKey } from '@/utils/authScopedCache'
 
 const BREEDING_RECORD_LABEL_MAP: Record<string, string> = {
   heat: '发情记录',
@@ -28,7 +29,6 @@ const LOCAL_OPERATION_STATUS_TEXT: Record<MutationStatus, string> = {
   conflict: '同步冲突',
 }
 
-const FAMILY_CACHE_KEY = 'breed_family_cache'
 const UNI_ID_USER_INFO_KEY = 'uni-id-pages-userInfo'
 
 function normalizeDogName(dog: Record<string, any> | null | undefined) {
@@ -53,7 +53,7 @@ function findActiveMemberName(family: Record<string, any> | null | undefined, ac
 }
 
 function getCachedActorName(actorUserId: string) {
-  const cachedFamily = readStorageObject(FAMILY_CACHE_KEY)
+  const cachedFamily = readStorageObject(getFamilyCacheKey(actorUserId))
   const familyMemberName = findActiveMemberName(cachedFamily, actorUserId)
   if (familyMemberName) return familyMemberName
 

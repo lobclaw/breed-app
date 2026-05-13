@@ -1,11 +1,18 @@
 /**
  * 任务数据 Store
- * 自动持久化 + stale-while-revalidate
+ * 按家庭显式缓存 + stale-while-revalidate
  * 首页加载时填充，BFabSheet 读取用于智能推荐
  */
 import { defineStore } from 'pinia'
 import { useAuth } from '@/composables/useAuth'
 import { localSyncRuntime } from '@/localdb/runtime'
+import {
+  getTodayWorkspaceDayKey,
+  getWorkspaceCacheKey,
+  readStorageJson,
+  WORKSPACE_CACHE_VERSION,
+  writeStorageJson,
+} from '@/utils/authScopedCache'
 import type { HomeCardFocusTarget } from '@/utils/homeCardFocus'
 import {
   buildFabTaskRecommendation,
@@ -45,6 +52,21 @@ interface PersistedBatchCardProgress {
   completedDogIds: string[]
 }
 
+interface TaskStoreSnapshot {
+  cacheVersion: number
+  familyId: string
+  dayKey: string
+  updatedAt: number
+  cards: TaskCard[]
+  counts: {
+    today: number
+    week: number
+    month30: number
+    hasOverdue: boolean
+  }
+  batchCardProgress: Record<string, PersistedBatchCardProgress>
+}
+
 const STORAGE_KEY = 'recent_actions'
 
 function getRecommendationDedupKey(url: string): string {
@@ -62,11 +84,6 @@ export const useTaskStore = defineStore('tasks', {
     pendingHomeTarget: '' as '' | HomeCardFocusTarget,
     loaded: false,
   }),
-
-  // @ts-ignore
-  unistorage: {
-    paths: ['cards', 'counts', 'batchCardProgress'],
-  },
 
   actions: {
     /** 从服务端加载 */
@@ -87,12 +104,18 @@ export const useTaskStore = defineStore('tasks', {
             hasOverdue: res.counts?.hasOverdue || false,
           }
           this.loaded = true
+          this.persistForFamily(familyId)
         }
       } catch { /* 网络失败保留缓存 */ }
     },
 
     /** 确保数据可用 */
     async ensure() {
+      const { currentFamily } = useAuth()
+      const familyId = currentFamily.value?._id || ''
+      if (familyId && !this.loaded && this.cards.length === 0) {
+        this.restoreForFamily(familyId)
+      }
       if (this.loaded || this.cards.length > 0) {
         this.loaded = true
         this.fetchFromServer()
@@ -136,7 +159,43 @@ export const useTaskStore = defineStore('tasks', {
       return target
     },
 
-    clearForAuthChange() {
+    restoreForFamily(familyId: string) {
+      const snapshot = readStorageJson<TaskStoreSnapshot>(getWorkspaceCacheKey('tasks', familyId))
+      if (
+        !snapshot ||
+        snapshot.familyId !== familyId ||
+        snapshot.cacheVersion !== WORKSPACE_CACHE_VERSION ||
+        snapshot.dayKey !== getTodayWorkspaceDayKey()
+      ) {
+        this.clearCurrentSession()
+        return false
+      }
+      this.cards = snapshot.cards || []
+      this.counts = {
+        today: snapshot.counts?.today || 0,
+        week: snapshot.counts?.week || 0,
+        month30: snapshot.counts?.month30 || 0,
+        hasOverdue: Boolean(snapshot.counts?.hasOverdue),
+      }
+      this.batchCardProgress = snapshot.batchCardProgress || {}
+      this.loaded = true
+      return true
+    },
+
+    persistForFamily(familyId: string) {
+      if (!familyId) return
+      writeStorageJson<TaskStoreSnapshot>(getWorkspaceCacheKey('tasks', familyId), {
+        cacheVersion: WORKSPACE_CACHE_VERSION,
+        familyId,
+        dayKey: getTodayWorkspaceDayKey(),
+        updatedAt: Date.now(),
+        cards: this.cards,
+        counts: this.counts,
+        batchCardProgress: this.batchCardProgress,
+      })
+    },
+
+    clearCurrentSession() {
       this.cards = []
       this.counts = { today: 0, week: 0, month30: 0, hasOverdue: false }
       this.batchCardProgress = {}
@@ -155,6 +214,8 @@ export const useTaskStore = defineStore('tasks', {
         } else {
           card.tasks = card.tasks.filter((t: any) => t._id !== taskId)
         }
+        const { currentFamily } = useAuth()
+        this.persistForFamily(currentFamily.value?._id || '')
       }
     },
 
