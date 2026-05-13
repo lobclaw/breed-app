@@ -53,3 +53,50 @@ describe('password recovery source contract', () => {
     expect(cloudConfig).toContain('"passwordStrength": "medium"')
   })
 })
+
+describe('sms login source contract', () => {
+  it('验证码登录应先弹图形验证码并在通过后发送短信', () => {
+    const content = source('src/uni_modules/uni-id-pages/pages/login/login-withoutpwd.vue')
+
+    expect(content).toContain('ref="smsCaptchaPopup"')
+    expect(content).toContain('scene="send-sms-code"')
+    expect(content).toContain('@confirm="sendSmsCodeAfterCaptcha"')
+    expect(content).toContain("this.$refs.agreements.popup(this.toSmsPage)")
+    expect(content).toContain('this.$refs.smsCaptchaPopup.open()')
+    expect(content).toContain('uniIdCo.sendSmsCode')
+    expect(content).toContain("scene: 'login-by-sms'")
+    expect(content).toContain("const sentAt = Date.now()")
+    expect(content).toContain("uni.setStorageSync(SMS_SENT_AT_STORAGE_PREFIX + this.phone, String(sentAt))")
+    expect(content).toContain("url: '/uni_modules/uni-id-pages/pages/login/login-smscode?phoneNumber=' + this.phone + '&sentAt=' + sentAt")
+  })
+
+  it('短信验证码页应只保留 6 位固定格输入、300 秒倒计时和手动测试码', () => {
+    const content = source('src/uni_modules/uni-id-pages/pages/login/login-smscode.vue')
+
+    expect(content).not.toContain('uni-id-pages-sms-form')
+    expect(content).toContain('class="otp-box"')
+    expect(content).toContain('maxlength="6"')
+    expect(content).toContain('height: 56px')
+    expect(content).toContain('flex: 1')
+    expect(content).toContain('const RESEND_SECONDS = 300')
+    expect(content).toContain("title: '请输入短信验证码'")
+    expect(content).toContain("return this.loggingIn ? '登录中...' : '登录'")
+    expect(content).toContain("return this.remainingSeconds + ' 秒后重新发送'")
+    expect(content).toContain("uni.showToast({")
+    expect(content).toContain("title: '测试模式，请输入 123456'")
+    expect(content).toContain('getInitialSentAt(routeSentAt)')
+    expect(content).toContain('uni.getStorageSync(this.getStorageKey())')
+    expect(content).toContain('uni.setStorageSync(this.getStorageKey(), String(sentAt))')
+    expect(content).not.toContain('this.code = "123456"')
+    expect(content).not.toContain("this.code = '123456'")
+  })
+
+  it('登录短信验证码有效期应与前端 5 分钟倒计时一致', () => {
+    const cloudConfig = source('uniCloud-alipay/cloudfunctions/common/uni-config-center/uni-id/config.json')
+    const sendSmsCode = source('uniCloud-alipay/cloudfunctions/uni-id-co/module/verify/send-sms-code.js')
+
+    expect(cloudConfig).toContain('"login-by-sms"')
+    expect(cloudConfig).toContain('"codeExpiresIn": 300')
+    expect(sendSmsCode).toContain('expiresIn: sceneConfig.codeExpiresIn || smsConfig.codeExpiresIn || 300')
+  })
+})

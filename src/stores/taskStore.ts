@@ -136,6 +136,14 @@ export const useTaskStore = defineStore('tasks', {
       return target
     },
 
+    clearForAuthChange() {
+      this.cards = []
+      this.counts = { today: 0, week: 0, month30: 0, hasOverdue: false }
+      this.batchCardProgress = {}
+      this.pendingHomeTarget = ''
+      this.loaded = false
+    },
+
     /** 本地移除卡片（乐观更新） */
     removeCardByTaskId(taskId: string) {
       const idx = this.cards.findIndex(c => c.tasks?.some((t: any) => t._id === taskId) || c.id === taskId)

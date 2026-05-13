@@ -43,18 +43,17 @@ module.exports = async function (params = {}) {
   })
 
   // -- 测试代码
+  const smsConfig = (this.config.service && this.config.service.sms) || {}
+  const sceneConfig = (smsConfig.scene && smsConfig.scene[scene]) || {}
   const {
     templateId
-  } = (this.config.service &&
-    this.config.service.sms &&
-    this.config.service.sms.scene &&
-    this.config.service.sms.scene[scene]) || {}
+  } = sceneConfig
   if (!templateId || !templateId.replace(/[^0-9a-zA-Z]/g, '')) {
     await require('../../lib/utils/verify-code')
       .setMobileVerifyCode.call(this, {
         mobile: params.mobile,
         code: '123456',
-        expiresIn: 180,
+        expiresIn: sceneConfig.codeExpiresIn || smsConfig.codeExpiresIn || 300,
         scene
       })
     return {

@@ -8,6 +8,10 @@ import { cloudCall } from './useCloudCall'
 import type { Family, MemberRole } from '@/types/family'
 import { getCloudErrorCode, isCloudConnectTimeout } from '@/utils/cloudError'
 import { localDb } from '@/localdb/db'
+import { localSyncRuntime } from '@/localdb/runtime'
+import { useDogStore } from '@/stores/dogStore'
+import { useProtocolStore } from '@/stores/protocolStore'
+import { useTaskStore } from '@/stores/taskStore'
 
 // 全局响应式状态（跨组件共享）
 const currentUser = ref<{ uid: string; token: string } | null>(null)
@@ -63,6 +67,15 @@ export function useAuth() {
    * 初始化认证状态（App 启动时调用）
    * 监听 uni-id-pages 登录成功事件
    */
+  function clearAuthScopedLocalState() {
+    currentFamily.value = null
+    cacheFamily(null)
+    localSyncRuntime.setCurrentFamilyId('')
+    useTaskStore().clearForAuthChange()
+    useDogStore().clearForAuthChange()
+    useProtocolStore().clearForAuthChange()
+  }
+
   async function init() {
     if (isInitialized.value) return
 
@@ -71,6 +84,7 @@ export function useAuth() {
       const info = uniCloud.getCurrentUserInfo()
       if (info.uid) {
         const token = uni.getStorageSync('uni_id_token')
+        clearAuthScopedLocalState()
         currentUser.value = { uid: info.uid, token }
         const loadResult = await loadFamily()
         // 登录后如果没有家庭，跳转到创建家庭页
@@ -83,8 +97,7 @@ export function useAuth() {
     // 监听退出登录事件
     uni.$on('uni-id-pages-logout', () => {
       currentUser.value = null
-      currentFamily.value = null
-      cacheFamily(null)
+      clearAuthScopedLocalState()
     })
 
     if (shouldSkipAuthProbeInH5Dev()) {
@@ -134,8 +147,7 @@ export function useAuth() {
 
       if (code === 'TOKEN_INVALID' || code === 'TOKEN_MISSING') {
         currentUser.value = null
-        currentFamily.value = null
-        cacheFamily(null)
+        clearAuthScopedLocalState()
         console.warn('加载家庭信息失败:', e.message || e)
         return 'error'
       }
@@ -218,5 +230,6 @@ export function useAuth() {
     createFamily,
     logout,
     navigateToLogin,
+    clearAuthScopedLocalState,
   }
 }

@@ -87,6 +87,7 @@
 		</view>
 		<!-- 固定定位的快捷登录按钮 -->
 		<uni-id-pages-fab-login ref="uniFabLogin"></uni-id-pages-fab-login>
+		<uni-popup-captcha @confirm="sendSmsCodeAfterCaptcha" v-model="smsCaptcha" scene="send-sms-code" title="安全验证" ref="smsCaptchaPopup"></uni-popup-captcha>
 	</view>
 </template>
 
@@ -97,6 +98,7 @@
 	const uniIdCo = uniCloud.importObject("uni-id-co", {
 		customUI: true
 	})
+	const SMS_SENT_AT_STORAGE_PREFIX = 'uni-id-pages-login-sms-sent-at:'
 	export default {
 		mixins: [mixin],
 		data() {
@@ -107,6 +109,8 @@
 				password: "",
 				showPassword: false,
 				captcha: "",
+				smsCaptcha: "",
+				sendingSms: false,
 				needCaptcha: false,
 				focusPhone: false,
 				focusPassword: false,
@@ -269,10 +273,71 @@
 				if (this.needAgreements && !this.agree) {
 					return this.$refs.agreements.popup(this.toSmsPage)
 				}
-				// 发送验证吗
+				this.smsCaptcha = ''
+				this.$refs.smsCaptchaPopup.open()
+			},
+			goSmsCodePage() {
+				const sentAt = Date.now()
+				uni.setStorageSync(SMS_SENT_AT_STORAGE_PREFIX + this.phone, String(sentAt))
 				uni.navigateTo({
-					url: '/uni_modules/uni-id-pages/pages/login/login-smscode?phoneNumber=' + this.phone
+					url: '/uni_modules/uni-id-pages/pages/login/login-smscode?phoneNumber=' + this.phone + '&sentAt=' + sentAt
 				});
+			},
+			sendSmsCodeAfterCaptcha() {
+				if (this.sendingSms) return
+				if (!this.smsCaptcha || this.smsCaptcha.length !== 4) {
+					return uni.showToast({
+						title: '请输入图形验证码',
+						icon: 'none',
+						duration: 3000
+					})
+				}
+				this.sendingSms = true
+				uni.showLoading({
+					title: '发送中...',
+					mask: true
+				})
+				uniIdCo.sendSmsCode({
+					mobile: this.phone,
+					scene: 'login-by-sms',
+					captcha: this.smsCaptcha
+				}).then(result => {
+					if (result && result.errCode === 'uni-id-invalid-sms-template-id') {
+						uni.showToast({
+							title: '测试模式，请输入 123456',
+							icon: 'none',
+							duration: 3000
+						})
+					} else {
+						uni.showToast({
+							title: '短信验证码发送成功',
+							icon: 'none',
+							duration: 2000
+						})
+					}
+					this.goSmsCodePage()
+				}).catch(e => {
+					const errCode = e.code || e.errCode
+					if (errCode === 'uni-id-invalid-sms-template-id') {
+						uni.showToast({
+							title: '测试模式，请输入 123456',
+							icon: 'none',
+							duration: 3000
+						})
+						this.goSmsCodePage()
+					} else {
+						this.smsCaptcha = ''
+						uni.showToast({
+							title: e.message || e.errMsg || '短信验证码发送失败',
+							icon: 'none',
+							duration: 3000
+						})
+					}
+				}).finally(() => {
+					this.sendingSms = false
+					this.smsCaptcha = ''
+					uni.hideLoading()
+				})
 			},
 			// 切换到密码登录
 			toPwdLogin() {

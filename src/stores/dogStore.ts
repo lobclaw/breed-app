@@ -48,6 +48,11 @@ export const useDogStore = defineStore('dogs', {
       }
     },
 
+    clearForAuthChange() {
+      this.list = []
+      this.loaded = false
+    },
+
     /** 按条件过滤 */
     getFiltered(roleFilter?: string, genderFilter?: string): DogWithStatus[] {
       let result = [...this.list]

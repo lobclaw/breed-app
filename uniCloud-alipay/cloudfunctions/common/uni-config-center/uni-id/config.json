@@ -101,7 +101,7 @@
       "scene": {
         "login-by-sms": {
           "templateId": "",
-          "codeExpiresIn": 180
+          "codeExpiresIn": 300
         },
         "reset-pwd-by-sms": {
           "templateId": "",

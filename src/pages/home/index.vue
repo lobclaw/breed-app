@@ -1027,6 +1027,24 @@ function hydrateHomeFromTaskStore() {
   counts.hasOverdue = taskStore.counts.hasOverdue || false
 }
 
+function clearHomeForMissingFamily() {
+  latestLoadToken += 1
+  loadedDateCountRanges.clear()
+  weekCache.value = {}
+  localBatchCardProgressMap.value = {}
+  cards.value = []
+  dayCards.value = []
+  dayCounts.value = {}
+  counts.today = 0
+  counts.week = 0
+  counts.month30 = 0
+  counts.hasOverdue = false
+  loading.value = false
+  focusedHomeCardId.value = ''
+  pendingHomeCardFocusTarget.value = ''
+  taskStore.clearForAuthChange()
+}
+
 function getHomeFocusSection(target: HomeCardFocusTarget) {
   return target === 'medication' ? 'therapy' : 'reminders'
 }
@@ -2561,6 +2579,7 @@ onShow(async () => {
 
   // 确保家庭信息已加载
   if (!hasFamily.value) {
+    clearHomeForMissingFamily()
     const loadResult = await loadFamily()
     if (loadResult === 'error' && !hasFamily.value) {
       return

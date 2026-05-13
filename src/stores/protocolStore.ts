@@ -55,5 +55,10 @@ export const useProtocolStore = defineStore('protocols', {
     async reload() {
       await this.fetchFromServer()
     },
+
+    clearForAuthChange() {
+      this.list = []
+      this.loaded = false
+    },
   },
 })
