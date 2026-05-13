@@ -10,10 +10,10 @@
     </match-media>
 
     <uni-forms class="set-password-form" ref="form" :value="formData" err-show-type="toast">
-      <text class="tip">输入密码</text>
+      <text class="tip">{{ passwordTip }}</text>
       <uni-forms-item name="newPassword">
         <uni-easyinput :focus="focusNewPassword" @blur="focusNewPassword = false" class="input-box"
-                       type="password" :inputBorder="false" v-model="formData.newPassword" placeholder="请输入密码">
+                       type="password" :inputBorder="false" v-model="formData.newPassword" maxlength="20" placeholder="请输入8-20位密码">
         </uni-easyinput>
       </uni-forms-item>
       <text class="tip">再次输入密码</text>
@@ -58,6 +58,7 @@ export default {
         newPassword: "",
         newPassword2: ""
       },
+      passwordTip: passwordMod.PASSWORD_TIP,
       rules: passwordMod.getPwdRules('newPassword', 'newPassword2')
     }
   },

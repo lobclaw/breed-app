@@ -16,7 +16,7 @@
 			</uni-forms-item>
 			<uni-forms-item name="newPassword">
 				<uni-easyinput :focus="focusNewPassword" @blur="focusNewPassword = false" class="input-box"
-					type="password" :inputBorder="false" v-model="formData.newPassword" placeholder="请输入新密码">
+					type="password" :inputBorder="false" v-model="formData.newPassword" maxlength="20" placeholder="请输入8-20位新密码">
 				</uni-easyinput>
 			</uni-forms-item>
 			<uni-forms-item name="newPassword2">
@@ -51,11 +51,11 @@
 					oldPassword: {
 						rules: [{
 								required: true,
-								errorMessage: '请输入新密码',
+								errorMessage: '请输入旧密码',
 							},
 							{
-								pattern: /^.{6,20}$/,
-								errorMessage: '密码为6 - 20位',
+								pattern: /^.{1,}$/,
+								errorMessage: '请输入旧密码',
 							}
 						]
 					},

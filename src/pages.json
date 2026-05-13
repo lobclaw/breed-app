@@ -421,7 +421,8 @@
 		{
 			"path": "uni_modules/uni-id-pages/pages/retrieve/retrieve",
 			"style": {
-				"navigationBarTitleText": "找回密码"
+				"navigationBarTitleText": "找回密码",
+				"navigationStyle": "custom"
 			}
 		},
 		{

@@ -141,6 +141,13 @@
 		/* #endif */
 	}
 
+	.captcha ::v-deep .uni-easyinput__content-input,
+	.captcha ::v-deep .uni-input-input,
+	.captcha ::v-deep .uni-input-placeholder,
+	.captcha ::v-deep .input-placeholder {
+		font-size: 15px !important;
+	}
+
 	.captcha-img-box,
 	.captcha-img,
 	.loding {

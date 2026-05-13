@@ -77,11 +77,11 @@
 						</view>
 					</view>
 					<view class="link-box__group" v-if="loginMode === 'password' && !config.isAdmin">
-						<text class="link" @click="toRetrievePwd">找回密码</text>
+						<text class="link" @click="toRetrievePwd">忘记密码</text>
 					</view>
 				</view>
 				<button v-if="loginMode === 'smsCode'" class="uni-btn" :class="{ 'uni-btn--inactive': !isPhone }" type="primary" @click="toSmsPage">验证并登录</button>
-				<button v-else class="uni-btn" type="primary" @click="pwdLogin">登录</button>
+				<button v-else class="uni-btn" :class="{ 'uni-btn--inactive': !canPasswordLogin }" type="primary" @click="pwdLogin">登录</button>
 				<uni-id-pages-agreements :scope="agreementScope" :key="agreementScope" ref="agreements"></uni-id-pages-agreements>
 			</template>
 		</view>
@@ -120,6 +120,9 @@
 			isPhone() { //手机号码校验正则
 				return /^1\d{10}$/.test(this.phone);
 			},
+			canPasswordLogin() {
+				return this.isPhone && this.password.length > 0 && (!this.needCaptcha || this.captcha.length === 4)
+			},
 			imgSrc() { //大快捷登录按钮图
 				const images = {
 					weixin: '/uni_modules/uni-id-pages/static/login/weixin.png',
@@ -137,7 +140,7 @@
 			},
 			pageTip() {
 				if (this.loginMode === 'password') {
-					return '已设置密码的手机号可直接登录'
+					return '已设置密码的手机号，可用密码登录'
 				}
 				return this.type == 'univerify'
 					? '使用本机号码快速登录，也可以切换其他账号'
@@ -247,6 +250,14 @@
 				this.$refs.uniFabLogin.login_before(this.type, true, options)
 			},
 			toSmsPage() {
+				if (!this.phone.length) {
+					this.focusPhone = true
+					return uni.showToast({
+						title: "请输入手机号",
+						icon: 'none',
+						duration: 3000
+					});
+				}
 				if (!this.isPhone) {
 					this.focusPhone = true
 					return uni.showToast({
@@ -271,26 +282,14 @@
 				this.setLoginType('smsCode')
 			},
 			toRetrievePwd() {
-				let url = '/uni_modules/uni-id-pages/pages/retrieve/retrieve'
-				if (/^1\d{10}$/.test(this.phone)) {
-					url += `?phoneNumber=${this.phone}`
-				}
 				uni.navigateTo({
-					url
+					url: '/uni_modules/uni-id-pages/pages/retrieve/retrieve'
 				})
 			},
 			togglePasswordVisible() {
 				this.showPassword = !this.showPassword
 			},
 			pwdLogin() {
-				if (!this.password.length) {
-					this.focusPassword = true
-					return uni.showToast({
-						title: '请输入密码',
-						icon: 'none',
-						duration: 3000
-					});
-				}
 				if (!this.phone.length) {
 					this.focusPhone = true
 					return uni.showToast({
@@ -303,6 +302,14 @@
 					this.focusPhone = true
 					return uni.showToast({
 						title: '请输入正确的手机号',
+						icon: 'none',
+						duration: 3000
+					});
+				}
+				if (!this.password.length) {
+					this.focusPassword = true
+					return uni.showToast({
+						title: '请输入密码',
 						icon: 'none',
 						duration: 3000
 					});

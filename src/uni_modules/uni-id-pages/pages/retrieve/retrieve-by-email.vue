@@ -31,7 +31,7 @@
 					<text class="auth-field__label">新密码</text>
 					<uni-forms-item name="password">
 						<uni-easyinput :focus="focusPassword" @blur="focusPassword = false" class="input-box" type="password" :inputBorder="false" v-model="formData.password" trim="both"
-							placeholder="请输入新密码"></uni-easyinput>
+							maxlength="20" placeholder="请输入8-20位新密码"></uni-easyinput>
 					</uni-forms-item>
 				</view>
 				<view class="auth-field">

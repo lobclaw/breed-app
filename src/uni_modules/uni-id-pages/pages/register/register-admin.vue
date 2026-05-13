@@ -27,7 +27,7 @@
 				<text class="auth-field__label">密码</text>
 				<uni-forms-item name="password" v-model="formData.password">
 					<uni-easyinput :inputBorder="false" :focus="focusPassword" @blur="focusPassword = false"
-						class="input-box" maxlength="20" :placeholder="'请输入' + (config.passwordStrength == 'weak'?'6':'8') + '-16位密码'" type="password"
+						class="input-box" maxlength="20" placeholder="请输入8-20位密码" type="password"
 						v-model="formData.password" trim="both" />
 				</uni-forms-item>
 			</view>
@@ -57,7 +57,6 @@
 <script>
 	import rules from './validator.js';
 	import mixin from '@/uni_modules/uni-id-pages/common/login-page.mixin.js';
-	import config from '@/uni_modules/uni-id-pages/config.js'
 	const uniIdCo = uniCloud.importObject("uni-id-co", {customUI: true})
 	export default {
 		mixins: [mixin],

@@ -1,6 +1,6 @@
 <!-- 找回密码页 -->
 <template>
-	<view class="uni-content">
+	<view class="uni-content retrieve-page">
 		<view class="auth-nav">
 			<text class="auth-nav__action" @click="goBack">‹</text>
 			<text class="auth-nav__help" @click="showHelp">帮助</text>
@@ -9,214 +9,239 @@
 			<image :src="logo"></image>
 		</view>
 		<view class="auth-panel">
-			<text class="title">找回密码</text>
-			<text class="tip">通过手机号验证后重置密码</text>
-			<uni-forms class="auth-form" ref="form" :value="formData" err-show-type="toast">
-				<view class="auth-field">
-					<text class="auth-field__label">手机号</text>
-					<uni-forms-item name="phone">
-						<uni-easyinput :focus="focusPhone" @blur="focusPhone = false" class="input-box" :disabled="lock" type="number" :inputBorder="false" trim="both"
-							v-model="formData.phone" maxlength="11" placeholder="请输入手机号">
-						</uni-easyinput>
-					</uni-forms-item>
+			<template v-if="step === 'verify'">
+				<text class="title">找回密码</text>
+				<text class="tip">{{ verifyTip }}</text>
+				<view class="auth-form">
+					<view v-if="!lock" class="auth-field">
+						<text class="auth-field__label">手机号</text>
+						<uni-easyinput
+							:focus="focusPhone"
+							@focus="focusPhone = true"
+							@blur="focusPhone = false"
+							class="input-box retrieve-input"
+							type="number"
+							:inputBorder="false"
+							trim="both"
+							v-model="formData.phone"
+							maxlength="11"
+							placeholder="请输入手机号"
+						/>
+					</view>
+					<view class="auth-field">
+						<text class="auth-field__label">短信验证码</text>
+						<uni-id-pages-sms-form
+							ref="shortCode"
+							:phone="formData.phone"
+							type="reset-pwd-by-sms"
+							v-model="formData.code"
+							@send-success="smsSent = true"
+						/>
+					</view>
+					<uni-id-pages-agreements scope="login" ref="agreements"></uni-id-pages-agreements>
+					<button class="uni-btn send-btn-box" :class="{ 'uni-btn--inactive': !canGoNext }" type="primary" @click="completeVerify">下一步</button>
 				</view>
-				<view class="auth-field">
-					<text class="auth-field__label">短信验证码</text>
-					<uni-forms-item name="code">
-						<uni-id-pages-sms-form ref="shortCode" :phone="formData.phone" type="reset-pwd-by-sms" v-model="formData.code">
-						</uni-id-pages-sms-form>
-					</uni-forms-item>
+			</template>
+
+			<template v-else>
+				<text class="title">请输入新登录密码</text>
+				<text class="tip password-tip">{{ passwordTip }}</text>
+				<view class="auth-form">
+					<view class="auth-field">
+						<text class="auth-field__label">新密码</text>
+						<uni-easyinput
+							:focus="focusPassword"
+							@focus="focusPassword = true"
+							@blur="focusPassword = false"
+							class="input-box"
+							type="password"
+							:inputBorder="false"
+							v-model="formData.password"
+							trim="both"
+							maxlength="20"
+							placeholder="请输入密码"
+						/>
+					</view>
+					<button class="uni-btn send-btn-box" type="primary" :disabled="submitting" @click="submitPassword">
+						{{ submitting ? '登录中...' : '完成' }}
+					</button>
 				</view>
-				<view class="auth-field">
-					<text class="auth-field__label">新密码</text>
-					<uni-forms-item name="password">
-						<uni-easyinput :focus="focusPassword" @blur="focusPassword = false" class="input-box" type="password" :inputBorder="false" v-model="formData.password" trim="both"
-							placeholder="请输入新密码"></uni-easyinput>
-					</uni-forms-item>
-				</view>
-				<view class="auth-field">
-					<text class="auth-field__label">确认密码</text>
-					<uni-forms-item name="password2">
-						<uni-easyinput :focus="focusPassword2" @blur="focusPassword2 = false" class="input-box" type="password" :inputBorder="false" v-model="formData.password2" trim="both"
-							placeholder="请再次输入新密码"></uni-easyinput>
-					</uni-forms-item>
-				</view>
-				<button class="uni-btn send-btn-box" type="primary" @click="submit">提交</button>
-				<view class="link-box auth-retrieve-links">
-					<text class="link" @click="retrieveByEmail">通过邮箱验证码找回密码</text>
-					<text class="link" @click="backLogin">返回登录</text>
-				</view>
-			</uni-forms>
+			</template>
 		</view>
-		<uni-popup-captcha @confirm="submit" v-model="formData.captcha" scene="reset-pwd-by-sms" ref="popup"></uni-popup-captcha>
+		<uni-popup-captcha @confirm="submitPassword" v-model="formData.captcha" scene="reset-pwd-by-sms" ref="popup"></uni-popup-captcha>
 	</view>
 </template>
 
 <script>
-	import mixin from '@/uni_modules/uni-id-pages/common/login-page.mixin.js';
-	const uniIdCo = uniCloud.importObject("uni-id-co",{
-		errorOptions:{
-			type:'toast'
+	import mixin from '@/uni_modules/uni-id-pages/common/login-page.mixin.js'
+	import passwordMod from '@/uni_modules/uni-id-pages/common/password.js'
+
+	const uniIdCo = uniCloud.importObject("uni-id-co", {
+		errorOptions: {
+			type: 'toast'
 		}
 	})
+
 	export default {
 		mixins: [mixin],
 		data() {
 			return {
+				step: 'verify',
 				lock: false,
-				focusPhone:true,
-				focusPassword:false,
-				focusPassword2:false,
+				smsSent: false,
+				submitting: false,
+				focusPhone: true,
+				focusPassword: false,
 				formData: {
-					"phone": "",
-					"code": "",
-					'password': '',
-					'password2': '',
-					"captcha": ""
+					phone: '',
+					code: '',
+					password: '',
+					captcha: ''
 				},
-				rules: {
-					phone: {
-						rules: [{
-								required: true,
-								errorMessage: '请输入手机号',
-							},
-							{
-								pattern: /^1\d{10}$/,
-								errorMessage: '请输入正确的手机号',
-							}
-						]
-					},
-					code: {
-						rules: [{
-								required: true,
-								errorMessage: '请输入短信验证码',
-							},
-							{
-								pattern: /^.{6}$/,
-								errorMessage: '请输入6位验证码',
-							}
-						]
-					},
-					password: {
-						rules: [{
-								required: true,
-								errorMessage: '请输入新密码',
-							},
-							{
-								pattern: /^.{6,20}$/,
-								errorMessage: '密码为6 - 20位',
-							}
-						]
-					},
-					password2: {
-						rules: [{
-								required: true,
-								errorMessage: '请确认密码',
-							},
-							{
-								pattern: /^.{6,20}$/,
-								errorMessage: '密码为6 - 20位',
-							},
-							{
-								validateFunction: function(rule, value, data, callback) {
-									// console.log(value);
-									if (value != data.password) {
-										callback('两次输入密码不一致')
-									};
-									return true
-								}
-							}
-						]
-					}
-				},
-				logo: "/static/logo.png"
+				logo: "/static/logo.png",
+				passwordTip: passwordMod.PASSWORD_TIP
 			}
 		},
 		computed: {
 			isPhone() {
-				let reg_phone = /^1\d{10}$/;
-				let isPhone = reg_phone.test(this.formData.phone);
-				return isPhone;
-			},
-			isPwd() {
-				let reg_pwd = /^.{6,20}$/;
-				let isPwd = reg_pwd.test(this.formData.password);
-				return isPwd;
+				return /^1\d{10}$/.test(this.formData.phone)
 			},
 			isCode() {
-				let reg_code = /^\d{6}$/;
-				let isCode = reg_code.test(this.formData.code);
-				return isCode;
-			}
-		},
-		onLoad(event) {
-			if (event && event.phoneNumber) {
-				this.formData.phone = event.phoneNumber;
-				if(event.lock){
-					this.lock = event.lock //如果是已经登录的账号，点击找回密码就锁定指定的账号绑定的手机号码
-					this.focusPhone = true
+				return /^\d{6}$/.test(this.formData.code)
+			},
+			canGoNext() {
+				return this.isPhone && this.isCode
+			},
+			verifyTip() {
+				if (!this.formData.phone) {
+					return '请输入手机号并完成验证'
 				}
+				const action = this.smsSent ? '验证码已通过短信发送至' : '验证码将通过短信发送至'
+				return action + ' +86 ' + this.formData.phone
 			}
 		},
-		onReady() {
-			if (this.formData.phone) {
-				this.$refs.shortCode.start();
+		onLoad(event = {}) {
+			if (event.phoneNumber) {
+				this.formData.phone = event.phoneNumber
+				this.lock = true
+				this.focusPhone = false
 			}
-			this.$refs.form.setRules(this.rules)
+			if (event.lock) {
+				this.lock = event.lock
+			}
 		},
 		onShow() {
 			// #ifdef H5
 			document.onkeydown = event => {
-				var e = event || window.event;
-				if (e && e.keyCode == 13) { //回车键的键值为13
-					this.submit()
+				var e = event || window.event
+				if (e && e.keyCode == 13) {
+					this.step === 'verify' ? this.completeVerify() : this.submitPassword()
 				}
-			};
+			}
 			// #endif
 		},
+		watch: {
+			'formData.phone'(value, oldValue) {
+				if (value === oldValue) return
+				this.smsSent = false
+				this.formData.code = ''
+			}
+		},
 		methods: {
-			/**
-			 * 完成并提交
-			 */
-			submit() {
-				this.$refs.form.validate()
-					.then(res => {
-						let {
-							"phone": mobile,
-							"password": password,
-							captcha,
-							code
-						} = this.formData
-						uniIdCo.resetPwdBySms({
-								mobile,
-								code,
-								password,
-								captcha
-							}).then(e => {
-								uni.navigateBack()
-							})
-							.catch(e => {
-								if (e.errCode == 'uni-id-captcha-required') {
-									this.$refs.popup.open()
-								}
-							}).finally(e => {
-								this.formData.captcha = ""
-							})
-					}).catch(errors=>{
-						let key = errors[0].key
-						if(key == 'code'){
-							return this.$refs.shortCode.focusSmsCodeInput = true
-						}
-						key = key.replace(key[0], key[0].toUpperCase())
-						this['focus'+key] = true
+			validatePhone() {
+				if (!this.formData.phone.length) {
+					this.focusPhone = true
+					uni.showToast({
+						title: '请输入手机号',
+						icon: 'none',
+						duration: 3000
 					})
+					return false
+				}
+				if (!this.isPhone) {
+					this.focusPhone = true
+					uni.showToast({
+						title: '请输入正确的手机号',
+						icon: 'none',
+						duration: 3000
+					})
+					return false
+				}
+				return true
 			},
-			retrieveByEmail() {
-				uni.navigateTo({
-					url: '/uni_modules/uni-id-pages/pages/retrieve/retrieve-by-email'
+			completeVerify() {
+				if (!this.validatePhone()) return
+				if (!this.isCode) {
+					this.$refs.shortCode.focusSmsCodeInput = true
+					return uni.showToast({
+						title: this.formData.code ? '请输入6位验证码' : '请输入短信验证码',
+						icon: 'none',
+						duration: 3000
+					})
+				}
+				if (this.needAgreements && !this.agree) {
+					return this.$refs.agreements.popup(() => {
+						this.step = 'password'
+						this.focusPassword = true
+					})
+				}
+				this.step = 'password'
+				this.focusPassword = true
+			},
+			submitPassword() {
+				if (this.submitting) return
+				const pwdCheck = passwordMod.validPwd(this.formData.password)
+				if (pwdCheck !== true) {
+					this.focusPassword = true
+					return uni.showToast({
+						title: pwdCheck,
+						icon: 'none',
+						duration: 3000
+					})
+				}
+
+				this.submitting = true
+				const mobile = this.formData.phone
+				const password = this.formData.password
+				uniIdCo.resetPwdBySms({
+					mobile,
+					code: this.formData.code,
+					password,
+					captcha: this.formData.captcha
+				}).then(() => {
+					return uniIdCo.login({
+						mobile,
+						password
+					}).then(e => {
+						this.loginSuccess(e)
+					}).catch(() => {
+						uni.showToast({
+							title: '密码已重置，请重新登录',
+							icon: 'none',
+							duration: 3000
+						})
+						this.backLogin(mobile)
+					})
+				}).catch(e => {
+					if (e.errCode == 'uni-id-captcha-required') {
+						this.$refs.popup.open()
+					} else if (e.message || e.errMsg) {
+						uni.showToast({
+							title: e.message || e.errMsg,
+							icon: 'none',
+							duration: 3000
+						})
+					}
+				}).finally(() => {
+					this.submitting = false
+					this.formData.captcha = ''
 				})
 			},
 			goBack() {
+				if (this.step === 'password') {
+					this.step = 'verify'
+					return
+				}
 				const pages = getCurrentPages()
 				if (pages.length > 1) {
 					uni.navigateBack()
@@ -226,13 +251,14 @@
 			},
 			showHelp() {
 				uni.showToast({
-					title: '请填写验证码并设置新密码',
+					title: this.step === 'verify' ? '请先完成手机号验证' : '请设置新的登录密码',
 					icon: 'none'
 				})
 			},
-			backLogin () {
+			backLogin(phone) {
+				const query = phone ? '?type=username&phoneNumber=' + phone : ''
 				uni.redirectTo({
-					url: '/uni_modules/uni-id-pages/pages/login/login-withoutpwd'
+					url: '/uni_modules/uni-id-pages/pages/login/login-withoutpwd' + query
 				})
 			}
 		}
@@ -241,6 +267,23 @@
 
 <style lang="scss">
 	@import "@/uni_modules/uni-id-pages/common/login-page.scss";
+
+	.retrieve-page .auth-form {
+		display: flex;
+		flex-direction: column;
+		width: 100%;
+	}
+
+	.retrieve-page .password-tip {
+		max-width: 100%;
+	}
+
+	.retrieve-page .retrieve-input ::v-deep .uni-easyinput__content-input,
+	.retrieve-page .retrieve-input ::v-deep .uni-input-input,
+	.retrieve-page .retrieve-input ::v-deep .uni-input-placeholder,
+	.retrieve-page .retrieve-input ::v-deep .input-placeholder {
+		font-size: 15px !important;
+	}
 
 	@media screen and (min-width: 690px) {
 		.uni-content{

@@ -5,7 +5,7 @@
       "version": 1
     }
   ], 
-  "passwordStrength": "weak", 
+  "passwordStrength": "medium",
   "tokenSecret": "3d3393bb810a39f5e2d9830e350c235adf67ecf7164af501512b490c000bec30", 
   "requestAuthSecret": "", 
   "tokenExpiresIn": 7200, 

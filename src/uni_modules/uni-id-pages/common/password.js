@@ -2,6 +2,7 @@
 import config from '@/uni_modules/uni-id-pages/config.js'
 
 const {passwordStrength} = config
+const PASSWORD_TIP = '密码需要8-20位，至少包含字母、数字、符号的任意两种'
 
 // 密码强度表达式
 const passwordRules = {
@@ -10,7 +11,7 @@ const passwordRules = {
 	// 密码必须包含字母、数字和特殊符号
 	strong: /^(?=.*[0-9])(?=.*[a-zA-Z])(?=.*[~!@#$%^&*_\-+=`|\\(){}[\]:;"'<>,.?/])[0-9a-zA-Z~!@#$%^&*_\-+=`|\\(){}[\]:;"'<>,.?/]{8,16}$/,
 	// 密码必须为字母、数字和特殊符号任意两种的组合
-	medium: /^(?![0-9]+$)(?![a-zA-Z]+$)(?![~!@#$%^&*_\-+=`|\\(){}[\]:;"'<>,.?/]+$)[0-9a-zA-Z~!@#$%^&*_\-+=`|\\(){}[\]:;"'<>,.?/]{8,16}$/,
+	medium: /^(?![0-9]+$)(?![a-zA-Z]+$)(?![~!@#$%^&*_\-+=`|\\(){}[\]:;"'<>,.?/]+$)[0-9a-zA-Z~!@#$%^&*_\-+=`|\\(){}[\]:;"'<>,.?/]{8,20}$/,
 	// 密码必须包含字母和数字
 	weak: /^(?=.*[0-9])(?=.*[a-zA-Z])[0-9a-zA-Z~!@#$%^&*_\-+=`|\\(){}[\]:;"'<>,.?/]{6,16}$/
 }
@@ -24,8 +25,8 @@ const ERROR = {
 	passwordStrengthError: {
 		super: '密码必须包含大小写字母、数字和特殊符号，密码长度必须在8-16位之间',
 		strong: '密码必须包含字母、数字和特殊符号，密码长度必须在8-16位之间',
-		medium: '密码必须为字母、数字和特殊符号任意两种的组合，密码长度必须在8-16位之间',
-		weak: '密码必须包含字母，密码长度必须在6-16位之间'
+		medium: PASSWORD_TIP,
+		weak: '密码必须包含字母和数字，密码长度必须在6-16位之间'
 	}
 }
 
@@ -80,6 +81,7 @@ function getPwdRules(pwdName = 'password', rePwdName = 'password2') {
 
 export default {
 	ERROR,
+	PASSWORD_TIP,
 	validPwd,
 	getPwdRules
 }

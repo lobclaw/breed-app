@@ -4,7 +4,7 @@
 			<uni-captcha :focus="focusCaptchaInput" ref="captcha" scene="send-sms-code" v-model="captcha" />
 		</view>
 		<view class="box">
-			<uni-easyinput :focus="focusSmsCodeInput" @blur="focusSmsCodeInput = false" type="number" class="input-box" :inputBorder="false" v-model="modelValue" maxlength="6" :clearable="false" trim="both"
+			<uni-easyinput :focus="focusSmsCodeInput" @focus="focusSmsCodeInput = true" @blur="focusSmsCodeInput = false" type="number" class="input-box" :inputBorder="false" v-model="modelValue" maxlength="6" :clearable="false" trim="both"
 				placeholder="短信验证码">
 			</uni-easyinput>
 			<view class="short-code-btn" hover-class="hover" @click="start">
@@ -131,7 +131,7 @@
 				}
 				let reg_phone = /^1\d{10}$/;
 				if (!reg_phone.test(this.phone)) return uni.showToast({
-					title: "手机号格式错误",
+					title: "请输入正确的手机号",
 					icon: 'none',
 					duration: 3000
 				});
@@ -153,6 +153,7 @@
 						icon: 'none',
 						duration: 3000
 					});
+					this.$emit('send-success')
 					this.reverseNumber = Number(this.count);
 					this.getCode();
 				}).catch(e => {
@@ -252,9 +253,19 @@
 		background-color: rgba(255, 255, 255, 0.92) !important;
 	}
 
-	.box ::v-deep .uni-easyinput__content-input {
+	.box ::v-deep .uni-easyinput__content.is-focused,
+	.box ::v-deep .uni-easyinput__content:focus-within {
+		border-color: rgba(234, 62, 119, 0.48) !important;
+		background-color: var(--card, #fff) !important;
+		box-shadow: 0 6px 18px rgba(234, 62, 119, 0.1);
+	}
+
+	.box ::v-deep .uni-easyinput__content-input,
+	.box ::v-deep .uni-input-input,
+	.box ::v-deep .uni-input-placeholder,
+	.box ::v-deep .input-placeholder {
 		padding-right: 118px;
-		font-size: 15px;
+		font-size: 15px !important;
 	}
 
 	.box ::v-deep .content-clear-icon {

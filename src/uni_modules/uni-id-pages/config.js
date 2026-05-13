@@ -12,6 +12,6 @@ export default {
     scope: ['register', 'login']
   },
   appid: {},
-  passwordStrength: 'weak', // 个人工具，弱密码即可
+  passwordStrength: 'medium', // 8-20 位，字母/数字/符号任意两种
   setPasswordAfterLogin: false
 }

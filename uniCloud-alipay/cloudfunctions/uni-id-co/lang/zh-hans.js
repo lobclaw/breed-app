@@ -21,7 +21,7 @@ const sentence = {
   'uni-id-invalid-password': '密码不合法',
   'uni-id-invalid-password-super': '密码必须包含大小写字母、数字和特殊符号，长度8-16位',
   'uni-id-invalid-password-strong': '密码必须包含字母、数字和特殊符号，长度8-16位不合法',
-  'uni-id-invalid-password-medium': '密码必须为字母、数字和特殊符号任意两种的组合，长度8-16位',
+  'uni-id-invalid-password-medium': '密码需要8-20位，至少包含字母、数字、符号的任意两种',
   'uni-id-invalid-password-weak': '密码必须包含字母和数字，长度6-16位',
   'uni-id-invalid-mobile': '手机号码不合法',
   'uni-id-invalid-email': '邮箱不合法',

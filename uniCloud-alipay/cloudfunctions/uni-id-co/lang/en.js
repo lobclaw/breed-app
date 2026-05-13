@@ -19,7 +19,7 @@ const sentence = {
   'uni-id-invalid-password': 'invalid password',
   'uni-id-invalid-password-super': 'Passwords must have 8-16 characters and contain uppercase letters, lowercase letters, numbers, and symbols.',
   'uni-id-invalid-password-strong': 'Passwords must have 8-16 characters and contain letters, numbers and symbols.',
-  'uni-id-invalid-password-medium': 'Passwords must have 8-16 characters and contain at least two of the following: letters, numbers, and symbols.',
+  'uni-id-invalid-password-medium': 'Passwords must have 8-20 characters and contain at least two of the following: letters, numbers, and symbols.',
   'uni-id-invalid-password-weak': 'Passwords must have 6-16 characters and contain letters and numbers.',
   'uni-id-invalid-mobile': 'Invalid mobile phone number',
   'uni-id-invalid-email': 'Invalid email address',
