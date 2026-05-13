@@ -647,7 +647,7 @@
 
 .form-sheet__submit {
   width: 100%;
-  height: 52px;
+  height: var(--button-height-primary);
   box-sizing: border-box;
   margin: 0;
   padding: 0;
@@ -657,8 +657,9 @@
   font-size: 16px;
   font-weight: 800;
   line-height: 1;
-  color: #fff;
-  background: var(--primary);
+  color: var(--button-primary-color);
+  background: var(--button-primary-bg);
+  box-shadow: var(--button-primary-shadow);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -674,7 +675,7 @@
   }
 
   &[disabled] {
-    opacity: 0.5;
+    opacity: var(--button-disabled-opacity);
   }
 
   &--danger {
@@ -769,7 +770,7 @@
 
 .submit-btn {
   width: 100%;
-  height: 50px;
+  height: var(--button-height-primary);
   box-sizing: border-box;
   margin: 0;
   padding: 0;
@@ -778,9 +779,9 @@
   font-size: 15px;
   font-weight: 700;
   line-height: 1;
-  color: white;
-  background: var(--primary);
-  box-shadow: 0 4px 16px rgba(234, 62, 119, 0.25);
+  color: var(--button-primary-color);
+  background: var(--button-primary-bg);
+  box-shadow: var(--button-primary-shadow);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -797,12 +798,12 @@
   }
 
   &[disabled] {
-    opacity: 0.4;
+    opacity: var(--button-disabled-opacity);
   }
 
   &--success {
-    background: var(--primary);
-    box-shadow: 0 4px 16px rgba(234, 62, 119, 0.25);
+    background: var(--button-primary-bg);
+    box-shadow: var(--button-primary-shadow);
     opacity: 1;
 
     &::before {

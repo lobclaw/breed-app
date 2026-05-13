@@ -12,6 +12,17 @@
   --primary: #ea3e77;
   --primary-soft: #fff0f2;
 
+  /* 按钮 */
+  --button-primary-bg: var(--primary);
+  --button-primary-active-bg: #dc2f68;
+  --button-primary-color: #fff;
+  --button-primary-shadow: 0 4px 16px rgba(234, 62, 119, 0.25);
+  --button-primary-shadow-lg: 0 10px 24px rgba(234, 62, 119, 0.18);
+  --button-disabled-opacity: 0.4;
+  --button-height-small: 32px;
+  --button-height-medium: 40px;
+  --button-height-primary: 48px;
+
   /* 背景 */
   --bg: #fdf8f9;
   --card: #FFFFFF;
@@ -68,6 +79,16 @@
 .dark {
   --primary: #f05888;
   --primary-soft: rgba(240, 88, 136, 0.12);
+
+  --button-primary-bg: var(--primary);
+  --button-primary-active-bg: #e94b7d;
+  --button-primary-color: #fff;
+  --button-primary-shadow: 0 4px 16px rgba(240, 88, 136, 0.26);
+  --button-primary-shadow-lg: 0 10px 24px rgba(240, 88, 136, 0.2);
+  --button-disabled-opacity: 0.4;
+  --button-height-small: 32px;
+  --button-height-medium: 40px;
+  --button-height-primary: 48px;
 
   --bg: #181210;
   --card: #241E1A;

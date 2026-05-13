@@ -18,7 +18,7 @@
       `b-btn--${color}`,
       {
         'b-btn--loading': loading,
-        'b-btn--disabled': disabled,
+        'b-btn--disabled': disabled || loading,
         'b-btn--block': fullWidth,
       },
     ]"
@@ -75,14 +75,17 @@ defineEmits<{ click: [] }>()
   }
 
   /* 尺寸 */
-  &--small { padding: 6px 14px; font-size: 12px; }
-  &--medium { padding: 8px 18px; font-size: 13px; }
-  &--large { padding: 12px 24px; font-size: 15px; }
+  &--small { height: var(--button-height-small); padding: 0 14px; font-size: 12px; }
+  &--medium { height: var(--button-height-medium); padding: 0 18px; font-size: 13px; }
+  &--large { height: var(--button-height-primary); padding: 0 24px; font-size: 15px; }
 
   /* Filled 变体 */
   &--filled {
     color: #FFFFFF;
-    &.b-btn--primary { background: var(--primary); }
+    &.b-btn--primary {
+      background: var(--button-primary-bg);
+      color: var(--button-primary-color);
+    }
     &.b-btn--red { background: var(--red); }
     &.b-btn--amber { background: var(--amber); }
     &.b-btn--green { background: var(--green); }
@@ -101,7 +104,7 @@ defineEmits<{ click: [] }>()
 
   /* 禁用 */
   &--disabled {
-    opacity: 0.4;
+    opacity: var(--button-disabled-opacity);
     cursor: not-allowed;
   }
 

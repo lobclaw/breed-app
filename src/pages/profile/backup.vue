@@ -1203,7 +1203,7 @@ onShow(() => {
 
   &__retry {
     flex: 1;
-    height: 42px;
+    height: var(--button-height-primary);
     box-sizing: border-box;
     margin: 0;
     padding: 0;
@@ -1230,7 +1230,7 @@ onShow(() => {
     }
 
     &[disabled] {
-      opacity: 0.72;
+      opacity: var(--button-disabled-opacity);
     }
   }
 
@@ -1853,7 +1853,7 @@ onShow(() => {
   &__primary,
   &__secondary {
     width: 100%;
-    height: 48px;
+    height: var(--button-height-primary);
     box-sizing: border-box;
     margin: 0;
     padding: 0;
@@ -1879,11 +1879,11 @@ onShow(() => {
   }
 
   &__primary {
-    background: var(--primary);
-    color: #fff;
+    background: var(--button-primary-bg);
+    color: var(--button-primary-color);
 
     &[disabled] {
-      opacity: 0.72;
+      opacity: var(--button-disabled-opacity);
     }
   }
 

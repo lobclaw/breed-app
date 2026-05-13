@@ -1347,7 +1347,7 @@ onShow(() => {
   flex: 1;
   min-width: 0;
   width: auto;
-  height: 48px;
+  height: var(--button-height-primary);
   margin: 0;
   border-radius: 16px;
   font-family: var(--font-display);
@@ -1368,9 +1368,9 @@ onShow(() => {
   }
 
   &--primary {
-    background: var(--primary);
-    color: #fff;
-    box-shadow: 0 8px 18px rgba(234, 62, 119, 0.2);
+    background: var(--button-primary-bg);
+    color: var(--button-primary-color);
+    box-shadow: var(--button-primary-shadow);
   }
 
   &--ghost {
@@ -1583,7 +1583,7 @@ onShow(() => {
 
 .sale-flow-submit {
   width: 100%;
-  height: 52px;
+  height: var(--button-height-primary);
   box-sizing: border-box;
   margin: 0;
   padding: 0;
@@ -1609,11 +1609,13 @@ onShow(() => {
   }
 
   &[disabled] {
-    opacity: 0.5;
+    opacity: var(--button-disabled-opacity);
   }
 
   &--primary {
-    background: var(--primary);
+    background: var(--button-primary-bg);
+    color: var(--button-primary-color);
+    box-shadow: var(--button-primary-shadow);
   }
 
   &--red {

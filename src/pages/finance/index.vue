@@ -2348,7 +2348,7 @@ onShow(async () => {
   &__reset,
   &__apply {
     flex: 1;
-    height: 48px;
+    height: var(--button-height-primary);
     border-radius: 18px;
     border: none;
     padding: 0 16px;
@@ -2374,14 +2374,14 @@ onShow(async () => {
   }
 
   &__apply {
-    background: linear-gradient(135deg, var(--primary) 0%, #ff6f98 100%);
-    color: #fff;
+    background: var(--button-primary-bg);
+    color: var(--button-primary-color);
     border: 1px solid rgba(240, 88, 136, 0.2);
-    box-shadow: 0 12px 24px rgba(240, 88, 136, 0.22);
+    box-shadow: var(--button-primary-shadow);
 
     &[disabled] {
-      opacity: 0.45;
-      color: #fff;
+      opacity: var(--button-disabled-opacity);
+      color: var(--button-primary-color);
     }
   }
 }

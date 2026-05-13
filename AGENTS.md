@@ -57,6 +57,8 @@
 - 页面进入统一：设置 active scope → 先读本地渲染 → `syncScope(scopeKey)` 后台校正；本地为空时只 full pull 当前 scope
 - 写入必须先本地事务并写 `outbox_mutations`；写同步不受 TTL 限制
 - 必须保留 in-flight 去重、scope TTL、手动刷新绕过 TTL、失败指数退避、collection cursor 与 scope freshness 分离
+- 所有 workspace 级缓存必须按当前 `familyId` 隔离；包括 `sync_state`、scope freshness、active scope、core sync meta、store snapshot、recent actions、提交反馈、首页聚焦/折叠、财务最近分类与入口筛选等；没有当前 `familyId` 时不得写入全局业务缓存
+- 切换账号/家庭后不得复用上一家庭的 cursor、TTL、in-flight promise、projection、路由预填或短时 UI 反馈；消费缓存时必须校验 payload `familyId` 与当前家庭一致
 - 所有 `local-first` 页面统一接入 `usePageSync`；选择器、store、表单候选与提交不得绕过 localdb / sync runtime
 - 本地写入使用语义 mutation，例如 `dog.create`、`task.complete`、`breeding.addRecord`、`health.recoverIllnesses`、`finance.addExpense`、`sale.complete`、`settings.update`
 - 云对象核心写方法统一支持 `_sync.clientMutationId / deviceId / baseVersions / clientEntityIds / clientTimestamp`，返回 `ack / clientMutationId / touchedEntities / resyncScopes / conflict`
@@ -148,6 +150,7 @@
 
 - 改首页：核对固定结构、红点口径、提交承接、防闪回、latest token、suppression
 - 改 local-first / 同步：核对 scope registry、TTL、active scope、collection cursor、scope freshness、outbox flush、Network 请求数量
+- 改缓存 / 会话隔离：核对所有 `uni.setStorageSync/getStorageSync`、Pinia 持久化、local meta、短时反馈与路由预填是否带 `familyId`，无 `familyId` 时是否跳过写入，消费时是否校验当前家庭
 - 改繁育 / 健康 / 用药：核对任务生成条件、状态推进、唯一性约束、记录表单验收、终态展示联动
 - 改销售：核对候选过滤、进行中唯一性、未结算退款拦截、金额边界、列表/详情归一化
 - 改登录 / 家庭成员：核对“登录即自动创建账号”口径、一键登录兜底、验证码/密码入口切换、验证码登录两步流、短信页 6 位固定格、300 秒倒计时、测试码手动输入、忘记密码两步流、uni 图形验证码、密码规则、协议展示、`families.members.nickname` 写入与默认称呼
@@ -161,6 +164,7 @@
 - `tests/` 是开发/CI 护栏，不进入正式 app 包；源码约束和边界测试需随功能保留
 - Local-First 必测：`tests/localdb`、核心云对象 `_sync` 幂等测试、页面 source contract
 - 在线优先边界必测：`tests/utils/onlineFirstBoundary.test.ts`
+- 账号会话缓存隔离必测：`tests/utils/cacheIsolation.test.ts`、`tests/utils/authSessionSwitch.test.ts`，涉及同步元数据时补 `tests/localdb/runtime-outbox.test.ts`
 - 操作日志缓存必测：`tests/utils/operationLogCache.test.ts`
 - 图片附件必测：`tests/utils/imageAttachment.test.ts`、`tests/utils/imageUploadFlow.test.ts`、`tests/localdb/runtime-outbox.test.ts`、`tests/utils/backupPage.test.ts`、`tests/localdb/repository.test.ts`
 - Network 验收：进入首页不拉非首页 scope；TTL 内切页不重复 pull；同一 scope 并发只发一个请求；手动刷新只强制当前 scope

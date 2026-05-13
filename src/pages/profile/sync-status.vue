@@ -719,7 +719,7 @@ onShow(() => {
 
   &__primary {
     width: 100%;
-    height: 42px;
+    height: var(--button-height-primary);
     box-sizing: border-box;
     margin: 0;
     padding: 0;
@@ -739,12 +739,12 @@ onShow(() => {
   }
 
   &__primary {
-    color: #fff;
-    background: var(--primary);
+    color: var(--button-primary-color);
+    background: var(--button-primary-bg);
   }
 
   &__primary[disabled] {
-    opacity: 0.45;
+    opacity: var(--button-disabled-opacity);
   }
 
   &__icon {

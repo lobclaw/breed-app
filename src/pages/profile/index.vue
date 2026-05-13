@@ -1265,7 +1265,7 @@ onBeforeUnmount(() => {
   }
 
   &__btn {
-    height: 42px;
+    height: var(--button-height-primary);
     box-sizing: border-box;
     margin: 0;
     padding: 0 24px;
@@ -1274,9 +1274,9 @@ onBeforeUnmount(() => {
     font-weight: 700;
     line-height: 1;
     border: none;
-    color: #fff;
-    background: var(--primary);
-    box-shadow: 0 2px 8px rgba(234, 62, 119, 0.2);
+    color: var(--button-primary-color);
+    background: var(--button-primary-bg);
+    box-shadow: var(--button-primary-shadow);
     display: inline-flex;
     align-items: center;
     justify-content: center;
