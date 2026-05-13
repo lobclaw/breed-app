@@ -138,7 +138,7 @@
       </view>
       <template #footer>
         <view class="form-sheet__footer">
-          <button class="form-sheet__submit" :disabled="!canSave" @click="saveProtocol">{{ submitText }}</button>
+          <button class="form-sheet__submit" :class="{ 'form-sheet__submit--inactive': !canSave }" @click="saveProtocol">{{ submitText }}</button>
         </view>
       </template>
     </BSheet>
@@ -270,7 +270,10 @@ function protocolMethodText(protocol: { method?: string | null }) {
 }
 
 async function saveProtocol() {
-  if (!canSave.value) return
+  if (!canSave.value) {
+    uni.showToast({ title: '请补全必填信息', icon: 'none' })
+    return
+  }
   showSheet.value = false
 
   const newP = {

@@ -216,7 +216,9 @@
       <BSubmitButton
         :loading="submitState === 'submitting'"
         :success="submitState === 'success'"
-        :disabled="!canSubmit || submitState === 'submitting'"
+        :disabled="submitState === 'submitting'"
+        :inactive="!canSubmit"
+        inactive-tip="请选择犬只并填写用药信息"
         @click="submit"
       >
         {{ submitButtonText }}

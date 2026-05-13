@@ -276,7 +276,9 @@
         v-else
         :loading="submitState === 'submitting'"
         :success="submitState === 'success'"
-        :disabled="!canSubmit || submitState === 'submitting'"
+        :disabled="submitState === 'submitting'"
+        :inactive="!canSubmit"
+        :inactive-tip="submitInactiveTip"
         @click="submit"
       >
         {{ submitButtonText }}
@@ -592,6 +594,14 @@ const canSubmit = computed(() => {
   if (resolvedType.value === 'vaccination') return !!details.vaccine_type
   if (resolvedType.value === 'deworming') return !!details.deworming_type
   return !!String(details.primary_condition || details.condition || '').trim()
+})
+
+const submitInactiveTip = computed(() => {
+  if (!isEdit.value && selectedDogs.value.length === 0) return '请选择犬只'
+  if (resolvedType.value === 'vaccination') return '请选择疫苗类型'
+  if (resolvedType.value === 'deworming') return '请选择驱虫类型'
+  if (resolvedType.value === 'illness') return '请选择疾病类型'
+  return '请补全必填信息'
 })
 
 type HealthSkeletonBlockKind = 'picker' | 'choice' | 'options-card' | 'input' | 'textarea'

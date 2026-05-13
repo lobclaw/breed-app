@@ -120,7 +120,8 @@
     <!-- 底部固定操作栏 -->
     <view v-if="!loading && taskGroups.length > 0" class="fixed-bottom">
       <BSubmitButton
-        :disabled="selected.size === 0"
+        :inactive="selected.size === 0"
+        inactive-tip="请选择要处理的犬只"
         @click="batchComplete"
       >
         确认完成 ({{ selected.size }}只)

@@ -45,7 +45,9 @@
           color="primary"
           size="large"
           :loading="joining"
-          :disabled="code.length < 6"
+          :disabled="joining"
+          :inactive="code.length < 6"
+          inactive-tip="请输入6位邀请码"
           @click="doJoin"
           style="width: 100%;"
         >

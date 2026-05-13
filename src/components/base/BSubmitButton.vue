@@ -5,25 +5,40 @@
 <template>
   <button
     class="submit-btn"
-    :class="{ 'submit-btn--success': success }"
+    :class="{
+      'submit-btn--success': success,
+      'submit-btn--inactive': inactive,
+    }"
     :disabled="disabled || loading"
     :loading="loading"
-    @click="$emit('click')"
+    @click="handleClick"
   >
     <slot />
   </button>
 </template>
 
 <script setup lang="ts">
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   loading?: boolean
   success?: boolean
   disabled?: boolean
+  inactive?: boolean
+  inactiveTip?: string
 }>(), {
   loading: false,
   success: false,
   disabled: false,
+  inactive: false,
+  inactiveTip: '',
 })
 
-defineEmits<{ click: [] }>()
+const emit = defineEmits<{ click: [] }>()
+
+function handleClick() {
+  if (props.inactive) {
+    uni.showToast({ title: props.inactiveTip || '请补全必填信息', icon: 'none' })
+    return
+  }
+  emit('click')
+}
 </script>

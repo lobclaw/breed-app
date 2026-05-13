@@ -62,7 +62,7 @@
       </view>
       <template #footer>
         <view class="form-sheet__footer">
-          <button class="form-sheet__submit" :disabled="!form.name.trim()" @click="save">
+          <button class="form-sheet__submit" :class="{ 'form-sheet__submit--inactive': !form.name.trim() }" @click="save">
             {{ editingId ? '保存修改' : '新建代理人' }}
           </button>
         </view>
@@ -123,7 +123,10 @@ function openSheet(agent?: any) {
 
 async function save() {
   const name = form.name.trim()
-  if (!name) return
+  if (!name) {
+    uni.showToast({ title: '请补全必填信息', icon: 'none' })
+    return
+  }
   showSheet.value = false
 
   if (editingId.value) {

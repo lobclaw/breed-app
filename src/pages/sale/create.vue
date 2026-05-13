@@ -140,7 +140,8 @@
 
     <view class="fixed-bottom">
       <BSubmitButton
-        :disabled="!selectedDog"
+        :inactive="!selectedDog"
+        inactive-tip="请选择要销售的犬只"
         :loading="submitState === 'submitting'"
         :success="submitState === 'success'"
         @click="submit"

@@ -266,7 +266,7 @@
       <button
         v-if="step < 3"
         class="btn-next"
-        :disabled="!canNext"
+        :class="{ 'btn-next--inactive': !canNext }"
         @click="goNext"
       >
         <text>{{ step === 1 ? '下一步：录入幼崽' : '下一步：确认' }}</text>
@@ -409,6 +409,14 @@ function onBack() {
 function goNext() {
   if (step.value === 1 && !cycleId.value) {
     uni.showToast({ title: '请选择怀孕中种母', icon: 'none' })
+    return
+  }
+  if (step.value === 1 && !form.birth_date) {
+    uni.showToast({ title: '请补全必填信息', icon: 'none' })
+    return
+  }
+  if (step.value === 2 && puppies.length === 0) {
+    uni.showToast({ title: '请补全必填信息', icon: 'none' })
     return
   }
   step.value++
@@ -1201,10 +1209,10 @@ onMounted(async () => {
 
 .btn-next {
   flex: 1;
-  height: 50px;
+  height: var(--button-height-primary);
   border-radius: var(--radius-btn);
-  background: var(--primary);
-  color: #fff;
+  background: var(--button-primary-bg);
+  color: var(--button-primary-color);
   font-family: var(--font-display);
   font-size: 15px;
   font-weight: 700;
@@ -1213,7 +1221,7 @@ onMounted(async () => {
   justify-content: center;
   gap: 6px;
   transition: all 0.12s ease;
-  box-shadow: 0 4px 16px rgba(234, 62, 119, 0.25);
+  box-shadow: var(--button-primary-shadow);
 
   &:active:not([disabled]) {
     transform: scale(0.97);
@@ -1221,7 +1229,16 @@ onMounted(async () => {
   }
 
   &[disabled] {
-    opacity: 0.5;
+    opacity: var(--button-disabled-opacity);
+  }
+
+  &--inactive {
+    opacity: var(--button-disabled-opacity);
+  }
+
+  &--inactive:active:not([disabled]) {
+    transform: scale(0.97);
+    opacity: var(--button-inactive-active-opacity);
   }
 }
 </style>

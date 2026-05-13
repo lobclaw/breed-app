@@ -433,7 +433,11 @@
       <template #footer>
         <view class="filter-actions filter-actions--sheet-footer">
           <button class="filter-actions__reset" @click="resetDraftFilters">重置</button>
-          <button class="filter-actions__apply" :disabled="!canApplyDraftFilters" @click="applyDraftFilters">应用筛选</button>
+          <button
+            class="filter-actions__apply"
+            :class="{ 'filter-actions__apply--inactive': !canApplyDraftFilters }"
+            @click="applyDraftFilters"
+          >应用筛选</button>
         </view>
       </template>
     </BSheet>
@@ -2382,6 +2386,14 @@ onShow(async () => {
     &[disabled] {
       opacity: var(--button-disabled-opacity);
       color: var(--button-primary-color);
+    }
+
+    &--inactive {
+      opacity: var(--button-disabled-opacity);
+    }
+
+    &--inactive:active {
+      opacity: var(--button-inactive-active-opacity);
     }
   }
 }

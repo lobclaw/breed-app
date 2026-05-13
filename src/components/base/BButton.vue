@@ -18,12 +18,13 @@
       `b-btn--${color}`,
       {
         'b-btn--loading': loading,
+        'b-btn--inactive': inactive,
         'b-btn--disabled': disabled || loading,
         'b-btn--block': fullWidth,
       },
     ]"
     :disabled="disabled || loading"
-    @click="$emit('click')"
+    @click="handleClick"
   >
     <view class="b-btn__content">
       <text v-if="loading" class="material-icons-round b-btn__state-icon b-btn__state-icon--spin">autorenew</text>
@@ -33,12 +34,14 @@
 </template>
 
 <script setup lang="ts">
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   variant?: 'filled' | 'ghost'
   color?: 'primary' | 'red' | 'amber' | 'green' | 'blue' | 'plum' | 'rose' | 'teal'
   size?: 'small' | 'medium' | 'large'
   loading?: boolean
   disabled?: boolean
+  inactive?: boolean
+  inactiveTip?: string
   fullWidth?: boolean
 }>(), {
   variant: 'filled',
@@ -46,10 +49,20 @@ withDefaults(defineProps<{
   size: 'medium',
   loading: false,
   disabled: false,
+  inactive: false,
+  inactiveTip: '',
   fullWidth: false,
 })
 
-defineEmits<{ click: [] }>()
+const emit = defineEmits<{ click: [] }>()
+
+function handleClick() {
+  if (props.inactive) {
+    uni.showToast({ title: props.inactiveTip || '请补全必填信息', icon: 'none' })
+    return
+  }
+  emit('click')
+}
 </script>
 
 <style lang="scss" scoped>
@@ -106,6 +119,15 @@ defineEmits<{ click: [] }>()
   &--disabled {
     opacity: var(--button-disabled-opacity);
     cursor: not-allowed;
+  }
+
+  &--inactive {
+    opacity: var(--button-disabled-opacity);
+  }
+
+  &--inactive:active:not(.b-btn--disabled) {
+    transform: scale(0.94);
+    opacity: var(--button-inactive-active-opacity);
   }
 
   &__content {

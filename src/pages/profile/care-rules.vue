@@ -120,6 +120,8 @@
             :loading="submitState === 'submitting'"
             :success="submitState === 'success'"
             :disabled="submitState === 'submitting'"
+            :inactive="!canConfirm"
+            inactive-tip="请填写触发条件和任务描述"
             @click="onConfirm"
           >
             {{ submitButtonText }}
@@ -182,6 +184,10 @@ const form = reactive({
 const isCustomTrigger = computed(() =>
   form.status_trigger === '自定义' || (form.status_trigger && !triggerOptions.includes(form.status_trigger))
 )
+const canConfirm = computed(() => {
+  const trigger = isCustomTrigger.value ? form.customTrigger.trim() : form.status_trigger
+  return !!trigger && !!form.task_description.trim()
+})
 
 const submitButtonText = computed(() => {
   if (submitState.value === 'submitting') return '保存中...'

@@ -112,7 +112,9 @@
       <BSubmitButton
         :loading="submitState === 'submitting'"
         :success="submitState === 'success'"
-        :disabled="!canSubmit || submitState === 'submitting'"
+        :disabled="submitState === 'submitting'"
+        :inactive="!canSubmit"
+        inactive-tip="请填写金额并选择分类"
         @click="submit"
       >
         {{ submitButtonText }}

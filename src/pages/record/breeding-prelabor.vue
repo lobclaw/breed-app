@@ -126,7 +126,9 @@
         <BSubmitButton
           :loading="submitState === 'submitting'"
           :success="submitState === 'success'"
-          :disabled="!canSubmit || submitState === 'submitting'"
+          :disabled="submitState === 'submitting'"
+          :inactive="!canSubmit"
+          :inactive-tip="submitInactiveTip"
           @click="handleSave"
         >
           {{ submitButtonText }}
@@ -237,6 +239,10 @@ const hasObservationContent = computed(() => {
     || notes.value.trim().length > 0
 })
 const canSubmit = computed(() => !!selectedDog.value && hasObservationContent.value && submitState.value !== 'submitting')
+const submitInactiveTip = computed(() => {
+  if (!selectedDog.value) return '请选择犬只'
+  return '请填写体温、征兆或补充说明'
+})
 
 const headerSubtitle = computed(() => '记录体温与临产征兆')
 

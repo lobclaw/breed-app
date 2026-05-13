@@ -678,6 +678,15 @@
     opacity: var(--button-disabled-opacity);
   }
 
+  &--inactive {
+    opacity: var(--button-disabled-opacity);
+  }
+
+  &--inactive:active:not([disabled]) {
+    transform: scale(0.97);
+    opacity: var(--button-inactive-active-opacity);
+  }
+
   &--danger {
     background: var(--red);
   }
@@ -799,6 +808,15 @@
 
   &[disabled] {
     opacity: var(--button-disabled-opacity);
+  }
+
+  &--inactive {
+    opacity: var(--button-disabled-opacity);
+  }
+
+  &--inactive:active:not([disabled]) {
+    transform: scale(0.94);
+    opacity: var(--button-inactive-active-opacity);
   }
 
   &--success {

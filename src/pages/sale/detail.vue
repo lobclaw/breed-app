@@ -250,7 +250,11 @@
       </view>
       <template #footer>
         <view class="sale-flow-footer">
-          <button class="sale-flow-submit sale-flow-submit--primary" :disabled="!depositForm.deposit_amount" @click="doDeposit">确认收定金</button>
+          <button
+            class="sale-flow-submit sale-flow-submit--primary"
+            :class="{ 'sale-flow-submit--inactive': !depositForm.deposit_amount }"
+            @click="doDeposit"
+          >确认收定金</button>
         </view>
       </template>
     </BSheet>
@@ -355,7 +359,11 @@
       </view>
       <template #footer>
         <view class="sale-flow-footer">
-          <button class="sale-flow-submit sale-flow-submit--primary" :disabled="!settleForm.received_amount" @click="doSettle">确认结算</button>
+          <button
+            class="sale-flow-submit sale-flow-submit--primary"
+            :class="{ 'sale-flow-submit--inactive': !settleForm.received_amount }"
+            @click="doSettle"
+          >确认结算</button>
         </view>
       </template>
     </BSheet>
@@ -447,7 +455,7 @@
         <view class="sale-flow-footer">
           <button
             class="sale-flow-submit sale-flow-submit--red"
-            :disabled="!refundSheetForm.refund_amount"
+            :class="{ 'sale-flow-submit--inactive': !refundSheetForm.refund_amount }"
             @click="doRefundSheet"
           >确认退款</button>
         </view>
@@ -930,6 +938,10 @@ function goToRestartSale() {
 }
 
 async function doDeposit() {
+  if (!depositForm.deposit_amount) {
+    uni.showToast({ title: '请补全必填信息', icon: 'none' })
+    return
+  }
   const familyId = currentFamily.value?._id || ''
   localSyncRuntime.setCurrentFamilyId(familyId)
   const res = await localSyncRuntime.receiveSaleDepositLocally(familyId, saleId.value, {
@@ -995,7 +1007,10 @@ async function doComplete() {
 
 async function doSettle() {
   const receivedAmount = parseFloat(settleForm.received_amount)
-  if (!receivedAmount || receivedAmount <= 0) return
+  if (!receivedAmount || receivedAmount <= 0) {
+    uni.showToast({ title: '请补全必填信息', icon: 'none' })
+    return
+  }
   const familyId = currentFamily.value?._id || ''
   localSyncRuntime.setCurrentFamilyId(familyId)
   const res = await localSyncRuntime.settleSaleLocally(familyId, saleId.value, {
@@ -1027,7 +1042,10 @@ async function doUpdateSaleMode() {
 /* S-6 退款提交 */
 async function doRefundSheet() {
   const amount = parseFloat(refundSheetForm.refund_amount)
-  if (!amount || amount <= 0) return
+  if (!amount || amount <= 0) {
+    uni.showToast({ title: '请补全必填信息', icon: 'none' })
+    return
+  }
   const receivedAmount = Number(sale.value?.received_amount || 0)
   if (!receivedAmount || amount > receivedAmount) {
     uni.showToast({ title: '退款金额不能超过到手价', icon: 'none' })
@@ -1610,6 +1628,15 @@ onShow(() => {
 
   &[disabled] {
     opacity: var(--button-disabled-opacity);
+  }
+
+  &--inactive {
+    opacity: var(--button-disabled-opacity);
+  }
+
+  &--inactive:active:not([disabled]) {
+    transform: scale(0.97);
+    opacity: var(--button-inactive-active-opacity);
   }
 
   &--primary {

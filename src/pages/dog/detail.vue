@@ -1161,7 +1161,9 @@
             class="weight-entry__save-btn"
             :loading="weightSubmitState === 'submitting'"
             :success="weightSubmitState === 'success'"
-            :disabled="weightSubmitState === 'submitting' || !canSubmitWeight"
+            :disabled="weightSubmitState === 'submitting'"
+            :inactive="!canSubmitWeight"
+            inactive-tip="请输入有效体重"
             @click="saveWeight"
           >
             {{ weightSaveButtonText }}

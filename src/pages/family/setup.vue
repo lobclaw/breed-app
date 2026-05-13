@@ -53,7 +53,9 @@
         color="primary"
         size="large"
         :loading="creating"
-        :disabled="!canSubmit || creating"
+        :disabled="creating"
+        :inactive="!canSubmit"
+        inactive-tip="请填写犬舍名称或邀请码"
         style="width: 100%; margin-top: 20px;"
         @click="create"
       >

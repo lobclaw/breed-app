@@ -305,6 +305,7 @@
   transform: scale(0.985);
   background: var(--button-primary-bg, var(--primary, #ea3e77)) !important;
   box-shadow: none;
+  opacity: var(--button-inactive-active-opacity, 0.52);
 }
 
 .register-back {

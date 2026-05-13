@@ -170,7 +170,9 @@
         <BSubmitButton
           :loading="submitState === 'submitting'"
           :success="submitState === 'success'"
-          :disabled="!hasAnyWeight || submitState === 'submitting'"
+          :disabled="submitState === 'submitting'"
+          :inactive="!hasAnyWeight"
+          inactive-tip="请输入体重"
           @click="submit"
         >
           {{ submitButtonText }}

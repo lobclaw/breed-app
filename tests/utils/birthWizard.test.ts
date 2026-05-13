@@ -61,9 +61,10 @@ describe('birth-wizard source contract', () => {
     expect(source).not.toContain('&--submit {')
   })
 
-  it('Step 1 未选择种母时下一步按钮应保持禁用态', () => {
+  it('Step 1 未选择种母时下一步按钮应保持暗态并可提示', () => {
     expect(source).toContain("if (step.value === 1) return !!cycleId.value && !!form.birth_date")
-    expect(source).toContain(':disabled="!canNext"')
+    expect(source).toContain(":class=\"{ 'btn-next--inactive': !canNext }\"")
+    expect(source).toContain("uni.showToast({ title: '请选择怀孕中种母', icon: 'none' })")
     expect(source).not.toContain(':disabled="step === 1 ? !form.birth_date : !canNext"')
   })
 

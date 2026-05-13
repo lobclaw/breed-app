@@ -161,7 +161,9 @@
       <BSubmitButton
         :loading="submitState === 'submitting'"
         :success="submitState === 'success'"
-        :disabled="!canSubmit || submitState === 'submitting'"
+        :disabled="submitState === 'submitting'"
+        :inactive="!canSubmit"
+        inactive-tip="请补全必填信息"
         @click="submit"
       >
         {{ submitButtonText }}

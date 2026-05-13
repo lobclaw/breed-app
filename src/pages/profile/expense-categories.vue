@@ -123,7 +123,8 @@
         <view class="form-sheet__footer">
           <button
             class="form-sheet__submit"
-            :disabled="!groupFormLabel.trim() || groupSubmitting"
+            :class="{ 'form-sheet__submit--inactive': !groupFormLabel.trim() }"
+            :disabled="groupSubmitting"
             :loading="groupSubmitting"
             @click="saveGroup"
           >
@@ -164,7 +165,8 @@
         <view class="form-sheet__footer">
           <button
             class="form-sheet__submit"
-            :disabled="!categoryFormName.trim() || !categoryFormParentGroup || categorySubmitting"
+            :class="{ 'form-sheet__submit--inactive': !categoryFormName.trim() || !categoryFormParentGroup }"
+            :disabled="categorySubmitting"
             :loading="categorySubmitting"
             @click="saveCategory"
           >
@@ -274,7 +276,10 @@ function openCategorySheet(category?: ExpenseCategory) {
 
 async function saveGroup() {
   const label = groupFormLabel.value.trim()
-  if (!label) return
+  if (!label) {
+    uni.showToast({ title: '请补全必填信息', icon: 'none' })
+    return
+  }
 
   groupSubmitting.value = true
   try {
@@ -297,7 +302,10 @@ async function saveGroup() {
 
 async function saveCategory() {
   const name = categoryFormName.value.trim()
-  if (!name || !categoryFormParentGroup.value) return
+  if (!name || !categoryFormParentGroup.value) {
+    uni.showToast({ title: '请补全必填信息', icon: 'none' })
+    return
+  }
 
   categorySubmitting.value = true
   try {

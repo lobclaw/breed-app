@@ -148,7 +148,9 @@
       <BSubmitButton
         v-else
         :loading="submitting"
-        :disabled="!canSubmit || submitting"
+        :disabled="submitting"
+        :inactive="!canSubmit"
+        inactive-tip="请填写金额并选择分类"
         @click="submit"
       >
         保存修改
