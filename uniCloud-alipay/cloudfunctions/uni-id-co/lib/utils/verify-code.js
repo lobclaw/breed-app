@@ -17,13 +17,15 @@ async function setVerifyCode ({
   scene
 } = {}) {
   const now = Date.now()
+  const clientInfo = this.getUniversalClientInfo()
   const record = {
     mobile,
     email,
     scene,
     code: code || getVerifyCode(),
     state: 0,
-    ip: this.getUniversalClientInfo().clientIP,
+    ip: clientInfo.clientIP,
+    device_uuid: clientInfo.deviceId || '',
     created_date: now,
     expired_date: now + expiresIn * 1000
   }

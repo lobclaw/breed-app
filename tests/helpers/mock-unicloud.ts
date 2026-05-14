@@ -60,6 +60,15 @@ function createQueryChain(collectionName: string) {
   let skipCount = 0
   let docId: string | null = null
 
+  function resetQueryState() {
+    filterFn = null
+    fieldProjection = null
+    sortRules.splice(0, sortRules.length)
+    limitCount = 0
+    skipCount = 0
+    docId = null
+  }
+
   const chain: any = {
     doc(id: string) {
       docId = id
@@ -94,7 +103,9 @@ function createQueryChain(collectionName: string) {
 
       if (docId) {
         const doc = col.find(d => d._id === docId)
-        return { data: doc ? [doc] : [] }
+        const result = { data: doc ? [doc] : [] }
+        resetQueryState()
+        return result
       }
 
       let results = filterFn ? col.filter(filterFn) : [...col]
@@ -131,16 +142,25 @@ function createQueryChain(collectionName: string) {
         })
       }
 
-      return { data: results }
+      const result = { data: results }
+      resetQueryState()
+      return result
     },
     async count() {
       const col = getCollection(collectionName)
       const results = filterFn ? col.filter(filterFn) : col
-      return { total: results.length }
+      const result = { total: results.length }
+      resetQueryState()
+      return result
     },
     async add(data: any) {
       const col = getCollection(collectionName)
       const id = data._id || `mock_${collectionName}_${col.length + 1}`
+      if (col.some(d => d._id === id)) {
+        const error: any = new Error(`duplicate key error collection: ${collectionName} _id: ${id}`)
+        error.code = 'E11000'
+        throw error
+      }
       const doc = { ...data, _id: id }
       col.push(doc)
       return { id }
@@ -171,7 +191,9 @@ function createQueryChain(collectionName: string) {
         }
       }
 
-      return { updated: targets.length }
+      const result = { updated: targets.length }
+      resetQueryState()
+      return result
     },
     async remove() {
       const col = getCollection(collectionName)
@@ -179,11 +201,16 @@ function createQueryChain(collectionName: string) {
         const idx = col.findIndex(d => d._id === docId)
         if (idx >= 0) {
           col.splice(idx, 1)
+          resetQueryState()
           return { deleted: 1 }
         }
+        resetQueryState()
         return { deleted: 0 }
       }
-      if (!filterFn) return { deleted: 0 }
+      if (!filterFn) {
+        resetQueryState()
+        return { deleted: 0 }
+      }
       let deleted = 0
       for (let i = col.length - 1; i >= 0; i--) {
         if (filterFn(col[i])) {
@@ -191,7 +218,9 @@ function createQueryChain(collectionName: string) {
           deleted++
         }
       }
-      return { deleted }
+      const result = { deleted }
+      resetQueryState()
+      return result
     },
   }
 

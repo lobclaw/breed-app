@@ -21,7 +21,7 @@
               v-model="memberNickname"
               class="member-name-input"
               type="text"
-              placeholder="我的称呼"
+              placeholder="我的昵称"
               maxlength="20"
               :adjust-position="true"
             />

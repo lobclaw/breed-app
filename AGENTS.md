@@ -132,6 +132,10 @@
 - `BSheet`、`BModal`、`BDeleteConfirm` 打开时锁滚动，关闭时先退场动画再卸载
 - 表单互斥选项用 pill-select；Segmented Control 只用于视图 / 标签切换；表单底部主 CTA 用 `BSubmitButton`
 - 表单单选用粉色实底 pill；多选用浅底卡片 + check + 粉色文字；不得把多选做成单选实底样式
+- 主按钮体验以 `src/styles/tokens.scss` 的按钮 token 为事实源；高度、颜色、阴影、禁用/暗态透明度不得在页面里散写新规格
+- 普通业务主按钮优先用 `BButton`，表单提交主 CTA 用 `BSubmitButton`；登录页、平台能力按钮、局部原生 `button` 可保留原生实现，但必须桥接同一套 token / 公共暗态样式
+- 校验型未满足条件态使用 `inactive / inactiveTip` 或对应 `--inactive` 公共 class：按钮保持暗态、可点击、有按压反馈并 toast 提示；不要用原生 `disabled` 阻断用户反馈
+- 真正不可交互状态才用原生 `disabled`，包括提交中、同步中、上传/下载中、导出/恢复中、联网/权限不可用等；这些状态不得为了提示而变成可重复点击
 - 提交反馈统一为“局部 loading + 弱成功反馈 + 来源页承接”；提交按钮固定默认 / 提交中 / 成功瞬态三态，成功瞬态 `520ms`
 - 繁育/健康记录采用“同类型新增编辑同页”：无 `id` 为新增，有 `id/recordId/record_id` 为编辑；不得新增或恢复 `breeding-edit`、`health-edit` 这类独立编辑页
 - 记录详情页、重复记录提示、同步状态页附件处理入口都必须按记录 `type` 直达对应类型页；生产 `birth` 不走普通繁育编辑页，需单独设计窝次/幼犬编辑链路
@@ -149,6 +153,7 @@
 ## 改动 Checklist
 
 - 改首页：核对固定结构、红点口径、提交承接、防闪回、latest token、suppression
+- 改按钮 / 表单 CTA：核对是否使用 `BButton` / `BSubmitButton` 或公共 token，校验型暗态是否可点击 toast，提交中/系统忙碌是否仍为真 `disabled`
 - 改 local-first / 同步：核对 scope registry、TTL、active scope、collection cursor、scope freshness、outbox flush、Network 请求数量
 - 改缓存 / 会话隔离：核对所有 `uni.setStorageSync/getStorageSync`、Pinia 持久化、local meta、短时反馈与路由预填是否带 `familyId`，无 `familyId` 时是否跳过写入，消费时是否校验当前家庭
 - 改繁育 / 健康 / 用药：核对任务生成条件、状态推进、唯一性约束、记录表单验收、终态展示联动

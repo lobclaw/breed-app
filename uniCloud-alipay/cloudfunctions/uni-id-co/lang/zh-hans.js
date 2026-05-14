@@ -31,6 +31,7 @@ const sentence = {
   'uni-id-get-third-party-account-failed': '获取第三方账号失败',
   'uni-id-get-third-party-user-info-failed': '获取用户信息失败',
   'uni-id-mobile-verify-code-error': '手机验证码错误或已过期',
+  'uni-id-sms-send-too-frequent': '验证码请求过于频繁，请稍后再试',
   'uni-id-email-verify-code-error': '邮箱验证码错误或已过期',
   'uni-id-admin-exists': '超级管理员已存在',
   'uni-id-permission-error': '权限错误',

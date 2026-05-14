@@ -24,6 +24,7 @@ const ERROR = {
   GET_THIRD_PARTY_ACCOUNT_FAILED: 'uni-id-get-third-party-account-failed',
   GET_THIRD_PARTY_USER_INFO_FAILED: 'uni-id-get-third-party-user-info-failed',
   MOBILE_VERIFY_CODE_ERROR: 'uni-id-mobile-verify-code-error',
+  SMS_SEND_TOO_FREQUENT: 'uni-id-sms-send-too-frequent',
   EMAIL_VERIFY_CODE_ERROR: 'uni-id-email-verify-code-error',
   ADMIN_EXISTS: 'uni-id-admin-exists',
   PERMISSION_ERROR: 'uni-id-permission-error',

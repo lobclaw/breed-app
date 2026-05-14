@@ -10,6 +10,13 @@ const {
 const {
   ERROR
 } = require('../../common/error')
+const {
+  assertSmsSendRateLimit,
+  createSmsSendReservation,
+  RATE_LIMIT_STATUS,
+  updateSmsSendReservation,
+  shouldSendSmsCode
+} = require('../../lib/utils/sms-rate-limit')
 
 /**
  * 发送短信验证码
@@ -41,30 +48,74 @@ module.exports = async function (params = {}) {
     scene: 'send-sms-code',
     captcha
   })
-
-  // -- 测试代码
-  const smsConfig = (this.config.service && this.config.service.sms) || {}
-  const sceneConfig = (smsConfig.scene && smsConfig.scene[scene]) || {}
-  const {
-    templateId
-  } = sceneConfig
-  if (!templateId || !templateId.replace(/[^0-9a-zA-Z]/g, '')) {
-    await require('../../lib/utils/verify-code')
-      .setMobileVerifyCode.call(this, {
-        mobile: params.mobile,
-        code: '123456',
-        expiresIn: sceneConfig.codeExpiresIn || smsConfig.codeExpiresIn || 300,
-        scene
-      })
-    return {
-      errCode: 'uni-id-invalid-sms-template-id',
-      errMsg: `未找到scene=${scene},的短信模版templateId。\n已启动测试模式，直接使用：123456作为短信验证码即可。\n如果是正式项目，请在路径：/common/uni-config-center/uni-id/config.json中service->sms中配置密钥等信息\n更多详情：https://uniapp.dcloud.io/uniCloud/uni-id.html#config`
-    }
-  }
-  // -- 测试代码
-
-  return sendSmsCode.call(this, {
+  const reservation = await createSmsSendReservation.call(this, {
     mobile,
     scene
   })
+
+  try {
+    await assertSmsSendRateLimit.call(this, {
+      mobile,
+      scene,
+      includeCurrent: true
+    })
+    const shouldSend = await shouldSendSmsCode.call(this, {
+      mobile,
+      scene
+    })
+    if (!shouldSend) {
+      await updateSmsSendReservation.call(this, {
+        reservation,
+        status: RATE_LIMIT_STATUS.SENT,
+        reason: 'reset_pwd_mobile_not_found'
+      })
+      return {
+        errCode: 0
+      }
+    }
+
+    // -- 测试代码
+    const smsConfig = (this.config.service && this.config.service.sms) || {}
+    const sceneConfig = (smsConfig.scene && smsConfig.scene[scene]) || {}
+    const {
+      templateId
+    } = sceneConfig
+    if (!templateId || !templateId.replace(/[^0-9a-zA-Z]/g, '')) {
+      await require('../../lib/utils/verify-code')
+        .setMobileVerifyCode.call(this, {
+          mobile: params.mobile,
+          code: '123456',
+          expiresIn: sceneConfig.codeExpiresIn || smsConfig.codeExpiresIn || 300,
+          scene
+        })
+      await updateSmsSendReservation.call(this, {
+        reservation,
+        status: RATE_LIMIT_STATUS.SENT,
+        reason: 'test_mode'
+      })
+      return {
+        errCode: 'uni-id-invalid-sms-template-id',
+        errMsg: `未找到scene=${scene},的短信模版templateId。\n已启动测试模式，直接使用：123456作为短信验证码即可。\n如果是正式项目，请在路径：/common/uni-config-center/uni-id/config.json中service->sms中配置密钥等信息\n更多详情：https://uniapp.dcloud.io/uniCloud/uni-id.html#config`
+      }
+    }
+    // -- 测试代码
+
+    const result = await sendSmsCode.call(this, {
+      mobile,
+      scene
+    })
+    await updateSmsSendReservation.call(this, {
+      reservation,
+      status: RATE_LIMIT_STATUS.SENT
+    })
+    return result
+  } catch (error) {
+    const errCode = error && (error.errCode || error.code)
+    await updateSmsSendReservation.call(this, {
+      reservation,
+      status: errCode === ERROR.SMS_SEND_TOO_FREQUENT ? RATE_LIMIT_STATUS.BLOCKED : RATE_LIMIT_STATUS.FAILED,
+      reason: errCode || 'send_sms_failed'
+    })
+    throw error
+  }
 }

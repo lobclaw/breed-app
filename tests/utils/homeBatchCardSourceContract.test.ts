@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 const testDir = __dirname
 const batchCardSource = readFileSync(resolve(testDir, '../../src/components/smart-card/BatchCard.vue'), 'utf8')
 const homeSource = readFileSync(resolve(testDir, '../../src/pages/home/index.vue'), 'utf8')
+const batchProcessSource = readFileSync(resolve(testDir, '../../src/pages/home/batch-process.vue'), 'utf8')
 
 describe('home batch card source contract', () => {
   it('批量健康卡应保留逐只勾选，并按犬只数量调整底部主按钮文案', () => {
@@ -30,5 +31,13 @@ describe('home batch card source contract', () => {
     expect(homeSource).toContain('return restorePersistedHealthBatchCards(cardList).map((card: any) => {')
     expect(homeSource).toContain('taskStore.batchCardProgress = { ...localBatchCardProgressMap.value }')
     expect(homeSource).toContain('localBatchCardProgressMap.value = { ...(taskStore.batchCardProgress || {}) }')
+  })
+
+  it('批量疫苗处理应在未选择疫苗类型时保持暗态并提示', () => {
+    expect(batchProcessSource).toContain('const canBatchComplete = computed(() => {')
+    expect(batchProcessSource).toContain("if (passedType === 'vaccination' && !formData.vaccine_type) return false")
+    expect(batchProcessSource).toContain("return '请选择疫苗类型'")
+    expect(batchProcessSource).toContain(':inactive="!canBatchComplete"')
+    expect(batchProcessSource).toContain('uni.showToast({ title: batchCompleteInactiveTip.value, icon: \'none\' })')
   })
 })

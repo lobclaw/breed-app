@@ -12,6 +12,10 @@
 			"bsonType": "timestamp",
 			"description": "创建时间"
 		},
+		"created_date": {
+			"bsonType": "timestamp",
+			"description": "验证码创建时间，兼容 uni-id-co 现有字段"
+		},
 		"device_uuid": {
 			"bsonType": "string",
 			"description": "设备UUID，常用于图片验证码"
@@ -39,6 +43,22 @@
 		"state": {
 			"bsonType": "int",
 			"description": "验证状态：0 未验证、1 已验证、2 已作废"
+		},
+		"rate_limit_only": {
+			"bsonType": "bool",
+			"description": "仅用于短信限流计数，不作为可用验证码"
+		},
+		"rate_limit_status": {
+			"bsonType": "string",
+			"description": "短信限流占位状态：pending/sent/failed/blocked"
+		},
+		"rate_limit_reason": {
+			"bsonType": "string",
+			"description": "短信限流占位状态原因"
+		},
+		"updated_date": {
+			"bsonType": "timestamp",
+			"description": "更新时间"
 		}
 	},
 	"required": []

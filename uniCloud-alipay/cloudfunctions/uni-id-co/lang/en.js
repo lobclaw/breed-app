@@ -29,6 +29,7 @@ const sentence = {
   'uni-id-get-third-party-account-failed': 'Get third party account failed',
   'uni-id-get-third-party-user-info-failed': 'Get third party user info failed',
   'uni-id-mobile-verify-code-error': 'Verify code error or expired',
+  'uni-id-sms-send-too-frequent': 'Verification code requests are too frequent. Please try again later',
   'uni-id-email-verify-code-error': 'Verify code error or expired',
   'uni-id-admin-exists': 'Administrator exists',
   'uni-id-permission-error': 'Permission denied',

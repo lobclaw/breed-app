@@ -1,13 +1,13 @@
 <template>
-	<uni-popup ref="popup" type="center">
+	<uni-popup ref="popup" type="center" :is-mask-click="false">
 		<view class="popup-captcha">
 			<view class="content">
 				<text class="title">{{title}}</text>
-				<uni-captcha :focus="focus" :scene="scene" v-model="val"></uni-captcha>
+				<uni-captcha ref="captcha" :focus="focus" :scene="scene" v-model="val"></uni-captcha>
 			</view>
 			<view class="button-box">
-				<view @click="close" class="btn">取消</view>
-				<view @click="confirm" class="btn confirm">确认</view>
+				<view @click="close" class="btn" :class="{ disabled: confirmLoading }">取消</view>
+				<view @click="confirm" class="btn confirm" :class="{ disabled: confirmLoading }">{{ confirmLoading ? loadingText : '确认' }}</view>
 			</view>
 		</view>
 	</uni-popup>
@@ -33,6 +33,24 @@
 				type: String,
 				default () {
 					return ""
+				}
+			},
+			closeOnConfirm: {
+				type: Boolean,
+				default () {
+					return true
+				}
+			},
+			confirmLoading: {
+				type: Boolean,
+				default () {
+					return false
+				}
+			},
+			loadingText: {
+				type: String,
+				default () {
+					return "处理中..."
 				}
 			},
 		},
@@ -61,18 +79,26 @@
 				this.val = ""
 				this.$refs.popup.open()
 			},
-			close() {
+			close(force = false) {
+				const shouldForce = force === true
+				if (this.confirmLoading && !shouldForce) return
 				this.focus = false
 				this.$refs.popup.close()
 			},
+			refresh(focus = true) {
+				this.$refs.captcha?.getImageCaptcha?.(focus)
+			},
 			confirm() {
+				if (this.confirmLoading) return
 				if(!this.val){
 					return uni.showToast({
 						title: '请填写验证码',
 						icon: 'none'
 					});
 				}
-				this.close()
+				if (this.closeOnConfirm) {
+					this.close()
+				}
 				this.$emit('confirm')
 			}
 		}
@@ -137,6 +163,9 @@
 		color: var(--text-2, #8b7355);
 		font-size: 14px;
 		font-weight: 700;
+	}
+	.button-box .disabled {
+		opacity: 0.55;
 	}
 	.button-box .confirm{
 		color: var(--primary, #ea3e77);

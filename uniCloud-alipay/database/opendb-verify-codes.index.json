@@ -1,0 +1,62 @@
+[
+  {
+    "IndexName": "scene_mobile_created_date",
+    "MgoKeySchema": {
+      "MgoIndexKeys": [
+        {
+          "Name": "scene",
+          "Direction": "1"
+        },
+        {
+          "Name": "mobile",
+          "Direction": "1"
+        },
+        {
+          "Name": "created_date",
+          "Direction": "-1"
+        }
+      ],
+      "MgoIsUnique": false
+    }
+  },
+  {
+    "IndexName": "scene_device_created_date",
+    "MgoKeySchema": {
+      "MgoIndexKeys": [
+        {
+          "Name": "scene",
+          "Direction": "1"
+        },
+        {
+          "Name": "device_uuid",
+          "Direction": "1"
+        },
+        {
+          "Name": "created_date",
+          "Direction": "-1"
+        }
+      ],
+      "MgoIsUnique": false
+    }
+  },
+  {
+    "IndexName": "scene_ip_created_date",
+    "MgoKeySchema": {
+      "MgoIndexKeys": [
+        {
+          "Name": "scene",
+          "Direction": "1"
+        },
+        {
+          "Name": "ip",
+          "Direction": "1"
+        },
+        {
+          "Name": "created_date",
+          "Direction": "-1"
+        }
+      ],
+      "MgoIsUnique": false
+    }
+  }
+]

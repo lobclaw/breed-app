@@ -120,8 +120,8 @@
     <!-- 底部固定操作栏 -->
     <view v-if="!loading && taskGroups.length > 0" class="fixed-bottom">
       <BSubmitButton
-        :inactive="selected.size === 0"
-        inactive-tip="请选择要处理的犬只"
+        :inactive="!canBatchComplete"
+        :inactive-tip="batchCompleteInactiveTip"
         @click="batchComplete"
       >
         确认完成 ({{ selected.size }}只)
@@ -210,6 +210,18 @@ const perDogCost = computed(() => {
   return (Math.round(total / selected.size * 100) / 100).toFixed(2)
 })
 
+const canBatchComplete = computed(() => {
+  if (selected.size === 0) return false
+  if (passedType === 'vaccination' && !formData.vaccine_type) return false
+  return true
+})
+
+const batchCompleteInactiveTip = computed(() => {
+  if (selected.size === 0) return '请选择要处理的犬只'
+  if (passedType === 'vaccination' && !formData.vaccine_type) return '请选择疫苗类型'
+  return '请补全必填信息'
+})
+
 function isGroupAllSelected(group: TaskGroup): boolean {
   return group.items.every(item => selected.has(item.id))
 }
@@ -234,7 +246,10 @@ function toggleItem(id: string) {
 }
 
 async function batchComplete() {
-  if (selected.size === 0) return
+  if (!canBatchComplete.value) {
+    uni.showToast({ title: batchCompleteInactiveTip.value, icon: 'none' })
+    return
+  }
 
   const ids = Array.from(selected)
   const cost = costInput.value ? parseFloat(costInput.value) : null

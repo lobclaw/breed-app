@@ -53,7 +53,16 @@
 				>{{ resendText }}</text>
 			</view>
 		</view>
-		<uni-popup-captcha @confirm="sendSmsCodeAfterCaptcha" v-model="resendCaptcha" scene="send-sms-code" title="安全验证" ref="resendCaptchaPopup"></uni-popup-captcha>
+		<uni-popup-captcha
+			@confirm="sendSmsCodeAfterCaptcha"
+			v-model="resendCaptcha"
+			scene="send-sms-code"
+			title="安全验证"
+			ref="resendCaptchaPopup"
+			:close-on-confirm="false"
+			:confirm-loading="resendSending"
+			loading-text="发送中..."
+		></uni-popup-captcha>
 		<uni-popup-captcha @confirm="submit" v-model="captcha" scene="login-by-sms" title="安全验证" ref="popup"></uni-popup-captcha>
 	</view>
 </template>
@@ -67,6 +76,7 @@
 	})
 	const RESEND_SECONDS = 300
 	const SMS_SENT_AT_STORAGE_PREFIX = 'uni-id-pages-login-sms-sent-at:'
+	const SMS_RATE_LIMIT_ERROR = 'uni-id-sms-send-too-frequent'
 	export default {
 		mixins: [mixin],
 		data() {
@@ -223,6 +233,7 @@
 					scene: 'login-by-sms',
 					captcha: this.resendCaptcha
 				}).then(result => {
+					this.$refs.resendCaptchaPopup?.close?.(true)
 					if (result && result.errCode === 'uni-id-invalid-sms-template-id') {
 						uni.showToast({
 							title: '测试模式，请输入 123456',
@@ -241,6 +252,7 @@
 				}).catch(e => {
 					const errCode = e.code || e.errCode
 					if (errCode === 'uni-id-invalid-sms-template-id') {
+						this.$refs.resendCaptchaPopup?.close?.(true)
 						uni.showToast({
 							title: '测试模式，请输入 123456',
 							icon: 'none',
@@ -248,7 +260,16 @@
 						})
 						this.startCountdown(Date.now())
 						this.focusCodeInput()
+					} else if (errCode === SMS_RATE_LIMIT_ERROR) {
+						this.$refs.resendCaptchaPopup?.close?.(true)
+						uni.showToast({
+							title: '验证码请求过于频繁，请稍后再试',
+							icon: 'none',
+							duration: 3000
+						})
 					} else {
+						this.resendCaptcha = ''
+						this.$refs.resendCaptchaPopup?.refresh?.()
 						uni.showToast({
 							title: e.message || e.errMsg || '短信验证码发送失败',
 							icon: 'none',

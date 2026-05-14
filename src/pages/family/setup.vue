@@ -11,14 +11,14 @@
       </view>
 
       <text class="family-setup__title">创建你的犬舍</text>
-      <text class="family-setup__desc">填写犬舍名称和你的显示称呼，开始管理繁育事务</text>
+      <text class="family-setup__desc">填写犬舍名称和你的昵称，开始管理繁育事务</text>
 
       <!-- 输入框 -->
       <view class="family-setup__input-wrap">
         <input
           v-model="memberNickname"
           class="family-setup__input"
-          placeholder="我的称呼"
+          placeholder="我的昵称"
           maxlength="20"
         />
       </view>
