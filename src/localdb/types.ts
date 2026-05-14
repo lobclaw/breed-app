@@ -1,3 +1,10 @@
+import type { BreedingCycle, BreedingRecord, Litter } from '@/types/breeding'
+import type { Dog, DogWeight } from '@/types/dog'
+import type { Family } from '@/types/family'
+import type { Agent, Expense, Income, SaleRecord } from '@/types/finance'
+import type { HealthRecord, MedicationProtocol, MedicationTask } from '@/types/health'
+import type { Task } from '@/types/task'
+
 export const BUSINESS_COLLECTIONS = [
   'dogs',
   'breeding_cycles',
@@ -22,6 +29,7 @@ export const SYSTEM_COLLECTIONS = [
   'sync_conflicts',
   'local_meta',
   'image_cache_entries',
+  'sync_issues',
 ] as const
 
 export const LOCAL_COLLECTIONS = [...BUSINESS_COLLECTIONS, ...SYSTEM_COLLECTIONS] as const
@@ -126,6 +134,58 @@ export interface ImageCacheEntry {
   last_accessed_at: number
   updated_at: number
 }
+
+export type SyncIssueKind = 'pending_upload' | 'sync_failed' | 'conflict'
+
+export interface SyncIssueRow {
+  _id: string
+  family_id: string
+  kind: SyncIssueKind
+  status: 'open' | 'resolved'
+  collection: string
+  record_id?: string | null
+  mutation_id?: string | null
+  title: string
+  last_error?: string | null
+  created_at?: number
+  updated_at: number
+}
+
+type LocalBusinessRow<T> = T & {
+  deleted_at?: number | null
+  version?: number
+  _local_pending?: boolean
+  _pending_upload?: boolean
+  pending_upload?: boolean
+  _upload_error?: string | null
+  upload_error?: string | null
+}
+
+export interface LocalTableMap {
+  dogs: LocalBusinessRow<Dog>
+  breeding_cycles: LocalBusinessRow<BreedingCycle>
+  litters: LocalBusinessRow<Litter>
+  breeding_records: LocalBusinessRow<BreedingRecord>
+  health_records: LocalBusinessRow<HealthRecord>
+  medication_tasks: LocalBusinessRow<MedicationTask>
+  tasks: LocalBusinessRow<Task>
+  expenses: LocalBusinessRow<Expense>
+  incomes: LocalBusinessRow<Income>
+  sale_records: LocalBusinessRow<SaleRecord>
+  families: LocalBusinessRow<Family>
+  agents: LocalBusinessRow<Agent>
+  dog_weights: LocalBusinessRow<DogWeight>
+  medication_protocols: LocalBusinessRow<MedicationProtocol>
+  outbox_mutations: OutboxMutation
+  local_operation_logs: LocalOperationLogRow
+  sync_state: SyncStateRow
+  sync_conflicts: SyncConflictRow
+  local_meta: LocalMetaRow
+  image_cache_entries: ImageCacheEntry
+  sync_issues: SyncIssueRow
+}
+
+export type LocalRowOf<C extends LocalCollectionName> = LocalTableMap[C]
 
 export interface SyncTouchedEntity {
   collection: BusinessCollectionName

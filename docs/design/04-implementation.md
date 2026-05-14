@@ -99,8 +99,9 @@ Local-First Foundation：
 负责：
 
 - 本地持久化适配器（SQLite / IndexedDB / fallback）
+- v2 行级本地镜像与 legacy KV 兼容迁移
 - 业务集合镜像与系统集合管理
-- 本地查询、事务、outbox、sync state、conflict state
+- 本地查询、事务、outbox、sync state、conflict state、sync issues
 - 设备 ID、客户端稳定 ID 与同步元数据
 
 ### `sync worker`
@@ -111,6 +112,7 @@ Local-First Foundation：
 - 离线暂停、指数退避、应用重启恢复、回前台续传
 - 写接口 ack 处理与按集合增量拉取
 - 冲突记录下沉到 `sync_conflicts`
+- 失败、冲突与附件待上传入口写入 `sync_issues`，供同步状态页和备份页读取
 
 ## 5. 前端边界
 
@@ -119,6 +121,7 @@ Local-First Foundation：
 首页是编排层，负责：
 
 - 从本地实体投影四层工作台、WeekStrip 与日期计数
+- 通过一次本地 snapshot 同时生成今日卡片、日期计数和未来日期卡片，避免首页首屏重复读表
 - latest token 保护
 - 迁移期的 suppression 兼容保护
 - 本地事务后的即时反馈与后台同步触发
@@ -163,9 +166,9 @@ Local-First Foundation：
 - 核心写路径已收口到本地事务 + outbox，并由各域云对象处理 `_sync` 幂等 ack
 - 销售流程已补齐本地候选过滤、列表/详情归一化投影，以及退款/定金取消金额边界的前端、本地事务、云对象三层校验
 - 备份页已接入 pending outbox / pending upload 阻断提示
-- 页面级同步通过 `family-service.pullCollections` 批量拉取当前 scope 的多个集合，并使用 `updated_at + _id` 复合游标分页拉完 `hasMore` 集合；首页严格只同步 `home` scope，不再进入后后台预拉非首页核心集合
+- 页面级同步通过 `family-service.pullCollections` 批量拉取当前 scope 的多个集合，并使用 `updated_at + _id` 复合游标分页拉完 `hasMore` 集合；首页严格只同步并读取 `home` scope，不再进入后后台预拉非首页核心集合
 - 本地同步元数据按当前家庭隔离：`sync_state` 使用 `familyId + collection` 记录 cursor，scope freshness / active scope / core sync meta 使用 `familyId + scope/meta key`，切换账号或家庭时不得复用上一家庭的 cursor、TTL 或 in-flight scope promise
-- 同步状态页已接入 pending / failed / conflict / pending upload 统计、当前 active scope、最近同步时间与失败/冲突重试；图片附件选取后先压缩并保存本地持久路径，`flushOutbox` 前统一上传本地附件，成功后替换本地行与 outbox payload 并清除 `pending_upload`
+- 同步状态页已接入 pending / failed / conflict / pending upload 统计、当前 active scope、最近同步时间与失败/冲突重试；pending upload / failed / conflict 的可见入口来自本地 `sync_issues` 问题索引，不再扫描全部业务集合；图片附件选取后先压缩并保存本地持久路径，`flushOutbox` 前统一上传本地附件，成功后替换本地行与 outbox payload 并清除 `pending_upload`
 - 图片展示统一先解析 display URL：本地路径直接展示，云 `fileID` 先查 `image_cache_entries` 本地缓存，未命中再批量通过 `getTempFileURL` 转换后用于缩略图与预览，并 best-effort 回填缓存；账号头像复用统一压缩/上传工具，但仍按在线优先边界处理
 - 在线优先页保持云端权威：家庭成员、操作日志、备份页不接普通 `usePageSync`；断网时使用统一联网守卫，允许只读缓存兜底
 - 操作日志页合并展示本地 pending 操作与云端日志；云端日志第一页按 `familyId + stable filter signature` 缓存，离线时弱提示“仅显示本地缓存和待同步操作”

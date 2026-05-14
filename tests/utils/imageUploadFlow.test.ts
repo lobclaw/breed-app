@@ -55,10 +55,11 @@ describe('image upload flow source contract', () => {
 
   it('同步状态页应展示并优先处理附件待上传问题', () => {
     const statusSource = source('src/localdb/sync-status.ts')
+    const issueSource = source('src/localdb/sync-issues.ts')
     const pageSource = source('src/pages/profile/sync-status.vue')
 
     expect(statusSource).toContain('pendingUploadIssues')
-    expect(statusSource).toContain('图片临时路径已失效，请重新选择图片')
+    expect(issueSource).toContain('图片临时路径已失效，请重新选择图片')
     expect(pageSource).toContain('pending_upload')
     expect(pageSource).toContain('上传附件')
     expect(pageSource).toContain('处理附件问题')

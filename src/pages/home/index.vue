@@ -930,6 +930,16 @@ async function fetchWeekCards(startDate: number, endDate: number) {
   return localSyncRuntime.getWeekCards(startDate, endDate, getCurrentFamilyId())
 }
 
+async function fetchHomeSnapshot(dateCountsStartDate: number, dateCountsEndDate: number, weekStartDate: number, weekEndDate: number) {
+  return localSyncRuntime.getHomeSnapshot({
+    familyId: getCurrentFamilyId(),
+    dateCountsStartDate,
+    dateCountsEndDate,
+    weekStartDate,
+    weekEndDate,
+  })
+}
+
 async function doCompleteTask(taskId: string, autoRecord?: boolean) {
   const familyId = getCurrentFamilyId()
   if (!familyId) return null
@@ -1188,13 +1198,41 @@ async function loadDateCounts(loadToken = latestLoadToken) {
 
 /** 并行加载所有首页数据 */
 async function loadAll() {
+  const DAY_MS = 86400000
   const loadToken = ++latestLoadToken
+  const todayTs = startOfDay(Date.now())
+  const weekStart = todayTs + DAY_MS
+  const weekEnd = todayTs + 7 * DAY_MS - 1
+  const hasData = cards.value.length > 0
+  if (!hasData) loading.value = true
   loadedDateCountRanges.clear()
-  await Promise.all([loadTodayCards(loadToken), loadWeekCache(loadToken), loadDateCounts(loadToken)])
-  if (loadToken !== latestLoadToken) return
-  // 两个请求都完成后：以实际可见卡片数修正今天的红点
-  // 不依赖 counts.today（它含用药卡，即使今日剂量全给完仍为 1）
-  syncTodayDayCountFromVisibleCards()
+  try {
+    const result = await fetchHomeSnapshot(todayTs, weekEnd, weekStart, weekEnd)
+    if (loadToken !== latestLoadToken) return
+    pruneSuppressedTasks()
+    if (result?.home) {
+      cards.value = filterSuppressedCards(result.home.cards || [])
+      counts.today = result.home.counts?.today || 0
+      counts.week = result.home.counts?.week || 0
+      counts.month30 = result.home.counts?.month30 || 0
+      counts.hasOverdue = result.home.counts?.hasOverdue || false
+      pruneLocalBatchCardProgress(cards.value)
+      syncTaskStoreHomeCache()
+    }
+    const cache: Record<number, WeekCacheEntry> = {}
+    for (const [key, value] of Object.entries(result?.weekCards || {})) {
+      const dayData = value as { cards?: any[] }
+      cache[Number(key)] = {
+        cards: filterSuppressedCards(dayData.cards || []),
+      }
+    }
+    weekCache.value = cache
+    mergeDateCountsRange(todayTs, weekEnd, result?.dateCounts || {})
+    loadedDateCountRanges.add(buildDateCountRangeKey(todayTs, weekEnd))
+    syncTodayDayCountFromVisibleCards()
+  } finally {
+    if (loadToken === latestLoadToken) loading.value = false
+  }
 }
 
 async function onDateSelect(ts: number) {

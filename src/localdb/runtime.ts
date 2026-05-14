@@ -34,6 +34,7 @@ import {
   type ResolvedSyncScope,
   type SyncScopeMode,
 } from '@/localdb/scope-registry'
+import { syncIssueService } from '@/localdb/sync-issues'
 import { getSyncStatus } from '@/localdb/sync-status'
 import { cloudCall } from '@/composables/useCloudCall'
 import type {
@@ -253,17 +254,55 @@ function toSyncStateRow(collection: BusinessCollectionName, familyId = '', curre
   }
 }
 
-async function getHomeEntities(): Promise<HomeProjectionEntities> {
-  const [dogs, tasks, health_records, medication_tasks, breeding_cycles, breeding_records] = await Promise.all([
-    localDb.getTable<any>('dogs'),
-    localDb.getTable<any>('tasks'),
-    localDb.getTable<any>('health_records'),
-    localDb.getTable<any>('medication_tasks'),
-    localDb.getTable<any>('breeding_cycles'),
-    localDb.getTable<any>('breeding_records'),
-  ])
+const homeEntitiesCache: {
+  revisionKey: string
+  entities: HomeProjectionEntities
+} = {
+  revisionKey: '',
+  entities: {
+    dogs: [],
+    tasks: [],
+    health_records: [],
+    medication_tasks: [],
+    breeding_cycles: [],
+    breeding_records: [],
+  },
+}
+let homeEntitiesPromise: Promise<HomeProjectionEntities> | null = null
 
-  return { dogs, tasks, health_records, medication_tasks, breeding_cycles, breeding_records }
+async function getHomeEntities(): Promise<HomeProjectionEntities> {
+  const revisionKey = (await Promise.all([
+    localDb.getCollectionRevision('dogs'),
+    localDb.getCollectionRevision('tasks'),
+    localDb.getCollectionRevision('health_records'),
+    localDb.getCollectionRevision('medication_tasks'),
+    localDb.getCollectionRevision('breeding_cycles'),
+    localDb.getCollectionRevision('breeding_records'),
+  ])).join(':')
+  if (homeEntitiesCache.revisionKey === revisionKey) return homeEntitiesCache.entities
+  if (homeEntitiesPromise) return homeEntitiesPromise
+
+  homeEntitiesPromise = (async () => {
+    try {
+      const [dogs, tasks, health_records, medication_tasks, breeding_cycles, breeding_records] = await Promise.all([
+        localDb.getTable<any>('dogs'),
+        localDb.getTable<any>('tasks'),
+        localDb.getTable<any>('health_records'),
+        localDb.getTable<any>('medication_tasks'),
+        localDb.getTable<any>('breeding_cycles'),
+        localDb.getTable<any>('breeding_records'),
+      ])
+
+      const entities = { dogs, tasks, health_records, medication_tasks, breeding_cycles, breeding_records }
+      homeEntitiesCache.revisionKey = revisionKey
+      homeEntitiesCache.entities = entities
+      return entities
+    } finally {
+      homeEntitiesPromise = null
+    }
+  })()
+
+  return homeEntitiesPromise
 }
 
 function normalizePulledRows<T extends Record<string, any>>(rows: T[]): Array<T & { _id: string; updated_at?: number; created_at?: number; version: number }> {
@@ -1040,6 +1079,8 @@ async function updateOutboxStatus(mutationId: string, status: MutationStatus, ex
       }
     })
   })
+  const mutation = await localDb.findById<OutboxMutation>('outbox_mutations', mutationId)
+  if (mutation) await syncIssueService.refreshOutboxIssue(mutation)
 }
 
 async function recoverStaleProcessingOutbox(familyId: string) {
@@ -1591,6 +1632,8 @@ class LocalSyncRuntime {
         }
       })
     })
+
+    await syncIssueService.refreshPendingUploadIssuesForCollections(uploadCollections, familyId)
 
     await Promise.all([...uploadedRefMap.entries()].map(([localRef, uploadedRef]) => (
       cacheUploadedImageLocalRef(uploadedRef, localRef, { familyId })
@@ -2199,6 +2242,24 @@ class LocalSyncRuntime {
     return buildLocalWeekCards(await getHomeEntities(), startDate, endDate, Date.now(), familyId)
   }
 
+  async getHomeSnapshot(options: {
+    familyId?: string
+    dateCountsStartDate: number
+    dateCountsEndDate: number
+    weekStartDate: number
+    weekEndDate: number
+    now?: number
+  }) {
+    const familyId = options.familyId || this.currentFamilyId
+    const now = options.now || Date.now()
+    const entities = await getHomeEntities()
+    return {
+      home: buildLocalHomeCards(entities, now, familyId),
+      dateCounts: buildLocalDateCounts(entities, options.dateCountsStartDate, options.dateCountsEndDate, familyId),
+      weekCards: buildLocalWeekCards(entities, options.weekStartDate, options.weekEndDate, now, familyId),
+    }
+  }
+
   async enqueueMutation(type: HomeMutationType, familyId: string, payload: HomeMutationPayload, collectionScope: BusinessCollectionName[], syncMeta: SyncMetadata) {
     const mutation = buildOutboxMutation(type, familyId, payload, collectionScope, syncMeta.clientMutationId)
     await upsertOutboxMutation(mutation)
@@ -2206,6 +2267,7 @@ class LocalSyncRuntime {
     if (localOperationLog) {
       await localDb.upsertRows('local_operation_logs', [localOperationLog])
     }
+    await syncIssueService.refreshPendingUploadIssuesForCollections(collectionScope, familyId)
     if (this.online && this.deferOutboxFlushDepth === 0) {
       void this.flushOutbox(familyId)
     }

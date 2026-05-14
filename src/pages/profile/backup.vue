@@ -664,8 +664,7 @@ async function toggleAutoBackup() {
 async function clearLocalRestoredCollections(familyId: string) {
   if (!familyId) return
   for (const collection of RESTORE_SYNC_COLLECTIONS) {
-    const rows = await localDb.getTable<any>(collection)
-    await localDb.replaceTable(collection, rows.filter(row => row?.family_id !== familyId))
+    await localDb.deleteRowsByFamily(collection, familyId)
   }
 }
 

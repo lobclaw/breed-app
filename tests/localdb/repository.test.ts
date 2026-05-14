@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { localDb } from '../../src/localdb/db'
 import { findLocal, mutateLocal, queryLocal, upsertLocalRows } from '../../src/localdb/repository'
 import { getSyncStatus } from '../../src/localdb/sync-status'
@@ -35,6 +35,7 @@ describe('localdb repository public api', () => {
     await localDb.replaceTable('outbox_mutations', [])
     await localDb.replaceTable('sync_conflicts', [])
     await localDb.replaceTable('sync_state', [])
+    await localDb.replaceTable('sync_issues', [])
 
     await upsertLocalRows('dogs', [{
       _id: 'dog_local_1',
@@ -83,6 +84,18 @@ describe('localdb repository public api', () => {
       updated_at: 200,
     })
     await localDb.upsertLocalMeta('sync:active-scope', 'dog-list')
+    await localDb.upsertRows('sync_issues', [{
+      _id: 'pending_upload:dogs:dog_local_pending_upload',
+      family_id: 'fam_upload',
+      kind: 'pending_upload',
+      status: 'open',
+      collection: 'dogs',
+      record_id: 'dog_local_pending_upload',
+      mutation_id: null,
+      title: '犬只资料 · 待传图片',
+      last_error: '图片临时路径已失效，请重新选择图片',
+      updated_at: 200,
+    }])
 
     expect(await getSyncStatus()).toMatchObject({
       pending: 1,
@@ -107,6 +120,7 @@ describe('localdb repository public api', () => {
     await localDb.replaceTable('outbox_mutations', [])
     await localDb.replaceTable('sync_conflicts', [])
     await localDb.replaceTable('sync_state', [])
+    await localDb.replaceTable('sync_issues', [])
 
     await localDb.upsertRows('outbox_mutations', [{
       _id: 'outbox_1',
@@ -146,6 +160,7 @@ describe('localdb repository public api', () => {
     await localDb.replaceTable('outbox_mutations', [])
     await localDb.replaceTable('sync_conflicts', [])
     await localDb.replaceTable('sync_state', [])
+    await localDb.replaceTable('sync_issues', [])
 
     await localDb.upsertRows('dogs', [
       {
@@ -205,6 +220,18 @@ describe('localdb repository public api', () => {
       created_at: 2,
       updated_at: 2,
     }])
+    await localDb.upsertRows('sync_issues', [{
+      _id: 'pending_upload:dogs:dog_fam_1',
+      family_id: 'fam_1',
+      kind: 'pending_upload',
+      status: 'open',
+      collection: 'dogs',
+      record_id: 'dog_fam_1',
+      mutation_id: null,
+      title: '犬只资料',
+      last_error: '',
+      updated_at: 1,
+    }])
 
     expect(await getSyncStatus({ familyId: 'fam_1' })).toMatchObject({
       pending: 0,
@@ -212,5 +239,28 @@ describe('localdb repository public api', () => {
       conflict: 0,
       pendingUpload: 1,
     })
+  })
+
+  it('同步状态不应扫描业务集合', async () => {
+    await localDb.replaceTable('outbox_mutations', [])
+    await localDb.replaceTable('sync_conflicts', [])
+    await localDb.replaceTable('sync_state', [])
+    await localDb.replaceTable('sync_issues', [])
+
+    const getTableSpy = vi.spyOn(localDb, 'getTable')
+    await getSyncStatus({ familyId: 'fam_1' })
+
+    const readCollections = getTableSpy.mock.calls.map(call => call[0])
+    expect(readCollections).toEqual([
+      'outbox_mutations',
+      'sync_conflicts',
+      'sync_state',
+      'sync_issues',
+    ])
+    expect(readCollections).not.toContain('dogs')
+    expect(readCollections).not.toContain('tasks')
+    expect(readCollections).not.toContain('health_records')
+    expect(readCollections).not.toContain('medication_tasks')
+    getTableSpy.mockRestore()
   })
 })

@@ -84,21 +84,25 @@
 本地系统集合：
 
 - `outbox_mutations`
+- `local_operation_logs`
 - `sync_state`
 - `sync_conflicts`
 - `local_meta`
+- `image_cache_entries`
+- `sync_issues`
 
 ### 4.2 MongoDB 适配策略
 
 - 同类记录合并集合，类型差异收口到 `details`
 - 冗余高频展示字段，减少 JOIN
-- 首页继续使用 `tasks` / `medication_tasks` / `health_records` / 繁育集合做本地投影，不新增远端首页事实表
+- 首页只同步并读取 home scope：`dogs` / `tasks` / `health_records` / `medication_tasks`；繁育流程首页事项由 `tasks` 中的 `breeding_milestone` 承接，不新增远端首页事实表
 - 犬只状态与统计值实时推导，不预存
 - 多犬费用用数组存储，不设计额外关联表
 
 ### 4.3 本地镜像策略
 
 - 核心业务集合本地全量镜像；页面默认从本地镜像读
+- 本地镜像底层采用 v2 行级存储：App 端 SQLite `local_rows`，H5 IndexedDB `rows` store；旧 `local_kv` / `kv` 保留用于兼容与迁移
 - 同步以 `updated_at + _id` 复合游标增量拉取，以 `deleted_at` tombstone 收口删除
 - 所有同步管理对象补充 `version`，客户端按 `baseVersions` 做乐观并发校验
 - 客户端新增实体先生成稳定 `_id`，保证离线创建可先建立关联
@@ -107,7 +111,7 @@
 
 优先保障：
 
-- 首页按家庭 + 状态 + 日期查询
+- 首页按家庭 + 状态 + 日期查询；首页首屏通过一次本地 snapshot 同时得到今日卡片、WeekStrip 红点与未来日期卡片
 - 犬只列表按家庭 + 去向 + 角色查询
 - 记录列表按 `dog_id` / `cycle_id` / `date` 查询
 - Local-First 同步集合按 `family_id + updated_at + _id` 建复合索引 `family_updated_at_id`，匹配 `family-service.pullCollections` 的增量查询与排序
@@ -168,6 +172,7 @@
 - 迁移期允许 `suppression` 兼容，但最终以本地实体真实状态消除闪回
 - WeekStrip 红点不能依赖 `counts.today`
 - 批量健康完成必须创建真实 `health_record`
+- 同步状态页读取本地 `sync_issues` 问题索引，不扫描全部业务集合
 
 ## 8. 日期与删除规则
 
