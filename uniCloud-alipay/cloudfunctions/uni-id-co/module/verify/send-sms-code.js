@@ -14,6 +14,7 @@ const {
   assertSmsSendRateLimit,
   createSmsSendReservation,
   RATE_LIMIT_STATUS,
+  releaseSmsSendReservation,
   updateSmsSendReservation,
   shouldSendSmsCode
 } = require('../../lib/utils/sms-rate-limit')
@@ -111,11 +112,27 @@ module.exports = async function (params = {}) {
     return result
   } catch (error) {
     const errCode = error && (error.errCode || error.code)
-    await updateSmsSendReservation.call(this, {
-      reservation,
-      status: errCode === ERROR.SMS_SEND_TOO_FREQUENT ? RATE_LIMIT_STATUS.BLOCKED : RATE_LIMIT_STATUS.FAILED,
-      reason: errCode || 'send_sms_failed'
-    })
+    const status = errCode === ERROR.SMS_SEND_TOO_FREQUENT ? RATE_LIMIT_STATUS.BLOCKED : RATE_LIMIT_STATUS.FAILED
+    try {
+      await updateSmsSendReservation.call(this, {
+        reservation,
+        status,
+        reason: errCode || 'send_sms_failed',
+        throwOnError: status === RATE_LIMIT_STATUS.FAILED
+      })
+    } catch (reservationError) {
+      if (status === RATE_LIMIT_STATUS.FAILED) {
+        try {
+          await releaseSmsSendReservation.call(this, {
+            reservation
+          })
+        } catch (releaseError) {
+          console.warn('[sms-rate-limit] release failed reservation failed', releaseError)
+        }
+      } else {
+        console.warn('[sms-rate-limit] update reservation failed', reservationError)
+      }
+    }
     throw error
   }
 }

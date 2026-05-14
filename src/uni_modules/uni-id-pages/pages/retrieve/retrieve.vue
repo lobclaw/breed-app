@@ -107,6 +107,7 @@
 							placeholder="请再次输入新密码"
 						/>
 					</view>
+					<text class="password-rule-tip">{{ passwordTip }}</text>
 				</view>
 
 				<button
@@ -532,6 +533,10 @@
 <style lang="scss">
 	@import "@/uni_modules/uni-id-pages/common/login-page.scss";
 
+	.retrieve-page {
+		padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 28px);
+	}
+
 	.retrieve-page .auth-form {
 		display: flex;
 		flex-direction: column;
@@ -596,6 +601,15 @@
 		color: var(--text-2, #8b7355);
 		font-size: 20px;
 		line-height: 20px;
+	}
+
+	.password-rule-tip {
+		display: block;
+		margin-top: 8px;
+		padding-left: 4px;
+		color: var(--text-3, #b8a08a);
+		font-size: 12px;
+		line-height: 18px;
 	}
 
 	.area {
@@ -778,6 +792,10 @@
 	@media screen and (min-width: 690px) {
 		.uni-content{
 			max-height: none;
+		}
+
+		.retrieve-page {
+			padding-bottom: 28px;
 		}
 	}
 </style>

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createMockUniCloud,
+  failNextCollectionUpdate,
   resetDB,
   seedCollection,
 } from '../helpers/mock-unicloud'
@@ -139,6 +140,36 @@ describe('uni-id sms rate limit', () => {
     })).rejects.toMatchObject({
       errCode: RATE_LIMIT_ERROR,
     })
+  })
+
+  it('发送失败且标记 failed 失败时可以释放占位并允许重试', async () => {
+    const {
+      createSmsSendReservation,
+      RATE_LIMIT_STATUS,
+      releaseSmsSendReservation,
+      updateSmsSendReservation,
+    } = loadSmsRateLimit()
+
+    const reservation = await createSmsSendReservation.call(createContext(), {
+      mobile: '13300000000',
+      scene: 'login-by-sms',
+    })
+    failNextCollectionUpdate('opendb-verify-codes')
+
+    await expect(updateSmsSendReservation.call(createContext(), {
+      reservation,
+      status: RATE_LIMIT_STATUS.FAILED,
+      reason: 'mock_send_failed',
+      throwOnError: true,
+    })).rejects.toThrow('mock update failed')
+
+    await releaseSmsSendReservation.call(createContext(), {
+      reservation,
+    })
+    await expect(createSmsSendReservation.call(createContext(), {
+      mobile: '13300000000',
+      scene: 'login-by-sms',
+    })).resolves.toEqual(reservation)
   })
 
   it('手机号窗口外允许重新获取', async () => {

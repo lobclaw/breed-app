@@ -38,6 +38,10 @@ describe('password recovery source contract', () => {
     expect(content).toContain('密码已重置，请重新登录')
     expect(content).toContain('const RESEND_SECONDS = 300')
     expect(content).toContain('SMS_RATE_LIMIT_ERROR')
+    expect(content).toContain('<text class="password-rule-tip">{{ passwordTip }}</text>')
+    expect(content).toContain('.password-rule-tip')
+    expect(content.indexOf('placeholder="请再次输入新密码"')).toBeLessThan(content.indexOf('<text class="password-rule-tip">{{ passwordTip }}</text>'))
+    expect(content).toContain('padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 28px)')
   })
 
   it('密码规则应统一为 8-20 位且至少两类字符', () => {
@@ -111,6 +115,7 @@ describe('sms login source contract', () => {
 
     expect(sendSmsCode).toContain('assertSmsSendRateLimit')
     expect(sendSmsCode).toContain('createSmsSendReservation')
+    expect(sendSmsCode).toContain('releaseSmsSendReservation')
     expect(sendSmsCode).toContain('updateSmsSendReservation')
     expect(sendSmsCode).toContain('shouldSendSmsCode')
     expect(rateLimit).toContain('SMS_SEND_TOO_FREQUENT')

@@ -286,7 +286,8 @@ async function createSmsSendReservation ({
 async function updateSmsSendReservation ({
   reservation,
   status,
-  reason
+  reason,
+  throwOnError = false
 } = {}) {
   if (!reservation || !reservation.id) return
   const data = {
@@ -299,8 +300,18 @@ async function updateSmsSendReservation ({
   try {
     await verifyCollection.doc(reservation.id).update(data)
   } catch (error) {
+    if (throwOnError) {
+      throw error
+    }
     console.warn('[sms-rate-limit] update reservation failed', error)
   }
+}
+
+async function releaseSmsSendReservation ({
+  reservation
+} = {}) {
+  if (!reservation || !reservation.id) return
+  await verifyCollection.doc(reservation.id).remove()
 }
 
 async function isResetPasswordMobileAvailable ({
@@ -341,6 +352,7 @@ module.exports = {
   RATE_LIMIT_STATUS,
   assertSmsSendRateLimit,
   createSmsSendReservation,
+  releaseSmsSendReservation,
   updateSmsSendReservation,
   shouldSendSmsCode
 }

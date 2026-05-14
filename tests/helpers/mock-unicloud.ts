@@ -6,6 +6,7 @@ import { vi } from 'vitest'
 
 // 内存数据库
 const collections: Record<string, any[]> = {}
+const updateFailures: Record<string, number> = {}
 
 function getCollection(name: string) {
   if (!collections[name]) {
@@ -19,11 +20,19 @@ export function resetDB() {
   for (const key of Object.keys(collections)) {
     delete collections[key]
   }
+  for (const key of Object.keys(updateFailures)) {
+    delete updateFailures[key]
+  }
 }
 
 /** 种子数据 */
 export function seedCollection(name: string, docs: any[]) {
   collections[name] = [...docs]
+}
+
+/** 让指定集合下一次 update 抛错 */
+export function failNextCollectionUpdate(name: string) {
+  updateFailures[name] = (updateFailures[name] || 0) + 1
 }
 
 /** 创建 mock db command */
@@ -166,6 +175,11 @@ function createQueryChain(collectionName: string) {
       return { id }
     },
     async update(data: any) {
+      if (updateFailures[collectionName] > 0) {
+        updateFailures[collectionName]--
+        resetQueryState()
+        throw new Error(`mock update failed: ${collectionName}`)
+      }
       const col = getCollection(collectionName)
       let targets: any[]
 
