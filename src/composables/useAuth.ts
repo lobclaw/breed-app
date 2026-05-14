@@ -26,6 +26,8 @@ const currentFamily = ref<Family | null>(null)
 const isInitialized = ref(false)
 const isFamilyVerified = ref(false)
 let authSessionVersion = 0
+let initPromise: Promise<void> | null = null
+let authEventsBound = false
 
 function bumpAuthSessionVersion() {
   authSessionVersion += 1
@@ -123,10 +125,9 @@ export function useAuth() {
     return !isFamilyVerified.value || previousFamilyId !== family._id
   }
 
-  async function init() {
-    if (isInitialized.value) return
-
-    // 监听 uni-id-pages 登录成功事件
+  function bindAuthEvents() {
+    if (authEventsBound) return
+    authEventsBound = true
     uni.$on('uni-id-pages-login-success', async () => {
       const info = uniCloud.getCurrentUserInfo()
       if (info.uid) {
@@ -134,44 +135,54 @@ export function useAuth() {
         bumpAuthSessionVersion()
         clearCurrentSession()
         currentUser.value = { uid: info.uid, token }
-        const loadResult = await loadFamily()
-        // 登录后如果没有家庭，跳转到创建家庭页
-        if (loadResult === 'no_family') {
-          uni.redirectTo({ url: '/pages/family/setup' })
-        }
       }
     })
 
-    // 监听退出登录事件
     uni.$on('uni-id-pages-logout', () => {
       bumpAuthSessionVersion()
       currentUser.value = null
       clearCurrentSession()
     })
+  }
 
-    if (shouldSkipAuthProbeInH5Dev()) {
-      isInitialized.value = true
-      return
-    }
+  async function init() {
+    if (isInitialized.value) return
+    if (initPromise) return initPromise
 
-    try {
-      const info = uniCloud.getCurrentUserInfo()
-      const token = uni.getStorageSync('uni_id_token')
+    initPromise = (async () => {
+      // 监听 uni-id-pages 登录/退出事件
+      bindAuthEvents()
 
-      if (info.uid && getTokenExpired(info) > Date.now()) {
-        bumpAuthSessionVersion()
-        currentUser.value = { uid: info.uid, token }
-        // 只探测当前 uid 的家庭身份缓存；业务响应式状态需等待 loadFamily 权限确认后恢复。
-        restoreFamilyFromCache(info.uid)
+      if (shouldSkipAuthProbeInH5Dev()) {
         isInitialized.value = true
-        // 后台静默刷新最新数据
-        loadFamily()
-      } else {
+        return
+      }
+
+      try {
+        const info = uniCloud.getCurrentUserInfo()
+        const token = uni.getStorageSync('uni_id_token')
+
+        if (info.uid && getTokenExpired(info) > Date.now()) {
+          bumpAuthSessionVersion()
+          currentUser.value = { uid: info.uid, token }
+          // 只探测当前 uid 的家庭身份缓存；业务响应式状态需等待 loadFamily 权限确认后恢复。
+          restoreFamilyFromCache(info.uid)
+          isInitialized.value = true
+          // 后台静默刷新最新数据
+          loadFamily()
+        } else {
+          isInitialized.value = true
+        }
+      } catch {
+        // 静默失败，uni-id-pages 的 uniIdRouter 会自动跳转登录页
         isInitialized.value = true
       }
-    } catch {
-      // 静默失败，uni-id-pages 的 uniIdRouter 会自动跳转登录页
-      isInitialized.value = true
+    })()
+
+    try {
+      await initPromise
+    } finally {
+      initPromise = null
     }
   }
 

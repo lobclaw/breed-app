@@ -27,6 +27,14 @@ const FINANCE_TTL_MS = 300000
 
 export const SYNC_SCOPE_REGISTRY: SyncScopeDefinition[] = [
   {
+    key: 'launch-online',
+    label: '启动鉴权',
+    mode: 'online-first',
+    ttlMs: 0,
+    collections: [],
+    routeMatchers: ['pages/launch/index'],
+  },
+  {
     key: 'home',
     label: '首页',
     mode: 'local-first',

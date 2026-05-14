@@ -2584,7 +2584,7 @@ onShow(async () => {
   }
   // 没有家庭则跳转创建页
   if (!hasFamily.value) {
-    uni.navigateTo({ url: '/pages/family/setup' })
+    uni.reLaunch({ url: '/pages/family/setup' })
     return
   }
   const familyId = getCurrentFamilyId()

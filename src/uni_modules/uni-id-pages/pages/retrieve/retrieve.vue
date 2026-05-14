@@ -795,6 +795,7 @@
 		}
 
 		.retrieve-page {
+			min-height: min(668px, calc(100vh - 40px));
 			padding-bottom: 28px;
 		}
 	}

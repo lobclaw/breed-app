@@ -42,6 +42,7 @@ describe('password recovery source contract', () => {
     expect(content).toContain('.password-rule-tip')
     expect(content.indexOf('placeholder="请再次输入新密码"')).toBeLessThan(content.indexOf('<text class="password-rule-tip">{{ passwordTip }}</text>'))
     expect(content).toContain('padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 28px)')
+    expect(content).toContain('min-height: min(668px, calc(100vh - 40px))')
   })
 
   it('密码规则应统一为 8-20 位且至少两类字符', () => {

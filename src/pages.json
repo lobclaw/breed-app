@@ -1,6 +1,13 @@
 {
 	"pages": [
 		{
+			"path": "pages/launch/index",
+			"style": {
+				"navigationBarTitleText": "繁育管理",
+				"navigationStyle": "custom"
+			}
+		},
+		{
 			"path": "pages/home/index",
 			"style": {
 				"navigationBarTitleText": "首页",
