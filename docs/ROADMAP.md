@@ -21,7 +21,7 @@
 2. 本地读路径与本地事务写路径收口
 3. `_sync` 幂等 / 冲突 / tombstone contract 稳定
 4. 同步状态 UX 与备份/上传边界收口
-5. Network 验收与真实设备回归
+5. Network 验收与真实设备回归（H5 首页 scope / TTL / in-flight / 手动刷新验收已完成，真实设备仍需回归）
 
 ## 各阶段目标
 
@@ -54,6 +54,7 @@
 - 首页不预拉非首页 scope
 - TTL 内切页不重复 pull，同 scope 并发只发一个请求
 - 断网写入立即可见，恢复网络后自动 flush 并应用 ack
+- H5 验收记录见 `docs/home-network-acceptance.md`；真机抓包或设备日志发现平台差异时，同步补充该文档和对应测试
 
 ## 当前非目标
 

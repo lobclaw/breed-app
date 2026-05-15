@@ -35,6 +35,93 @@ function normalizeDogName(dog: Record<string, any> | null | undefined) {
   return dog?.name || dog?.dog_name || '未命名犬只'
 }
 
+type OperationLogSnapshot = Record<string, unknown>
+
+function toCleanString(value: unknown) {
+  return String(value || '').trim()
+}
+
+function toCleanStringArray(value: unknown) {
+  if (!Array.isArray(value)) return []
+  return value.map(item => toCleanString(item)).filter(Boolean)
+}
+
+function getSnapshotString(snapshot: OperationLogSnapshot, keys: string[]) {
+  for (const key of keys) {
+    const value = toCleanString(snapshot[key])
+    if (value) return value
+  }
+  return ''
+}
+
+function getSnapshotStringArray(snapshot: OperationLogSnapshot, keys: string[]) {
+  for (const key of keys) {
+    const values = toCleanStringArray(snapshot[key])
+    if (values.length) return values
+  }
+  return []
+}
+
+function getDogNameSnapshots(payload: Record<string, any>, snapshot: OperationLogSnapshot) {
+  const explicitNames = getSnapshotStringArray(snapshot, ['dogNames', 'dog_names'])
+  if (explicitNames.length) return explicitNames
+  const singleName = getSnapshotString(snapshot, ['dogName', 'dog_name', 'damName', 'dam_name'])
+    || toCleanString(payload.dog_name || payload.dogName || payload.dam_name || payload.damName)
+  if (singleName) return [singleName]
+  if (Array.isArray(payload.dogs)) {
+    return payload.dogs
+      .map((dog: any) => toCleanString(dog?.dog_name || dog?.dogName || dog?.name))
+      .filter(Boolean)
+  }
+  return toCleanStringArray(payload.dog_names || payload.dogNames)
+}
+
+function getTaskTitleSnapshots(payload: Record<string, any>, snapshot: OperationLogSnapshot) {
+  const titles = getSnapshotStringArray(snapshot, ['taskTitles', 'task_titles'])
+  if (titles.length) return titles
+  const title = getSnapshotString(snapshot, ['taskTitle', 'task_title'])
+    || toCleanString(payload.taskTitle || payload.task_title || payload.title)
+  if (title) return [title]
+  if (Array.isArray(payload.tasks)) {
+    return payload.tasks.map((task: any) => toCleanString(task?.title)).filter(Boolean)
+  }
+  return toCleanStringArray(payload.taskTitles || payload.task_titles)
+}
+
+function getMedicationTitleSnapshots(payload: Record<string, any>, snapshot: OperationLogSnapshot) {
+  const titles = getSnapshotStringArray(snapshot, ['medicationTitles', 'medication_titles'])
+  if (titles.length) return titles
+  const title = getSnapshotString(snapshot, ['medicationTitle', 'medication_title', 'drugName', 'drug_name'])
+    || toCleanString(payload.medicationTitle || payload.medication_title || payload.drug_name || payload.drugName)
+  if (title) return [title]
+  return toCleanStringArray(payload.medicationTitles || payload.medication_titles)
+}
+
+async function resolveDogNames(payload: Record<string, any>, snapshot: OperationLogSnapshot, dogIds: string[]) {
+  const names = getDogNameSnapshots(payload, snapshot)
+  if (names.length) return names
+  return getDogNames(dogIds)
+}
+
+async function resolveDogName(payload: Record<string, any>, snapshot: OperationLogSnapshot, dogId: string, fallback = '未命名犬只') {
+  const names = getDogNameSnapshots(payload, snapshot)
+  if (names[0]) return names[0]
+  if (!dogId) return fallback
+  return getDogName(dogId)
+}
+
+async function resolveTaskTitles(payload: Record<string, any>, snapshot: OperationLogSnapshot, taskIds: string[]) {
+  const titles = getTaskTitleSnapshots(payload, snapshot)
+  if (titles.length) return titles
+  return getTaskTitles(taskIds)
+}
+
+async function resolveMedicationTitles(payload: Record<string, any>, snapshot: OperationLogSnapshot, taskIds: string[]) {
+  const titles = getMedicationTitleSnapshots(payload, snapshot)
+  if (titles.length) return titles
+  return getMedicationTitles(taskIds)
+}
+
 function readStorageObject(key: string): Record<string, any> | null {
   try {
     const raw = uni.getStorageSync(key)
@@ -140,7 +227,7 @@ function toCountLabel(count: number, unit: string) {
   return count > 1 ? `${count}${unit}` : ''
 }
 
-async function buildOperationDescriptor(type: LocalMutationType, payload: Record<string, any>) {
+async function buildOperationDescriptor(type: LocalMutationType, payload: Record<string, any>, snapshot: OperationLogSnapshot = {}) {
   switch (type) {
     case LOCAL_MUTATION_TYPES.CREATE_DOG: {
       return {
@@ -154,7 +241,7 @@ async function buildOperationDescriptor(type: LocalMutationType, payload: Record
     }
     case LOCAL_MUTATION_TYPES.UPDATE_DOG:
     case LOCAL_MUTATION_TYPES.UPDATE_DOG_NAME: {
-      const dogName = payload.name || await getDogName(String(payload.id || payload.dogId || ''))
+      const dogName = payload.name || payload.patch?.name || await resolveDogName(payload, snapshot, String(payload.id || payload.dogId || ''))
       return {
         actionType: 'update',
         domain: 'dog',
@@ -165,7 +252,7 @@ async function buildOperationDescriptor(type: LocalMutationType, payload: Record
       }
     }
     case LOCAL_MUTATION_TYPES.CHANGE_DOG_DISPOSITION: {
-      const dogName = await getDogName(String(payload.id || payload.dogId || ''))
+      const dogName = await resolveDogName(payload, snapshot, String(payload.id || payload.dogId || ''))
       return {
         actionType: 'status_change',
         domain: 'dog',
@@ -176,7 +263,7 @@ async function buildOperationDescriptor(type: LocalMutationType, payload: Record
       }
     }
     case LOCAL_MUTATION_TYPES.UPGRADE_PUPPY_TO_BREEDER: {
-      const dogName = await getDogName(String(payload.id || payload.dogId || ''))
+      const dogName = await resolveDogName(payload, snapshot, String(payload.id || payload.dogId || ''))
       return {
         actionType: 'update',
         domain: 'dog',
@@ -187,7 +274,7 @@ async function buildOperationDescriptor(type: LocalMutationType, payload: Record
       }
     }
     case LOCAL_MUTATION_TYPES.SOFT_DELETE_DOG: {
-      const dogName = await getDogName(String(payload.id || payload.dogId || ''))
+      const dogName = await resolveDogName(payload, snapshot, String(payload.id || payload.dogId || ''))
       return {
         actionType: 'delete',
         domain: 'dog',
@@ -234,7 +321,7 @@ async function buildOperationDescriptor(type: LocalMutationType, payload: Record
       }
     }
     case LOCAL_MUTATION_TYPES.COMPLETE_TASK: {
-      const titles = await getTaskTitles([String(payload.taskId || '')])
+      const titles = await resolveTaskTitles(payload, snapshot, [String(payload.taskId || '')])
       const title = titles[0] || '任务'
       return {
         actionType: 'complete',
@@ -246,7 +333,7 @@ async function buildOperationDescriptor(type: LocalMutationType, payload: Record
       }
     }
     case LOCAL_MUTATION_TYPES.BATCH_COMPLETE_TASK: {
-      const titles = await getTaskTitles(Array.isArray(payload.taskIds) ? payload.taskIds : [])
+      const titles = await resolveTaskTitles(payload, snapshot, Array.isArray(payload.taskIds) ? payload.taskIds : [])
       return {
         actionType: 'complete',
         domain: 'task',
@@ -259,7 +346,7 @@ async function buildOperationDescriptor(type: LocalMutationType, payload: Record
     case LOCAL_MUTATION_TYPES.POSTPONE_TASK:
     case LOCAL_MUTATION_TYPES.BATCH_POSTPONE_TASK: {
       const ids = Array.isArray(payload.taskIds) ? payload.taskIds : [String(payload.taskId || '')]
-      const titles = await getTaskTitles(ids)
+      const titles = await resolveTaskTitles(payload, snapshot, ids)
       const count = titles.length || ids.filter(Boolean).length
       return {
         actionType: 'postpone',
@@ -271,7 +358,7 @@ async function buildOperationDescriptor(type: LocalMutationType, payload: Record
       }
     }
     case LOCAL_MUTATION_TYPES.CREATE_HEALTH_RECORDS: {
-      const dogNames = await getDogNames(Array.isArray(payload.dog_ids) ? payload.dog_ids : [])
+      const dogNames = await resolveDogNames(payload, snapshot, Array.isArray(payload.dog_ids) ? payload.dog_ids : [])
       const label = HEALTH_RECORD_LABEL_MAP[String(payload.type || '')] || '健康记录'
       return {
         actionType: 'create',
@@ -285,7 +372,7 @@ async function buildOperationDescriptor(type: LocalMutationType, payload: Record
       }
     }
     case LOCAL_MUTATION_TYPES.UPDATE_HEALTH_RECORD: {
-      const dogName = await getDogName(String(payload.dog_id || ''))
+      const dogName = await resolveDogName(payload, snapshot, String(payload.dog_id || ''))
       return {
         actionType: 'update',
         domain: 'health',
@@ -306,7 +393,7 @@ async function buildOperationDescriptor(type: LocalMutationType, payload: Record
       }
     }
     case LOCAL_MUTATION_TYPES.CREATE_MEDICATION_TASKS: {
-      const dogNames = await getDogNames(Array.isArray(payload.dog_ids) ? payload.dog_ids : [])
+      const dogNames = await resolveDogNames(payload, snapshot, Array.isArray(payload.dog_ids) ? payload.dog_ids : [])
       const drugName = String(payload.drug_name || '').trim() || '用药任务'
       return {
         actionType: 'create',
@@ -320,7 +407,7 @@ async function buildOperationDescriptor(type: LocalMutationType, payload: Record
       }
     }
     case LOCAL_MUTATION_TYPES.RECORD_MEDICATION_DOSE: {
-      const titles = await getMedicationTitles([String(payload.medicationTaskId || '')])
+      const titles = await resolveMedicationTitles(payload, snapshot, [String(payload.medicationTaskId || '')])
       return {
         actionType: 'update',
         domain: 'medication',
@@ -331,7 +418,7 @@ async function buildOperationDescriptor(type: LocalMutationType, payload: Record
       }
     }
     case LOCAL_MUTATION_TYPES.BATCH_COMPLETE_MEDICATION_DAY: {
-      const titles = await getMedicationTitles(Array.isArray(payload.medicationTaskIds) ? payload.medicationTaskIds : [])
+      const titles = await resolveMedicationTitles(payload, snapshot, Array.isArray(payload.medicationTaskIds) ? payload.medicationTaskIds : [])
       return {
         actionType: 'complete',
         domain: 'medication',
@@ -375,7 +462,7 @@ async function buildOperationDescriptor(type: LocalMutationType, payload: Record
       }
     }
     case LOCAL_MUTATION_TYPES.ADD_DOG_WEIGHT: {
-      const dogName = await getDogName(String(payload.dog_id || payload.dogId || ''))
+      const dogName = await resolveDogName(payload, snapshot, String(payload.dog_id || payload.dogId || ''))
       return {
         actionType: 'create',
         domain: 'health',
@@ -387,7 +474,7 @@ async function buildOperationDescriptor(type: LocalMutationType, payload: Record
     }
     case LOCAL_MUTATION_TYPES.CREATE_BREEDING_RECORD:
     case LOCAL_MUTATION_TYPES.BATCH_CREATE_BREEDING_RECORDS: {
-      const dogNames = await getDogNames(Array.isArray(payload.dog_ids) ? payload.dog_ids : [String(payload.dog_id || '')])
+      const dogNames = await resolveDogNames(payload, snapshot, Array.isArray(payload.dog_ids) ? payload.dog_ids : [String(payload.dog_id || '')])
       const label = BREEDING_RECORD_LABEL_MAP[String(payload.type || '')] || '繁育记录'
       return {
         actionType: 'create',
@@ -401,7 +488,7 @@ async function buildOperationDescriptor(type: LocalMutationType, payload: Record
       }
     }
     case LOCAL_MUTATION_TYPES.ADD_BIRTH_RECORD: {
-      const dogName = await getDogName(String(payload.dam_id || payload.dog_id || ''))
+      const dogName = await resolveDogName(payload, snapshot, String(payload.dam_id || payload.dog_id || ''))
       return {
         actionType: 'create',
         domain: 'breeding',
@@ -412,7 +499,11 @@ async function buildOperationDescriptor(type: LocalMutationType, payload: Record
       }
     }
     case LOCAL_MUTATION_TYPES.UPDATE_BREEDING_RECORD: {
-      const { dogName, label } = await getBreedingRecordLogContext(String(payload.id || ''))
+      const snapshotDogName = getSnapshotString(snapshot, ['dogName', 'dog_name'])
+      const snapshotLabel = getSnapshotString(snapshot, ['recordLabel', 'record_label'])
+      const { dogName, label } = snapshotDogName && snapshotLabel
+        ? { dogName: snapshotDogName, label: snapshotLabel }
+        : await getBreedingRecordLogContext(String(payload.id || ''))
       return {
         actionType: 'update',
         domain: 'breeding',
@@ -494,7 +585,8 @@ async function buildOperationDescriptor(type: LocalMutationType, payload: Record
       }
     }
     case LOCAL_MUTATION_TYPES.UPDATE_EXPENSE: {
-      const name = await getEntityName('expenses', String(payload.id || ''), String(payload.category || '支出'))
+      const name = getSnapshotString(snapshot, ['targetName', 'target_name'])
+        || await getEntityName('expenses', String(payload.id || ''), String(payload.category || '支出'))
       return {
         actionType: 'update',
         domain: 'finance',
@@ -505,7 +597,8 @@ async function buildOperationDescriptor(type: LocalMutationType, payload: Record
       }
     }
     case LOCAL_MUTATION_TYPES.UPDATE_INCOME: {
-      const name = await getEntityName('incomes', String(payload.id || ''), String(payload.type || '收入'))
+      const name = getSnapshotString(snapshot, ['targetName', 'target_name'])
+        || await getEntityName('incomes', String(payload.id || ''), String(payload.type || '收入'))
       return {
         actionType: 'update',
         domain: 'finance',
@@ -536,7 +629,7 @@ async function buildOperationDescriptor(type: LocalMutationType, payload: Record
       }
     }
     case LOCAL_MUTATION_TYPES.CREATE_SALE_RECORD: {
-      const dogName = await getDogName(String(payload.dog_id || ''))
+      const dogName = await resolveDogName(payload, snapshot, String(payload.dog_id || ''))
       return {
         actionType: 'create',
         domain: 'sale',
@@ -579,7 +672,7 @@ async function buildOperationDescriptor(type: LocalMutationType, payload: Record
       }
     }
     case LOCAL_MUTATION_TYPES.UPDATE_AGENT: {
-      const name = String(payload.name || await getEntityName('agents', String(payload.id || ''), '未命名代理人'))
+      const name = String(payload.name || getSnapshotString(snapshot, ['targetName', 'target_name']) || await getEntityName('agents', String(payload.id || ''), '未命名代理人'))
       return {
         actionType: 'update',
         domain: 'sale',
@@ -646,7 +739,7 @@ async function buildOperationDescriptor(type: LocalMutationType, payload: Record
         domain: 'medication',
         targetType: 'settings_item',
         targetId: String(payload.id || ''),
-        targetName: String(payload.name || payload.drug_name || ''),
+        targetName: String(payload.name || payload.drug_name || getSnapshotString(snapshot, ['targetName', 'target_name']) || ''),
         summary: '更新了用药方案',
       }
     }
@@ -680,8 +773,9 @@ export async function createPendingLocalOperationLog(
   familyId: string,
   payload: Record<string, any>,
   syncMeta: SyncMetadata,
+  logSnapshot: OperationLogSnapshot = {},
 ) {
-  const descriptor = await buildOperationDescriptor(type, payload)
+  const descriptor = await buildOperationDescriptor(type, payload, logSnapshot)
   if (!descriptor.summary) return null
   const actor = await resolveCurrentActor(familyId)
   const now = Number(syncMeta.clientTimestamp || Date.now())

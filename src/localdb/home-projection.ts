@@ -16,12 +16,12 @@ const BREEDING_EXTRA_TYPES = new Set([
 type GenericRow = Record<string, any>
 
 export interface HomeProjectionEntities {
-  dogs: GenericRow[]
-  tasks: GenericRow[]
-  health_records: GenericRow[]
-  medication_tasks: GenericRow[]
-  breeding_cycles?: GenericRow[]
-  breeding_records?: GenericRow[]
+  dogs: readonly GenericRow[]
+  tasks: readonly GenericRow[]
+  health_records: readonly GenericRow[]
+  medication_tasks: readonly GenericRow[]
+  breeding_cycles?: readonly GenericRow[]
+  breeding_records?: readonly GenericRow[]
 }
 
 function rowBelongsToFamily(row: GenericRow, familyId: string) {
@@ -36,8 +36,6 @@ function filterEntitiesByFamily(entities: HomeProjectionEntities, familyId = '')
     tasks: (entities.tasks || []).filter(row => rowBelongsToFamily(row, familyId)),
     health_records: (entities.health_records || []).filter(row => rowBelongsToFamily(row, familyId)),
     medication_tasks: (entities.medication_tasks || []).filter(row => rowBelongsToFamily(row, familyId)),
-    breeding_cycles: (entities.breeding_cycles || []).filter(row => rowBelongsToFamily(row, familyId)),
-    breeding_records: (entities.breeding_records || []).filter(row => rowBelongsToFamily(row, familyId)),
   }
 }
 
@@ -285,7 +283,7 @@ function buildSyntheticBreedingMilestoneTask(
   }
 }
 
-function buildPendingBreedingMilestones(entities: HomeProjectionEntities) {
+export function buildPendingBreedingMilestones(entities: HomeProjectionEntities) {
   const cycles = (entities.breeding_cycles || []).filter(cycle => !cycle.deleted_at)
   const records = (entities.breeding_records || []).filter(record => !record.deleted_at)
   if (!cycles.length) return []
@@ -458,7 +456,6 @@ function buildPendingBreedingMilestones(entities: HomeProjectionEntities) {
 function getPendingHomeTasks(entities: HomeProjectionEntities) {
   return [
     ...((entities.tasks || []).filter(task => !task.deleted_at && task.status === 'pending')),
-    ...buildPendingBreedingMilestones(entities),
   ]
 }
 
@@ -883,7 +880,7 @@ function getPendingTasksForToday(entities: HomeProjectionEntities, now = Date.no
     }
   }
 
-  const normalizedPendingTasks = dedupeBreedingMilestones(mergedTasks)
+  const normalizedPendingTasks = dedupeBreedingMilestones(mergedTasks).map(task => ({ ...task }))
   normalizedPendingTasks.forEach((task) => {
     task.priority = getTaskPriority(task, todayStartTs, todayEndTs)
     task._completed = false
@@ -975,9 +972,11 @@ export function buildLocalWeekCards(entities: HomeProjectionEntities, startDate:
   for (const task of tasks) {
     const key = startOfDay(task.due_date)
     if (!dayGroups.has(key)) dayGroups.set(key, [])
-    task.priority = getTaskPriority(task, realTodayStart, realTodayEnd)
-    task._completed = false
-    dayGroups.get(key)!.push(task)
+    dayGroups.get(key)!.push({
+      ...task,
+      priority: getTaskPriority(task, realTodayStart, realTodayEnd),
+      _completed: false,
+    })
   }
 
   const result: Record<number, GenericRow> = {}

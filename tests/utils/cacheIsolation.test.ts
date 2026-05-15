@@ -41,6 +41,8 @@ describe('account session cache isolation contract', () => {
     expect(source).toContain("return familyId ? getWorkspaceCacheKey('recent-actions', familyId) : ''")
     expect(source).toContain('if (!storageKey) return []')
     expect(source).toContain('if (!storageKey) return')
+    expect(source).not.toContain("getWorkspaceCacheKey('tasks'")
+    expect(source).not.toContain('writeStorageJson')
     expect(source).not.toContain("const STORAGE_KEY = 'recent_actions'")
   })
 

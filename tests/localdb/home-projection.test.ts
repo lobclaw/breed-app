@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { localDb } from '../../src/localdb/db'
 import { applyTouchedEntityVersions, buildLocalDateCounts, buildLocalHomeCards } from '../../src/localdb/home-projection'
+import { buildHomeSnapshot, clearHomeEntitiesCache } from '../../src/localdb/runtime/home-snapshot'
 
 describe('local home projection', () => {
   it('应将单只犬的疫苗和驱虫提醒也投影为健康批量卡', () => {
@@ -172,38 +174,32 @@ describe('local home projection', () => {
     expect(Object.values(counts).some(value => value === 1)).toBe(true)
   })
 
-  it('应为本地待同步的发情记录即时投影首页繁育卡片', () => {
+  it('应从已物化的 tasks 读取本地待同步繁育里程碑', () => {
     const now = new Date('2026-04-30T15:00:00+08:00').getTime()
     const heatDate = new Date('2026-04-30T10:00:00+08:00').getTime()
 
     const result = buildLocalHomeCards({
       dogs: [{ _id: 'dog_1', name: '奶糖' }],
-      tasks: [],
-      health_records: [],
-      medication_tasks: [],
-      breeding_cycles: [{
-        _id: 'cycle_1',
-        family_id: 'family_1',
-        dam_id: 'dog_1',
-        dam_name: '奶糖',
-        status: '发情中',
-        created_at: now,
-        updated_at: now,
-        _local_pending: true,
-      }],
-      breeding_records: [{
-        _id: 'record_1',
-        family_id: 'family_1',
-        cycle_id: 'cycle_1',
+      tasks: [{
+        _id: 'task_1',
+        card_type: 'individual',
         dog_id: 'dog_1',
         dog_name: '奶糖',
-        type: 'heat',
-        date: heatDate,
-        details: {},
+        cycle_id: 'cycle_1',
+        type: 'breeding_milestone',
+        title: '奶糖 · 建议卵泡检查',
+        due_date: heatDate,
+        status: 'pending',
+        family_id: 'family_1',
+        source_record_id: 'record_1',
+        source_collection: 'breeding_records',
+        details: { step_type: 'follicle_check' },
         created_at: now,
         updated_at: now,
         _local_pending: true,
       }],
+      health_records: [],
+      medication_tasks: [],
     }, now)
 
     const breedingCard = result.cards.find(card => card.cardType === 'dog' && card.tasks?.[0]?.type === 'breeding_milestone')
@@ -212,7 +208,7 @@ describe('local home projection', () => {
     expect(result.counts.today).toBeGreaterThan(0)
   })
 
-  it('应为缺少里程碑任务的已同步发情周期补首页繁育卡片', () => {
+  it('首页 projection 不再扫描 breeding_cycles / breeding_records 合成繁育卡片', () => {
     const now = new Date('2026-05-06T10:00:00+08:00').getTime()
     const heatDate = new Date('2026-05-01T10:00:00+08:00').getTime()
 
@@ -246,9 +242,31 @@ describe('local home projection', () => {
     }, now)
 
     const breedingCard = result.cards.find(card => card.cardType === 'dog' && card.tasks?.[0]?.type === 'breeding_milestone')
-    expect(breedingCard).toBeTruthy()
-    expect(breedingCard?.tasks?.[0]?.details?.step_type).toBe('follicle_check')
-    expect(breedingCard?.tasks?.[0]?.dog_name).toBe('肉肉')
+    expect(breedingCard).toBeFalsy()
+  })
+
+  it('首页 projection 不应污染输入任务行', () => {
+    const now = new Date('2026-05-06T10:00:00+08:00').getTime()
+    const task = {
+      _id: 'task_readonly_input',
+      family_id: 'family_1',
+      type: 'manual',
+      status: 'pending',
+      title: '检查',
+      due_date: now,
+      created_at: now,
+      updated_at: now,
+    }
+
+    buildLocalHomeCards({
+      dogs: [],
+      tasks: [task],
+      health_records: [],
+      medication_tasks: [],
+    }, now, 'family_1')
+
+    expect(task).not.toHaveProperty('priority')
+    expect(task).not.toHaveProperty('_completed')
   })
 
   it('应在同步确认后清除本地 pending 标记', () => {
@@ -270,5 +288,103 @@ describe('local home projection', () => {
 
     expect(rows[0].version).toBe(2)
     expect(rows[0]._local_pending).toBe(false)
+  })
+
+  it('collection revision 未变化时应复用首页投影，相关集合变化后应失效', async () => {
+    const familyId = 'family_home_memo'
+    const otherFamilyId = 'family_home_memo_other'
+    const now = new Date('2026-05-15T10:00:00+08:00').getTime()
+    const tomorrow = new Date('2026-05-16T10:00:00+08:00').getTime()
+    const nextWeek = new Date('2026-05-22T10:00:00+08:00').getTime()
+
+    await Promise.all([
+      localDb.replaceTable('dogs', []),
+      localDb.replaceTable('tasks', []),
+      localDb.replaceTable('health_records', []),
+      localDb.replaceTable('medication_tasks', []),
+    ])
+    clearHomeEntitiesCache()
+
+    await localDb.upsertRows('dogs', [
+      { _id: 'dog_home_memo_1', family_id: familyId, name: '小满', updated_at: now },
+      { _id: 'dog_home_memo_2', family_id: otherFamilyId, name: '奶糕', updated_at: now },
+    ])
+    await localDb.upsertRows('tasks', [
+      {
+        _id: 'task_home_memo_1',
+        family_id: familyId,
+        dog_id: 'dog_home_memo_1',
+        dog_name: '小满',
+        type: 'vaccination',
+        title: '疫苗',
+        status: 'pending',
+        due_date: now,
+        updated_at: now,
+      },
+      {
+        _id: 'task_home_memo_other',
+        family_id: otherFamilyId,
+        dog_id: 'dog_home_memo_2',
+        dog_name: '奶糕',
+        type: 'deworming',
+        title: '驱虫',
+        status: 'pending',
+        due_date: now,
+        updated_at: now,
+      },
+    ])
+
+    const input = {
+      familyId,
+      dateCountsStartDate: now,
+      dateCountsEndDate: nextWeek,
+      weekStartDate: now,
+      weekEndDate: nextWeek,
+      now,
+    }
+    const first = await buildHomeSnapshot(input)
+    const second = await buildHomeSnapshot(input)
+
+    expect(second.home).toBe(first.home)
+    expect(second.dateCounts).toBe(first.dateCounts)
+    expect(second.weekCards).toBe(first.weekCards)
+    expect(first.home.cards.some(card => card.tasks?.some(task => task._id === 'task_home_memo_other'))).toBe(false)
+
+    clearHomeEntitiesCache()
+    const afterManualRefresh = await buildHomeSnapshot(input)
+    expect(afterManualRefresh.home).not.toBe(first.home)
+    expect(afterManualRefresh.dateCounts).not.toBe(first.dateCounts)
+    expect(afterManualRefresh.weekCards).not.toBe(first.weekCards)
+
+    const other = await buildHomeSnapshot({ ...input, familyId: otherFamilyId })
+    expect(other.home).not.toBe(afterManualRefresh.home)
+    expect(other.home.cards.some(card => card.tasks?.some(task => task._id === 'task_home_memo_other'))).toBe(true)
+
+    const crossDay = await buildHomeSnapshot({ ...input, now: tomorrow })
+    expect(crossDay.home).not.toBe(afterManualRefresh.home)
+    expect(crossDay.weekCards).not.toBe(afterManualRefresh.weekCards)
+
+    const anonymousFirst = await buildHomeSnapshot({ ...input, familyId: '' })
+    const anonymousSecond = await buildHomeSnapshot({ ...input, familyId: '' })
+    expect(anonymousSecond.home).not.toBe(anonymousFirst.home)
+    expect(anonymousSecond.dateCounts).not.toBe(anonymousFirst.dateCounts)
+    expect(anonymousSecond.weekCards).not.toBe(anonymousFirst.weekCards)
+
+    await localDb.upsertRows('tasks', [{
+      _id: 'task_home_memo_2',
+      family_id: familyId,
+      dog_id: 'dog_home_memo_1',
+      dog_name: '小满',
+      type: 'deworming',
+      title: '驱虫',
+      status: 'pending',
+      due_date: now,
+      updated_at: now + 1,
+    }])
+
+    const afterTaskChange = await buildHomeSnapshot(input)
+    expect(afterTaskChange.home).not.toBe(afterManualRefresh.home)
+    expect(afterTaskChange.dateCounts).not.toBe(afterManualRefresh.dateCounts)
+    expect(afterTaskChange.weekCards).not.toBe(afterManualRefresh.weekCards)
   })
 })

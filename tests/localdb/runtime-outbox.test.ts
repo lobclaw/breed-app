@@ -645,6 +645,93 @@ describe('local sync runtime outbox diagnostics', () => {
     expect(pullCalls).toHaveLength(1)
   })
 
+  it('首页 Network 验收：只拉 home scope、TTL 内不重复拉取、手动刷新只强制当前 scope、同 scope 并发去重', async () => {
+    const pullCalls: Array<{ collections: string[]; forceFull?: boolean }> = []
+    const homeCollections = ['dogs', 'tasks', 'health_records', 'medication_tasks']
+
+    const pullCollections = vi.fn(async (input: { collections: string[]; forceFull?: boolean }) => {
+      pullCalls.push({
+        collections: [...input.collections],
+        forceFull: input.forceFull,
+      })
+      return {
+        data: {
+          collections: Object.fromEntries(input.collections.map(collection => [collection, {
+            ok: true,
+            rows: [],
+            cursor: 0,
+            hasMore: false,
+          }])),
+        },
+      }
+    })
+
+    ;(globalThis as any).uniCloud = {
+      importObject: () => ({
+        pullCollections,
+      }),
+    }
+
+    localSyncRuntime.setCurrentFamilyId('fam_network_home')
+    const first = await localSyncRuntime.syncScope('home', { force: true })
+    const ttlHit = await localSyncRuntime.syncScope('home')
+    const manualRefresh = await localSyncRuntime.syncActiveScope({ force: true })
+
+    expect(first?.pulledCollections).toEqual(homeCollections)
+    expect(ttlHit?.skipped).toBe(true)
+    expect(ttlHit?.skipReason).toBe('ttl:20000')
+    expect(manualRefresh?.force).toBe(true)
+    expect(pullCalls).toEqual([
+      { collections: homeCollections, forceFull: true },
+      { collections: homeCollections, forceFull: true },
+    ])
+    expect(pullCalls.flatMap(call => call.collections)).not.toEqual(expect.arrayContaining([
+      'breeding_cycles',
+      'breeding_records',
+      'expenses',
+      'incomes',
+      'sale_records',
+    ]))
+
+    const releasePull = createDeferred()
+    const concurrentPullCollections = vi.fn(async (input: { collections: string[]; forceFull?: boolean }) => {
+      pullCalls.push({
+        collections: [...input.collections],
+        forceFull: input.forceFull,
+      })
+      await releasePull.promise
+      return {
+        data: {
+          collections: Object.fromEntries(input.collections.map(collection => [collection, {
+            ok: true,
+            rows: [],
+            cursor: 0,
+            hasMore: false,
+          }])),
+        },
+      }
+    })
+
+    ;(globalThis as any).uniCloud = {
+      importObject: () => ({
+        pullCollections: concurrentPullCollections,
+      }),
+    }
+
+    const concurrentFirst = localSyncRuntime.syncScope('home', { force: true })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    const concurrentSecond = localSyncRuntime.syncScope('home', { force: true })
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    expect(concurrentPullCollections).toHaveBeenCalledTimes(1)
+    releasePull.resolve()
+    const [concurrentFirstResult, concurrentSecondResult] = await Promise.all([concurrentFirst, concurrentSecond])
+
+    expect(concurrentSecondResult).toBe(concurrentFirstResult)
+    expect(pullCalls).toHaveLength(3)
+    expect(pullCalls[2]).toEqual({ collections: homeCollections, forceFull: true })
+  })
+
   it('增量空返回不应推进 collection cursor', async () => {
     await localDb.upsertRows('sync_state', [{
       _id: 'fam_1:dogs',

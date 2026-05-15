@@ -4,8 +4,9 @@ import { LOCAL_COLLECTIONS } from '@/localdb/types'
 declare const plus: any
 
 export const STORAGE_V2_ENABLED_KEY = 'breed-local-first:storage:v2:enabled'
+export const MIGRATION_STALE_MS = 10 * 60 * 1000
 
-export type MigrationState = 'pending' | 'migrating' | 'migrated' | `failed:${string}`
+export type MigrationState = 'pending' | `migrating:${number}` | 'migrated' | `failed:${number}:${string}`
 
 export interface LocalRowRecord {
   collection: LocalCollectionName
@@ -26,6 +27,7 @@ export interface KeyValueAdapter {
 export interface LocalRowAdapter {
   getAllRows(collection: LocalCollectionName): Promise<LocalRowRecord[]>
   getRow(collection: LocalCollectionName, id: string): Promise<LocalRowRecord | null>
+  getRowsByFamily(collection: LocalCollectionName, familyId: string): Promise<LocalRowRecord[]>
   getRowsByIds(collection: LocalCollectionName, ids: string[]): Promise<LocalRowRecord[]>
   putRows(collection: LocalCollectionName, rows: LocalRowRecord[]): Promise<void>
   deleteRows(collection: LocalCollectionName, ids: string[]): Promise<void>
@@ -46,7 +48,7 @@ function buildRowKey(collection: LocalCollectionName, id: string) {
   return `${normalizeCollection(collection)}:${id}`
 }
 
-function getRevisionKey(collection: LocalCollectionName) {
+export function getRevisionKey(collection: LocalCollectionName) {
   return `breed-local-first:storage:v2:revision:${normalizeCollection(collection)}`
 }
 
@@ -117,6 +119,10 @@ class MemoryAdapter implements LocalDbAdapter {
 
   async getRow(collection: LocalCollectionName, id: string) {
     return this.rows.get(buildRowKey(collection, id)) ?? null
+  }
+
+  async getRowsByFamily(collection: LocalCollectionName, familyId: string) {
+    return Array.from(this.rows.values()).filter(row => row.collection === collection && row.family_id === familyId)
   }
 
   async getRowsByIds(collection: LocalCollectionName, ids: string[]) {
@@ -192,6 +198,11 @@ class UniStorageAdapter implements LocalDbAdapter {
   async getRow(collection: LocalCollectionName, id: string) {
     const rows = await this.getAllRows(collection)
     return rows.find(row => row.id === id) || null
+  }
+
+  async getRowsByFamily(collection: LocalCollectionName, familyId: string) {
+    const rows = await this.getAllRows(collection)
+    return rows.filter(row => row.family_id === familyId)
   }
 
   async getRowsByIds(collection: LocalCollectionName, ids: string[]) {
@@ -298,7 +309,20 @@ class IndexedDbAdapter implements LocalDbAdapter {
     return new Promise<T>((resolve, reject) => {
       const tx = db.transaction(IndexedDbAdapter.KV_STORE_NAME, mode)
       const store = tx.objectStore(IndexedDbAdapter.KV_STORE_NAME)
-      executor(store, resolve, reject)
+      let result: T
+      let rejected = false
+      const rejectOnce = (reason?: unknown) => {
+        if (rejected) return
+        rejected = true
+        reject(reason)
+        try { tx.abort() } catch {}
+      }
+      executor(store, value => { result = value }, rejectOnce)
+      tx.oncomplete = () => {
+        if (!rejected) resolve(result!)
+      }
+      tx.onerror = () => rejectOnce(tx.error)
+      tx.onabort = () => rejectOnce(tx.error)
     })
   }
 
@@ -307,10 +331,54 @@ class IndexedDbAdapter implements LocalDbAdapter {
     return new Promise<T>((resolve, reject) => {
       const tx = db.transaction(IndexedDbAdapter.ROW_STORE_NAME, mode)
       const store = tx.objectStore(IndexedDbAdapter.ROW_STORE_NAME)
-      executor(store, resolve, reject)
-      tx.onerror = () => reject(tx.error)
-      tx.onabort = () => reject(tx.error)
+      let result: T
+      let rejected = false
+      const rejectOnce = (reason?: unknown) => {
+        if (rejected) return
+        rejected = true
+        reject(reason)
+        try { tx.abort() } catch {}
+      }
+      executor(store, value => { result = value }, rejectOnce)
+      tx.oncomplete = () => {
+        if (!rejected) resolve(result!)
+      }
+      tx.onerror = () => rejectOnce(tx.error)
+      tx.onabort = () => rejectOnce(tx.error)
     })
+  }
+
+  private async runRowKv<T>(mode: IDBTransactionMode, executor: (
+    rowsStore: IDBObjectStore,
+    kvStore: IDBObjectStore,
+    resolve: (value: T) => void,
+    reject: (reason?: unknown) => void,
+  ) => void) {
+    const db = await this.getDb()
+    return new Promise<T>((resolve, reject) => {
+      const tx = db.transaction([IndexedDbAdapter.ROW_STORE_NAME, IndexedDbAdapter.KV_STORE_NAME], mode)
+      const rowsStore = tx.objectStore(IndexedDbAdapter.ROW_STORE_NAME)
+      const kvStore = tx.objectStore(IndexedDbAdapter.KV_STORE_NAME)
+      let result: T
+      let rejected = false
+      const rejectOnce = (reason?: unknown) => {
+        if (rejected) return
+        rejected = true
+        reject(reason)
+        try { tx.abort() } catch {}
+      }
+      executor(rowsStore, kvStore, value => { result = value }, rejectOnce)
+      tx.oncomplete = () => {
+        if (!rejected) resolve(result!)
+      }
+      tx.onerror = () => rejectOnce(tx.error)
+      tx.onabort = () => rejectOnce(tx.error)
+    })
+  }
+
+  private shouldUseFallback(error?: unknown) {
+    const message = error instanceof Error ? error.message : String(error || '')
+    return !this.isSupported() || this.blocked || message === 'INDEXED_DB_BLOCKED' || message === 'IndexedDB unavailable'
   }
 
   async get(key: string) {
@@ -321,7 +389,8 @@ class IndexedDbAdapter implements LocalDbAdapter {
         request.onsuccess = () => resolve(request.result ? String(request.result) : null)
         request.onerror = () => reject(request.error)
       })
-    } catch {
+    } catch (error) {
+      if (!this.shouldUseFallback(error)) throw error
       return this.fallback.get(key)
     }
   }
@@ -334,7 +403,8 @@ class IndexedDbAdapter implements LocalDbAdapter {
         request.onsuccess = () => resolve()
         request.onerror = () => reject(request.error)
       })
-    } catch {
+    } catch (error) {
+      if (!this.shouldUseFallback(error)) throw error
       await this.fallback.set(key, value)
     }
   }
@@ -347,7 +417,8 @@ class IndexedDbAdapter implements LocalDbAdapter {
         request.onsuccess = () => resolve()
         request.onerror = () => reject(request.error)
       })
-    } catch {
+    } catch (error) {
+      if (!this.shouldUseFallback(error)) throw error
       await this.fallback.remove(key)
     }
   }
@@ -360,7 +431,8 @@ class IndexedDbAdapter implements LocalDbAdapter {
         request.onsuccess = () => resolve((request.result || []).map(this.fromIndexedRow))
         request.onerror = () => reject(request.error)
       })
-    } catch {
+    } catch (error) {
+      if (!this.shouldUseFallback(error)) throw error
       return this.fallback.getAllRows(collection)
     }
   }
@@ -372,8 +444,24 @@ class IndexedDbAdapter implements LocalDbAdapter {
         request.onsuccess = () => resolve(request.result ? this.fromIndexedRow(request.result) : null)
         request.onerror = () => reject(request.error)
       })
-    } catch {
+    } catch (error) {
+      if (!this.shouldUseFallback(error)) throw error
       return this.fallback.getRow(collection, id)
+    }
+  }
+
+  async getRowsByFamily(collection: LocalCollectionName, familyId: string) {
+    if (!familyId) return []
+    try {
+      return await this.runRows<LocalRowRecord[]>('readonly', (store, resolve, reject) => {
+        const index = store.index('collection_family')
+        const request = index.getAll([collection, familyId])
+        request.onsuccess = () => resolve((request.result || []).map(this.fromIndexedRow))
+        request.onerror = () => reject(request.error)
+      })
+    } catch (error) {
+      if (!this.shouldUseFallback(error)) throw error
+      return this.fallback.getRowsByFamily(collection, familyId)
     }
   }
 
@@ -394,7 +482,8 @@ class IndexedDbAdapter implements LocalDbAdapter {
           request.onerror = () => reject(request.error)
         })
       })
-    } catch {
+    } catch (error) {
+      if (!this.shouldUseFallback(error)) throw error
       return this.fallback.getRowsByIds(collection, uniqueIds)
     }
   }
@@ -402,11 +491,12 @@ class IndexedDbAdapter implements LocalDbAdapter {
   async putRows(collection: LocalCollectionName, rows: LocalRowRecord[]) {
     if (!rows.length) return
     try {
-      await this.runRows<void>('readwrite', (store, resolve, reject) => {
+      await this.runRowKv<void>('readwrite', (store, kvStore, resolve, reject) => {
         rows.forEach(row => store.put(this.toIndexedRow(row)))
-        this.bumpRevision(collection).then(() => resolve(), reject)
+        this.bumpRevisionInKvStore(collection, kvStore, resolve, reject)
       })
-    } catch {
+    } catch (error) {
+      if (!this.shouldUseFallback(error)) throw error
       await this.fallback.putRows(collection, rows)
     }
   }
@@ -415,11 +505,12 @@ class IndexedDbAdapter implements LocalDbAdapter {
     const uniqueIds = [...new Set(ids.filter(Boolean))]
     if (!uniqueIds.length) return
     try {
-      await this.runRows<void>('readwrite', (store, resolve, reject) => {
+      await this.runRowKv<void>('readwrite', (store, kvStore, resolve, reject) => {
         uniqueIds.forEach(id => store.delete(buildRowKey(collection, id)))
-        this.bumpRevision(collection).then(() => resolve(), reject)
+        this.bumpRevisionInKvStore(collection, kvStore, resolve, reject)
       })
-    } catch {
+    } catch (error) {
+      if (!this.shouldUseFallback(error)) throw error
       await this.fallback.deleteRows(collection, uniqueIds)
     }
   }
@@ -428,24 +519,26 @@ class IndexedDbAdapter implements LocalDbAdapter {
     try {
       const rows = await this.getAllRows(collection)
       await this.deleteRows(collection, rows.filter(row => row.family_id === familyId).map(row => row.id))
-    } catch {
+    } catch (error) {
+      if (!this.shouldUseFallback(error)) throw error
       await this.fallback.deleteRowsByFamily(collection, familyId)
     }
   }
 
   async replaceRows(collection: LocalCollectionName, rows: LocalRowRecord[]) {
     try {
-      await this.runRows<void>('readwrite', (store, resolve, reject) => {
+      await this.runRowKv<void>('readwrite', (store, kvStore, resolve, reject) => {
         const index = store.index('collection')
         const request = index.getAllKeys(collection)
         request.onsuccess = () => {
           ;(request.result || []).forEach(key => store.delete(key))
           rows.forEach(row => store.put(this.toIndexedRow(row)))
-          this.bumpRevision(collection).then(() => resolve(), reject)
+          this.bumpRevisionInKvStore(collection, kvStore, resolve, reject)
         }
         request.onerror = () => reject(request.error)
       })
-    } catch {
+    } catch (error) {
+      if (!this.shouldUseFallback(error)) throw error
       await this.fallback.replaceRows(collection, rows)
     }
   }
@@ -454,9 +547,21 @@ class IndexedDbAdapter implements LocalDbAdapter {
     return toRevision(await this.get(getRevisionKey(collection)))
   }
 
-  private async bumpRevision(collection: LocalCollectionName) {
-    const revision = (await this.getCollectionRevision(collection)) + 1
-    await this.set(getRevisionKey(collection), String(revision))
+  private bumpRevisionInKvStore(
+    collection: LocalCollectionName,
+    kvStore: IDBObjectStore,
+    resolve: (value: void) => void,
+    reject: (reason?: unknown) => void,
+  ) {
+    const key = getRevisionKey(collection)
+    const revisionRequest = kvStore.get(key)
+    revisionRequest.onsuccess = () => {
+      const revision = toRevision(revisionRequest.result ? String(revisionRequest.result) : null) + 1
+      const putRequest = kvStore.put(String(revision), key)
+      putRequest.onsuccess = () => resolve()
+      putRequest.onerror = () => reject(putRequest.error)
+    }
+    revisionRequest.onerror = () => reject(revisionRequest.error)
   }
 
   private toIndexedRow(row: LocalRowRecord) {
@@ -547,8 +652,8 @@ class SqliteAdapter implements LocalDbAdapter {
         [key],
       )
       return rows[0]?.value ? String(rows[0].value) : null
-    } catch {
-      return this.fallback.get(key)
+    } catch (error) {
+      throw error
     }
   }
 
@@ -560,8 +665,8 @@ class SqliteAdapter implements LocalDbAdapter {
         `INSERT OR REPLACE INTO ${SqliteAdapter.KV_TABLE_NAME} (key, value) VALUES (?, ?)`,
         [key, value],
       )
-    } catch {
-      await this.fallback.set(key, value)
+    } catch (error) {
+      throw error
     }
   }
 
@@ -573,8 +678,8 @@ class SqliteAdapter implements LocalDbAdapter {
         `DELETE FROM ${SqliteAdapter.KV_TABLE_NAME} WHERE key = ?`,
         [key],
       )
-    } catch {
-      await this.fallback.remove(key)
+    } catch (error) {
+      throw error
     }
   }
 
@@ -587,8 +692,8 @@ class SqliteAdapter implements LocalDbAdapter {
         [collection],
       )
       return rows.map(row => this.fromSqlRow(row))
-    } catch {
-      return this.fallback.getAllRows(collection)
+    } catch (error) {
+      throw error
     }
   }
 
@@ -601,8 +706,23 @@ class SqliteAdapter implements LocalDbAdapter {
         [collection, id],
       )
       return rows[0] ? this.fromSqlRow(rows[0]) : null
-    } catch {
-      return this.fallback.getRow(collection, id)
+    } catch (error) {
+      throw error
+    }
+  }
+
+  async getRowsByFamily(collection: LocalCollectionName, familyId: string) {
+    if (!familyId) return []
+    if (!this.isSupported()) return this.fallback.getRowsByFamily(collection, familyId)
+    try {
+      await this.open()
+      const rows = await this.select(
+        `SELECT collection, id, family_id, updated_at, deleted_at, flags, value FROM ${SqliteAdapter.ROW_TABLE_NAME} WHERE collection = ? AND family_id = ?`,
+        [collection, familyId],
+      )
+      return rows.map(row => this.fromSqlRow(row))
+    } catch (error) {
+      throw error
     }
   }
 
@@ -618,8 +738,8 @@ class SqliteAdapter implements LocalDbAdapter {
         [collection, ...uniqueIds],
       )
       return rows.map(row => this.fromSqlRow(row))
-    } catch {
-      return this.fallback.getRowsByIds(collection, uniqueIds)
+    } catch (error) {
+      throw error
     }
   }
 
@@ -635,11 +755,11 @@ class SqliteAdapter implements LocalDbAdapter {
           [collection, row.id, row.family_id, row.updated_at, row.deleted_at, row.flags, row.value],
         )
       }
-      await this.bumpRevision(collection)
+      await this.bumpRevisionInCurrentTransaction(collection)
       await this.execute('COMMIT')
     } catch (error) {
       try { await this.execute('ROLLBACK') } catch {}
-      await this.fallback.putRows(collection, rows)
+      throw error
     }
   }
 
@@ -655,11 +775,11 @@ class SqliteAdapter implements LocalDbAdapter {
         `DELETE FROM ${SqliteAdapter.ROW_TABLE_NAME} WHERE collection = ? AND id IN (${placeholders})`,
         [collection, ...uniqueIds],
       )
-      await this.bumpRevision(collection)
+      await this.bumpRevisionInCurrentTransaction(collection)
       await this.execute('COMMIT')
-    } catch {
+    } catch (error) {
       try { await this.execute('ROLLBACK') } catch {}
-      await this.fallback.deleteRows(collection, uniqueIds)
+      throw error
     }
   }
 
@@ -673,11 +793,11 @@ class SqliteAdapter implements LocalDbAdapter {
         `DELETE FROM ${SqliteAdapter.ROW_TABLE_NAME} WHERE collection = ? AND family_id = ?`,
         [collection, familyId],
       )
-      await this.bumpRevision(collection)
+      await this.bumpRevisionInCurrentTransaction(collection)
       await this.execute('COMMIT')
-    } catch {
+    } catch (error) {
       try { await this.execute('ROLLBACK') } catch {}
-      await this.fallback.deleteRowsByFamily(collection, familyId)
+      throw error
     }
   }
 
@@ -693,11 +813,11 @@ class SqliteAdapter implements LocalDbAdapter {
           [collection, row.id, row.family_id, row.updated_at, row.deleted_at, row.flags, row.value],
         )
       }
-      await this.bumpRevision(collection)
+      await this.bumpRevisionInCurrentTransaction(collection)
       await this.execute('COMMIT')
-    } catch {
+    } catch (error) {
       try { await this.execute('ROLLBACK') } catch {}
-      await this.fallback.replaceRows(collection, rows)
+      throw error
     }
   }
 
@@ -705,9 +825,12 @@ class SqliteAdapter implements LocalDbAdapter {
     return toRevision(await this.get(getRevisionKey(collection)))
   }
 
-  private async bumpRevision(collection: LocalCollectionName) {
+  private async bumpRevisionInCurrentTransaction(collection: LocalCollectionName) {
     const revision = (await this.getCollectionRevision(collection)) + 1
-    await this.set(getRevisionKey(collection), String(revision))
+    await this.execute(
+      `INSERT OR REPLACE INTO ${SqliteAdapter.KV_TABLE_NAME} (key, value) VALUES (?, ?)`,
+      [getRevisionKey(collection), String(revision)],
+    )
   }
 
   private fromSqlRow(row: any): LocalRowRecord {

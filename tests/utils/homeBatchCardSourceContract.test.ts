@@ -5,6 +5,9 @@ import { describe, expect, it } from 'vitest'
 const testDir = __dirname
 const batchCardSource = readFileSync(resolve(testDir, '../../src/components/smart-card/BatchCard.vue'), 'utf8')
 const homeSource = readFileSync(resolve(testDir, '../../src/pages/home/index.vue'), 'utf8')
+const homeCardSectionsSource = readFileSync(resolve(testDir, '../../src/pages/home/components/HomeCardSections.vue'), 'utf8')
+const homeSectionListSource = readFileSync(resolve(testDir, '../../src/pages/home/components/HomeSectionList.vue'), 'utf8')
+const homeBatchProgressSource = readFileSync(resolve(testDir, '../../src/pages/home/composables/useHomeBatchProgress.ts'), 'utf8')
 const batchProcessSource = readFileSync(resolve(testDir, '../../src/pages/home/batch-process.vue'), 'utf8')
 
 describe('home batch card source contract', () => {
@@ -19,18 +22,23 @@ describe('home batch card source contract', () => {
     expect(homeSource).toContain('removeCardLocally(taskId, true)')
     expect(homeSource).toContain("if (mode === 'batch-auto-partial') {")
     expect(homeSource).toContain('removeCardLocally(taskId, false, false)')
-    expect(homeSource).toContain('function applyLocalBatchCardProgress(card: any)')
-    expect(homeSource).toContain('function markBatchDogCompleted(card: any, taskId: string)')
+    expect(homeCardSectionsSource).toContain('@complete="(...args) => $emit(\'complete\', ...args)"')
+    expect(homeSectionListSource).toContain('@complete="(...args) => $emit(\'complete\', ...args)"')
+    expect(homeBatchProgressSource).toContain('function applyLocalBatchCardProgress(card: any)')
+    expect(homeBatchProgressSource).toContain('function markBatchDogCompleted(card: any, taskId: string)')
   })
 
   it('首页应把批量卡局部进度同步到持久缓存，刷新后继续显示 1/2', () => {
-    expect(homeSource).toContain('const localBatchCardProgressMap = ref<Record<string, { dogs: any[]; completedDogIds: string[] }>>(taskStore.batchCardProgress || {})')
-    expect(homeSource).toContain('function syncTaskStoreHomeCache()')
-    expect(homeSource).toContain('function pruneLocalBatchCardProgress(cardList: any[] = [])')
-    expect(homeSource).toContain('function restorePersistedHealthBatchCards(cardList: any[] = [])')
-    expect(homeSource).toContain('return restorePersistedHealthBatchCards(cardList).map((card: any) => {')
-    expect(homeSource).toContain('taskStore.batchCardProgress = { ...localBatchCardProgressMap.value }')
-    expect(homeSource).toContain('localBatchCardProgressMap.value = { ...(taskStore.batchCardProgress || {}) }')
+    expect(homeBatchProgressSource).toContain('const localBatchCardProgressMap = ref<Record<string, BatchProgress>>({})')
+    expect(homeBatchProgressSource).toContain('function hydrateLocalBatchCardProgress()')
+    expect(homeBatchProgressSource).toContain('function syncTaskStoreHomeCache()')
+    expect(homeBatchProgressSource).toContain('function pruneLocalBatchCardProgress(cardList: any[] = [])')
+    expect(homeBatchProgressSource).toContain('function restorePersistedHealthBatchCards(cardList: any[] = [])')
+    expect(homeBatchProgressSource).toContain('return restorePersistedHealthBatchCards(cardList).map((card: any) => {')
+    expect(homeBatchProgressSource).toContain('options.taskStore.setRecommendationInput(familyId, options.cards.value, options.counts)')
+    expect(homeBatchProgressSource).toContain('options.taskStore.batchCardProgress = { ...localBatchCardProgressMap.value }')
+    expect(homeBatchProgressSource).not.toContain('options.taskStore.persistForFamily(familyId)')
+    expect(homeSource).toContain('hydrateHomeSessionState()')
   })
 
   it('批量疫苗处理应在未选择疫苗类型时保持暗态并提示', () => {

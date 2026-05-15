@@ -18,8 +18,21 @@
 - 技术栈：UniApp（Vue 3 + TypeScript + Pinia）+ UniCloud 云对象（支付宝云）+ UniCloud MongoDB
 - 阶段：Phase 1 已完成；当前处于 `Local-First Foundation` 收口
 - 主线：页面级 scope、本地事务、outbox、`_sync` 幂等 ack、同步状态 UX、在线优先边界、Network 验收
-- 当前重点：真实设备 Network、多端并发、冲突/失败/待上传入口体验、图片附件 local-first 收口
+- 当前重点：真实设备 Network（H5 scope/TTL/in-flight 验收已留档）、多端并发、冲突/失败/待上传入口体验、图片附件 local-first 收口
 - 下一版本 UX 种子：为短时可逆动作补 `Undo / 可撤销`，优先覆盖首页完成/跳过、销售取消、回收站恢复
+
+## 当前实现结构
+
+- `src/localdb/runtime.ts` 只暴露 `localSyncRuntime` 门面；runtime 内部已按 pull / outbox / attachments / scope-sync / home-snapshot / local-builders / mutation helpers / dog / task / health / medication / breeding / litter / settings / finance / sale / agent 拆分到 `src/localdb/runtime/*`
+- 本地写入入口仍统一走 `localSyncRuntime.*Locally`；业务页面不得直接调用 runtime 内部 mutation 模块，避免绕过 outbox、pending upload、issue refresh 与 flush 节流
+- `src/localdb/domain-repository.ts` 是本地读模型 barrel 门面；按 dogs / breeding / health / finance / sale / settings-recycle 拆到 `src/localdb/domain-repository/*`
+- 纯派生逻辑优先放 `src/localdb/domain-services/*`，例如财务展示、销售状态、健康/用药状态、繁育状态；repository 只负责读取与组装
+- 高频本地读取优先走 readonly LocalDB API；runtime mutation 写入已统一迁到 `localDb.transactRows` 行级事务，回调内按已知 collection + id 使用 `getRow/upsertRow/updateRow/deleteRow`，不得回退到 `localDb.transact`、`runLocalMutation`、批量整表 upsert 或 `tables.*` 数组重写
+- `localDb.transact` 仍作为兼容 API 保留给非 runtime-mutation 调用方；新增或修改 `src/localdb/runtime/*-mutations.ts` 时必须走 `transactRows` 并保留 outbox、baseVersions、touchedEntities、冲突检测和本地 UI 承接
+- 首页 snapshot 按 `familyId + 日期范围 + collection revisions` memo 投影，`taskStore` 不再持久化首页业务卡片
+- 首页仍由 `pages/home/index.vue` 编排，但 Header、卡片区、列表、底部 sheet 已拆到 `pages/home/components/*`，工作台分组、sheet 状态、focus / 来源页承接、高频 suppression、批量进度缓存拆到 `pages/home/composables/*`
+- 本地 pending 操作日志文案优先使用 mutation 的 `logSnapshot` 名称快照，缺失时再 best-effort 查询本地表
+- `SqliteAdapter` 仅在运行环境不支持 SQLite 时 fallback 到 legacy storage；真实读写错误必须抛出，不得静默降级造成双写分裂
 
 ## 协作原则
 
@@ -36,7 +49,7 @@
 - 代码标识符用英文；注释用中文；文档用中文
 - 业务日期字段统一为北京时间口径 timestamp 毫秒数；唯一例外是 `families.settings.morning_summary_time` 的 `HH:MM`
 - 用户只选日期时按“所选年月日 + 当前本地时分秒毫秒”构造；按“天”消费时统一按北京时间换算边界
-- 统计值实时查询，不做预存；简单读走 clientDB/JQL，多集合写入、状态推进、批量操作走云对象
+- 统计值实时查询，不做预存；Local-First 页面简单读走本地镜像 / projection，多集合写入、状态推进、批量操作走本地事务 + outbox，再由云对象同步校验
 - Local-First 迁移后，页面读取优先走 `src/localdb` 本地镜像 / projection；clientDB/JQL 仅用于同步 pull 或在线优先边界
 - 支持软删除的集合统一用 `deleted_at`；回收站当前仅纳入 `dogs`、`expenses`、`incomes`、`agents`、`medication_protocols`
 - 云函数内禁止使用未定义常量；毫秒常量直接写字面量 `86400000`
@@ -55,7 +68,7 @@
 
 - 本地数据库是 UI 事实源；云端负责同步、校验、幂等 ack 与冲突返回，不退回“等云返回再显示/提交”
 - 页面进入统一：设置 active scope → 先读本地渲染 → `syncScope(scopeKey)` 后台校正；本地为空时只 full pull 当前 scope
-- 写入必须先本地事务并写 `outbox_mutations`；写同步不受 TTL 限制
+- 写入必须先本地行级事务并写 `outbox_mutations`；写同步不受 TTL 限制
 - 必须保留 in-flight 去重、scope TTL、手动刷新绕过 TTL、失败指数退避、collection cursor 与 scope freshness 分离
 - 所有 workspace 级缓存必须按当前 `familyId` 隔离；包括 `sync_state`、scope freshness、active scope、core sync meta、store snapshot、recent actions、提交反馈、首页聚焦/折叠、财务最近分类与入口筛选等；没有当前 `familyId` 时不得写入全局业务缓存
 - 切换账号/家庭后不得复用上一家庭的 cursor、TTL、in-flight promise、projection、路由预填或短时 UI 反馈；消费缓存时必须校验 payload `familyId` 与当前家庭一致
@@ -172,6 +185,7 @@
 - 常规回归：`pnpm type-check`、`pnpm test`
 - `tests/` 是开发/CI 护栏，不进入正式 app 包；源码约束和边界测试需随功能保留
 - Local-First 必测：`tests/localdb`、核心云对象 `_sync` 幂等测试、页面 source contract
+- 改 runtime mutation 必测：`pnpm test tests/localdb/source-contract.test.ts tests/localdb/repository.test.ts tests/localdb/runtime-outbox.test.ts`，并确认 `src/localdb/runtime/*-mutations.ts` 无 `localDb.transact(`、`runLocalMutation(`、`upsertLocalRows(`、`localDb.upsertRows(`、`tables.*`
 - 在线优先边界必测：`tests/utils/onlineFirstBoundary.test.ts`
 - 账号会话缓存隔离必测：`tests/utils/cacheIsolation.test.ts`、`tests/utils/authSessionSwitch.test.ts`，涉及同步元数据时补 `tests/localdb/runtime-outbox.test.ts`
 - 操作日志缓存必测：`tests/utils/operationLogCache.test.ts`

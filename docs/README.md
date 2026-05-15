@@ -62,6 +62,7 @@
 ## 验收文档
 
 - `docs/record-form-acceptance.md`：记录表单统一重构后的手工验收清单
+- `docs/home-network-acceptance.md`：首页 H5 scope / TTL / in-flight 去重 / 手动刷新 Network 验收记录
 
 ## 归档文档
 

@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { localDb } from '../../src/localdb/db'
 import { createPendingLocalOperationLog, getLocalOperationStatusText } from '../../src/localdb/local-operation-log'
 import { LOCAL_MUTATION_TYPES } from '../../src/localdb/mutation-registry'
+import { localSyncRuntime } from '../../src/localdb/runtime'
 
 describe('local operation log', () => {
   beforeEach(async () => {
@@ -22,6 +23,8 @@ describe('local operation log', () => {
       family_id: 'fam_1',
       updated_at: 1,
     } as any])
+    await localDb.replaceTable('outbox_mutations', [])
+    await localDb.replaceTable('local_operation_logs', [])
 
     ;(globalThis as any).uniCloud = {
       getCurrentUserInfo: vi.fn(() => ({ uid: 'user_1' })),
@@ -29,6 +32,11 @@ describe('local operation log', () => {
     ;(globalThis as any).uni = {
       getStorageSync: vi.fn(() => ''),
     }
+  })
+
+  afterEach(() => {
+    ;(localSyncRuntime as any).online = true
+    vi.restoreAllMocks()
   })
 
   it('应为新增繁育记录生成本地待同步日志', async () => {
@@ -100,6 +108,56 @@ describe('local operation log', () => {
       domain: 'task',
       target_name: '十一 · 发情检查',
       summary: '完成了任务 十一 · 发情检查',
+    })
+  })
+
+  it('有日志快照时不应为任务文案额外查询 tasks 表', async () => {
+    const querySpy = vi.spyOn(localDb, 'query')
+    const row = await createPendingLocalOperationLog(
+      LOCAL_MUTATION_TYPES.COMPLETE_TASK,
+      'fam_1',
+      { taskId: 'task_missing' },
+      {
+        clientMutationId: 'mutation_snapshot_task',
+        deviceId: 'device_1',
+        clientTimestamp: 1006,
+      },
+      { taskTitle: '快照任务' },
+    )
+
+    expect(row).toMatchObject({
+      target_name: '快照任务',
+      summary: '完成了任务 快照任务',
+    })
+    expect(querySpy).not.toHaveBeenCalled()
+  })
+
+  it('enqueueMutation 的日志快照不得写入 outbox payload', async () => {
+    ;(localSyncRuntime as any).online = false
+    const syncMeta = {
+      clientMutationId: 'mutation_enqueue_snapshot',
+      deviceId: 'device_1',
+      clientTimestamp: 1007,
+    }
+
+    await localSyncRuntime.enqueueMutation(
+      LOCAL_MUTATION_TYPES.COMPLETE_TASK,
+      'fam_1',
+      { taskId: 'task_1', _sync: syncMeta },
+      ['tasks'],
+      syncMeta,
+      { taskTitle: '入队快照任务' },
+    )
+
+    const mutation = await localDb.findById<any>('outbox_mutations', 'outbox_mutation_enqueue_snapshot')
+    const log = await localDb.findById<any>('local_operation_logs', 'local_operation_mutation_enqueue_snapshot')
+
+    expect(mutation?.payload).toMatchObject({ taskId: 'task_1' })
+    expect(mutation?.payload).not.toHaveProperty('taskTitle')
+    expect(mutation?.payload).not.toHaveProperty('taskTitles')
+    expect(log).toMatchObject({
+      target_name: '入队快照任务',
+      summary: '完成了任务 入队快照任务',
     })
   })
 

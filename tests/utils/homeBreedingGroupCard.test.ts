@@ -8,11 +8,12 @@ const testDir = dirname(fileURLToPath(import.meta.url))
 describe('home breeding group collapse', () => {
   it('首页 workbench 为繁育分组保留 2 条可见项并透传 hiddenCount', () => {
     const homeSource = readFileSync(resolve(testDir, '../../src/pages/home/index.vue'), 'utf8')
+    const workbenchSectionSource = readFileSync(resolve(testDir, '../../src/pages/home/composables/homeWorkbenchSections.ts'), 'utf8')
 
     expect(homeSource).toContain('buildHomeWorkbench(cards.value, { visibleRowLimit: 2 })')
     expect(homeSource).toContain('buildHomeWorkbench(dayCards.value, { visibleRowLimit: 2 })')
-    expect(homeSource).toContain('visibleCards: uniqueSourceCards(group.visibleRows || [])')
-    expect(homeSource).toContain('hiddenCount: group.hiddenCount || 0')
+    expect(workbenchSectionSource).toContain('visibleCards: uniqueSourceCards(group.visibleRows || [])')
+    expect(workbenchSectionSource).toContain('hiddenCount: group.hiddenCount || 0')
   })
 
   it('繁育分组卡默认折叠并提供底部展开收起入口', () => {

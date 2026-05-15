@@ -45,6 +45,7 @@ describe('auth session switch source contract', () => {
     const dogStore = source('src/stores/dogStore.ts')
     const protocolStore = source('src/stores/protocolStore.ts')
     const home = source('src/pages/home/index.vue')
+    const homeBatchProgress = source('src/pages/home/composables/useHomeBatchProgress.ts')
 
     expect(auth).toContain('function clearCurrentSession()')
     expect(auth).toContain('const isFamilyVerified = ref(false)')
@@ -64,10 +65,14 @@ describe('auth session switch source contract', () => {
 
     expect(taskStore).toContain('restoreForFamily(familyId: string)')
     expect(taskStore).toContain('persistForFamily(familyId: string)')
+    expect(taskStore).toContain('setRecommendationInput(familyId: string')
     expect(taskStore).toContain('clearCurrentSession()')
+    expect(taskStore).toContain("this.familyId = ''")
     expect(taskStore).toContain('this.cards = []')
     expect(taskStore).toContain('this.counts = { today: 0, week: 0, month30: 0, hasOverdue: false }')
-    expect(taskStore).toContain('snapshot.dayKey !== getTodayWorkspaceDayKey()')
+    expect(taskStore).not.toContain("getWorkspaceCacheKey('tasks'")
+    expect(taskStore).not.toContain('writeStorageJson')
+    expect(taskStore).not.toContain('snapshot.dayKey !== getTodayWorkspaceDayKey()')
     expect(taskStore).not.toContain('unistorage:')
 
     expect(dogStore).toContain('restoreForFamily(familyId: string)')
@@ -85,6 +90,7 @@ describe('auth session switch source contract', () => {
     expect(home).toContain('!hasFamily.value || !isFamilyVerified.value')
     expect(home).toContain('clearHomeForMissingFamily()')
     expect(home.indexOf('clearHomeForMissingFamily()')).toBeLessThan(home.indexOf('const loadResult = await loadFamily()'))
-    expect(home).toContain('taskStore.persistForFamily(familyId)')
+    expect(homeBatchProgress).toContain('options.taskStore.setRecommendationInput(familyId, options.cards.value, options.counts)')
+    expect(homeBatchProgress).not.toContain('options.taskStore.persistForFamily(familyId)')
   })
 })

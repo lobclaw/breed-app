@@ -28,7 +28,7 @@ Local-First Foundation：
 - 核心业务读写已升级为“本地事务 + outbox + 后台同步”
 - `local-first` 页面已统一接入页面级 scope 与 `usePageSync`
 - 产品按“本地优先单主端”落地，但同步底座保留升级到多端并发的能力
-- 当前剩余重点转为 Network 验收、冲突 UX 与附件失败/重试体验补强
+- 当前剩余重点转为真实设备 Network 回归、冲突 UX 与附件失败/重试体验补强；H5 首页 scope / TTL / in-flight / 手动刷新 Network 验收已留档
 
 ## 3. 服务边界
 
@@ -99,9 +99,10 @@ Local-First Foundation：
 负责：
 
 - 本地持久化适配器（SQLite / IndexedDB / fallback）
-- v2 行级本地镜像与 legacy KV 兼容迁移
+- v2 行级本地镜像与 legacy KV 兼容迁移；迁移中断使用带时间戳状态恢复，真实写失败不得静默切到 legacy 造成双写分裂
 - 业务集合镜像与系统集合管理
 - 本地查询、事务、outbox、sync state、conflict state、sync issues
+- 高频读路径使用 readonly API；兼容读 API 仍返回隔离副本，source contract 约束首页、repository、同步状态不得退回全表 deep clone 读取；少量行写入可使用 `localDb.transactRows` 的 `getRow/upsertRow/updateRow/deleteRow` 行级事务，继续复用 revision 冲突检测
 - 设备 ID、客户端稳定 ID 与同步元数据
 
 ### `sync worker`
@@ -112,7 +113,7 @@ Local-First Foundation：
 - 离线暂停、指数退避、应用重启恢复、回前台续传
 - 写接口 ack 处理与按集合增量拉取
 - 冲突记录下沉到 `sync_conflicts`
-- 失败、冲突与附件待上传入口写入 `sync_issues`，供同步状态页和备份页读取
+- 失败、冲突与附件待上传入口写入 `sync_issues`，供同步状态页和备份页读取；附件恢复、删除或上传成功后清理旧 open issue
 
 ## 5. 前端边界
 
@@ -120,8 +121,9 @@ Local-First Foundation：
 
 首页是编排层，负责：
 
-- 从本地实体投影四层工作台、WeekStrip 与日期计数
+- 只从 home scope 四个本地集合（`dogs`、`tasks`、`health_records`、`medication_tasks`）投影四层工作台、WeekStrip 与日期计数
 - 通过一次本地 snapshot 同时生成今日卡片、日期计数和未来日期卡片，避免首页首屏重复读表
+- 按 `familyId + 北京日期/日期范围 + dogs/tasks/health_records/medication_tasks revision` memo 化首页卡片、日期计数与周卡投影；空 `familyId` 不写业务缓存
 - latest token 保护
 - 迁移期的 suppression 兼容保护
 - 本地事务后的即时反馈与后台同步触发
@@ -133,6 +135,7 @@ Local-First Foundation：
 - 在子组件里直接调用云对象
 - 静默截断数据
 - 自行拼装远端首页事实
+- 调用会 deep clone 的 LocalDB 全表读取 API
 
 ### 表单
 
@@ -148,7 +151,7 @@ Local-First Foundation：
 
 ### 第一批接入
 
-- 固定四层：`逾期 / 繁育 / 健康 / 用药`
+- 固定四层：`逾期 / 繁育 / 用药 / 健康`
 - 首页、WeekStrip、今日计数
 - 首页上的完成、推迟、给药、康复、停药等即时动作
 - `tasks / medication_tasks / health_records / dogs` 本地镜像与投影
@@ -167,8 +170,14 @@ Local-First Foundation：
 - 销售流程已补齐本地候选过滤、列表/详情归一化投影，以及退款/定金取消金额边界的前端、本地事务、云对象三层校验
 - 备份页已接入 pending outbox / pending upload 阻断提示
 - 页面级同步通过 `family-service.pullCollections` 批量拉取当前 scope 的多个集合，并使用 `updated_at + _id` 复合游标分页拉完 `hasMore` 集合；首页严格只同步并读取 `home` scope，不再进入后后台预拉非首页核心集合
+- `src/localdb/runtime.ts` 保持 `localSyncRuntime` 门面，pull/in-flight、outbox/ack/conflict、附件上传、首页 snapshot、scope freshness、本地实体构造，以及 dog/task/health/medication/breeding/litter/settings/finance/sale/agent mutation 已拆到 `src/localdb/runtime/*`；业务页面不直接依赖内部模块
+- `src/localdb/domain-repository.ts` 保持 barrel 门面，按 dogs / breeding / health / finance / sale / settings-recycle 暴露本地读 API，页面继续从统一入口导入
+- 首页编排继续在 `pages/home/index.vue`，Header、卡片区、列表、底部 sheet 已拆到 `pages/home/components/*`；工作台分组、sheet 状态、focus/承接、高频 suppression、健康批量进度缓存已拆到 `pages/home/composables/*`
+- `taskStore` 不再持久化首页业务卡片、计数或批量进度；首页业务事实源以 LocalDB / home snapshot 为准，store 只保留会话级短时状态和推荐输入
+- 本地 pending 操作日志的 descriptor 优先使用 runtime mutation 传入的 `logSnapshot` 名称快照，避免常见写入路径为了 UI 文案额外查业务表；缺失字段时继续 best-effort 本地查询兜底
 - 本地同步元数据按当前家庭隔离：`sync_state` 使用 `familyId + collection` 记录 cursor，scope freshness / active scope / core sync meta 使用 `familyId + scope/meta key`，切换账号或家庭时不得复用上一家庭的 cursor、TTL 或 in-flight scope promise
 - 同步状态页已接入 pending / failed / conflict / pending upload 统计、当前 active scope、最近同步时间与失败/冲突重试；pending upload / failed / conflict 的可见入口来自本地 `sync_issues` 问题索引，不再扫描全部业务集合；图片附件选取后先压缩并保存本地持久路径，`flushOutbox` 前统一上传本地附件，成功后替换本地行与 outbox payload 并清除 `pending_upload`
+- source contract 已固化 SQLite 真实错误不得 fallback、业务页面/store 不得直接 import runtime 内部 mutation 模块、首页不得直接调用 deep clone 读取 API、同步状态不得扫描业务集合、行级事务 API 入口，以及已收敛模块不得重新引入裸 `any`
 - 图片展示统一先解析 display URL：本地路径直接展示，云 `fileID` 先查 `image_cache_entries` 本地缓存，未命中再批量通过 `getTempFileURL` 转换后用于缩略图与预览，并 best-effort 回填缓存；账号头像复用统一压缩/上传工具，但仍按在线优先边界处理
 - 在线优先页保持云端权威：家庭成员、操作日志、备份页不接普通 `usePageSync`；断网时使用统一联网守卫，允许只读缓存兜底
 - 操作日志页合并展示本地 pending 操作与云端日志；云端日志第一页按 `familyId + stable filter signature` 缓存，离线时弱提示“仅显示本地缓存和待同步操作”
@@ -209,7 +218,7 @@ Local-First Foundation：
 - ack / touchedEntities / version / conflict contract
 - 云对象业务约束
 - 首页本地投影纯函数行为
-- 首页繁育主链本地合成 milestone 不得进入普通任务 suppression，避免未成熟复查后同一合成 id 的下一张卡被隐藏
+- 首页繁育主链只消费已物化到 `tasks` 的 `breeding_milestone`；本地繁育写入、ack 后拉取与繁育 scope 校正负责补齐物化任务
 - 批量健康完成是否真实落 `health_record`
 - 首页批量健康卡单只完成后是否保留 `1/2` 等局部进度承接
 - 首页批量健康卡是否只在全部完成后整卡退场
@@ -217,8 +226,10 @@ Local-First Foundation：
 - WeekStrip 红点与首页可见内容一致性
 - 页面 scope 批量 pull 请求数、首页不拉非首页 scope、同 scope 并发去重
 - `tests/` 目录是开发/CI 测试护栏，不进入正式 app 包；源码约束与边界测试需随功能保留
+- source contract：`tests/localdb/source-contract.test.ts`
 - 在线优先边界：`tests/utils/onlineFirstBoundary.test.ts`
 - 操作日志缓存：`tests/utils/operationLogCache.test.ts`，覆盖在线写入、离线按稳定 signature 命中、筛选数组排序去重
+- 首页 Network 验收：`tests/localdb/home-network-acceptance.test.ts` 与 `docs/home-network-acceptance.md`
 - 图片附件：`tests/utils/imageAttachment.test.ts`、`tests/utils/imageUploadFlow.test.ts`、`tests/localdb/runtime-outbox.test.ts`、`tests/utils/backupPage.test.ts`、`tests/localdb/repository.test.ts`
 
 ### 当前建议命令

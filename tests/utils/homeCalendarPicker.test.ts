@@ -5,6 +5,8 @@ import { describe, expect, it } from 'vitest'
 
 const testDir = dirname(fileURLToPath(import.meta.url))
 const source = readFileSync(resolve(testDir, '../../src/pages/home/index.vue'), 'utf8')
+const headerSource = readFileSync(resolve(testDir, '../../src/pages/home/components/HomeHeader.vue'), 'utf8')
+const sectionSource = readFileSync(resolve(testDir, '../../src/pages/home/components/HomeSectionList.vue'), 'utf8')
 
 describe('home calendar picker contract', () => {
   it('首页月份标题应接入日期月历', () => {
@@ -46,7 +48,8 @@ describe('home calendar picker contract', () => {
   })
 
   it('首页顶部副标题应随 selectedDate 在今日概览和当日安排之间切换', () => {
-    expect(source).toContain('<text class="greeting-sub">{{ greetingSubText }}</text>')
+    expect(headerSource).toContain('<text class="greeting-sub">{{ greetingSubText }}</text>')
+    expect(source).toContain(':greeting-sub-text="greetingSubText"')
     expect(source).toContain("const suffix = isSelectedToday.value ? '今日概览' : '当日安排'")
     expect(source).toContain('return `${formatFullDate(selectedDate.value)} · ${suffix}`')
   })
@@ -54,7 +57,7 @@ describe('home calendar picker contract', () => {
   it('首页顶部统计应随当前日期模式切换统计来源', () => {
     expect(source).toContain("const activeSummarySections = computed(() => viewMode.value === 'today' ? todaySections.value : daySections.value)")
     expect(source).toContain("count: activeSummarySections.value.find(section => section.key === 'breeding')?.cards.length || 0")
-    expect(source).toContain(':id="`section-${section.key}`"')
+    expect(sectionSource).toContain(':id="`section-${section.key}`"')
   })
 
   it('首页应接住 WeekStrip 的返回今日入口并复用日期切换链路', () => {

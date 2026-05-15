@@ -104,7 +104,23 @@ export const syncIssueService = {
       row.family_id === familyId
       && ((row._pending_upload || row.pending_upload) || row._upload_error || row.upload_error)
     ))
-    await Promise.all(rows.map(row => this.refreshPendingUploadIssue(collection, row)))
+    const pendingIssueIds = new Set(
+      rows
+        .filter(row => Boolean((row._pending_upload || row.pending_upload) && !row.deleted_at))
+        .map(row => issueIdForPendingUpload(collection, String(row._id || ''))),
+    )
+    const openIssues = await localDb.query<SyncIssueRow>('sync_issues', issue => (
+      issue.family_id === familyId
+      && issue.kind === 'pending_upload'
+      && issue.status === 'open'
+      && issue.collection === collection
+    ))
+    await Promise.all([
+      ...rows.map(row => this.refreshPendingUploadIssue(collection, row)),
+      ...openIssues
+        .filter(issue => !pendingIssueIds.has(issue._id))
+        .map(issue => resolveIssue(issue._id, familyId)),
+    ])
   },
 
   async refreshPendingUploadIssuesForCollections(collections: LocalCollectionName[], familyId: string) {

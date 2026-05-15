@@ -17,11 +17,13 @@ export async function getSyncStatus(options: { familyId?: string } = {}) {
   const familyId = String(options.familyId || '')
   const activeScopeMetaKey = familyId ? `sync:active-scope:${familyId}` : 'sync:active-scope'
   const [outbox, conflicts, syncStates, activeScope, issues] = await Promise.all([
-    localDb.getOutbox(),
-    localDb.getTable<any>('sync_conflicts'),
-    localDb.getTable<any>('sync_state'),
+    localDb.queryReadonly<any>('outbox_mutations', undefined, {
+      sort: (a, b) => a.created_at - b.created_at,
+    }),
+    localDb.getReadonlyTable<any>('sync_conflicts'),
+    familyId ? localDb.getRowsByFamilyReadonly<any>('sync_state', familyId) : localDb.getReadonlyTable<any>('sync_state'),
     localDb.getLocalMeta<string>(activeScopeMetaKey),
-    localDb.getTable<SyncIssueRow>('sync_issues'),
+    familyId ? localDb.getRowsByFamilyReadonly<SyncIssueRow>('sync_issues', familyId) : localDb.getReadonlyTable<SyncIssueRow>('sync_issues'),
   ])
   const scopedSyncStates = familyId ? syncStates.filter(item => item.family_id === familyId) : syncStates
   const scopedOutbox = familyId ? outbox.filter(item => item.family_id === familyId) : outbox

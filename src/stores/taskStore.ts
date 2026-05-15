@@ -1,17 +1,13 @@
 /**
  * 任务数据 Store
- * 按家庭显式缓存 + stale-while-revalidate
- * 首页加载时填充，BFabSheet 读取用于智能推荐
+ * 只保存会话内 FAB 推荐输入与短时 UI 状态。
+ * 首页业务卡片事实源为 LocalDB / home snapshot，不再持久化到 workspace storage。
  */
 import { defineStore } from 'pinia'
 import { useAuth } from '@/composables/useAuth'
 import { localSyncRuntime } from '@/localdb/runtime'
 import {
-  getTodayWorkspaceDayKey,
   getWorkspaceCacheKey,
-  readStorageJson,
-  WORKSPACE_CACHE_VERSION,
-  writeStorageJson,
 } from '@/utils/authScopedCache'
 import type { HomeCardFocusTarget } from '@/utils/homeCardFocus'
 import {
@@ -52,21 +48,6 @@ interface PersistedBatchCardProgress {
   completedDogIds: string[]
 }
 
-interface TaskStoreSnapshot {
-  cacheVersion: number
-  familyId: string
-  dayKey: string
-  updatedAt: number
-  cards: TaskCard[]
-  counts: {
-    today: number
-    week: number
-    month30: number
-    hasOverdue: boolean
-  }
-  batchCardProgress: Record<string, PersistedBatchCardProgress>
-}
-
 function getRecentActionStorageKey(familyId: string) {
   return familyId ? getWorkspaceCacheKey('recent-actions', familyId) : ''
 }
@@ -80,6 +61,7 @@ function getRecommendationDedupKey(url: string): string {
 
 export const useTaskStore = defineStore('tasks', {
   state: () => ({
+    familyId: '',
     cards: [] as TaskCard[],
     counts: { today: 0, week: 0, month30: 0, hasOverdue: false },
     batchCardProgress: {} as Record<string, PersistedBatchCardProgress>,
@@ -88,27 +70,29 @@ export const useTaskStore = defineStore('tasks', {
   }),
 
   actions: {
-    /** 从服务端加载 */
+    /** 从本地 home snapshot 加载推荐输入，后台同步只做校正 */
     async fetchFromServer() {
       try {
         const { currentFamily } = useAuth()
         const familyId = currentFamily.value?._id
         if (!familyId) return
+        if (this.familyId && this.familyId !== familyId) {
+          this.clearCurrentSession()
+        }
+        this.familyId = familyId
         localSyncRuntime.setCurrentFamilyId(familyId)
-        await localSyncRuntime.syncScope('home')
         const res = await localSyncRuntime.getHomeCards(familyId)
         if (currentFamily.value?._id !== familyId) return
         if (res) {
-          this.cards = (res.cards || []) as TaskCard[]
-          this.counts = {
-            today: res.counts?.today || 0,
-            week: res.counts?.week || 0,
-            month30: res.counts?.month30 || 0,
-            hasOverdue: res.counts?.hasOverdue || false,
-          }
-          this.loaded = true
-          this.persistForFamily(familyId)
+          this.setRecommendationInput(familyId, (res.cards || []) as TaskCard[], res.counts)
         }
+        void localSyncRuntime.syncScope('home')
+          .then(() => localSyncRuntime.getHomeCards(familyId))
+          .then((freshRes) => {
+            if (currentFamily.value?._id !== familyId || !freshRes) return
+            this.setRecommendationInput(familyId, (freshRes.cards || []) as TaskCard[], freshRes.counts)
+          })
+          .catch(() => {})
       } catch { /* 网络失败保留缓存 */ }
     },
 
@@ -116,9 +100,14 @@ export const useTaskStore = defineStore('tasks', {
     async ensure() {
       const { currentFamily } = useAuth()
       const familyId = currentFamily.value?._id || ''
-      if (familyId && !this.loaded && this.cards.length === 0) {
-        this.restoreForFamily(familyId)
+      if (!familyId) {
+        this.clearCurrentSession()
+        return
       }
+      if (this.familyId && this.familyId !== familyId) {
+        this.clearCurrentSession()
+      }
+      this.familyId = familyId
       if (this.loaded || this.cards.length > 0) {
         this.loaded = true
         this.fetchFromServer()
@@ -169,42 +158,36 @@ export const useTaskStore = defineStore('tasks', {
     },
 
     restoreForFamily(familyId: string) {
-      const snapshot = readStorageJson<TaskStoreSnapshot>(getWorkspaceCacheKey('tasks', familyId))
-      if (
-        !snapshot ||
-        snapshot.familyId !== familyId ||
-        snapshot.cacheVersion !== WORKSPACE_CACHE_VERSION ||
-        snapshot.dayKey !== getTodayWorkspaceDayKey()
-      ) {
+      if (!familyId) {
         this.clearCurrentSession()
         return false
       }
-      this.cards = snapshot.cards || []
-      this.counts = {
-        today: snapshot.counts?.today || 0,
-        week: snapshot.counts?.week || 0,
-        month30: snapshot.counts?.month30 || 0,
-        hasOverdue: Boolean(snapshot.counts?.hasOverdue),
-      }
-      this.batchCardProgress = snapshot.batchCardProgress || {}
-      this.loaded = true
-      return true
+      if (this.familyId && this.familyId !== familyId) this.clearCurrentSession()
+      this.familyId = familyId
+      return false
     },
 
     persistForFamily(familyId: string) {
       if (!familyId) return
-      writeStorageJson<TaskStoreSnapshot>(getWorkspaceCacheKey('tasks', familyId), {
-        cacheVersion: WORKSPACE_CACHE_VERSION,
-        familyId,
-        dayKey: getTodayWorkspaceDayKey(),
-        updatedAt: Date.now(),
-        cards: this.cards,
-        counts: this.counts,
-        batchCardProgress: this.batchCardProgress,
-      })
+      this.familyId = familyId
+    },
+
+    setRecommendationInput(familyId: string, cards: TaskCard[] = [], counts: Partial<typeof this.counts> = {}) {
+      if (!familyId) return
+      if (this.familyId && this.familyId !== familyId) this.clearCurrentSession()
+      this.familyId = familyId
+      this.cards = cards
+      this.counts = {
+        today: counts.today || 0,
+        week: counts.week || 0,
+        month30: counts.month30 || 0,
+        hasOverdue: Boolean(counts.hasOverdue),
+      }
+      this.loaded = true
     },
 
     clearCurrentSession() {
+      this.familyId = ''
       this.cards = []
       this.counts = { today: 0, week: 0, month30: 0, hasOverdue: false }
       this.batchCardProgress = {}
@@ -224,19 +207,22 @@ export const useTaskStore = defineStore('tasks', {
           card.tasks = card.tasks.filter((t: any) => t._id !== taskId)
         }
         const { currentFamily } = useAuth()
-        this.persistForFamily(currentFamily.value?._id || '')
+        if (currentFamily.value?._id) this.familyId = currentFamily.value._id
       }
     },
 
     /** 构建智能推荐（3 槽位降级） */
     buildSmartRecommendations(): Array<FabTaskRecommendation | SimpleRecommendation> {
       const ACTION_META = getTaskActionMeta()
+      const { currentFamily } = useAuth()
+      const familyId = currentFamily.value?._id || ''
+      const sourceCards = familyId ? (this.familyId === familyId ? this.cards : []) : this.cards
 
       const slots: Array<FabTaskRecommendation | SimpleRecommendation> = []
       const usedUrls = new Set<string>()
 
-      const todoCard = this.cards.find((card: any) => !hasBreedingMilestoneTask(card))
-      const suggestionCard = this.cards.find((card: any) => hasBreedingMilestoneTask(card))
+      const todoCard = sourceCards.find((card: any) => !hasBreedingMilestoneTask(card))
+      const suggestionCard = sourceCards.find((card: any) => hasBreedingMilestoneTask(card))
 
       const todoRecommendation = todoCard ? buildFabTaskRecommendation(todoCard) : null
       const suggestionRecommendation = suggestionCard ? buildFabTaskRecommendation(suggestionCard) : null
