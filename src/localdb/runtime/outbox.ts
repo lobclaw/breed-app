@@ -1,23 +1,18 @@
 import { CORE_SYNC_COLLECTIONS } from '@/localdb/collections'
 import { localDb } from '@/localdb/db'
-import { applyTouchedEntityVersions } from '@/localdb/home-projection'
 import type { LocalMutationPayload, LocalMutationType } from '@/localdb/mutation-registry'
 import { materializeBreedingMilestonesForFamily } from '@/localdb/runtime/home-snapshot'
 import { formatPullFailures, pullCollectionsBatch } from '@/localdb/runtime/pull'
 import { syncIssueService } from '@/localdb/sync-issues'
 import type {
   BusinessCollectionName,
-  LocalCollectionName,
-  LocalOperationLogRow,
-  LocalRowOf,
   MutationStatus,
   OutboxMutation,
   SyncAckPayload,
+  SyncConflictRow,
   SyncMetadata,
 } from '@/localdb/types'
 import { getOrCreateDeviceId } from '@/localdb/id'
-
-type AckMutationTables = Partial<{ [C in BusinessCollectionName]: LocalRowOf<C>[] }> & { [collection: string]: unknown }
 
 function getNow() {
   return Date.now()
@@ -53,42 +48,45 @@ export async function upsertOutboxMutation(mutation: OutboxMutation) {
 }
 
 export async function updateOutboxStatus(mutationId: string, status: MutationStatus, extra: Partial<OutboxMutation> = {}) {
-  await localDb.transact(['outbox_mutations', 'local_operation_logs', 'sync_conflicts'], (tables) => {
-    let clientMutationId = mutationId.replace(/^outbox_/, '')
-    tables.outbox_mutations = (tables.outbox_mutations as OutboxMutation[]).map((mutation) => {
-      if (mutation._id !== mutationId) return mutation
-      clientMutationId = mutation.client_mutation_id || clientMutationId
+  const currentMutation = await localDb.findById<OutboxMutation>('outbox_mutations', mutationId)
+  const clientMutationId = currentMutation?.client_mutation_id || mutationId.replace(/^outbox_/, '')
+  const logId = `local_operation_${clientMutationId}`
+  const conflictRows = status === 'synced'
+    ? (await localDb.getReadonlyTable<SyncConflictRow>('sync_conflicts'))
+        .filter(conflict => String(conflict.client_mutation_id || '') === clientMutationId && conflict.status !== 'resolved')
+    : []
+  const now = getNow()
+
+  await localDb.transactRows(['outbox_mutations', 'local_operation_logs', 'sync_conflicts'] as const, async (rows) => {
+    await rows.updateRow('outbox_mutations', mutationId, (mutation) => {
       const nextLastError = extra.last_error ?? (status === 'failed' ? mutation.last_error ?? null : null)
       return {
         ...mutation,
         status,
-        updated_at: getNow(),
+        updated_at: now,
         last_error: nextLastError,
         ...extra,
       }
     })
-    const logId = `local_operation_${clientMutationId}`
+
     if (status === 'synced') {
-      tables.local_operation_logs = (tables.local_operation_logs as LocalOperationLogRow[]).filter(log => log._id !== logId)
-      tables.sync_conflicts = (tables.sync_conflicts as any[]).map((conflict) => {
-        if (String(conflict.client_mutation_id || '') !== clientMutationId || conflict.status === 'resolved') return conflict
-        return {
-          ...conflict,
+      await rows.deleteRow('local_operation_logs', logId)
+      for (const conflict of conflictRows) {
+        await rows.updateRow('sync_conflicts', conflict._id, row => ({
+          ...row,
           status: 'resolved',
-          updated_at: getNow(),
-        }
-      })
+          updated_at: now,
+        }))
+      }
       return
     }
-    tables.local_operation_logs = (tables.local_operation_logs as LocalOperationLogRow[]).map((log) => {
-      if (log._id !== logId) return log
-      return {
-        ...log,
-        status,
-        last_error: extra.last_error ?? (status === 'failed' ? log.last_error ?? null : null),
-        updated_at: getNow(),
-      }
-    })
+
+    await rows.updateRow('local_operation_logs', logId, (log) => ({
+      ...log,
+      status,
+      last_error: extra.last_error ?? (status === 'failed' ? log.last_error ?? null : null),
+      updated_at: now,
+    }))
   })
   const mutation = await localDb.findById<OutboxMutation>('outbox_mutations', mutationId)
   if (mutation) await syncIssueService.refreshOutboxIssue(mutation)
@@ -96,34 +94,31 @@ export async function updateOutboxStatus(mutationId: string, status: MutationSta
 
 export async function recoverStaleProcessingOutbox(familyId: string) {
   const now = getNow()
-  await localDb.transact(['outbox_mutations', 'local_operation_logs'], (tables) => {
-    const recoveringIds = new Set(
-      (tables.outbox_mutations as OutboxMutation[])
-        .filter(mutation => mutation.family_id === familyId && mutation.status === 'processing')
-        .map(mutation => mutation.client_mutation_id)
-        .filter(Boolean),
-    )
+  const processingMutations = (await localDb.getOutbox())
+    .filter(mutation => mutation.family_id === familyId && mutation.status === 'processing')
+  if (!processingMutations.length) return
 
-    if (!recoveringIds.size) return
+  const recoveringIds = new Set(processingMutations.map(mutation => mutation.client_mutation_id).filter(Boolean))
+  const processingLogs = (await localDb.getRowsByFamilyReadonly('local_operation_logs', familyId))
+    .filter(log => recoveringIds.has(log.client_mutation_id) && log.status === 'processing')
 
-    tables.outbox_mutations = (tables.outbox_mutations as OutboxMutation[]).map((mutation) => {
-      if (mutation.family_id !== familyId || mutation.status !== 'processing') return mutation
-      return {
-        ...mutation,
+  await localDb.transactRows(['outbox_mutations', 'local_operation_logs'] as const, async (rows) => {
+    for (const mutation of processingMutations) {
+      await rows.updateRow('outbox_mutations', mutation._id, row => ({
+        ...row,
         status: 'pending',
         next_retry_at: 0,
         updated_at: now,
-      }
-    })
+      }))
+    }
 
-    tables.local_operation_logs = (tables.local_operation_logs as LocalOperationLogRow[]).map((log) => {
-      if (!recoveringIds.has(log.client_mutation_id) || log.status !== 'processing') return log
-      return {
-        ...log,
+    for (const log of processingLogs) {
+      await rows.updateRow('local_operation_logs', log._id, row => ({
+        ...row,
         status: 'pending',
         updated_at: now,
-      }
-    })
+      }))
+    }
   })
 }
 
@@ -155,37 +150,22 @@ export function rebaseMutationForConflict(
   } satisfies OutboxMutation<LocalMutationPayload>
 }
 
-function applyAckToCollectionRows<C extends BusinessCollectionName>(
-  rows: LocalRowOf<C>[],
-  touchedEntities: NonNullable<SyncAckPayload['touchedEntities']>,
-  collection: C,
-) {
-  return applyTouchedEntityVersions(rows, touchedEntities, collection) as LocalRowOf<C>[]
-}
-
-function applyAckToMutableTables<C extends BusinessCollectionName>(
-  tables: AckMutationTables,
-  collection: C,
-  touchedEntities: NonNullable<SyncAckPayload['touchedEntities']>,
-) {
-  const key = String(collection)
-  tables[key] = applyAckToCollectionRows((tables[key] || []) as LocalRowOf<C>[], touchedEntities, collection)
-}
-
 export async function applySyncAck(ack: SyncAckPayload, fallbackCollections: BusinessCollectionName[], familyId: string) {
   const touchedEntities = ack.touchedEntities || []
   const touchedCollections = [...new Set(touchedEntities.map(item => item.collection))]
 
   if (touchedEntities.length > 0) {
-    await localDb.transact(
-      touchedCollections as LocalCollectionName[],
-      (tables) => {
-        const mutableTables = tables as AckMutationTables
-        for (const collection of touchedCollections) {
-          applyAckToMutableTables(mutableTables, collection, touchedEntities)
-        }
-      },
-    )
+    await localDb.transactRows(touchedCollections, async (rows) => {
+      for (const touched of touchedEntities) {
+        await rows.updateRow(touched.collection, touched.id, row => ({
+          ...row,
+          version: touched.version,
+          updated_at: touched.updatedAt,
+          deleted_at: touched.deletedAt ?? row.deleted_at ?? null,
+          _local_pending: false,
+        }))
+      }
+    })
   }
 
   const resyncCollections = [...new Set(

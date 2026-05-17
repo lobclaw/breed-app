@@ -3,7 +3,7 @@
  */
 
 // 云对象响应格式
-export interface CloudResult<T = any> {
+export interface CloudResult<T = unknown> {
   code: number
   message?: string
   data?: T

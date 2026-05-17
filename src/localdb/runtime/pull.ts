@@ -4,7 +4,7 @@ import type { BusinessCollectionName, SyncStateRow } from '@/localdb/types'
 
 interface PullCollectionPayload {
   ok?: boolean
-  rows?: Record<string, any>[]
+  rows?: Array<Record<string, unknown>>
   cursor?: number
   cursorId?: string
   offset?: number
@@ -18,7 +18,7 @@ interface PullCollectionsResponse {
   }
 }
 
-export type PulledRow = Record<string, any> & { _id: string; updated_at?: number; created_at?: number; version: number }
+export type PulledRow = Record<string, unknown> & { _id: string; updated_at?: number; created_at?: number; version: number }
 
 export interface PullCollectionFailure {
   collection: BusinessCollectionName
@@ -41,7 +41,7 @@ function getNow() {
   return Date.now()
 }
 
-function rowBelongsToFamily(row: Record<string, any>, familyId: string) {
+function rowBelongsToFamily(row: { family_id?: unknown, _id?: unknown }, familyId: string) {
   if (!familyId) return true
   return row?.family_id === familyId || row?._id === familyId
 }
@@ -60,14 +60,14 @@ function toSyncStateRow(collection: BusinessCollectionName, familyId = '', curre
   }
 }
 
-function normalizePulledRows<T extends Record<string, any>>(rows: T[]): Array<T & { _id: string; updated_at?: number; created_at?: number; version: number }> {
+function normalizePulledRows<T extends Record<string, unknown>>(rows: T[]): Array<T & { _id: string; updated_at?: number; created_at?: number; version: number }> {
   return rows.map((row) => {
     const updatedAt = Number(row.updated_at || row.created_at || 0)
     return {
       ...row,
       _id: String(row._id || ''),
       version: Number(row.version || 0),
-      updated_at: updatedAt || row.updated_at,
+      updated_at: updatedAt || (typeof row.updated_at === 'number' ? row.updated_at : undefined),
       _local_pending: false,
     }
   })

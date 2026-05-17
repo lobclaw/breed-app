@@ -330,6 +330,15 @@ interface SyncIssue {
   lastError: string
 }
 
+type RuntimeSyncStatus = Awaited<ReturnType<typeof localSyncRuntime.getSyncStatus>>
+type RuntimeOutboxIssue = Awaited<ReturnType<typeof localSyncRuntime.getOutboxIssues>>[number]
+type RuntimePendingUploadIssue = NonNullable<RuntimeSyncStatus['pendingUploadIssues']>[number]
+type RuntimeSyncIssue = RuntimeOutboxIssue | RuntimePendingUploadIssue
+type CloudUserInfoWithExpiry = ReturnType<typeof uniCloud.getCurrentUserInfo> & {
+  tokenExpired?: number
+  token_expired?: number
+}
+
 const exportResult = ref<ExportFileResult | null>(null)
 const exportResultDownloading = ref(false)
 const backupHistory = ref<BackupHistoryFile[]>([])
@@ -435,7 +444,7 @@ const syncStatusDescription = computed(() => {
   return hasUnsyncedData.value ? syncWarningText.value : '所有本地数据已同步，可安心备份或导出。'
 })
 const isDevMode = computed(() => {
-  const devFlag = typeof globalThis !== 'undefined' ? (globalThis as any).__DEV__ : undefined
+  const devFlag = typeof globalThis !== 'undefined' ? (globalThis as { __DEV__?: boolean }).__DEV__ : undefined
   return devFlag === true || import.meta.env.DEV === true
 })
 const exportResultName = computed(() => {
@@ -455,8 +464,8 @@ function getRemainingSyncToast() {
 
 function isCurrentLoginExpired() {
   try {
-    const info = uniCloud.getCurrentUserInfo()
-    const expiredAt = Number((info as any)?.tokenExpired ?? (info as any)?.token_expired ?? uni.getStorageSync('uni_id_token_expired') ?? 0)
+    const info = uniCloud.getCurrentUserInfo() as CloudUserInfoWithExpiry
+    const expiredAt = Number(info?.tokenExpired ?? info?.token_expired ?? uni.getStorageSync('uni_id_token_expired') ?? 0)
     return !info?.uid || (expiredAt > 0 && expiredAt <= Date.now())
   } catch {
     return false
@@ -579,7 +588,7 @@ function getExportUrl(result: ExportFileResult | null): string {
   return String(result?.url || result?.fileID || '')
 }
 
-function normalizeSyncIssues(items: Array<Record<string, any>> = []): SyncIssue[] {
+function normalizeSyncIssues(items: RuntimeSyncIssue[] = []): SyncIssue[] {
   return items.map(item => ({
     _id: String(item._id || ''),
     type: String(item.type || 'unknown'),
@@ -588,7 +597,7 @@ function normalizeSyncIssues(items: Array<Record<string, any>> = []): SyncIssue[
   }))
 }
 
-function applySyncSnapshot(currentSyncStatus: Record<string, any> | null | undefined, currentIssues: Array<Record<string, any>> = []) {
+function applySyncSnapshot(currentSyncStatus: RuntimeSyncStatus | null | undefined, currentIssues: RuntimeSyncIssue[] = []) {
   syncStatus.value = {
     pending: Number(currentSyncStatus?.pending || 0),
     processing: Number(currentSyncStatus?.processing || 0),
@@ -597,7 +606,7 @@ function applySyncSnapshot(currentSyncStatus: Record<string, any> | null | undef
     pendingUpload: Number(currentSyncStatus?.pendingUpload || 0),
   }
   syncIssues.value = normalizeSyncIssues([
-    ...((currentSyncStatus?.pendingUploadIssues || []) as Array<Record<string, any>>),
+    ...(currentSyncStatus?.pendingUploadIssues || []),
     ...currentIssues,
   ])
   syncStatusReady.value = true
@@ -610,7 +619,7 @@ async function loadSyncSnapshot() {
       localSyncRuntime.getSyncStatus(),
       localSyncRuntime.getOutboxIssues({ limit: 3 }),
     ])
-    applySyncSnapshot(currentSyncStatus as Record<string, any>, currentIssues as Array<Record<string, any>>)
+    applySyncSnapshot(currentSyncStatus, currentIssues)
   } finally {
     syncStatusChecking.value = false
   }
@@ -673,7 +682,7 @@ async function ensureBackupReady() {
     localSyncRuntime.getSyncStatus(),
     localSyncRuntime.getOutboxIssues({ limit: 3 }),
   ])
-  applySyncSnapshot(currentSyncStatus as Record<string, any>, currentIssues as Array<Record<string, any>>)
+  applySyncSnapshot(currentSyncStatus, currentIssues)
   if (!hasUnsyncedData.value) return true
   uni.showToast({
     title: '仍有本地数据未同步，请稍后再备份',

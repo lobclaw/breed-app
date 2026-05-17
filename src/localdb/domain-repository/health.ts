@@ -1,6 +1,6 @@
 import { localDb } from '@/localdb/db'
+import type { LocalRowOf } from '@/localdb/types'
 import type { MedicationProtocol } from '@/stores/protocolStore'
-import type { HealthRecord, MedicationTask } from '@/types/health'
 import type { Task } from '@/types/task'
 import { getBeijingDayStart } from '@/utils/date'
 import {
@@ -10,25 +10,87 @@ import {
 } from '@/localdb/domain-services/healthStatus'
 import { sortByRecent } from './shared'
 
+type HealthRecordRow = LocalRowOf<'health_records'>
+type TaskRow = LocalRowOf<'tasks'>
+type DogRow = LocalRowOf<'dogs'>
+type MedicationProtocolRow = LocalRowOf<'medication_protocols'> & MedicationProtocol
+
+type HealthRecordDetails = {
+  primary_condition?: unknown
+  condition?: unknown
+  treatment_status?: unknown
+  symptom_tags?: unknown
+}
+
+type MedicationTaskRow = LocalRowOf<'medication_tasks'> & {
+  actual_start_date?: number | null
+  duration_days?: number | null
+  daily_doses?: Record<string, unknown> | null
+  completed_dates?: unknown
+  completed_map?: Record<string, unknown> | null
+  protocol_id?: string | null
+  protocol_name?: string | null
+  dosage_unit?: string | null
+  method?: string | null
+  details?: { drug_name?: unknown } | null
+}
+
+type NormalizedMedicationTask = Omit<MedicationTaskRow, 'completed_dates' | 'end_date' | 'source_record_id' | 'start_date' | 'status'> & {
+  completed_dates: number[]
+  completed_map: Record<string, { name: string; time: string }>
+  completed_dose_count: number
+  end_date: number
+  is_fully_completed: boolean
+  protocol_name: string | null
+  source_record_id: string | null
+  start_date: number
+  status: 'active' | 'completed' | 'cancelled'
+  total_dose_count: number
+}
+
+type MedicationSortSource = {
+  actual_start_date?: number | null
+  created_at?: number
+  updated_at?: number
+}
+
 function startOfDay(ts: number) {
   return getBeijingDayStart(Number.isFinite(Number(ts)) ? Number(ts) : Date.now())
 }
 
+function getHealthDetails(record?: { details?: Record<string, unknown> | null }): HealthRecordDetails {
+  return record?.details && typeof record.details === 'object' ? record.details : {}
+}
+
+function getMedicationDrugName(task: Pick<MedicationTaskRow, 'details' | 'drug_name'>) {
+  const detailName = task.details?.drug_name
+  return task.drug_name || (typeof detailName === 'string' && detailName.trim() ? detailName.trim() : '')
+}
+
+function readCompletedMapEntry(value: unknown) {
+  if (!value || typeof value !== 'object') return null
+  const entry = value as { name?: unknown; label?: unknown; time?: unknown }
+  return {
+    name: typeof entry.name === 'string' ? entry.name : typeof entry.label === 'string' ? entry.label : '',
+    time: typeof entry.time === 'string' ? entry.time : '',
+  }
+}
+
 export async function listLocalMedicationProtocols(familyId: string): Promise<MedicationProtocol[]> {
   if (!familyId) return []
-  const rows = await localDb.query<any>('medication_protocols', row =>
+  const rows = await localDb.query<MedicationProtocolRow>('medication_protocols', row =>
     row.family_id === familyId
     && !row.deleted_at,
     {
       sort: (left, right) => Number(right.updated_at || right.created_at || 0) - Number(left.updated_at || left.created_at || 0),
     },
   )
-  return rows as MedicationProtocol[]
+  return rows
 }
 
 export async function listLocalDogHealthHistory(familyId: string, dogId: string, type?: string) {
   if (!familyId || !dogId) return []
-  return localDb.query<any>('health_records', row => {
+  return localDb.query<HealthRecordRow>('health_records', row => {
     if (row.family_id !== familyId) return false
     if (row.deleted_at) return false
     if (row.dog_id !== dogId) return false
@@ -43,7 +105,7 @@ export async function listLocalLatestVaccinationDatesByDogIds(familyId: string, 
   const dogIdSet = new Set((dogIds || []).map(id => String(id || '').trim()).filter(Boolean))
   if (!familyId || dogIdSet.size === 0) return {} as Record<string, number>
 
-  const records = await localDb.query<HealthRecord & { deleted_at?: number | null }>('health_records', row =>
+  const records = await localDb.query<HealthRecordRow>('health_records', row =>
     row.family_id === familyId
     && row.type === 'vaccination'
     && dogIdSet.has(row.dog_id)
@@ -65,7 +127,7 @@ export async function listLocalLatestDewormingDatesByDogIds(familyId: string, do
   const dogIdSet = new Set((dogIds || []).map(id => String(id || '').trim()).filter(Boolean))
   if (!familyId || dogIdSet.size === 0) return {} as Record<string, number>
 
-  const records = await localDb.query<HealthRecord & { deleted_at?: number | null }>('health_records', row =>
+  const records = await localDb.query<HealthRecordRow>('health_records', row =>
     row.family_id === familyId
     && row.type === 'deworming'
     && dogIdSet.has(row.dog_id)
@@ -83,11 +145,11 @@ export async function listLocalLatestDewormingDatesByDogIds(familyId: string, do
   }, {})
 }
 
-function getMedicationHistorySortTs(task: Record<string, any>) {
+function getMedicationHistorySortTs(task: MedicationSortSource) {
   return Number(task?.actual_start_date) || Number(task?.updated_at) || Number(task?.created_at) || 0
 }
 
-function getMedicationHistoryStatusRank(task: Record<string, any>) {
+function getMedicationHistoryStatusRank(task: { status?: string }) {
   const status = getMedicationDetailStatus(task?.status)
   if (status === 'active') return 0
   if (status === 'completed') return 1
@@ -96,7 +158,7 @@ function getMedicationHistoryStatusRank(task: Record<string, any>) {
 
 export async function listLocalDogMedicationHistory(familyId: string, dogId: string) {
   if (!familyId || !dogId) return []
-  const tasks = await localDb.query<any>('medication_tasks', row =>
+  const tasks = await localDb.query<MedicationTaskRow>('medication_tasks', row =>
     row.family_id === familyId
     && row.dog_id === dogId
     && !row.deleted_at,
@@ -126,18 +188,18 @@ export async function listLocalDogMedicationHistory(familyId: string, dogId: str
 
 export async function getLocalTaskById(familyId: string, taskId: string): Promise<Task | null> {
   if (!familyId || !taskId) return null
-  const task = await localDb.findById<Task & { deleted_at?: number | null }>('tasks', taskId)
-  if (!task || (task as any).family_id !== familyId || (task as any).deleted_at) return null
+  const task = await localDb.findById<TaskRow>('tasks', taskId)
+  if (!task || task.family_id !== familyId || task.deleted_at) return null
   return task
 }
 
 export async function listLocalTasksByIds(familyId: string, taskIds: string[]): Promise<Task[]> {
   if (!familyId || !Array.isArray(taskIds) || taskIds.length === 0) return []
   const taskIdSet = new Set(taskIds.filter(Boolean))
-  const tasks = await localDb.query<Task & { deleted_at?: number | null }>('tasks', row =>
-    (row as any).family_id === familyId
+  const tasks = await localDb.query<TaskRow>('tasks', row =>
+    row.family_id === familyId
     && taskIdSet.has(row._id)
-    && !(row as any).deleted_at,
+    && !row.deleted_at,
   )
   const orderMap = new Map(taskIds.map((id, index) => [id, index]))
   return tasks.sort((left, right) => (orderMap.get(left._id) ?? 0) - (orderMap.get(right._id) ?? 0))
@@ -152,22 +214,23 @@ export async function findLocalDuplicateIllnesses(
   if (!familyId || !dogIds.length || !condition.trim()) return []
   const dogIdSet = new Set(dogIds.filter(Boolean))
   const normalizedCondition = condition.trim()
-  const rows = await localDb.query<any>('health_records', row => {
+  const rows = await localDb.query<HealthRecordRow>('health_records', row => {
     if (row.family_id !== familyId) return false
     if (row.deleted_at) return false
     if (row.type !== 'illness') return false
     if (!dogIdSet.has(row.dog_id)) return false
     if (excludeRecordId && row._id === excludeRecordId) return false
-    const treatmentStatus = String(row?.details?.treatment_status || '观察中').trim()
+    const details = getHealthDetails(row)
+    const treatmentStatus = String(details.treatment_status || '观察中').trim()
     if (treatmentStatus === '已康复') return false
-    const rowCondition = String(row?.details?.primary_condition || row?.details?.condition || '').trim()
+    const rowCondition = String(details.primary_condition || details.condition || '').trim()
     return rowCondition === normalizedCondition
   }, { sort: sortByRecent })
 
   return rows.map((row) => ({
     dogId: row.dog_id,
     recordId: row._id,
-    condition: String(row?.details?.primary_condition || row?.details?.condition || '').trim(),
+    condition: String(getHealthDetails(row).primary_condition || getHealthDetails(row).condition || '').trim(),
   }))
 }
 
@@ -179,7 +242,7 @@ export async function findLocalDuplicateMedicationTasks(
   if (!familyId || !dogIds.length || !drugName.trim()) return []
   const dogIdSet = new Set(dogIds.filter(Boolean))
   const normalizedDrugName = drugName.trim().toLowerCase()
-  const tasks = await localDb.query<any>('medication_tasks', row =>
+  const tasks = await localDb.query<MedicationTaskRow>('medication_tasks', row =>
     row.family_id === familyId
     && !row.deleted_at,
   )
@@ -213,7 +276,7 @@ function getMedicationDetailStatus(status?: string) {
   return 'active'
 }
 
-function calculateMedicationCompletion(task: Record<string, any>) {
+function calculateMedicationCompletion(task: MedicationTaskRow) {
   const durationDays = Math.max(1, Number(task?.duration_days) || 1)
   const frequency = Math.max(1, Number(task?.frequency) || 1)
   const dailyDoses = task?.daily_doses || {}
@@ -229,7 +292,7 @@ function calculateMedicationCompletion(task: Record<string, any>) {
   }
 }
 
-function normalizeMedicationTaskDetail(task: Record<string, any>, protocolName: string | null) {
+function normalizeMedicationTaskDetail(task: MedicationTaskRow, protocolName: string | null): NormalizedMedicationTask {
   const durationDays = Math.max(1, Number(task?.duration_days) || 1)
   const startDate = startOfDay(task?.actual_start_date || task?.start_date || task?.created_at || Date.now())
   const endDate = task?.end_date || (startDate + ((durationDays - 1) * 86400000))
@@ -262,9 +325,10 @@ function normalizeMedicationTaskDetail(task: Record<string, any>, protocolName: 
     Object.entries(task.completed_map).forEach(([key, value]) => {
       const dayTs = Number(key)
       if (!dayTs || !value || typeof value !== 'object') return
-      const valueObject = value as Record<string, any>
+      const valueObject = readCompletedMapEntry(value)
+      if (!valueObject) return
       completedMap[String(dayTs)] = {
-        name: valueObject.name || valueObject.label || '',
+        name: valueObject.name,
         time: valueObject.time || '',
       }
     })
@@ -284,7 +348,7 @@ function normalizeMedicationTaskDetail(task: Record<string, any>, protocolName: 
     total_dose_count: completion.totalDoseCount,
     is_fully_completed: completion.completedDoseCount >= completion.totalDoseCount,
     protocol_name: protocolName || task?.protocol_name || null,
-  } as Record<string, any>
+  } as NormalizedMedicationTask
 }
 
 function normalizeIllnessSymptomTags(tags: unknown) {
@@ -294,29 +358,31 @@ function normalizeIllnessSymptomTags(tags: unknown) {
     .filter(Boolean)))
 }
 
-function isActiveIllnessRecord(record: Record<string, any>) {
+function isActiveIllnessRecord(record: HealthRecordRow) {
+  const details = getHealthDetails(record)
   return record?.type === 'illness'
     && !record?.deleted_at
-    && (record?.details?.treatment_status || '观察中') !== '已康复'
+    && (details.treatment_status || '观察中') !== '已康复'
 }
 
-function buildLinkedIllnessSummary(record?: Record<string, any> | null) {
+function buildLinkedIllnessSummary(record?: HealthRecordRow | null) {
   if (!record) return null
-  const symptomTags = normalizeIllnessSymptomTags(record?.details?.symptom_tags)
+  const details = getHealthDetails(record)
+  const symptomTags = normalizeIllnessSymptomTags(details.symptom_tags)
   return {
     recordId: record._id,
-    title: getIllnessPrimaryCondition(record?.details || record),
-    treatmentStatus: record?.details?.treatment_status || '观察中',
+    title: getIllnessPrimaryCondition(details),
+    treatmentStatus: details.treatment_status || '观察中',
     symptomSummary: symptomTags.join(' / '),
     date: Number(record?.date || 0) || null,
   }
 }
 
-function buildLinkedMedicationTaskSummary(task: Record<string, any>) {
+function buildLinkedMedicationTaskSummary(task: MedicationTaskRow) {
   const normalized = normalizeMedicationTaskDetail(task, null)
   return {
     taskId: normalized._id,
-    medicationName: normalized.drug_name || normalized.details?.drug_name || '用药任务',
+    medicationName: getMedicationDrugName(normalized) || '用药任务',
     status: normalized.status,
     startedAt: normalized.start_date,
     endedAt: normalized.status === 'completed' ? normalized.end_date : null,
@@ -327,9 +393,9 @@ function buildLinkedMedicationTaskSummary(task: Record<string, any>) {
 export async function getLocalHealthRecordDetail(familyId: string, recordId: string) {
   if (!familyId || !recordId) return null
   const [record, dogs, medicationTasks] = await Promise.all([
-    localDb.findById<HealthRecord>('health_records', recordId),
-    localDb.query<any>('dogs', row => row.family_id === familyId && !row.deleted_at),
-    localDb.query<any>('medication_tasks', row =>
+    localDb.findById<HealthRecordRow>('health_records', recordId),
+    localDb.query<DogRow>('dogs', row => row.family_id === familyId && !row.deleted_at),
+    localDb.query<MedicationTaskRow>('medication_tasks', row =>
       row.family_id === familyId && row.source_record_id === recordId,
       { sort: sortByRecent },
     ),
@@ -348,13 +414,13 @@ export async function getLocalHealthRecordDetail(familyId: string, recordId: str
 export async function getLocalMedicationTaskDetail(familyId: string, taskId: string) {
   if (!familyId || !taskId) return null
   const [task, protocols, illnesses] = await Promise.all([
-    localDb.findById<MedicationTask>('medication_tasks', taskId),
-    localDb.query<any>('medication_protocols', row => row.family_id === familyId && !row.deleted_at),
-    localDb.query<any>('health_records', row => row.family_id === familyId && row.type === 'illness' && !row.deleted_at),
+    localDb.findById<MedicationTaskRow>('medication_tasks', taskId),
+    localDb.query<MedicationProtocolRow>('medication_protocols', row => row.family_id === familyId && !row.deleted_at),
+    localDb.query<HealthRecordRow>('health_records', row => row.family_id === familyId && row.type === 'illness' && !row.deleted_at),
   ])
   if (!task || task.family_id !== familyId) return null
-  const protocolName = protocols.find(item => item._id === (task as any).protocol_id)?.name || null
-  const normalizedTask = normalizeMedicationTaskDetail(task as Record<string, any>, protocolName)
+  const protocolName = protocols.find(item => item._id === task.protocol_id)?.name || null
+  const normalizedTask = normalizeMedicationTaskDetail(task, protocolName)
 
   let linkedIllness = null
   let relationType: 'linked' | 'fallback' | 'standalone' = normalizedTask.source_record_id ? 'linked' : 'standalone'

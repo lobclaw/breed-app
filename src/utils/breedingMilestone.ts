@@ -34,7 +34,7 @@ export interface BreedingMilestoneViewModel {
 interface BreedingMilestoneTaskLike {
   title?: string
   due_date?: number
-  details?: Record<string, any> | null
+  details?: Record<string, unknown> | null
 }
 
 interface StepMeta {

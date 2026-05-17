@@ -11,7 +11,7 @@ export interface OperationLogFilterSignatureOptions {
   now?: number
 }
 
-export interface OperationLogCacheEntry<T = Record<string, any>> {
+export interface OperationLogCacheEntry<T = Record<string, unknown>> {
   signature: string
   cachedAt: number
   hasMore: boolean
@@ -20,6 +20,15 @@ export interface OperationLogCacheEntry<T = Record<string, any>> {
 
 export const OPERATION_LOG_CACHE_PREFIX = 'breed_operation_log_cache:'
 export const OPERATION_LOG_CACHE_LIMIT = 8
+
+type StoredOperationLogCache<T> = {
+  entries?: OperationLogCacheEntry<T>[]
+}
+
+function parseStoredOperationLogCache<T>(raw: unknown): StoredOperationLogCache<T> {
+  const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+  return typeof parsed === 'object' && parsed !== null ? parsed as StoredOperationLogCache<T> : {}
+}
 
 function startOfDay(timestamp: number): number {
   return getBeijingDayStart(timestamp)
@@ -87,7 +96,7 @@ export function getOperationLogCacheKey(familyId: string) {
   return familyId ? `${OPERATION_LOG_CACHE_PREFIX}${familyId}` : ''
 }
 
-export function readOperationLogCacheEntry<T = Record<string, any>>(
+export function readOperationLogCacheEntry<T = Record<string, unknown>>(
   familyId: string,
   signature: string,
 ): OperationLogCacheEntry<T> | null {
@@ -96,17 +105,17 @@ export function readOperationLogCacheEntry<T = Record<string, any>>(
   try {
     const raw = uni.getStorageSync(key)
     if (!raw) return null
-    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
-    const entries = Array.isArray(parsed?.entries) ? parsed.entries : []
-    const matched = entries.find((entry: any) => entry?.signature === signature)
+    const parsed = parseStoredOperationLogCache<T>(raw)
+    const entries = Array.isArray(parsed.entries) ? parsed.entries : []
+    const matched = entries.find(entry => entry?.signature === signature)
     if (!matched || !Array.isArray(matched.rawLogs)) return null
-    return matched as OperationLogCacheEntry<T>
+    return matched
   } catch {
     return null
   }
 }
 
-export function writeOperationLogCacheEntry<T = Record<string, any>>(
+export function writeOperationLogCacheEntry<T = Record<string, unknown>>(
   familyId: string,
   signature: string,
   rawItems: T[],
@@ -116,8 +125,8 @@ export function writeOperationLogCacheEntry<T = Record<string, any>>(
   if (!key || !signature) return
   try {
     const raw = uni.getStorageSync(key)
-    const parsed = raw ? (typeof raw === 'string' ? JSON.parse(raw) : raw) : {}
-    const entries = Array.isArray(parsed?.entries) ? parsed.entries : []
+    const parsed = raw ? parseStoredOperationLogCache<T>(raw) : {}
+    const entries = Array.isArray(parsed.entries) ? parsed.entries : []
     const nextEntry: OperationLogCacheEntry<T> = {
       signature,
       cachedAt: Date.now(),
@@ -126,7 +135,7 @@ export function writeOperationLogCacheEntry<T = Record<string, any>>(
     }
     const nextEntries = [
       nextEntry,
-      ...entries.filter((entry: any) => entry?.signature !== signature),
+      ...entries.filter(entry => entry?.signature !== signature),
     ].slice(0, OPERATION_LOG_CACHE_LIMIT)
     uni.setStorageSync(key, JSON.stringify({ entries: nextEntries }))
   } catch {

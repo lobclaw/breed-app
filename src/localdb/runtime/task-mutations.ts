@@ -13,7 +13,6 @@ type TaskRow = LocalRowOf<'tasks'> & {
   postpone_count?: number
 }
 type HealthRecordRow = LocalRowOf<'health_records'>
-type ExpenseRow = LocalRowOf<'expenses'>
 type TaskPayloadTimestamp = number | string | null
 type ManualTaskDogInput = {
   dog_id: string
@@ -124,7 +123,7 @@ export async function batchCreateManualTasksLocally(ctx: RuntimeMutationContext,
     if (tasks.length > 0) {
       await localDb.transactRows('tasks', async (rows) => {
         for (const task of tasks) {
-          await rows.upsertRow(task as unknown as TaskRow)
+          await rows.upsertRow(task)
         }
       })
       await ctx.enqueueMutation(
@@ -206,10 +205,10 @@ export async function completeTaskLocally(ctx: RuntimeMutationContext, familyId:
           } as HealthRecordRow)
         }
         const expenseRows = autoHealthRecords
-          .filter(record => record.expenseId && Number(record.cost || 0) > 0)
+          .filter(record => record.expenseId && record.dogId && Number(record.cost || 0) > 0)
           .map((record) => buildLocalHealthExpense(
             familyId,
-            { _id: record.dogId, name: record.dogName || '' },
+            { _id: record.dogId || '', name: record.dogName || '' },
             {
               type: record.type,
               date: record.date,
@@ -221,7 +220,7 @@ export async function completeTaskLocally(ctx: RuntimeMutationContext, familyId:
             now,
           ))
         for (const expenseRow of expenseRows) {
-          await rows.upsertRow('expenses', expenseRow as unknown as ExpenseRow)
+          await rows.upsertRow('expenses', expenseRow)
         }
       }
     })
@@ -309,10 +308,10 @@ export async function batchCompleteTasksLocally(ctx: RuntimeMutationContext, fam
           } as HealthRecordRow)
         }
         const expenseRows = autoHealthRecords
-          .filter(record => record.expenseId && Number(record.cost || 0) > 0)
+          .filter(record => record.expenseId && record.dogId && Number(record.cost || 0) > 0)
           .map((record) => buildLocalHealthExpense(
             familyId,
-            { _id: record.dogId, name: record.dogName || '' },
+            { _id: record.dogId || '', name: record.dogName || '' },
             {
               type: record.type,
               date: record.date,
@@ -324,7 +323,7 @@ export async function batchCompleteTasksLocally(ctx: RuntimeMutationContext, fam
             now,
           ))
         for (const expenseRow of expenseRows) {
-          await rows.upsertRow('expenses', expenseRow as unknown as ExpenseRow)
+          await rows.upsertRow('expenses', expenseRow)
         }
       }
     })

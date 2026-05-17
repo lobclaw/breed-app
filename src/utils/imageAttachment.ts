@@ -44,6 +44,53 @@ interface ImageCompressionAttempt {
   maxEdge: number
   quality: number
 }
+interface BufferLike {
+  from(input: ArrayBuffer | string, encoding?: string): {
+    toString(encoding?: string): string
+  }
+}
+interface DownloadFileResult {
+  tempFilePath?: string
+}
+interface ChooseImageResult {
+  tempFilePaths?: string | string[]
+}
+interface ImageInfoResult {
+  width?: number
+  height?: number
+}
+interface FileInfoResult {
+  size?: number
+}
+interface CompressImageResult {
+  tempFilePath?: string
+}
+interface SaveFileResult {
+  savedFilePath?: string
+}
+interface CompressImageOptions {
+  src: string
+  quality: number
+  compressedWidth?: number
+  compressedHeight?: number
+}
+interface UploadFileOptions {
+  cloudPath: string
+  fileType: 'image'
+  filePath: string
+}
+interface UploadFileResult {
+  fileID?: string
+  url?: string
+}
+interface TempFileUrlItem {
+  fileID?: string
+  tempFileURL?: string
+  url?: string
+}
+interface TempFileUrlResult {
+  fileList?: TempFileUrlItem[]
+}
 
 const IMAGE_COMPRESSION_PROFILES: Record<ImageCompressionProfile, {
   targetBytes: number
@@ -82,12 +129,16 @@ const IMAGE_CACHE_MAX_BYTES = 300 * 1024 * 1024
 const IMAGE_CACHE_MAX_AGE_MS = 90 * 86400000
 let imageCacheCleanupPromise: Promise<void> | null = null
 
-function getUniApi() {
-  return typeof uni === 'undefined' ? null : uni as any
+function getUniApi(): typeof uni | null {
+  return typeof uni === 'undefined' ? null : uni
 }
 
-function getUniCloudApi() {
-  return typeof uniCloud === 'undefined' ? null : uniCloud as any
+function getUniCloudApi(): typeof uniCloud | null {
+  return typeof uniCloud === 'undefined' ? null : uniCloud
+}
+
+function getGlobalBuffer(): BufferLike | undefined {
+  return (globalThis as typeof globalThis & { Buffer?: BufferLike }).Buffer
 }
 
 function getLegacyImageCacheEntryId(fileID: string) {
@@ -159,7 +210,7 @@ function arrayBufferToBase64(buffer: ArrayBuffer) {
     binary += String.fromCharCode(...chunk)
   }
   if (typeof btoa === 'function') return btoa(binary)
-  const BufferCtor = (globalThis as any).Buffer
+  const BufferCtor = getGlobalBuffer()
   if (BufferCtor) return BufferCtor.from(buffer).toString('base64')
   throw new Error('当前环境不支持图片持久化降级')
 }
@@ -184,7 +235,7 @@ function dataUrlToBlob(dataUrl: string) {
   const isBase64 = !!match[2]
   const body = match[3] || ''
   const binary = isBase64
-    ? (typeof atob === 'function' ? atob(body) : String((globalThis as any).Buffer?.from(body, 'base64') || ''))
+    ? (typeof atob === 'function' ? atob(body) : String(getGlobalBuffer()?.from(body, 'base64') || ''))
     : decodeURIComponent(body)
   const bytes = new Uint8Array(binary.length)
   for (let index = 0; index < binary.length; index += 1) {
@@ -277,7 +328,7 @@ function collectLocalImageRefsDeep(value: unknown, refs: Set<string>) {
 async function getProtectedLocalImageRefs() {
   const refs = new Set<string>()
   await Promise.all(BUSINESS_COLLECTIONS.map(async (collection) => {
-    const rows = await localDb.getTable<any>(collection)
+    const rows = await localDb.getTable<{ images?: unknown; details?: { images?: unknown } | null }>(collection)
     rows.forEach((row) => {
       collectLocalImageRefs(row?.images, refs)
       collectLocalImageRefs(row?.details?.images, refs)
@@ -389,7 +440,7 @@ async function downloadRemoteImageToLocal(url: string) {
     const tempPath = await new Promise<string>((resolve, reject) => {
       api.downloadFile({
         url,
-        success: (res: any) => resolve(String(res?.tempFilePath || '')),
+        success: (res: DownloadFileResult) => resolve(String(res?.tempFilePath || '')),
         fail: reject,
       })
     })
@@ -450,7 +501,13 @@ function chooseImage(count: number) {
       count,
       sizeType: ['compressed'],
       sourceType: ['album', 'camera'],
-      success: (res: any) => resolve(Array.isArray(res?.tempFilePaths) ? res.tempFilePaths : []),
+      success: (res: ChooseImageResult) => {
+        if (Array.isArray(res?.tempFilePaths)) {
+          resolve(res.tempFilePaths)
+          return
+        }
+        resolve(res?.tempFilePaths ? [res.tempFilePaths] : [])
+      },
       fail: reject,
     })
   })
@@ -462,7 +519,7 @@ function getImageInfo(path: string) {
   return new Promise<{ width: number, height: number } | null>((resolve) => {
     api.getImageInfo({
       src: path,
-      success: (res: any) => resolve({ width: Number(res?.width || 0), height: Number(res?.height || 0) }),
+      success: (res: ImageInfoResult) => resolve({ width: Number(res?.width || 0), height: Number(res?.height || 0) }),
       fail: () => resolve(null),
     })
   })
@@ -478,7 +535,7 @@ function getFileSize(path: string) {
   return new Promise<number>((resolve) => {
     api.getFileInfo({
       filePath: path,
-      success: (res: any) => resolve(Number(res?.size || 0)),
+      success: (res: FileInfoResult) => resolve(Number(res?.size || 0)),
       fail: () => resolve(0),
     })
   })
@@ -487,7 +544,7 @@ function getFileSize(path: string) {
 async function compressImageOnce(path: string, attempt: ImageCompressionAttempt) {
   const api = getUniApi()
   const info = await getImageInfo(path)
-  const options: Record<string, any> = {
+  const options: CompressImageOptions = {
     src: path,
     quality: attempt.quality,
   }
@@ -508,7 +565,7 @@ async function compressImageOnce(path: string, attempt: ImageCompressionAttempt)
       return await new Promise<string>((resolve, reject) => {
         api.compressImage({
           ...options,
-          success: (res: any) => resolve(String(res?.tempFilePath || path)),
+          success: (res: CompressImageResult) => resolve(String(res?.tempFilePath || path)),
           fail: reject,
         })
       })
@@ -596,8 +653,8 @@ export async function persistLocalImage(path: string) {
   return new Promise<{ path: string, persisted: boolean, warning?: string, recoverable?: boolean }>((resolve) => {
     api.saveFile({
       tempFilePath: path,
-      success: (res: any) => resolve({ path: String(res?.savedFilePath || path), persisted: true }),
-      fail: async (error: any) => {
+      success: (res: SaveFileResult) => resolve({ path: String(res?.savedFilePath || path), persisted: true }),
+      fail: async (error: unknown) => {
         console.warn('图片本地持久保存失败，已保留临时路径等待同步', error)
         const inlineRef = await createDurableInlineImageRef(path).catch(() => '')
         resolve({
@@ -661,20 +718,20 @@ export async function uploadLocalImage(localRef: string, meta: UploadImageMeta) 
     throw new Error('当前环境不支持附件上传')
   }
   const cloudPath = buildUploadCloudPath(meta, localRef)
-  const options: Record<string, any> = {
-    cloudPath,
-    fileType: 'image',
-  }
   let uploadObjectUrl = ''
+  let filePath = localRef
   if (isDataUrlImageRef(localRef)) {
     uploadObjectUrl = createUploadObjectUrl(localRef)
     if (!uploadObjectUrl) throw new Error('当前环境不支持上传本地缓存图片')
-    options.filePath = uploadObjectUrl
-  } else {
-    options.filePath = localRef
+    filePath = uploadObjectUrl
+  }
+  const options: UploadFileOptions = {
+    cloudPath,
+    fileType: 'image',
+    filePath,
   }
   try {
-    const result = await cloudApi.uploadFile(options)
+    const result = await cloudApi.uploadFile(options) as UploadFileResult
     const uploadedRef = String(result?.fileID || result?.url || '').trim()
     if (!uploadedRef) throw new Error('附件上传未返回 fileID')
     return uploadedRef
@@ -697,7 +754,7 @@ export async function resolveImageDisplayUrl(ref: string, options: ResolveImageD
   const cloudApi = getUniCloudApi()
   if (!cloudApi?.getTempFileURL) return ''
   try {
-    const result = await cloudApi.getTempFileURL({ fileList: [imageRef] })
+    const result = await cloudApi.getTempFileURL({ fileList: [imageRef] }) as TempFileUrlResult
     const file = Array.isArray(result?.fileList) ? result.fileList[0] : null
     const url = String(file?.tempFileURL || file?.url || '').trim()
     if (url) {
@@ -752,10 +809,10 @@ export async function resolveImageDisplayUrls(refs: string[], options: ResolveIm
   if (!cloudApi?.getTempFileURL) return results
   try {
     const fileList = pendingItems.map(item => item.ref)
-    const result = await cloudApi.getTempFileURL({ fileList })
+    const result = await cloudApi.getTempFileURL({ fileList }) as TempFileUrlResult
     const files = Array.isArray(result?.fileList) ? result.fileList : []
     const urlByFileId = new Map<string, string>()
-    files.forEach((file: any, index: number) => {
+    files.forEach((file, index: number) => {
       const fileID = String(file?.fileID || fileList[index] || '').trim()
       const url = String(file?.tempFileURL || file?.url || '').trim()
       if (fileID && url) urlByFileId.set(fileID, url)

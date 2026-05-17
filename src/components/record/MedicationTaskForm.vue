@@ -393,6 +393,36 @@ import BDogPicker from '@/components/form/BDogPicker.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BSheet from '@/components/layout/BSheet.vue'
 import BModal from '@/components/layout/BModal.vue'
+import type { Dog } from '@/types/dog'
+
+type MedicationFormDog = Dog
+
+interface MedicationDuplicateTask {
+  dog_id: string
+  dog_name: string
+  dogName: string
+  task_id: string
+  task_name: string
+  start_date: number | null
+  status: string
+  day: number
+  totalDays: number
+}
+
+interface MedicationIllnessDetails {
+  primary_condition?: unknown
+  condition?: unknown
+  symptom_tags?: unknown
+  treatment_status?: unknown
+}
+
+interface MedicationIllnessRecord {
+  _id?: string
+  dog_id?: string
+  type?: string
+  date?: number | null
+  details?: MedicationIllnessDetails | null
+}
 
 const props = withDefaults(defineProps<{
   query?: Record<string, string>
@@ -401,7 +431,7 @@ const props = withDefaults(defineProps<{
 })
 
 const { currentFamily } = useAuth()
-const selectedDogs = ref<any[]>([])
+const selectedDogs = ref<MedicationFormDog[]>([])
 const drugName = ref('')
 const dosage = ref('')
 const dosageUnit = ref('mg')
@@ -463,7 +493,7 @@ const selectedSingleIllnessLink = computed<MedicationRouteIllnessLink | null>(()
 const effectiveIllnessLinks = computed<MedicationRouteIllnessLink[]>(() => {
   if (selectedDogs.value.length === 0) return []
 
-  const selectedDogIds = new Set(selectedDogs.value.map((dog: any) => dog?._id).filter(Boolean))
+  const selectedDogIds = new Set(selectedDogs.value.map(dog => dog?._id).filter(Boolean))
   const seenDogIds = new Set<string>()
 
   const routeLinks = illnessLinks.value.filter((item) => {
@@ -541,6 +571,51 @@ function normalizeRouteIllnessLinks(value: MedicationRouteIllnessLink[]) {
   }, [])
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function createMedicationFormDog(input: { _id: string; name?: string; role?: unknown; gender?: unknown; breed?: unknown; species?: unknown }): MedicationFormDog {
+  return {
+    _id: input._id,
+    family_id: currentFamily.value?._id || '',
+    name: input.name || '',
+    gender: input.gender === '公' ? '公' : '母',
+    role: input.role === '种狗' || input.role === '外部种公' ? input.role : '幼崽',
+    disposition: '在养',
+    species: typeof input.species === 'string' ? input.species : '',
+    breed: typeof input.breed === 'string' ? input.breed : '',
+    birth_date: null,
+    purchase_date: null,
+    purchase_price: null,
+    latest_weight: null,
+    origin_litter_id: null,
+    owner_info: null,
+    deleted_at: null,
+    created_at: 0,
+    updated_at: 0,
+  }
+}
+
+function normalizeMedicationFormDogs(value: unknown): MedicationFormDog[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((dog): MedicationFormDog | null => {
+      if (!isRecord(dog)) return null
+      const id = typeof dog._id === 'string' ? dog._id.trim() : ''
+      if (!id) return null
+      return createMedicationFormDog({
+        _id: id,
+        name: typeof dog.name === 'string' ? dog.name : '',
+        role: dog.role,
+        gender: dog.gender,
+        species: dog.species,
+        breed: dog.breed,
+      })
+    })
+    .filter((dog): dog is MedicationFormDog => !!dog)
+}
+
 const dosageUnits = [
   { label: '毫升', value: 'ml' },
   { label: '毫克', value: 'mg' },
@@ -603,7 +678,7 @@ function setChip(chip: string) {
   chipActive.value = chip
 }
 
-watch(() => selectedDogs.value.map((dog: any) => dog?._id || '').join(','), () => {
+watch(() => selectedDogs.value.map(dog => dog?._id || '').join(','), () => {
   void loadSingleDogIllnessOptions()
 })
 
@@ -613,7 +688,7 @@ function illnessOptionStatusColor(status?: string): 'green' | 'amber' | 'red' {
   return 'red'
 }
 
-function buildIllnessLinkFromRecord(record: any): MedicationRouteIllnessLink | null {
+function buildIllnessLinkFromRecord(record: MedicationIllnessRecord): MedicationRouteIllnessLink | null {
   if (!record || record.type !== 'illness') return null
   const details = record.details || {}
   const treatmentStatus = String(details.treatment_status || '观察中').trim()
@@ -661,7 +736,7 @@ async function submit() {
   markSubmitting()
   try {
     const drug = drugName.value.trim()
-    const dogIds = selectedDogs.value.map((dog: any) => dog._id)
+    const dogIds = selectedDogs.value.map(dog => dog._id)
 
     dupList.value = await findLocalDuplicateMedicationTasks(currentFamily.value?._id || '', dogIds, drug)
     if (dupList.value.length > 0) {
@@ -678,7 +753,7 @@ async function submit() {
       }
     }
 
-    const duplicateDogIds = new Set(dupList.value.map((item: any) => item.dog_id))
+    const duplicateDogIds = new Set(dupList.value.map(item => item.dog_id))
     const cleanDogIds = dogIds.filter(dogId => !duplicateDogIds.has(dogId))
     const overrideDogIds = [...dupOverrideDogIds.value]
     const finalDogIds = [...cleanDogIds, ...overrideDogIds]
@@ -829,13 +904,13 @@ async function doSaveProtocol() {
 }
 
 const showDupModal = ref(false)
-const dupList = ref<any[]>([])
+const dupList = ref<MedicationDuplicateTask[]>([])
 const dupOverrideDogIds = ref<string[]>([])
 const dupResolve = ref<((value: boolean) => void) | null>(null)
 
 const cleanDogs = computed(() => {
-  const duplicateDogIds = new Set(dupList.value.map((item: any) => item.dog_id))
-  return selectedDogs.value.filter((dog: any) => !duplicateDogIds.has(dog._id))
+  const duplicateDogIds = new Set(dupList.value.map(item => item.dog_id))
+  return selectedDogs.value.filter(dog => !duplicateDogIds.has(dog._id))
 })
 
 const dupModalTitle = computed(() => {
@@ -867,7 +942,7 @@ function toggleAllOverride() {
   if (dupOverrideDogIds.value.length === dupList.value.length) {
     dupOverrideDogIds.value = []
   } else {
-    dupOverrideDogIds.value = dupList.value.map((item: any) => item.dog_id)
+    dupOverrideDogIds.value = dupList.value.map(item => item.dog_id)
   }
 }
 
@@ -877,7 +952,7 @@ onMounted(() => {
 
 async function initFromRoute() {
   const routeQuery = resolveMedicationRouteQuery(props.query)
-  selectedDogs.value = routeQuery.selectedDogs
+  selectedDogs.value = normalizeMedicationFormDogs(routeQuery.selectedDogs)
   illnessRecordId.value = routeQuery.illnessRecordId
   illnessLinks.value = Array.isArray(routeQuery.illnessLinks)
     ? normalizeRouteIllnessLinks(routeQuery.illnessLinks)

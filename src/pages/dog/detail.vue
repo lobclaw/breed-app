@@ -734,7 +734,7 @@
 
       <!-- ========== 财务 Tab ========== -->
       <view v-if="activeTab === 'finance'" class="dog-detail__pane">
-        <view v-if="!financeLoaded" class="dog-detail__tab-loading">
+        <view v-if="!financeTabLoaded" class="dog-detail__tab-loading">
           <BSkeleton :rows="3" />
         </view>
         <template v-else>
@@ -1287,9 +1287,7 @@ import { consumeSubmitFeedback, SUBMIT_SUCCESS_FEEDBACK_DELAY_MS, wait } from '@
 import { localSyncRuntime } from '@/localdb/runtime'
 import {
   getLocalBreedingCycleDetail,
-  getLocalDamRoi,
   getLocalDogDetail,
-  getLocalDogFinanceSummary,
   listLocalBreedingCycles,
   listLocalDogHealthHistory,
   listLocalDogMedicationHistory,
@@ -1320,8 +1318,7 @@ import {
   formatRelativeDayLabel as formatDueRelativeDayLabel,
 } from '@/utils/breedingTimeline'
 import { buildTimestampFromDayOffset, formatDateInputValue, getBeijingOrdinalDay } from '@/utils/date'
-import { formatFinanceAmount, getFinanceAmountParts, type FinanceAmountParts } from '@/utils/financeDisplay'
-import { normalizeExpenseCategoryName, normalizeIncomeType } from '@/constants/financeCategories'
+import { useDogDetailFinance } from './composables/useDogDetailFinance'
 
 const { currentFamily } = useAuth()
 usePageSync({ routePath: 'pages/dog/detail' })
@@ -1329,6 +1326,7 @@ usePageSync({ routePath: 'pages/dog/detail' })
 const dog = ref<Dog | null>(null)
 const statuses = ref<DeriveStatus[]>([])
 const cycles = ref<any[]>([])
+const litters = ref<any[]>([])
 const healthRecords = ref<any[]>([])
 const medicationRecords = ref<any[]>([])
 const externalSireMatingRecords = ref<any[]>([])
@@ -1354,7 +1352,6 @@ const pageLoadStage = ref<'bootstrapping' | 'ready'>('bootstrapping')
 const healthRecordsLoaded = ref(false)
 const medicationHistoryLoaded = ref(false)
 const externalSireMatingRecordsLoaded = ref(false)
-const financeLoaded = ref(false)
 const cyclesLoaded = ref(false)
 const littersLoaded = ref(false)
 const showMore = ref(false)
@@ -1373,7 +1370,6 @@ const pageInstance = getCurrentInstance()
 const HEALTH_FILTER_FOCUS_RATIO = 0.38
 const HEALTH_FILTER_AUTO_TOLERANCE_PX = 12
 const HEALTH_FILTER_FORCE_MIN_DELTA_PX = 8
-const FINANCE_ENTRY_DOG_FILTER_KEY = 'finance_entry_dog_filter'
 let dogId = ''
 let submitBannerTimer: ReturnType<typeof setTimeout> | null = null
 let healthFilterFocusTimer: ReturnType<typeof setTimeout> | null = null
@@ -1381,6 +1377,40 @@ let pendingHealthFilterFocusMode: 'auto' | 'force' = 'auto'
 let hasLoadedOnce = false
 let latestLoadToken = 0
 let latestActiveCycleSummaryToken = 0
+
+const {
+  dogFinance,
+  damFinanceRoi,
+  financeLoaded,
+  damFinanceRoiLoaded,
+  isDamFinanceDog,
+  financeTabLoaded,
+  financeSummaryTitle,
+  financeSummaryCards,
+  financeRecentTransactions,
+  resetFinanceData,
+  resetFinanceForDog,
+  ensureDamFinanceRoi,
+  loadFinanceSummary,
+  formatFinanceTransactionAmount,
+  getFinanceSummaryCardValueClass,
+  getFinanceRecentIcon,
+  getFinanceRecentIconClass,
+  getFinanceRecentAmountClass,
+  getFinanceRecentTitle,
+  getFinanceRecentSubtitle,
+  goToExpenseAdd,
+  goToIncomeAdd,
+  goToFinanceList,
+  goToDamRoi,
+  goToFinanceDetail,
+} = useDogDetailFinance({
+  dog,
+  getFamilyId: () => currentFamily.value?._id || '',
+  getDogId: () => dogId,
+  getLoadToken: () => latestLoadToken,
+  formatDate,
+})
 
 const tabs = computed(() => {
   if (dog.value?.role === '外部种公') {
@@ -1783,90 +1813,6 @@ function focusActiveHealthFilter(mode: 'auto' | 'force' = 'auto', retryCount = 1
   })
 }
 
-type FinanceSummaryCard = {
-  key: string
-  label: string
-  value: string
-  parts?: FinanceAmountParts
-  tone: 'income' | 'expense' | 'profit' | 'loss' | 'neutral'
-  full?: boolean
-}
-
-const litters = ref<any[]>([])
-const dogFinance = ref<any>(null)
-const damFinanceRoi = ref<any>(null)
-const isDamFinanceDog = computed(() => dog.value?.role === '种狗' && dog.value?.gender === '母')
-const financeSummaryTitle = computed(() => isDamFinanceDog.value ? '投资回报' : '财务概览')
-const financeSummaryCards = computed<FinanceSummaryCard[]>(() => {
-  if (isDamFinanceDog.value) {
-    const roi = damFinanceRoi.value || {}
-    const netProfit = Number(roi.netProfit) || 0
-    return [
-      {
-        key: 'purchase-cost',
-        label: '购入成本',
-        value: formatFinanceOverviewAmount(-(Number(roi.purchaseCost) || 0)),
-        tone: 'expense',
-      },
-      {
-        key: 'breeding-cost',
-        label: '繁育支出',
-        value: formatFinanceOverviewAmount(-(Number(roi.totalBreedingCost) || 0)),
-        tone: 'expense',
-      },
-      {
-        key: 'health-cost',
-        label: '个体费用',
-        value: formatFinanceOverviewAmount(-(Number(roi.healthCost) || 0)),
-        tone: 'expense',
-      },
-      {
-        key: 'breeding-income',
-        label: '繁育收入',
-        value: formatFinanceOverviewAmount(Number(roi.totalBreedingIncome) || 0),
-        tone: 'income',
-      },
-      {
-        key: 'net-profit',
-        label: '累计净收益',
-        value: formatFinanceOverviewAmount(netProfit),
-        parts: formatFinanceOverviewAmountParts(netProfit),
-        tone: netProfit >= 0 ? 'profit' : 'loss',
-        full: true,
-      },
-    ]
-  }
-
-  const finance = dogFinance.value || {}
-  const netProfit = Number(finance.netProfit) || 0
-  return [
-    {
-      key: 'purchase-cost',
-      label: '购入成本',
-      value: formatFinanceOverviewAmount(-(Number(finance.purchaseCost) || 0)),
-      tone: 'expense',
-    },
-    {
-      key: 'direct-expenses',
-      label: '直接费用',
-      value: formatFinanceOverviewAmount(-(Number(finance.directExpenses) || 0)),
-      tone: 'expense',
-    },
-    {
-      key: 'sales-income',
-      label: '销售收入',
-      value: formatFinanceOverviewAmount(Number(finance.salesIncome) || 0),
-      tone: 'income',
-    },
-    {
-      key: 'net-profit',
-      label: '累计净收益',
-      value: formatFinanceOverviewAmount(netProfit),
-      tone: netProfit >= 0 ? 'profit' : 'loss',
-    },
-  ]
-})
-const financeRecentTransactions = computed(() => Array.isArray(dogFinance.value?.recent) ? dogFinance.value.recent : [])
 const litterByCycleId = computed(() => {
   const map = new Map<string, any>()
   for (const litter of litters.value) {
@@ -2503,83 +2449,6 @@ async function ensureActiveCycleSummary(force = false) {
   }
 }
 
-function formatFinanceOverviewAmount(amount: number) {
-  return formatFinanceAmount(amount, { scene: 'overview' })
-}
-
-function formatFinanceOverviewAmountParts(amount: number) {
-  return getFinanceAmountParts(amount, { scene: 'overview' })
-}
-
-function formatFinanceTransactionAmount(tx: any) {
-  const amount = tx?._txType === 'expense' ? -(tx.total_amount || 0) : (tx.amount || 0)
-  const formattedAmount = formatFinanceAmount(amount, { scene: 'list' })
-  return tx?._txType === 'income' ? `+${formattedAmount}` : formattedAmount
-}
-
-function getFinanceSummaryCardValueClass(card: FinanceSummaryCard) {
-  if (card.tone === 'income' || card.tone === 'profit') return 'dog-detail__fin-cell-value--income'
-  if (card.tone === 'expense' || card.tone === 'loss') return 'dog-detail__fin-cell-value--expense'
-  return 'dog-detail__fin-cell-value--neutral'
-}
-
-function getFinanceRecentIcon(tx: any) {
-  return tx?._txType === 'income' ? 'payments' : 'account_balance_wallet'
-}
-
-function getFinanceRecentIconClass(tx: any) {
-  return tx?._txType === 'income' ? 'dog-detail__rec-icon--finance-income' : 'dog-detail__rec-icon--finance-expense'
-}
-
-function getFinanceRecentAmountClass(tx: any) {
-  return tx?._txType === 'income' ? 'dog-detail__rec-amount--income' : 'dog-detail__rec-amount--expense'
-}
-
-const FINANCE_RECENT_NOTE_MAX_LENGTH = 14
-
-function getFinanceRecentTitle(tx: any) {
-  if (tx?._txType === 'expense') {
-    const category = String(tx?.category || '').trim()
-    return category ? normalizeExpenseCategoryName(category) : '支出记录'
-  }
-  const type = String(tx?.type_label || tx?.type || '').trim()
-  return type ? normalizeIncomeType(type) : '收入记录'
-}
-
-function formatFinanceRecentNote(notes?: string | null) {
-  const normalized = String(notes || '').replace(/\s+/g, ' ').trim()
-  if (!normalized) return ''
-  if (normalized.length <= FINANCE_RECENT_NOTE_MAX_LENGTH) return normalized
-  return `${normalized.slice(0, FINANCE_RECENT_NOTE_MAX_LENGTH)}...`
-}
-
-function appendFinanceRecentNote(subtitle: string, tx: any) {
-  const note = formatFinanceRecentNote(tx?.notes)
-  return note ? `${subtitle} · ${note}` : subtitle
-}
-
-function getFinanceRecentSubtitle(tx: any) {
-  const dateText = formatDate(tx?.date || 0)
-  let subtitle = dateText
-  if (tx?._txType === 'expense') {
-    if (tx?.linked_litter_id) {
-      const litterText = tx?.dam_name
-        ? `${tx.dam_name}${tx?.litter_number ? ` · 第${tx.litter_number}窝` : ' · 关联窝'}`
-        : '关联窝'
-      subtitle = `${dateText} · ${litterText}`
-    } else if (tx?.linked_cycle_id) {
-      subtitle = `${dateText} · ${tx?.dam_name ? `${tx.dam_name} · 繁育周期` : '繁育周期'}`
-    } else if (Array.isArray(tx?.dog_names) && tx.dog_names.length > 0) {
-      const dogNames = tx.dog_names.slice(0, 2).join('、')
-      subtitle = `${dateText} · ${dogNames}${tx.dog_names.length > 2 ? ` +${tx.dog_names.length - 2}` : ''}`
-    }
-    return appendFinanceRecentNote(subtitle, tx)
-  }
-
-  if (tx?.dog_name) subtitle = `${dateText} · ${tx.dog_name}`
-  return appendFinanceRecentNote(subtitle, tx)
-}
-
 function goBack() {
   uni.navigateBack()
 }
@@ -2714,32 +2583,6 @@ function goToOriginLitter(litterId: string) {
   })
 }
 
-function goToExpenseAdd() {
-  uni.navigateTo({ url: `/pages/finance/expense-add?dogId=${dogId}` })
-}
-
-function goToIncomeAdd() {
-  uni.navigateTo({ url: `/pages/finance/expense-add?type=income&dogId=${dogId}` })
-}
-
-function goToFinanceList() {
-  const dogName = dog.value?.name || ''
-  const familyId = currentFamily.value?._id || ''
-  if (!familyId) {
-    uni.showToast({ title: '家庭信息加载中，请稍后再试', icon: 'none' })
-    return
-  }
-  try {
-    uni.setStorageSync(FINANCE_ENTRY_DOG_FILTER_KEY, JSON.stringify({ familyId, dogId, dogName }))
-  } catch {}
-  uni.switchTab({
-    url: '/pages/finance/index',
-    fail() {
-      uni.showToast({ title: '财务页打开失败', icon: 'none' })
-    },
-  })
-}
-
 function goToStartSale() {
   const dogName = encodeURIComponent(dog.value?.name || '')
   uni.navigateTo({
@@ -2748,24 +2591,6 @@ function goToStartSale() {
       uni.showToast({ title: '页面打开失败', icon: 'none' })
     },
   })
-}
-
-function goToDamRoi() {
-  uni.navigateTo({ url: `/pages/finance/dam-roi?damId=${dogId}` })
-}
-
-function goToFinanceDetail(tx: any) {
-  if (!tx?._id) {
-    uni.showToast({ title: '记录信息缺失', icon: 'none' })
-    return
-  }
-
-  if (tx._txType === 'expense') {
-    uni.navigateTo({ url: `/pages/finance/expense-detail?id=${tx._id}` })
-    return
-  }
-
-  uni.navigateTo({ url: `/pages/finance/income-detail?id=${tx._id}` })
 }
 
 function handleStatusTap(status: DeriveStatus) {
@@ -3159,6 +2984,7 @@ function resetSectionLoadingState(options: { isPuppy?: boolean; isExternalSire?:
   medicationHistoryLoaded.value = isExternalSire
   externalSireMatingRecordsLoaded.value = !isExternalSire
   financeLoaded.value = isExternalSire
+  damFinanceRoiLoaded.value = isExternalSire
   cyclesLoaded.value = !!options.isPuppy
   littersLoaded.value = !!options.isPuppy
 }
@@ -3225,8 +3051,7 @@ async function loadData({
         externalSireMatingRecords.value = []
         cycles.value = []
         litters.value = []
-        dogFinance.value = null
-        damFinanceRoi.value = null
+        resetFinanceData()
         puppySaleRecords.value = []
         weightHistory.value = []
       }
@@ -3255,6 +3080,8 @@ async function loadData({
 
     const isPuppy = detail?.role === '幼崽'
     const isExternalSire = detail?.role === '外部种公'
+    const shouldLoadDamRoi = detail?.role === '种狗' && detail?.gender === '母'
+    resetFinanceForDog({ isExternalSire, shouldLoadDamRoi })
     if (showBootstrapSkeleton) {
       resetSectionLoadingState({ isPuppy, isExternalSire })
       pageLoadStage.value = 'ready'
@@ -3269,8 +3096,7 @@ async function loadData({
       if (isExternalSire) {
         healthRecords.value = []
         medicationRecords.value = []
-        dogFinance.value = null
-        damFinanceRoi.value = null
+        resetFinanceForDog({ isExternalSire: true })
         activeCycleSummaryDetail.value = null
       } else {
         externalSireMatingRecords.value = []
@@ -3363,43 +3189,13 @@ async function loadData({
           externalSireMatingRecordsLoaded.value = true
         })
 
-    const shouldLoadDamRoi = detail?.role === '种狗' && detail?.gender === '母'
-    const financePromise = isExternalSire
-      ? Promise.resolve().then(() => {
-          if (loadToken !== latestLoadToken) return
-          dogFinance.value = null
-          damFinanceRoi.value = null
-          financeLoaded.value = true
-        })
-      : Promise.all([
-          getLocalDogFinanceSummary(familyId, dogId)
-            .then((financeRes) => {
-              if (loadToken !== latestLoadToken) return
-              dogFinance.value = financeRes || null
-            })
-            .catch(() => {
-              if (loadToken !== latestLoadToken) return
-              dogFinance.value = null
-            }),
-          shouldLoadDamRoi
-            ? getLocalDamRoi(familyId, dogId)
-                .then((roiRes) => {
-                  if (loadToken !== latestLoadToken) return
-                  damFinanceRoi.value = roiRes || null
-                })
-                .catch(() => {
-                  if (loadToken !== latestLoadToken) return
-                  damFinanceRoi.value = null
-                })
-            : Promise.resolve().then(() => {
-                if (loadToken !== latestLoadToken) return
-                damFinanceRoi.value = null
-              }),
-        ])
-          .finally(() => {
-            if (loadToken !== latestLoadToken) return
-            financeLoaded.value = true
-          })
+    const financePromise = loadFinanceSummary({
+      familyId,
+      dogId,
+      isExternalSire,
+      activeTab: activeTab.value,
+      loadToken,
+    })
 
     const cyclesPromise = isPuppy
       ? Promise.resolve()
@@ -3499,6 +3295,12 @@ watch(activeHealthFilter, () => {
 watch([activeTab, healthTabLoaded], ([tab, loaded]) => {
   if (tab === 'health' && loaded) {
     scheduleFocusActiveHealthFilter('auto')
+  }
+})
+
+watch(activeTab, (tab) => {
+  if (tab === 'finance') {
+    void ensureDamFinanceRoi()
   }
 })
 

@@ -7,6 +7,7 @@ import {
   STORAGE_V2_ENABLED_KEY,
   toLocalRowRecord,
   type LocalRowRecord,
+  type LocalRowRecordSource,
 } from '@/localdb/adapter'
 import type {
   LocalCollectionName,
@@ -36,7 +37,11 @@ type LocalMultiRowTransactionContext<C extends LocalCollectionName> = {
   deleteRow<T extends C>(collection: T, id: string): Promise<void>
 }
 type LocalDbListener = (event: LocalDbChangeEvent) => void
-type CacheEntry = { revision: number; rows: any[] }
+type StoredLocalRow = LocalRowRecordSource & {
+  _id: string
+  family_id?: string | null
+}
+type CacheEntry = { revision: number; rows: StoredLocalRow[] }
 type TransactionSnapshot = {
   useV2: boolean
   revision: number
@@ -60,7 +65,7 @@ function parseRow<T>(record: LocalRowRecord): T | null {
   }
 }
 
-function normalizeRows<T extends { _id?: string; updated_at?: number; created_at?: number }>(rows: T[]) {
+function normalizeRows<T extends StoredLocalRow>(rows: readonly T[]) {
   return [...(rows || [])]
     .filter(row => row && row._id)
     .sort((a, b) => {
@@ -84,6 +89,37 @@ function buildMap<T extends { _id: string }>(rows: T[]) {
 
 function isRowWithId(row: unknown): row is { _id: string } {
   return typeof row === 'object' && row !== null && typeof (row as { _id?: unknown })._id === 'string'
+}
+
+function isStoredLocalRow(row: unknown): row is StoredLocalRow {
+  return isRowWithId(row)
+}
+
+function isPresent<T>(value: T | null | undefined): value is T {
+  return value !== null && value !== undefined
+}
+
+function getRowId(row: unknown) {
+  return isRowWithId(row) ? row._id : ''
+}
+
+function buildTypedRowMap<T>(rows: readonly T[]) {
+  const map = new Map<string, T>()
+  for (const row of rows) {
+    const id = getRowId(row)
+    if (id) map.set(id, row)
+  }
+  return map
+}
+
+function parseRowsPayload(raw: string | null): StoredLocalRow[] {
+  if (!raw) return []
+  const parsed = JSON.parse(raw) as unknown
+  return Array.isArray(parsed) ? parsed.filter(isStoredLocalRow) : []
+}
+
+function typedRows<T>(rows: StoredLocalRow[]): T[] {
+  return rows as T[]
 }
 
 function createTransactionTables(
@@ -161,12 +197,7 @@ export class LocalDb {
     try {
       await adapter.set(stateKey, `migrating:${Date.now()}`)
       const raw = await adapter.get(getCollectionStorageKey(collection))
-      const rows = raw ? JSON.parse(raw) : []
-      const normalizedRows = Array.isArray(rows)
-        ? rows
-          .filter(row => row && typeof row === 'object' && row._id)
-          .map(row => toLocalRowRecord(collection, row))
-        : []
+      const normalizedRows = parseRowsPayload(raw).map(row => toLocalRowRecord(collection, row))
       await adapter.replaceRows(collection, normalizedRows)
       await adapter.set(stateKey, 'migrated')
       return true
@@ -180,13 +211,13 @@ export class LocalDb {
   private async readLegacyTable<T>(collection: LocalCollectionName): Promise<T[]> {
     const adapter = getLocalDbAdapter()
     const raw = await adapter.get(getCollectionStorageKey(collection))
-    const rows = raw ? (JSON.parse(raw) as T[]) : []
-    return normalizeRows(rows as any) as T[]
+    return typedRows<T>(normalizeRows(parseRowsPayload(raw)))
   }
 
   private async writeLegacyTable<T>(collection: LocalCollectionName, rows: T[]) {
     const adapter = getLocalDbAdapter()
-    const normalized = normalizeRows(rows as any)
+    const storedRows = rows.filter((row): row is T & StoredLocalRow => isStoredLocalRow(row))
+    const normalized = normalizeRows(storedRows)
     await adapter.set(getCollectionStorageKey(collection), JSON.stringify(normalized))
     const revision = (await adapter.getCollectionRevision(collection)) + 1
     await adapter.set(getRevisionKey(collection), String(revision))
@@ -198,12 +229,12 @@ export class LocalDb {
     const revision = await adapter.getCollectionRevision(collection)
     const cached = this.cache.get(collection)
     if (cached && cached.revision === revision) {
-      return cached.rows as T[]
+      return typedRows<T>(cached.rows)
     }
     const records = await adapter.getAllRows(collection)
-    const rows = normalizeRows(records.map(record => parseRow<T>(record)).filter(Boolean) as any)
+    const rows = normalizeRows(records.map(record => parseRow<StoredLocalRow>(record)).filter(isStoredLocalRow))
     this.cache.set(collection, { revision, rows })
-    return rows as T[]
+    return typedRows<T>(rows)
   }
 
   async getReadonlyTable<C extends LocalCollectionName>(collection: C): Promise<readonly LocalRowOf<C>[]>
@@ -221,10 +252,11 @@ export class LocalDb {
     return cloneRows(await this.getReadonlyTable<T>(collection) as T[])
   }
 
-  private async replaceV2Table<T extends { _id?: string }>(collection: LocalCollectionName, rows: T[]) {
+  private async replaceV2Table<T>(collection: LocalCollectionName, rows: T[]) {
     const adapter = getLocalDbAdapter()
-    const normalized = normalizeRows(rows as any)
-    await adapter.replaceRows(collection, normalized.map(row => toLocalRowRecord(collection, row as any)))
+    const storedRows = rows.filter((row): row is T & StoredLocalRow => isStoredLocalRow(row))
+    const normalized = normalizeRows(storedRows)
+    await adapter.replaceRows(collection, normalized.map(row => toLocalRowRecord(collection, row)))
     const revision = await adapter.getCollectionRevision(collection)
     this.cache.set(collection, { revision, rows: normalized })
   }
@@ -235,7 +267,7 @@ export class LocalDb {
     const runReplace = async () => {
       const useV2 = await this.ensureCollectionStorage(collection)
       if (useV2) {
-        await this.replaceV2Table(collection, rows as any)
+        await this.replaceV2Table(collection, rows)
       } else {
         await this.writeLegacyTable(collection, rows)
       }
@@ -255,7 +287,7 @@ export class LocalDb {
         await adapter.deleteRowsByFamily(collection, familyId)
         this.cache.delete(collection)
       } else {
-        const rows = await this.readLegacyTable<any>(collection)
+        const rows = await this.readLegacyTable<StoredLocalRow>(collection)
         await this.writeLegacyTable(collection, rows.filter(row => row.family_id !== familyId))
       }
       this.emit([collection])
@@ -282,8 +314,8 @@ export class LocalDb {
         const useV2 = await this.ensureCollectionStorage(collection)
         const revision = useV2 ? await adapter.getCollectionRevision(collection) : 0
         const originalRows = useV2
-          ? [...await this.getReadonlyTable<any>(collection)]
-          : await this.readLegacyTable<any>(collection)
+          ? [...await this.getReadonlyTable<StoredLocalRow>(collection)]
+          : await this.readLegacyTable<StoredLocalRow>(collection)
         snapshots.set(collection, {
           useV2,
           revision,
@@ -387,8 +419,8 @@ export class LocalDb {
       }
 
       const result = await (mutator as (ctx: LocalRowTransactionContext<C>) => T | Promise<T>)(ctx)
-      const originalRows = Array.from(originalMap.values()).filter(Boolean)
-      const workingRows = Array.from(workingMap.values()).filter(Boolean)
+      const originalRows = Array.from(originalMap.values()).filter(isPresent)
+      const workingRows = Array.from(workingMap.values()).filter(isPresent)
       const changed = !sameRows(originalRows, workingRows)
 
       if (changed && useV2) {
@@ -396,11 +428,7 @@ export class LocalDb {
           this.emit([collection])
         }
       } else if (changed) {
-        const nextMap = new Map<string, LocalRowOf<C>>(
-          (legacyRows || [])
-            .filter(row => isRowWithId(row))
-            .map(row => [String((row as unknown as { _id: string })._id), row]),
-        )
+        const nextMap = buildTypedRowMap<LocalRowOf<C>>(legacyRows || [])
         for (const [id, row] of workingMap.entries()) {
           if (row) nextMap.set(id, row)
           else nextMap.delete(id)
@@ -505,8 +533,8 @@ export class LocalDb {
 
       for (const collection of uniqueCollections) {
         const state = getState(collection)
-        const originalRows = Array.from(state.originalMap.values()).filter(Boolean)
-        const workingRows = Array.from(state.workingMap.values()).filter(Boolean)
+        const originalRows = Array.from(state.originalMap.values()).filter(isPresent)
+        const workingRows = Array.from(state.workingMap.values()).filter(isPresent)
         const changed = !sameRows(originalRows, workingRows)
         if (!changed) continue
 
@@ -515,11 +543,7 @@ export class LocalDb {
             changedCollections.push(collection)
           }
         } else {
-          const nextMap = new Map<string, LocalRowOf<typeof collection>>(
-            (state.legacyRows || [])
-              .filter(row => isRowWithId(row))
-              .map(row => [String((row as unknown as { _id: string })._id), row]),
-          )
+          const nextMap = buildTypedRowMap<LocalRowOf<typeof collection>>(state.legacyRows || [])
           for (const [id, row] of state.workingMap.entries()) {
             if (row) nextMap.set(id, row)
             else nextMap.delete(id)
@@ -549,8 +573,8 @@ export class LocalDb {
 
     if (currentRevision !== originalRevision) {
       const currentRows = (await adapter.getRowsByIds(collection, changedIds))
-        .map(record => parseRow<any>(record))
-        .filter(Boolean)
+        .map(record => parseRow<StoredLocalRow>(record))
+        .filter(isStoredLocalRow)
       const currentMap = buildMap(currentRows)
       for (const id of changedIds) {
         const currentRow = currentMap.get(id) || null
@@ -564,8 +588,8 @@ export class LocalDb {
 
     const rowsToPut = changedIds
       .map(id => workingMap.get(id))
-      .filter(Boolean)
-      .map(row => toLocalRowRecord(collection, row as any))
+      .filter(isStoredLocalRow)
+      .map(row => toLocalRowRecord(collection, row))
     const idsToDelete = changedIds.filter(id => !workingMap.has(id))
 
     if (rowsToPut.length) await adapter.putRows(collection, rowsToPut)
@@ -625,10 +649,13 @@ export class LocalDb {
     const useV2 = await this.ensureCollectionStorage(collection)
     if (useV2) {
       const records = await getLocalDbAdapter().getRowsByFamily(collection, familyId)
-      return normalizeRows(records.map(record => parseRow<T>(record)).filter(Boolean) as any) as T[]
+      return typedRows<T>(normalizeRows(records.map(record => parseRow<StoredLocalRow>(record)).filter(isStoredLocalRow)))
     }
     const rows = await this.readLegacyTable<T>(collection)
-    return rows.filter((row: any) => row?.family_id === familyId || row?._id === familyId)
+    return rows.filter((row) => {
+      if (!isStoredLocalRow(row)) return false
+      return row.family_id === familyId || row._id === familyId
+    })
   }
 
   async getRowsByFamily<C extends LocalCollectionName>(collection: C, familyId: string): Promise<LocalRowOf<C>[]>
@@ -685,14 +712,14 @@ export class LocalDb {
       const currentMap = new Map(
         currentRows
           .map(record => parseRow<T>(record))
-          .filter(Boolean)
-          .map(row => [row!._id, row!]),
+          .filter((row): row is T => isRowWithId(row))
+          .map(row => [row._id, row]),
       )
       const nextRows = normalizedRows.map(row => ({
         ...(currentMap.get(row._id) || {}),
         ...row,
       }))
-      await adapter.putRows(collection, nextRows.map(row => toLocalRowRecord(collection, row as any)))
+      await adapter.putRows(collection, nextRows.filter(isStoredLocalRow).map(row => toLocalRowRecord(collection, row)))
       this.cache.delete(collection)
       this.emit([collection])
     }

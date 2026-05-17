@@ -523,7 +523,7 @@ import {
   getLocalNextMatingNumberPreview,
   getLocalTaskById,
 } from '@/localdb/domain-repository'
-import { localSyncRuntime } from '@/localdb/runtime'
+import { localSyncRuntime, type BreedingMutationPayload } from '@/localdb/runtime'
 import { resolveBreedingRouteQuery } from '@/utils/recordFormRoutes'
 import { getDefaultExtraArrangementDate, type ExtraArrangementKind } from '@/utils/breedingExtraArrangement'
 import { getBreedingDogPickerEmptyState, getEligibleBreedingDogs, selectDefaultBreedingDog } from '@/utils/breedingDogEligibility'
@@ -537,6 +537,7 @@ import BExtraArrangementSection from '@/components/form/BExtraArrangementSection
 import BImageUpload from '@/components/form/BImageUpload.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BBreedingContextCard from '@/components/record/BBreedingContextCard.vue'
+import type { DeriveStatus, Dog, DogWithStatus } from '@/types/dog'
 
 type BreedingRecordType =
   | 'heat'
@@ -547,6 +548,57 @@ type BreedingRecordType =
   | 'pre_labor'
   | 'abnormal_termination'
   | 'heat_observation'
+
+type BreedingDetailsPayload = Record<string, string | number | boolean | string[] | null | undefined> & {
+  appetite_change?: string
+  confirmed?: string
+  expected_checkup_date?: number
+  expected_due_date?: number
+  images?: string[]
+  is_due_date_manual?: boolean
+  left_count?: string | number
+  left_size?: string | number
+  mating_count?: string | number
+  mating_method?: string
+  mating_number?: string | number
+  method?: string
+  nesting_behavior?: boolean
+  other_signs?: string
+  puppy_count?: string | number
+  result?: string
+  results?: string
+  right_count?: string | number
+  right_size?: string | number
+  sire_id?: string
+  sire_name?: string
+  male_name?: string
+  temperature?: string | number
+  termination_type?: string
+  vulva_status?: string
+  discharge_status?: string
+  symptoms?: string[]
+}
+type BreedingFormDog = DogWithStatus
+type BreedingRecordDetail = NonNullable<Awaited<ReturnType<typeof getLocalBreedingRecordDetail>>>
+type BreedingCycleContext = NonNullable<Awaited<ReturnType<typeof getLocalBreedingCycleFormContext>>>
+type BreedingTaskLike = NonNullable<Awaited<ReturnType<typeof getLocalTaskById>>>
+type BreedingStatusLike = DeriveStatus & { cycle_id?: string }
+type BreedingBatchFailure = { reason?: string }
+
+const BREEDING_FORM_TYPES: readonly BreedingRecordType[] = [
+  'heat',
+  'follicle_check',
+  'mating',
+  'pregnancy_check',
+  'prenatal_check',
+  'pre_labor',
+  'abnormal_termination',
+  'heat_observation',
+]
+
+function isBreedingFormType(value: unknown): value is BreedingRecordType {
+  return typeof value === 'string' && BREEDING_FORM_TYPES.includes(value as BreedingRecordType)
+}
 
 const props = withDefaults(defineProps<{
   mode: 'create' | 'edit'
@@ -563,7 +615,8 @@ const isEdit = computed(() => props.mode === 'edit')
 const { currentFamily } = useAuth()
 
 const breedingType = computed<BreedingRecordType | ''>(() => {
-  return (isEdit.value ? currentRecord.value?.type : props.type) || ''
+  const type = isEdit.value ? currentRecord.value?.type : props.type
+  return isBreedingFormType(type) ? type : ''
 })
 
 const typeLabels: Record<BreedingRecordType, string> = {
@@ -589,10 +642,10 @@ const createTitles: Record<BreedingRecordType, string> = {
 }
 
 const loading = ref(false)
-const currentRecord = ref<any>(null)
-const selectedDog = ref<any>(null)
-const selectedDogs = ref<any[]>([])
-const selectedSire = ref<any>(null)
+const currentRecord = ref<BreedingRecordDetail | null>(null)
+const selectedDog = ref<BreedingFormDog | null>(null)
+const selectedDogs = ref<Dog[]>([])
+const selectedSire = ref<Dog | null>(null)
 const dogLocked = ref(false)
 const dogPickerVisible = ref(false)
 const cycleId = ref('')
@@ -603,7 +656,7 @@ const recordTime = ref<number>(Date.now())
 const notes = ref('')
 const costInput = ref('')
 const images = ref<string[]>([])
-const details = reactive<Record<string, any>>({})
+const details = reactive<BreedingDetailsPayload>({})
 const manualDueDate = ref<number | null>(null)
 const extraArrangementEnabled = ref(false)
 const extraArrangementKind = ref<ExtraArrangementKind>('contact_doctor')
@@ -621,7 +674,7 @@ const latestHeatRequestToken = ref(0)
 const cycleStatusRequestToken = ref(0)
 const latestHeatDates = ref<Record<string, number>>({})
 const currentCycleStatus = ref('')
-const cycleFormContext = ref<any>(null)
+const cycleFormContext = ref<BreedingCycleContext | null>(null)
 
 const matingMethods = ['人工授精', '自然交配']
 const follicleResults = ['发育中', '已成熟', '发育不良', '其他']
@@ -632,6 +685,73 @@ const vulvaOptions = ['硬/肿胀', '开始软化', '明显松软']
 const dischargeOptions = ['鲜红较多', '暗红减少', '淡粉/草黄色', '接近透明']
 const symptoms = ['主动靠近公犬', '接受爬跨', '翘尾侧偏', '频繁排尿', '舔舐外阴增多']
 const dogStore = useDogStore()
+
+function toOptionalString(value: unknown) {
+  return typeof value === 'string' ? value : ''
+}
+
+function toStringList(value: unknown) {
+  return Array.isArray(value) ? value.map(item => String(item || '')).filter(Boolean) : []
+}
+
+function toTimestampOrNull(value: unknown) {
+  const timestamp = Number(value || 0)
+  return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : null
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function createBreedingFormDog(input: {
+  _id: string
+  name?: string
+  gender?: unknown
+  role?: unknown
+  breed?: unknown
+  species?: unknown
+  statuses?: unknown
+}): BreedingFormDog {
+  return {
+    _id: input._id,
+    family_id: currentFamily.value?._id || '',
+    name: input.name || '',
+    gender: input.gender === '公' ? '公' : '母',
+    role: input.role === '外部种公' ? '外部种公' : input.role === '幼崽' ? '幼崽' : '种狗',
+    disposition: '在养',
+    species: typeof input.species === 'string' ? input.species : '',
+    breed: typeof input.breed === 'string' ? input.breed : '',
+    statuses: Array.isArray(input.statuses) ? input.statuses as BreedingStatusLike[] : [],
+    deleted_at: null,
+    created_at: 0,
+    updated_at: 0,
+  }
+}
+
+function normalizeBreedingFormDog(value: unknown): BreedingFormDog | null {
+  if (!isRecord(value)) return null
+  const id = typeof value._id === 'string' ? value._id.trim() : ''
+  if (!id) return null
+  return createBreedingFormDog({
+    _id: id,
+    name: typeof value.name === 'string' ? value.name : '',
+    gender: value.gender,
+    role: value.role,
+    breed: value.breed,
+    species: value.species,
+    statuses: value.statuses,
+  })
+}
+
+function normalizeBreedingDetails(value: unknown): BreedingDetailsPayload {
+  return isRecord(value) ? value as BreedingDetailsPayload : {}
+}
+
+function getDogIds(rows: Array<{ _id?: string }>) {
+  return rows
+    .map(dog => dog._id)
+    .filter((id): id is string => !!id)
+}
 
 const pageTitle = computed(() => {
   const title = breedingType.value ? createTitles[breedingType.value] : '录入繁育记录'
@@ -684,8 +804,8 @@ const latestHeatMetaMap = computed(() => {
   if (!shouldShowLatestHeatMeta.value) return {}
   const currentHeatDogIds = new Set(
     breedingCandidateDogs.value
-      .filter((dog: any) => hasCurrentHeatStatus(dog))
-      .map((dog: any) => dog._id),
+      .filter(dog => hasCurrentHeatStatus(dog))
+      .map(dog => dog._id),
   )
   return Object.entries(latestHeatDates.value).reduce<Record<string, string>>((map, [dogId, ts]) => {
     if (currentHeatDogIds.has(dogId)) return map
@@ -718,10 +838,11 @@ const selectedDogStageTag = computed(() => buildBreedingStageTagFromContext(cycl
 const selectedDogIds = computed(() => selectedDog.value?._id ? [selectedDog.value._id] : [])
 
 const selectedDogCycleStatus = computed(() => {
-  const statuses = Array.isArray(selectedDog.value?.statuses) ? selectedDog.value.statuses : []
-  const activeStatuses = statuses.filter((status: any) => status?.type === '发情中' || status?.type === '怀孕中')
+  const dog = selectedDog.value
+  const statuses = dog && Array.isArray(dog.statuses) ? dog.statuses : []
+  const activeStatuses = statuses.filter(status => status?.type === '发情中' || status?.type === '怀孕中')
   const matchedStatus = cycleId.value
-    ? activeStatuses.find((status: any) => status?.cycleId === cycleId.value)
+    ? activeStatuses.find(status => status?.cycleId === cycleId.value)
     : activeStatuses[0]
   return matchedStatus?.type || ''
 })
@@ -785,7 +906,7 @@ const estimatedDueDate = computed(() => {
 const matingNumberShortText = computed(() => `第 ${details.mating_number || 1} 脚`)
 
 const showTempWarning = computed(() => {
-  const temperature = parseFloat(details.temperature)
+  const temperature = parseFloat(String(details.temperature || ''))
   return !Number.isNaN(temperature) && temperature > 0 && temperature < 37.1
 })
 
@@ -831,7 +952,7 @@ const canSubmit = computed(() => {
   if (breedingType.value === 'follicle_check') return !!details.left_count
   if (breedingType.value === 'mating') return !!selectedSire.value
   if (breedingType.value === 'prenatal_check') return hasPrenatalCheckContent.value
-  if (breedingType.value === 'abnormal_termination') return visibleTerminationTypes.value.includes(details.termination_type)
+  if (breedingType.value === 'abnormal_termination') return visibleTerminationTypes.value.includes(typeof details.termination_type === 'string' ? details.termination_type : '')
   return true
 })
 
@@ -968,9 +1089,9 @@ function formatDateOnly(ts?: number | null) {
   return `${targetDate.getUTCFullYear()}-${String(targetDate.getUTCMonth() + 1).padStart(2, '0')}-${String(targetDate.getUTCDate()).padStart(2, '0')}`
 }
 
-function hasCurrentHeatStatus(dog: Record<string, any>) {
+function hasCurrentHeatStatus(dog: { statuses?: BreedingStatusLike[] }) {
   const statuses = Array.isArray(dog?.statuses) ? dog.statuses : []
-  return statuses.some((status: any) => status?.type === '发情中')
+  return statuses.some(status => status?.type === '发情中')
 }
 
 async function refreshCurrentCycleStatus() {
@@ -997,7 +1118,7 @@ async function refreshLatestHeatDates() {
     return
   }
 
-  const dogIds = breedingCandidateDogs.value.map((dog: any) => dog._id).filter(Boolean)
+  const dogIds = getDogIds(breedingCandidateDogs.value)
   if (dogIds.length === 0) {
     latestHeatDates.value = {}
     return
@@ -1019,10 +1140,11 @@ function openDogPicker() {
   dogPickerVisible.value = true
 }
 
-function onDogSelect(dog: any) {
-  selectedDog.value = dog
-  const statuses = Array.isArray(dog?.statuses) ? dog.statuses : []
-  const breedingStatus = statuses.find((status: any) => status?.type === '发情中' || status?.type === '怀孕中')
+function onDogSelect(dog: unknown) {
+  selectedDog.value = normalizeBreedingFormDog(dog)
+  const source = isRecord(dog) ? dog : {}
+  const statuses = Array.isArray(source.statuses) ? source.statuses as BreedingStatusLike[] : []
+  const breedingStatus = statuses.find(status => status?.type === '发情中' || status?.type === '怀孕中')
   cycleId.value = breedingStatus?.cycleId || breedingStatus?.cycle_id || ''
 }
 
@@ -1058,18 +1180,18 @@ function toggleSymptom(symptom: string) {
   }
 }
 
-function buildDetails() {
-  const built: Record<string, any> = {}
+function buildDetails(): BreedingDetailsPayload {
+  const built: BreedingDetailsPayload = {}
 
   if (breedingType.value === 'heat') {
     built.start_date = date.value
   }
 
   if (breedingType.value === 'follicle_check') {
-    built.left_count = parseInt(details.left_count) || 0
-    built.left_size = parseFloat(details.left_size) || 0
-    built.right_count = parseInt(details.right_count) || 0
-    built.right_size = parseFloat(details.right_size) || 0
+    built.left_count = parseInt(String(details.left_count || '')) || 0
+    built.left_size = parseFloat(String(details.left_size || '')) || 0
+    built.right_count = parseInt(String(details.right_count || '')) || 0
+    built.right_size = parseFloat(String(details.right_size || '')) || 0
     if (details.result) built.result = details.result
   }
 
@@ -1077,7 +1199,7 @@ function buildDetails() {
     built.sire_id = selectedSire.value?._id || details.sire_id || ''
     built.sire_name = selectedSire.value?.name || details.sire_name || ''
     built.method = details.method || '人工授精'
-    built.mating_number = parseInt(details.mating_number) || 1
+    built.mating_number = parseInt(String(details.mating_number || '')) || 1
     built.expected_checkup_date = date.value ? date.value + 21 * 86400000 : undefined
     built.expected_due_date = manualDueDate.value || (date.value ? date.value + 59 * 86400000 : undefined)
     built.is_due_date_manual = !!manualDueDate.value
@@ -1085,7 +1207,7 @@ function buildDetails() {
 
   if (breedingType.value === 'pregnancy_check') {
     if (details.confirmed) built.confirmed = details.confirmed
-    if (details.puppy_count) built.puppy_count = parseInt(details.puppy_count)
+    if (details.puppy_count) built.puppy_count = parseInt(String(details.puppy_count))
     if (images.value.length > 0) built.images = images.value
   }
 
@@ -1095,7 +1217,7 @@ function buildDetails() {
   }
 
   if (breedingType.value === 'pre_labor') {
-    if (details.temperature) built.temperature = parseFloat(details.temperature)
+    if (details.temperature) built.temperature = parseFloat(String(details.temperature))
     built.nesting_behavior = !!details.nesting_behavior
     if (details.appetite_change) built.appetite_change = details.appetite_change
     if (details.other_signs) built.other_signs = details.other_signs
@@ -1124,7 +1246,7 @@ function buildHeatBatchFeedbackMessage(savedCount: number, failedCount: number) 
   return buildRecordFeedbackMessage(savedCount)
 }
 
-function getBreedingHomeAnchorKey(type: BreedingRecordType, detailPayload: Record<string, any>) {
+function getBreedingHomeAnchorKey(type: BreedingRecordType, detailPayload: BreedingDetailsPayload) {
   if (type === 'heat') return 'breeding-step:follicle_check'
   if (type === 'follicle_check') return 'breeding-step:mating'
   if (type === 'mating') return 'breeding-step:pregnancy_check'
@@ -1133,22 +1255,22 @@ function getBreedingHomeAnchorKey(type: BreedingRecordType, detailPayload: Recor
   return ''
 }
 
-function resolveBreedingHomeAnchorKey(detailPayload: Record<string, any>) {
+function resolveBreedingHomeAnchorKey(detailPayload: BreedingDetailsPayload) {
   const type = breedingType.value
   if (!type) return ''
   return getBreedingHomeAnchorKey(type, detailPayload)
 }
 
-function applyTaskPrefill(task: any) {
+function applyTaskPrefill(task: BreedingTaskLike | null | undefined) {
   if (!task) return
 
   if (!selectedDog.value && task.dog_id) {
-    selectedDog.value = {
+    selectedDog.value = createBreedingFormDog({
       _id: task.dog_id,
       name: task.dog_name || '',
       gender: '母',
       role: '种狗',
-    }
+    })
     dogLocked.value = true
   } else if (selectedDog.value?._id && task.dog_id === selectedDog.value._id && task.dog_name) {
     selectedDog.value = {
@@ -1158,9 +1280,9 @@ function applyTaskPrefill(task: any) {
     dogLocked.value = true
   }
 
-  const taskDetails = task.details || {}
+  const taskDetails = normalizeBreedingDetails(task.details)
   if (taskDetails.method) details.method = taskDetails.method
-  if (taskDetails.notes) notes.value = taskDetails.notes
+  if (typeof taskDetails.notes === 'string') notes.value = taskDetails.notes
   if (taskDetails.cost) costInput.value = String(taskDetails.cost)
 }
 
@@ -1196,7 +1318,7 @@ async function loadCreateState() {
   const routeQuery = resolveBreedingRouteQuery(props.query)
   cycleId.value = routeQuery.cycleId
   prefillTaskId.value = routeQuery.taskId
-  selectedDog.value = routeQuery.selectedDog
+  selectedDog.value = normalizeBreedingFormDog(routeQuery.selectedDog)
   dogLocked.value = routeQuery.dogLocked
 
   if (breedingType.value === 'heat_observation') {
@@ -1234,38 +1356,40 @@ async function loadEditState() {
     if (!record) return
 
     currentRecord.value = record
-    selectedDog.value = {
+    selectedDog.value = createBreedingFormDog({
       _id: record.dog_id,
       name: record.dog_name || '',
       gender: '母',
       role: '种狗',
-    }
+    })
     dogLocked.value = true
     cycleId.value = record.cycle_id || ''
     notes.value = record.notes || ''
     costInput.value = record.cost ? String(record.cost) : ''
+    const recordDetails = normalizeBreedingDetails(record.details)
 
     if (record.type === 'heat_observation') {
       recordTime.value = record.date || Date.now()
-      vulvaStatus.value = record.details?.vulva_status || ''
-      dischargeStatus.value = record.details?.discharge_status || ''
-      selectedSymptoms.value = [...(record.details?.symptoms || [])]
+      vulvaStatus.value = toOptionalString(recordDetails.vulva_status)
+      dischargeStatus.value = toOptionalString(recordDetails.discharge_status)
+      selectedSymptoms.value = toStringList(recordDetails.symptoms)
     } else {
       date.value = record.date || null
-      Object.assign(details, record.details || {})
+      Object.assign(details, recordDetails)
       if (record.type === 'mating') {
-        details.method = record.details?.method || record.details?.mating_method || '人工授精'
-        details.mating_number = record.details?.mating_number || record.details?.mating_count || 1
-        selectedSire.value = record.details?.sire_id
-          ? { _id: record.details.sire_id, name: record.details.sire_name || record.details?.male_name || '' }
+        details.method = recordDetails.method || recordDetails.mating_method || '人工授精'
+        details.mating_number = recordDetails.mating_number || recordDetails.mating_count || 1
+        const sireId = toOptionalString(recordDetails.sire_id)
+        selectedSire.value = sireId
+          ? createBreedingFormDog({ _id: sireId, name: toOptionalString(recordDetails.sire_name) || toOptionalString(recordDetails.male_name), gender: '公', role: '外部种公' })
           : null
-        manualDueDate.value = record.details?.is_due_date_manual ? (record.details?.expected_due_date || null) : null
+        manualDueDate.value = recordDetails.is_due_date_manual ? toTimestampOrNull(recordDetails.expected_due_date) : null
       }
       if (record.type === 'pregnancy_check' || record.type === 'prenatal_check') {
-        images.value = [...(record.details?.images || [])]
+        images.value = toStringList(recordDetails.images)
       }
       if (record.type === 'pregnancy_check') {
-        details.confirmed = record.details?.confirmed || '否'
+        details.confirmed = recordDetails.confirmed || '否'
       }
       if (record.type === 'pre_labor' && details.nesting_behavior === undefined) {
         details.nesting_behavior = false
@@ -1287,7 +1411,7 @@ async function submitCreate() {
   if (isHeatMultiCreate.value) {
     const detailPayload = buildDetails()
     const result = await localSyncRuntime.batchAddBreedingRecordsLocally(currentFamily.value?._id || '', {
-      dog_ids: selectedDogs.value.map((dog: any) => dog._id),
+      dog_ids: selectedDogs.value.map(dog => dog._id),
       type: 'heat',
       date: date.value,
       notes: notes.value || null,
@@ -1316,7 +1440,7 @@ async function submitCreate() {
   }
 
   const detailPayload = buildDetails()
-  const payload: Record<string, any> = {
+  const payload: BreedingMutationPayload = {
     type: breedingType.value,
     dog_id: selectedDog.value?._id || '',
     cycle_id: cycleId.value || undefined,
@@ -1361,7 +1485,7 @@ async function submitCreate() {
 
 async function submitEdit() {
   const detailPayload = buildDetails()
-  const payload: Record<string, any> = {
+  const payload: BreedingMutationPayload = {
     id: props.recordId,
     notes: notes.value || null,
     details: detailPayload,
@@ -1449,7 +1573,7 @@ watch(
 )
 
 watch(
-  [shouldShowLatestHeatMeta, () => currentFamily.value?._id || '', () => breedingCandidateDogs.value.map((dog: any) => dog._id).join(',')],
+  [shouldShowLatestHeatMeta, () => currentFamily.value?._id || '', () => getDogIds(breedingCandidateDogs.value).join(',')],
   () => {
     void refreshLatestHeatDates()
   },

@@ -1,7 +1,40 @@
 import type { LocalCollectionName } from '@/localdb/types'
 import { LOCAL_COLLECTIONS } from '@/localdb/types'
 
-declare const plus: any
+type SqliteRow = {
+  collection?: unknown
+  id?: unknown
+  family_id?: unknown
+  updated_at?: unknown
+  deleted_at?: unknown
+  flags?: unknown
+  value?: unknown
+}
+
+declare const plus: {
+  sqlite?: {
+    openDatabase(options: {
+      name: string
+      path: string
+      success: () => void
+      fail: (error: unknown) => void
+    }): void
+    executeSql(options: {
+      name: string
+      sql: string
+      args?: unknown[]
+      success: () => void
+      fail: (error: unknown) => void
+    }): void
+    selectSql(options: {
+      name: string
+      sql: string
+      args?: unknown[]
+      success: (rows: SqliteRow[]) => void
+      fail: (error: unknown) => void
+    }): void
+  }
+}
 
 export const STORAGE_V2_ENABLED_KEY = 'breed-local-first:storage:v2:enabled'
 export const MIGRATION_STALE_MS = 10 * 60 * 1000
@@ -16,6 +49,29 @@ export interface LocalRowRecord {
   deleted_at: number
   flags: string
   value: string
+}
+
+export type LocalRowRecordSource = {
+  _id?: unknown
+  family_id?: unknown
+  updated_at?: unknown
+  created_at?: unknown
+  deleted_at?: unknown
+  _pending_upload?: unknown
+  pending_upload?: unknown
+  _upload_error?: unknown
+  upload_error?: unknown
+}
+
+function isLocalRowRecordSource(row: unknown): row is LocalRowRecordSource & { _id: unknown } {
+  return typeof row === 'object'
+    && row !== null
+    && Boolean((row as { _id?: unknown })._id)
+}
+
+type IndexedRow = Partial<LocalRowRecord> & {
+  collection?: unknown
+  id?: unknown
 }
 
 export interface KeyValueAdapter {
@@ -59,10 +115,10 @@ function toRevision(value: string | null) {
 function getRowsFromLegacyPayload(collection: LocalCollectionName, raw: string | null): LocalRowRecord[] {
   if (!raw) return []
   try {
-    const rows = JSON.parse(raw)
+    const rows = JSON.parse(raw) as unknown
     if (!Array.isArray(rows)) return []
     return rows
-      .filter(row => row && typeof row === 'object' && row._id)
+      .filter(isLocalRowRecordSource)
       .map(row => toLocalRowRecord(collection, row))
   } catch {
     return []
@@ -77,7 +133,7 @@ export function getCollectionStorageKey(collection: LocalCollectionName) {
   return `breed-local-first:${normalizeCollection(collection)}`
 }
 
-export function toLocalRowRecord(collection: LocalCollectionName, row: Record<string, any>): LocalRowRecord {
+export function toLocalRowRecord(collection: LocalCollectionName, row: LocalRowRecordSource): LocalRowRecord {
   const familyId = String(row.family_id || (collection === 'families' ? row._id || '' : ''))
   const pendingUpload = Boolean(row._pending_upload || row.pending_upload)
   const hasUploadError = Boolean(row._upload_error || row.upload_error)
@@ -568,15 +624,15 @@ class IndexedDbAdapter implements LocalDbAdapter {
     return { ...row, key: buildRowKey(row.collection, row.id) }
   }
 
-  private fromIndexedRow(row: any): LocalRowRecord {
+  private fromIndexedRow(row: IndexedRow): LocalRowRecord {
     return {
-      collection: row.collection,
-      id: row.id,
+      collection: row.collection as LocalCollectionName,
+      id: String(row.id || ''),
       family_id: row.family_id || '',
       updated_at: Number(row.updated_at || 0),
       deleted_at: Number(row.deleted_at || 0),
-      flags: row.flags || '{}',
-      value: row.value || '{}',
+      flags: String(row.flags || '{}'),
+      value: String(row.value || '{}'),
     }
   }
 }
@@ -592,12 +648,18 @@ class SqliteAdapter implements LocalDbAdapter {
     return typeof plus !== 'undefined' && !!plus?.sqlite
   }
 
+  private getSqlite() {
+    const sqlite = plus.sqlite
+    if (!sqlite) throw new Error('SQLite unavailable')
+    return sqlite
+  }
+
   private async open() {
     if (!this.isSupported() || this.opened) return
 
     const dbPath = '_doc/breed_app_local_first.db'
     await new Promise<void>((resolve, reject) => {
-      plus.sqlite.openDatabase({
+      this.getSqlite().openDatabase({
         name: SqliteAdapter.DB_NAME,
         path: dbPath,
         success: () => resolve(),
@@ -621,7 +683,7 @@ class SqliteAdapter implements LocalDbAdapter {
 
   private async execute(sql: string, args: unknown[] = []) {
     await new Promise<void>((resolve, reject) => {
-      plus.sqlite.executeSql({
+      this.getSqlite().executeSql({
         name: SqliteAdapter.DB_NAME,
         sql,
         args,
@@ -632,12 +694,12 @@ class SqliteAdapter implements LocalDbAdapter {
   }
 
   private async select(sql: string, args: unknown[] = []) {
-    return new Promise<any[]>((resolve, reject) => {
-      plus.sqlite.selectSql({
+    return new Promise<SqliteRow[]>((resolve, reject) => {
+      this.getSqlite().selectSql({
         name: SqliteAdapter.DB_NAME,
         sql,
         args,
-        success: (rows: any[]) => resolve(rows || []),
+        success: rows => resolve(rows || []),
         fail: (error: unknown) => reject(error),
       })
     })
@@ -833,15 +895,15 @@ class SqliteAdapter implements LocalDbAdapter {
     )
   }
 
-  private fromSqlRow(row: any): LocalRowRecord {
+  private fromSqlRow(row: SqliteRow): LocalRowRecord {
     return {
-      collection: row.collection,
+      collection: row.collection as LocalCollectionName,
       id: String(row.id || ''),
       family_id: String(row.family_id || ''),
       updated_at: Number(row.updated_at || 0),
       deleted_at: Number(row.deleted_at || 0),
-      flags: row.flags || '{}',
-      value: row.value || '{}',
+      flags: String(row.flags || '{}'),
+      value: String(row.value || '{}'),
     }
   }
 }

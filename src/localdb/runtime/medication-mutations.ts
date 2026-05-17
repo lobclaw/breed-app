@@ -7,6 +7,17 @@ import { buildLocalAck, buildSyncMeta, getFamilyId, getNow } from '@/localdb/run
 import type { BusinessCollectionName, LocalRowOf, SyncMetadata } from '@/localdb/types'
 import { getBeijingDayStart, getBeijingOrdinalDay } from '@/utils/date'
 
+type MedicationTaskReminderRow = LocalRowOf<'tasks'> & {
+  medication_task_id?: string | null
+}
+type LocalMedicationTaskRow = LocalRowOf<'medication_tasks'> & {
+  actual_start_date?: number | string | null
+  duration_days?: number | string | null
+  daily_doses?: Record<string, number>
+  title?: string | null
+  source_record_id?: string | null
+}
+
 export interface RuntimeMutationContext {
   enqueueMutation(
     type: LocalMutationType,
@@ -18,11 +29,36 @@ export interface RuntimeMutationContext {
   ): Promise<void>
 }
 
+export interface BatchStartMedicationPayload {
+  dog_ids: string[]
+  actual_start_date?: number | string | null
+  duration_days?: number | string | null
+  drug_name: string
+  protocol_id?: string | null
+  dosage?: string | null
+  dosage_unit?: string | null
+  method?: string | null
+  frequency?: number | string | null
+  cost?: number | string | null
+  notes?: string | null
+  illness_links?: Array<{ dog_id: string, illness_record_id: string }>
+  illnessLinks?: Array<{ dog_id: string, illness_record_id: string }>
+  override_dog_ids?: string[]
+  illnessRecordId?: string | null
+  illness_record_id?: string | null
+}
+
+export interface EndMedicationPayload {
+  id?: string
+  illnessDisposition?: string | null
+  illness_disposition?: string | null
+}
+
 function startOfDay(ts: number) {
   return getBeijingDayStart(ts)
 }
 
-function getTaskBaseVersion(task: Record<string, any> | null) {
+function getTaskBaseVersion(task: LocalMedicationTaskRow | null) {
   if (!task?._id) return {}
   return { [task._id]: Number(task.version || 0) }
 }
@@ -30,12 +66,12 @@ function getTaskBaseVersion(task: Record<string, any> | null) {
 async function getDogsByIds(dogIds: string[]) {
   const uniqueIds = [...new Set(dogIds.filter(Boolean))]
   if (!uniqueIds.length) return []
-  const dogs = await localDb.query<any>('dogs', dog => uniqueIds.includes(dog._id))
+  const dogs = await localDb.query('dogs', dog => uniqueIds.includes(dog._id))
   const dogMap = new Map(dogs.map(dog => [dog._id, dog]))
-  return uniqueIds.map(id => dogMap.get(id)).filter(Boolean)
+  return uniqueIds.map(id => dogMap.get(id)).filter((dog): dog is LocalRowOf<'dogs'> => Boolean(dog))
 }
 
-export async function batchStartMedicationLocally(ctx: RuntimeMutationContext, familyIdInput: string, data: Record<string, any>) {
+export async function batchStartMedicationLocally(ctx: RuntimeMutationContext, familyIdInput: string, data: BatchStartMedicationPayload) {
   const familyId = getFamilyId(familyIdInput)
   if (!Array.isArray(data.dog_ids) || !data.dog_ids.length) throw new Error('请选择犬只')
   const dogs = await getDogsByIds(data.dog_ids)
@@ -45,10 +81,10 @@ export async function batchStartMedicationLocally(ctx: RuntimeMutationContext, f
   const durationDays = Number(data.duration_days || 1)
   const startDate = Number.isFinite(Number(data.actual_start_date)) ? Number(data.actual_start_date) : now
   const endDate = startDate + ((durationDays - 1) * 86400000)
-  const illnessLinks = new Map((data.illness_links || data.illnessLinks || []).map((item: any) => [item.dog_id, item.illness_record_id]))
+  const illnessLinks = new Map((data.illness_links || data.illnessLinks || []).map(item => [item.dog_id, item.illness_record_id]))
   const overrideDogIdSet = new Set(Array.isArray(data.override_dog_ids) ? data.override_dog_ids.filter(Boolean) : [])
   const overriddenMedicationTasks = overrideDogIdSet.size > 0
-    ? await localDb.query<any>('medication_tasks', row =>
+    ? await localDb.query('medication_tasks', row =>
       row.family_id === familyId
       && overrideDogIdSet.has(row.dog_id)
       && row.drug_name === data.drug_name
@@ -97,7 +133,7 @@ export async function batchStartMedicationLocally(ctx: RuntimeMutationContext, f
     : []
   const linkedIllnessIds = medicationTasks.map(task => task.source_record_id).filter(Boolean)
   const linkedIllnessRows = linkedIllnessIds.length > 0
-    ? await localDb.query<any>('health_records', row =>
+    ? await localDb.query('health_records', row =>
       row.family_id === familyId
       && linkedIllnessIds.includes(row._id),
     )
@@ -129,10 +165,10 @@ export async function batchStartMedicationLocally(ctx: RuntimeMutationContext, f
       } as LocalRowOf<'medication_tasks'>))
     }
     for (const task of medicationTasks) {
-      await rows.upsertRow('medication_tasks', task as unknown as LocalRowOf<'medication_tasks'>)
+      await rows.upsertRow('medication_tasks', task as LocalRowOf<'medication_tasks'>)
     }
     for (const expenseRow of expenseRows) {
-      await rows.upsertRow('expenses', expenseRow as unknown as LocalRowOf<'expenses'>)
+      await rows.upsertRow('expenses', expenseRow as LocalRowOf<'expenses'>)
     }
     for (const illnessRow of linkedIllnessRows) {
       await rows.updateRow('health_records', illnessRow._id, row => ({
@@ -186,12 +222,12 @@ export async function batchStartMedicationLocally(ctx: RuntimeMutationContext, f
 }
 
 export async function recordMedicationDoseLocally(ctx: RuntimeMutationContext, familyId: string, medicationTaskId: string) {
-  const task = await localDb.findById<any>('medication_tasks', medicationTaskId)
+  const task = await localDb.findById<LocalMedicationTaskRow>('medication_tasks', medicationTaskId)
   if (!task || task.status !== '进行中') return null
 
   const now = getNow()
   const today = startOfDay(now)
-  const startDate = startOfDay(task.actual_start_date || task.start_date || task.created_at || now)
+  const startDate = startOfDay(Number(task.actual_start_date || task.start_date || task.created_at || now))
   const currentDay = getBeijingOrdinalDay(startDate, today) || 0
   if (currentDay < 1 || currentDay > (task.duration_days || 1)) return null
 
@@ -236,7 +272,7 @@ export async function recordMedicationDoseLocally(ctx: RuntimeMutationContext, f
 }
 
 export async function batchCompleteMedicationDayLocally(ctx: RuntimeMutationContext, familyId: string, medicationTaskIds: string[]) {
-  const rows = await localDb.query<any>('medication_tasks', task => medicationTaskIds.includes(task._id))
+  const rows = await localDb.query<LocalMedicationTaskRow>('medication_tasks', task => medicationTaskIds.includes(task._id))
   const activeRows = rows.filter(task => task.status === '进行中')
   if (!activeRows.length) return null
 
@@ -250,7 +286,7 @@ export async function batchCompleteMedicationDayLocally(ctx: RuntimeMutationCont
   })
   const medicationPatches = activeRows.map((row) => {
     const today = startOfDay(now)
-    const startDate = startOfDay(row.actual_start_date || row.start_date || row.created_at || now)
+    const startDate = startOfDay(Number(row.actual_start_date || row.start_date || row.created_at || now))
     const currentDay = getBeijingOrdinalDay(startDate, today) || 0
     if (currentDay < 1 || currentDay > Number(row.duration_days || 1)) return null
 
@@ -298,15 +334,15 @@ export async function batchCompleteMedicationDayLocally(ctx: RuntimeMutationCont
   }
 }
 
-export async function endMedicationLocally(ctx: RuntimeMutationContext, familyId: string, medicationTaskId: string, data: Record<string, any> = {}) {
-  const task = await findLocalRow<any>('medication_tasks', medicationTaskId)
+export async function endMedicationLocally(ctx: RuntimeMutationContext, familyId: string, medicationTaskId: string, data: EndMedicationPayload = {}) {
+  const task = await findLocalRow('medication_tasks', medicationTaskId)
   if (!task || task.family_id !== familyId) throw new Error('用药任务不存在')
   if (task.status !== '进行中') throw new Error('该用药已结束')
 
   const linkedIllness = task.source_record_id
-    ? await findLocalRow<any>('health_records', task.source_record_id)
+    ? await findLocalRow('health_records', task.source_record_id)
     : null
-  const pendingDailyTasks = await localDb.query<any>('tasks', row =>
+  const pendingDailyTasks = await localDb.query<MedicationTaskReminderRow>('tasks', row =>
     row.family_id === familyId
     && row.medication_task_id === medicationTaskId
     && row.status === 'pending',
@@ -383,11 +419,12 @@ export async function endMedicationLocally(ctx: RuntimeMutationContext, familyId
 }
 
 export async function endMedicationByDogLocally(ctx: RuntimeMutationContext, familyId: string, dogId: string) {
-  const rows = await localDb.query<any>('medication_tasks', row => row.dog_id === dogId && row.status === '进行中')
+  const rows = await localDb.query<LocalMedicationTaskRow>('medication_tasks', row => row.dog_id === dogId && row.status === '进行中')
   if (!rows.length) return null
   const medicationTaskIds = rows.map(row => row._id)
-  const pendingDailyTasks = await localDb.query<any>('tasks', row =>
+  const pendingDailyTasks = await localDb.query<MedicationTaskReminderRow>('tasks', row =>
     row.family_id === familyId
+    && !!row.medication_task_id
     && medicationTaskIds.includes(row.medication_task_id)
     && row.status === 'pending',
   )

@@ -10,12 +10,32 @@ const PENDING_UPLOAD_COLLECTION_LABELS: Record<string, string> = {
   dogs: '犬只资料',
 }
 
+type PendingUploadBusinessRow = {
+  _id: string
+  family_id?: string
+  dog_names?: unknown
+  dog_name?: unknown
+  dam_name?: unknown
+  name?: unknown
+  category?: unknown
+  type?: unknown
+  images?: unknown
+  details?: {
+    images?: unknown
+  } | null
+  _pending_upload?: boolean
+  pending_upload?: boolean
+  _upload_error?: unknown
+  upload_error?: unknown
+  deleted_at?: number | null
+}
+
 function getNow() {
   return Date.now()
 }
 
-function getRowDisplayName(row: Record<string, any>) {
-  const dogNames = Array.isArray(row.dog_names) ? row.dog_names.map((item: any) => String(item || '').trim()).filter(Boolean) : []
+function getRowDisplayName(row: PendingUploadBusinessRow) {
+  const dogNames = Array.isArray(row.dog_names) ? row.dog_names.map(item => String(item || '').trim()).filter(Boolean) : []
   return String(
     row.dog_name
     || dogNames[0]
@@ -27,21 +47,22 @@ function getRowDisplayName(row: Record<string, any>) {
   ).trim()
 }
 
-function getPendingUploadTitle(collection: string, row: Record<string, any>) {
+function getPendingUploadTitle(collection: string, row: PendingUploadBusinessRow) {
   const label = PENDING_UPLOAD_COLLECTION_LABELS[collection] || '业务记录'
   const name = getRowDisplayName(row)
   return name ? `${label} · ${name}` : label
 }
 
-function getPendingUploadRefs(row: Record<string, any>) {
+function getPendingUploadRefs(row: PendingUploadBusinessRow) {
+  const detailsImages = row.details?.images
   const refs = [
     ...(Array.isArray(row.images) ? row.images : []),
-    ...(Array.isArray(row.details?.images) ? row.details.images : []),
+    ...(Array.isArray(detailsImages) ? detailsImages : []),
   ]
   return refs.map(item => String(item || '').trim()).filter(Boolean)
 }
 
-function getPendingUploadError(row: Record<string, any>) {
+function getPendingUploadError(row: PendingUploadBusinessRow) {
   const refs = getPendingUploadRefs(row)
   if (refs.some(ref => isVolatileImageRef(ref))) return '图片临时路径已失效，请重新选择图片'
   if (refs.some(ref => isDataUrlImageRef(ref))) return '图片已缓存在本机，等待上传'
@@ -72,7 +93,7 @@ async function resolveIssue(issueId: string, familyId = '') {
 }
 
 export const syncIssueService = {
-  async refreshPendingUploadIssue(collection: LocalCollectionName, row: Record<string, any>) {
+  async refreshPendingUploadIssue(collection: LocalCollectionName, row: PendingUploadBusinessRow) {
     const recordId = String(row?._id || '')
     if (!recordId) return
     const familyId = String(row.family_id || (collection === 'families' ? row._id || '' : ''))
@@ -100,9 +121,9 @@ export const syncIssueService = {
 
   async refreshPendingUploadIssuesForCollection(collection: LocalCollectionName, familyId: string) {
     if (!familyId) return
-    const rows = await localDb.query<any>(collection, row => (
+    const rows = await localDb.query<PendingUploadBusinessRow>(collection, row => (
       row.family_id === familyId
-      && ((row._pending_upload || row.pending_upload) || row._upload_error || row.upload_error)
+      && Boolean((row._pending_upload || row.pending_upload) || row._upload_error || row.upload_error)
     ))
     const pendingIssueIds = new Set(
       rows
@@ -121,6 +142,19 @@ export const syncIssueService = {
         .filter(issue => !pendingIssueIds.has(issue._id))
         .map(issue => resolveIssue(issue._id, familyId)),
     ])
+  },
+
+  async refreshPendingUploadIssuesForRows(collection: LocalCollectionName, familyId: string, recordIds: string[]) {
+    if (!familyId) return
+    const uniqueRecordIds = [...new Set((recordIds || []).map(id => String(id || '').trim()).filter(Boolean))]
+    await Promise.all(uniqueRecordIds.map(async (recordId) => {
+      const row = await localDb.findById<PendingUploadBusinessRow>(collection, recordId)
+      if (!row || row.family_id !== familyId) {
+        await resolveIssue(issueIdForPendingUpload(collection, recordId), familyId)
+        return
+      }
+      await this.refreshPendingUploadIssue(collection, row)
+    }))
   },
 
   async refreshPendingUploadIssuesForCollections(collections: LocalCollectionName[], familyId: string) {

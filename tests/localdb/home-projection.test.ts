@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { localDb } from '../../src/localdb/db'
 import { applyTouchedEntityVersions, buildLocalDateCounts, buildLocalHomeCards } from '../../src/localdb/home-projection'
-import { buildHomeSnapshot, clearHomeEntitiesCache } from '../../src/localdb/runtime/home-snapshot'
+import { buildHomeSnapshot, clearHomeEntitiesCache, materializeBreedingMilestonesForFamily } from '../../src/localdb/runtime/home-snapshot'
 
 describe('local home projection', () => {
   it('应将单只犬的疫苗和驱虫提醒也投影为健康批量卡', () => {
@@ -206,6 +206,56 @@ describe('local home projection', () => {
     expect(breedingCard).toBeTruthy()
     expect(breedingCard?.tasks?.[0]?.details?.step_type).toBe('follicle_check')
     expect(result.counts.today).toBeGreaterThan(0)
+  })
+
+  it('繁育 milestone 物化应只新增缺失任务且重复执行不重复创建', async () => {
+    const familyId = 'family_materialize_milestone'
+    const now = new Date('2026-05-15T10:00:00+08:00').getTime()
+    const heatDate = new Date('2026-05-10T10:00:00+08:00').getTime()
+
+    await Promise.all([
+      localDb.replaceTable('tasks', []),
+      localDb.replaceTable('breeding_cycles', [{
+        _id: 'cycle_materialize_1',
+        family_id: familyId,
+        dam_id: 'dog_materialize_1',
+        dam_name: '奶糖',
+        status: '发情中',
+        start_date: heatDate,
+        created_at: heatDate,
+        updated_at: now,
+      }]),
+      localDb.replaceTable('breeding_records', [{
+        _id: 'record_materialize_heat',
+        family_id: familyId,
+        cycle_id: 'cycle_materialize_1',
+        dog_id: 'dog_materialize_1',
+        dog_name: '奶糖',
+        type: 'heat',
+        date: heatDate,
+        details: {},
+        created_at: heatDate,
+        updated_at: now,
+      }]),
+    ])
+
+    const first = await materializeBreedingMilestonesForFamily(familyId)
+    const second = await materializeBreedingMilestonesForFamily(familyId)
+    const tasks = await localDb.getRowsByFamilyReadonly('tasks', familyId)
+
+    expect(first).toHaveLength(1)
+    expect(first[0]._id).toBe('synthetic_breeding_milestone:cycle_materialize_1:follicle_check')
+    expect(first[0]._local_pending).toBe(true)
+    expect(first[0].version).toBe(0)
+    expect(second).toEqual([])
+    expect(tasks).toHaveLength(1)
+    expect(tasks[0]).toMatchObject({
+      _id: 'synthetic_breeding_milestone:cycle_materialize_1:follicle_check',
+      family_id: familyId,
+      type: 'breeding_milestone',
+      status: 'pending',
+      cycle_id: 'cycle_materialize_1',
+    })
   })
 
   it('首页 projection 不再扫描 breeding_cycles / breeding_records 合成繁育卡片', () => {

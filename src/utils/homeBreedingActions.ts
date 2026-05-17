@@ -28,7 +28,7 @@ export interface HomeBreedingCardLike {
     type?: string
     cycle_id?: string
     litter_id?: string
-    details?: Record<string, any> | null
+    details?: Record<string, unknown> | null
   }>
 }
 

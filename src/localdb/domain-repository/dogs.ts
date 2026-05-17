@@ -1,6 +1,7 @@
 import { localDb } from '@/localdb/db'
 import type { BreedingRecord } from '@/types/breeding'
 import type { DeriveStatus, DogWithStatus } from '@/types/dog'
+import type { LocalRowOf } from '@/localdb/types'
 import {
   buildBreedingStatusMap,
 } from '@/localdb/domain-services/breedingStatus'
@@ -17,8 +18,23 @@ import {
   sortListStatuses,
 } from '@/localdb/domain-services/healthStatus'
 
-function groupRowsByDogId(rows: Array<Record<string, any>> = []) {
-  const grouped = new Map<string, any[]>()
+type DogRepositoryRow = LocalRowOf<'dogs'>
+type DogRelatedRow = {
+  dog_id?: string | null
+}
+type DogListFilters = {
+  gender?: string
+  role?: string
+  disposition?: string
+  dispositions?: string[]
+}
+type DogWeightRow = LocalRowOf<'dog_weights'> & {
+  date?: number | null
+  measured_at?: number | null
+}
+
+function groupRowsByDogId<T extends DogRelatedRow>(rows: T[] = []) {
+  const grouped = new Map<string, T[]>()
   rows.forEach((row) => {
     const dogId = typeof row?.dog_id === 'string' ? row.dog_id : ''
     if (!dogId) return
@@ -30,10 +46,10 @@ function groupRowsByDogId(rows: Array<Record<string, any>> = []) {
 }
 
 function buildDogStatuses(
-  dog: Record<string, any>,
+  dog: DogRepositoryRow,
   breedingStatusMap: Map<string, DeriveStatus[]>,
-  illnessMap: Map<string, any[]>,
-  medicationMap: Map<string, any[]>,
+  illnessMap: Map<string, LocalRowOf<'health_records'>[]>,
+  medicationMap: Map<string, LocalRowOf<'medication_tasks'>[]>,
   now = Date.now(),
   options: { aggregateIllnesses?: boolean } = {},
 ) {
@@ -50,7 +66,7 @@ function buildDogStatuses(
   return statuses.length > 0 ? statuses : [{ type: '正常' as const }]
 }
 
-export async function listLocalDogsWithStatus(familyId: string, filters: Record<string, any> = {}): Promise<DogWithStatus[]> {
+export async function listLocalDogsWithStatus(familyId: string, filters: DogListFilters = {}): Promise<DogWithStatus[]> {
   if (!familyId) return []
   const now = Date.now()
   const allowedDispositions = ['在养', '待售', '已预定', '自留']
@@ -62,7 +78,7 @@ export async function listLocalDogsWithStatus(familyId: string, filters: Record<
   const dogDispositionSet = dogDispositions?.length ? new Set(dogDispositions) : null
 
   const [dogs, cycles, illnesses, medicationTasks, activeLitters] = await Promise.all([
-    localDb.query<any>('dogs', (dog) => {
+    localDb.query('dogs', (dog) => {
       if (dog.family_id !== familyId) return false
       if (dog.deleted_at) return false
       if (filters.gender && dog.gender !== filters.gender) return false
@@ -70,20 +86,20 @@ export async function listLocalDogsWithStatus(familyId: string, filters: Record<
       if (dogDispositionSet) return dogDispositionSet.has(dog.disposition)
       return allowedDispositions.includes(dog.disposition)
     }),
-    localDb.query<any>('breeding_cycles', cycle =>
+    localDb.query('breeding_cycles', cycle =>
       cycle.family_id === familyId
       && ['发情中', '怀孕中', '已生产'].includes(cycle.status),
     ),
-    localDb.query<any>('health_records', record =>
+    localDb.query('health_records', record =>
       record.family_id === familyId
       && record.type === 'illness'
       && record?.details?.treatment_status !== '已康复',
     ),
-    localDb.query<any>('medication_tasks', task =>
+    localDb.query('medication_tasks', task =>
       task.family_id === familyId
       && isMedicationTaskActive(task, now),
     ),
-    localDb.query<any>('litters', litter =>
+    localDb.query('litters', litter =>
       litter.family_id === familyId
       && !litter.weaned_at,
     ),
@@ -105,24 +121,24 @@ export async function getLocalDogDetail(familyId: string, dogId: string): Promis
 
   const now = Date.now()
   const [dog, cycles, illnesses, medicationTasks, activeLitters, breedingRecords] = await Promise.all([
-    localDb.findById<DogWithStatus & { deleted_at?: number | null }>('dogs', dogId),
-    localDb.query<any>('breeding_cycles', cycle =>
+    localDb.findById('dogs', dogId),
+    localDb.query('breeding_cycles', cycle =>
       cycle.family_id === familyId
       && cycle.dam_id === dogId
       && ['发情中', '怀孕中', '已生产'].includes(cycle.status),
     ),
-    localDb.query<any>('health_records', record =>
+    localDb.query('health_records', record =>
       record.family_id === familyId
       && record.dog_id === dogId
       && record.type === 'illness'
       && record?.details?.treatment_status !== '已康复',
     ),
-    localDb.query<any>('medication_tasks', task =>
+    localDb.query('medication_tasks', task =>
       task.family_id === familyId
       && task.dog_id === dogId
       && isMedicationTaskActive(task, now),
     ),
-    localDb.query<any>('litters', litter =>
+    localDb.query('litters', litter =>
       litter.family_id === familyId
       && litter.dam_id === dogId
       && !litter.weaned_at,
@@ -153,7 +169,7 @@ export async function getLocalDogDetail(familyId: string, dogId: string): Promis
 
 export async function listLocalDogWeights(familyId: string, dogId: string) {
   if (!familyId || !dogId) return []
-  const weights = await localDb.query<any>('dog_weights', row =>
+  const weights = await localDb.query<DogWeightRow>('dog_weights', row =>
     row.family_id === familyId
     && row.dog_id === dogId,
   )

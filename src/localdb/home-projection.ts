@@ -13,7 +13,112 @@ const BREEDING_EXTRA_TYPES = new Set([
   'abnormal_termination',
 ])
 
-type GenericRow = Record<string, any>
+type GenericDetails = Record<string, unknown> & {
+  anchor_id?: string | null
+  condition?: string | null
+  confirmed?: string | boolean | null
+  day?: number | null
+  deworming_type?: string | null
+  dosage?: string | number | null
+  dosage_unit?: string | null
+  drug_name?: string | null
+  expected_checkup_date?: number | null
+  expected_due_date?: number | null
+  frequency?: number | null
+  kind?: string | null
+  mating_number?: number | null
+  method?: string | null
+  primary_condition?: string | null
+  result?: string | null
+  severity?: string | null
+  symptom_tags?: unknown
+  total_days?: number | null
+  treatment_status?: string | null
+  vaccine_type?: string | null
+}
+
+interface GenericRow {
+  _completed?: boolean
+  _createdAt?: number
+  _id?: string
+  _local_pending?: boolean
+  _synthetic_local?: boolean
+  actual_start_date?: number | string | null
+  allMedTasks?: GenericRow[]
+  cardType?: string
+  cards?: GenericRow[]
+  completed?: boolean
+  completed_at?: number | string | null
+  created_at?: number | string | null
+  currentDay?: number
+  cycle_id?: string
+  daily_doses?: Record<string, number>
+  daysSick?: number
+  dam_id?: string
+  dam_name?: string
+  date?: number | string | null
+  deleted_at?: number | null
+  details?: GenericDetails | null
+  display_title?: string
+  dog_id?: string
+  dog_name?: string
+  dogId?: string
+  dogName?: string
+  dogs?: GenericRow[]
+  domain?: string
+  dosage?: string | number | null
+  dosageStr?: string
+  dosage_unit?: string | null
+  doses_given?: number
+  drug_name?: string
+  drugName?: string
+  due_date?: number | string | null
+  duration_days?: number | string | null
+  family_id?: string
+  frequency?: number | string | null
+  groupTitle?: string
+  id?: string
+  illness?: string
+  illnessId?: string
+  illnessIds?: string[]
+  illnessNames?: string
+  isDoneToday?: boolean
+  linkedMedicationTaskId?: string
+  litter_id?: string
+  method?: string
+  methodFreq?: string
+  name?: string
+  overdueDays?: number
+  priority?: string
+  progress?: GenericDetails | string | null
+  relationType?: string
+  sectionType?: string
+  sections?: Record<string, GenericRow[]>
+  severity?: string
+  source_record_id?: string | null
+  start_date?: number | string | null
+  state?: string
+  status?: string
+  statusLabel?: string
+  symptomSummary?: string
+  taskId?: string
+  medicationTaskIds?: Array<string | undefined>
+  title?: string
+  todayDoses?: number
+  treatmentStatus?: string
+  type?: string
+  updated_at?: number | string | null
+  version?: number
+  tasks?: GenericRow[]
+}
+
+interface SectionedHomeCards {
+  workflow: GenericRow[]
+  extra_arrangements: GenericRow[]
+  reminders: GenericRow[]
+  therapy: GenericRow[]
+  cards: GenericRow[]
+}
 
 export interface HomeProjectionEntities {
   dogs: readonly GenericRow[]
@@ -54,7 +159,7 @@ function startOfDay(ts: number) {
   return getBeijingDayContext(ts).dayStart
 }
 
-function getMaxTimestamp(...values: Array<number | null | undefined>) {
+function getMaxTimestamp(...values: Array<number | string | null | undefined>) {
   return values.reduce<number>((max, value) => {
     const next = Number(value || 0)
     return next > max ? next : max
@@ -71,11 +176,11 @@ function normalizeIllnessCondition(condition: unknown) {
   return typeof condition === 'string' ? condition.trim() : ''
 }
 
-function getIllnessPrimaryCondition(source: Record<string, any> = {}) {
+function getIllnessPrimaryCondition(source: GenericDetails = {}) {
   return normalizeIllnessCondition(source.primary_condition || source.condition || '')
 }
 
-function getIllnessSymptomSummary(source: Record<string, any> = {}, limit = 2) {
+function getIllnessSymptomSummary(source: GenericDetails = {}, limit = 2) {
   const tags = Array.isArray(source.symptom_tags)
     ? source.symptom_tags
       .map((item: unknown) => typeof item === 'string' ? item.trim() : '')
@@ -88,7 +193,7 @@ function getIllnessSymptomSummary(source: Record<string, any> = {}, limit = 2) {
 }
 
 function isBreedingExtraTask(task: GenericRow) {
-  return BREEDING_EXTRA_TYPES.has(task?.type)
+  return BREEDING_EXTRA_TYPES.has(String(task?.type || ''))
 }
 
 function getTaskDomain(task: GenericRow) {
@@ -150,11 +255,12 @@ function getTaskDisplayTitle(task: GenericRow) {
 
 function getTaskPriority(task: GenericRow, todayStartMs: number, todayEndMs: number) {
   if (!task) return 'upcoming'
+  const dueDate = Number(task.due_date || 0)
   if (task.type === 'breeding_milestone') {
-    return task.due_date <= todayEndMs ? 'today' : 'upcoming'
+    return dueDate <= todayEndMs ? 'today' : 'upcoming'
   }
-  if (task.due_date < todayStartMs) return 'overdue'
-  if (task.due_date <= todayEndMs) return 'today'
+  if (dueDate < todayStartMs) return 'overdue'
+  if (dueDate <= todayEndMs) return 'today'
   return 'upcoming'
 }
 
@@ -234,19 +340,19 @@ function countBreedingRecords(records: GenericRow[], type: string) {
   return records.filter(record => !record.deleted_at && record.type === type).length
 }
 
-function getFollicleResult(details: Record<string, any> = {}) {
+function getFollicleResult(details: GenericDetails = {}) {
   return typeof details?.result === 'string' ? details.result : ''
 }
 
-function isFollicleReady(details: Record<string, any> = {}) {
+function isFollicleReady(details: GenericDetails = {}) {
   return getFollicleResult(details) === '已成熟'
 }
 
-function isFollicleAbnormal(details: Record<string, any> = {}) {
+function isFollicleAbnormal(details: GenericDetails = {}) {
   return getFollicleResult(details) === '发育不良'
 }
 
-function isPregnancyConfirmed(details: Record<string, any> = {}) {
+function isPregnancyConfirmed(details: GenericDetails = {}) {
   return details.confirmed === '是' || details.confirmed === true
 }
 
@@ -257,7 +363,7 @@ function buildSyntheticBreedingMilestoneTask(
   title: string,
   dueDate: number,
   sourceRecordId: string | null,
-  details: Record<string, any>,
+  details: GenericDetails,
   updatedAt: number,
 ) {
   const now = Date.now()
@@ -404,7 +510,7 @@ export function buildPendingBreedingMilestones(entities: HomeProjectionEntities)
       if (latestPregnancyRecord && isPregnancyConfirmed(latestPregnancyRecord.details || {})) {
         const expectedDueDate = Number(
           latestMatingRecord.details?.expected_due_date
-          || (latestMatingRecord.date + 59 * DAY_MS),
+          || (Number(latestMatingRecord.date || 0) + 59 * DAY_MS),
         )
         syntheticTasks.push(buildSyntheticBreedingMilestoneTask(
           cycle,
@@ -426,11 +532,11 @@ export function buildPendingBreedingMilestones(entities: HomeProjectionEntities)
 
       const expectedCheckupDate = Number(
         latestMatingRecord.details?.expected_checkup_date
-        || (latestMatingRecord.date + 25 * DAY_MS),
+        || (Number(latestMatingRecord.date || 0) + 25 * DAY_MS),
       )
       const expectedDueDate = Number(
         latestMatingRecord.details?.expected_due_date
-        || (latestMatingRecord.date + 59 * DAY_MS),
+        || (Number(latestMatingRecord.date || 0) + 59 * DAY_MS),
       )
       syntheticTasks.push(buildSyntheticBreedingMilestoneTask(
         cycle,
@@ -463,8 +569,9 @@ function highestPriority(tasks: GenericRow[]) {
   const order: Record<string, number> = { overdue: 1, today: 2, upcoming: 3 }
   let best = 'upcoming'
   for (const task of tasks) {
-    if ((order[task.priority] || 3) < (order[best] || 3)) {
-      best = task.priority
+    const priority = task.priority || 'upcoming'
+    if ((order[priority] || 3) < (order[best] || 3)) {
+      best = priority
     }
   }
   return best
@@ -474,10 +581,11 @@ function computeMedItemsForBeijingDay(activeMedications: GenericRow[], targetDat
   const targetDayStart = getBeijingDayContext(targetDate).dayStart
   return (activeMedications || [])
     .map((med) => {
-      const startDayStart = getBeijingDayContext(med.actual_start_date || med.start_date || med.created_at || targetDate).dayStart
+      const startDayStart = getBeijingDayContext(Number(med.actual_start_date || med.start_date || med.created_at || targetDate)).dayStart
       const currentDay = getBeijingOrdinalDay(startDayStart, targetDayStart) || 0
-      if (currentDay < 1 || currentDay > (med.duration_days || 1)) return null
-      const frequency = med.frequency || 1
+      const durationDays = Number(med.duration_days || 1)
+      if (currentDay < 1 || currentDay > durationDays) return null
+      const frequency = Number(med.frequency || 1)
       const todayDoses = med.daily_doses?.[String(currentDay)] || 0
       return {
         ...med,
@@ -486,11 +594,11 @@ function computeMedItemsForBeijingDay(activeMedications: GenericRow[], targetDat
         isDoneToday: todayDoses >= frequency,
       }
     })
-    .filter(Boolean)
+    .filter(Boolean) as GenericRow[]
 }
 
 function toLegacyMedItem(task: GenericRow) {
-  const frequency = task.details?.frequency || 1
+  const frequency = Number(task.details?.frequency || 1)
   const todayDoses = task.doses_given || 0
   return {
     _id: task._id,
@@ -501,12 +609,12 @@ function toLegacyMedItem(task: GenericRow) {
     dosage_unit: task.details?.dosage_unit || null,
     method: task.details?.method || '口服',
     frequency,
-    duration_days: task.details?.total_days || 1,
-    actual_start_date: task.due_date || Date.now(),
-    currentDay: task.details?.day || 1,
+    duration_days: Number(task.details?.total_days || 1),
+    actual_start_date: Number(task.due_date || Date.now()),
+    currentDay: Number(task.details?.day || 1),
     todayDoses,
     isDoneToday: todayDoses >= frequency || task.status === 'completed',
-    created_at: task.created_at || task.due_date || Date.now(),
+    created_at: Number(task.created_at || task.due_date || Date.now()),
     source_record_id: task.source_record_id || null,
   }
 }
@@ -517,8 +625,8 @@ function computeMedItemsForDay(activeMedications: GenericRow[], targetDate: numb
 
 function mergeTasks(tasks: GenericRow[], todayCompleted: GenericRow[] = [], activeIllnesses: GenericRow[] = [], medItems: GenericRow[] = [], now = Date.now()) {
   const cards: GenericRow[] = []
-  const consumed = new Set<string>()
-  const completedConsumed = new Set<string>()
+  const consumed = new Set<string | undefined>()
+  const completedConsumed = new Set<string | undefined>()
   const todayDayStart = startOfDay(now)
 
   for (const task of [...tasks, ...todayCompleted]) {
@@ -531,15 +639,16 @@ function mergeTasks(tasks: GenericRow[], todayCompleted: GenericRow[] = [], acti
 
   const medByDog = new Map<string, GenericRow[]>()
   for (const med of mergedMedItems) {
-    if (!medByDog.has(med.dog_id)) medByDog.set(med.dog_id, [])
-    medByDog.get(med.dog_id)!.push(med)
+    const dogId = med.dog_id || ''
+    if (!medByDog.has(dogId)) medByDog.set(dogId, [])
+    medByDog.get(dogId)!.push(med)
   }
 
   const illnessesByDog = new Map<string, GenericRow[]>()
   const illnessesById = new Map<string, GenericRow>()
   for (const illness of activeIllnesses) {
     const status = illness.details?.treatment_status || '观察中'
-    const dogId = illness.dog_id
+    const dogId = illness.dog_id || ''
     const normalizedIllness = {
       dogId,
       dogName: illness.dog_name || '',
@@ -547,26 +656,26 @@ function mergeTasks(tasks: GenericRow[], todayCompleted: GenericRow[] = [], acti
       symptomSummary: getIllnessSymptomSummary(illness.details || {}),
       severity: illness.details?.severity || '轻微',
       illnessId: illness._id,
-      daysSick: getBeijingOrdinalDay(illness.date || illness.created_at || now, todayDayStart) || 1,
+      daysSick: getBeijingOrdinalDay(Number(illness.date || illness.created_at || now), todayDayStart) || 1,
       treatmentStatus: status,
-      _createdAt: illness.date || illness.created_at || 0,
+      _createdAt: Number(illness.date || illness.created_at || 0),
     }
 
     if (!illnessesByDog.has(dogId)) illnessesByDog.set(dogId, [])
     illnessesByDog.get(dogId)!.push(normalizedIllness)
-    illnessesById.set(illness._id, normalizedIllness)
+    illnessesById.set(illness._id || '', normalizedIllness)
   }
 
   const sickObserveDogs = activeIllnesses
     .map((illness) => {
       const status = illness.details?.treatment_status || '观察中'
-      const dogMedications = medByDog.get(illness.dog_id) || []
+      const dogMedications = medByDog.get(illness.dog_id || '') || []
       const explicitLinkedMedication = dogMedications.find(med => med.source_record_id && med.source_record_id === illness._id) || null
       const hasExplicitLinkedMedication = !!explicitLinkedMedication
       const hasFallbackMedication = dogMedications.some(med => !med.source_record_id)
       if (status === '治疗中' && (hasExplicitLinkedMedication || hasFallbackMedication)) return null
 
-      const illnessStart = startOfDay(illness.date || illness.created_at || now)
+      const illnessStart = startOfDay(Number(illness.date || illness.created_at || now))
       return {
         dogId: illness.dog_id,
         dogName: illness.dog_name || '',
@@ -579,7 +688,7 @@ function mergeTasks(tasks: GenericRow[], todayCompleted: GenericRow[] = [], acti
         relationType: hasExplicitLinkedMedication ? 'linked' : (hasFallbackMedication ? 'fallback' : 'standalone'),
         daysSick: getBeijingOrdinalDay(illnessStart, todayDayStart) || 1,
         treatmentStatus: status,
-        _createdAt: illness.date || illness.created_at || 0,
+        _createdAt: Number(illness.date || illness.created_at || 0),
       }
     })
     .filter(Boolean) as GenericRow[]
@@ -614,8 +723,8 @@ function mergeTasks(tasks: GenericRow[], todayCompleted: GenericRow[] = [], acti
       currentDay: med.currentDay,
       status: med.isDoneToday ? 'completed' : 'pending',
       doses_given: med.todayDoses,
-      details: { drug_name: med.drug_name || '用药', frequency: med.frequency || 1 },
-      dosageStr: med.dosage ? `${med.dosage}${unitMap[med.dosage_unit] || med.dosage_unit || 'mg'}` : '',
+      details: { drug_name: med.drug_name || '用药', frequency: Number(med.frequency || 1) },
+      dosageStr: med.dosage ? `${med.dosage}${unitMap[String(med.dosage_unit || '')] || med.dosage_unit || 'mg'}` : '',
       progress: `第${med.currentDay}/${med.duration_days}天`,
       methodFreq: (med.frequency || 1) > 1 ? `${med.method || '口服'} 日${med.frequency}次` : (med.method || '口服'),
     }))
@@ -628,16 +737,16 @@ function mergeTasks(tasks: GenericRow[], todayCompleted: GenericRow[] = [], acti
       illnessNames: medicatedIllnessNames.join('/'),
       symptomSummary: medicatedSymptomSummaries[0] || '',
       illnessId: medicatedIllnesses.length === 1 ? medicatedIllnesses[0].illnessId : '',
-      illnessIds: [...new Set(medicatedIllnesses.map(illness => illness.illnessId).filter(Boolean))],
+      illnessIds: [...new Set(medicatedIllnesses.map(illness => illness.illnessId).filter((id): id is string => !!id))],
       relationType,
       treatmentStatus: medicatedIllnessNames.length > 0 ? '治疗中' : '',
       drugName: isMultiDrug ? `${uniqueDrugs.length}种用药` : (primary.drug_name || '用药'),
-      dosageStr: isMultiDrug ? '' : (primary.dosage ? `${primary.dosage}${unitMap[primary.dosage_unit] || primary.dosage_unit || 'mg'}` : ''),
+      dosageStr: isMultiDrug ? '' : (primary.dosage ? `${primary.dosage}${unitMap[String(primary.dosage_unit || '')] || primary.dosage_unit || 'mg'}` : ''),
       progress: isMultiDrug ? '' : `${primary.currentDay}/${primary.duration_days}天`,
       methodFreq: isMultiDrug ? '' : ((primary.frequency || 1) > 1 ? `${primary.method || '口服'} 日${primary.frequency}次` : (primary.method || '口服')),
       completed: meds.every(med => med.isDoneToday),
       allMedTasks: allMedTasksForDog,
-      _createdAt: primary.created_at || 0,
+      _createdAt: Number(primary.created_at || 0),
     })
   }
 
@@ -645,8 +754,8 @@ function mergeTasks(tasks: GenericRow[], todayCompleted: GenericRow[] = [], acti
     .filter(dog => dog.state !== 'sick_only')
     .sort((a, b) => {
       const order: Record<string, number> = { sick_with_med: 0, med_only: 1 }
-      const aOrder = order[a.state] ?? 1
-      const bOrder = order[b.state] ?? 1
+      const aOrder = order[a.state || ''] ?? 1
+      const bOrder = order[b.state || ''] ?? 1
       if (aOrder !== bOrder) return aOrder - bOrder
       return (a._createdAt || 0) - (b._createdAt || 0)
     })
@@ -682,7 +791,7 @@ function mergeTasks(tasks: GenericRow[], todayCompleted: GenericRow[] = [], acti
   if (careTasks.length > 0) {
     const groupMap = new Map<string, GenericRow[]>()
     for (const task of careTasks) {
-      const key = task.title
+      const key = task.title || ''
       if (!groupMap.has(key)) groupMap.set(key, [])
       groupMap.get(key)!.push(task)
     }
@@ -733,7 +842,7 @@ function mergeTasks(tasks: GenericRow[], todayCompleted: GenericRow[] = [], acti
   ]
   const batchGroups = new Map<string, GenericRow[]>()
   for (const task of allForBatch) {
-    const key = `${getTaskVariantKey(task)}__${startOfDay(task.due_date)}`
+    const key = `${getTaskVariantKey(task)}__${startOfDay(Number(task.due_date || 0))}`
     if (!batchGroups.has(key)) batchGroups.set(key, [])
     batchGroups.get(key)!.push(task)
   }
@@ -780,7 +889,7 @@ function mergeTasks(tasks: GenericRow[], todayCompleted: GenericRow[] = [], acti
   const plainLeftover = tasks.filter(task => !consumed.has(task._id))
   const dogGroups = new Map<string, GenericRow[]>()
   for (const task of plainLeftover) {
-    const key = task.dog_id || task._id
+    const key = task.dog_id || task._id || ''
     if (!dogGroups.has(key)) dogGroups.set(key, [])
     dogGroups.get(key)!.push(task)
   }
@@ -801,7 +910,13 @@ function mergeTasks(tasks: GenericRow[], todayCompleted: GenericRow[] = [], acti
   return cards
 }
 
-function buildSectionedCards(pendingTasks: GenericRow[], todayCompletedTasks: GenericRow[], activeIllnesses: GenericRow[], medItems: GenericRow[], now = Date.now()) {
+function buildSectionedCards(
+  pendingTasks: GenericRow[],
+  todayCompletedTasks: GenericRow[],
+  activeIllnesses: GenericRow[],
+  medItems: GenericRow[],
+  now = Date.now(),
+): SectionedHomeCards {
   const workflowPendingTasks = pendingTasks.filter(task => task.type === 'breeding_milestone')
   const workflowCompletedTasks = todayCompletedTasks.filter(task => task.type === 'breeding_milestone')
   const breedingExtraPendingTasks = pendingTasks.filter(task => isBreedingExtraTask(task))
@@ -819,8 +934,8 @@ function buildSectionedCards(pendingTasks: GenericRow[], todayCompletedTasks: Ge
   const annotateOverdue = (cardList: GenericRow[]) => {
     const overdueCards = cardList.filter(card => card.priority === 'overdue')
     for (const card of overdueCards) {
-      const oldestDue = card.tasks?.reduce((min: number, task: GenericRow) => Math.min(min, task.due_date || Number.POSITIVE_INFINITY), Number.POSITIVE_INFINITY)
-      card.overdueDays = oldestDue < Number.POSITIVE_INFINITY ? getOverdueDays(oldestDue, now) : 1
+      const oldestDue = card.tasks?.reduce((min: number, task: GenericRow) => Math.min(min, Number(task.due_date || Number.POSITIVE_INFINITY)), Number.POSITIVE_INFINITY)
+      card.overdueDays = Number(oldestDue || 0) < Number.POSITIVE_INFINITY ? getOverdueDays(Number(oldestDue), now) : 1
     }
     overdueCards.sort((a, b) => (b.overdueDays || 0) - (a.overdueDays || 0))
     const todayCards = cardList.filter(card => card.priority === 'today')
@@ -855,7 +970,7 @@ function getActiveIllnesses(entities: HomeProjectionEntities): GenericRow[] {
       ...record,
       dog_name: record.dog_name || dogNameMap.get(record.dog_id) || '',
     }))
-    .sort((a: any, b: any) => (Number(b.date || b.created_at || 0)) - (Number(a.date || a.created_at || 0)))) as GenericRow[]
+    .sort((a: GenericRow, b: GenericRow) => (Number(b.date || b.created_at || 0)) - (Number(a.date || a.created_at || 0))))
 }
 
 function getActiveMedicationTasks(entities: HomeProjectionEntities) {
@@ -868,7 +983,7 @@ function getPendingTasksForToday(entities: HomeProjectionEntities, now = Date.no
   const todayStartTs = todayContext.dayStart
   const todayEndTs = todayContext.dayEnd
   const allPendingTasks = getPendingHomeTasks(entities)
-  const pendingTasks = allPendingTasks.filter(task => task.due_date <= todayEndTs)
+  const pendingTasks = allPendingTasks.filter(task => Number(task.due_date || 0) <= todayEndTs)
   const workflowTasks = allPendingTasks.filter(task => task.type === 'breeding_milestone')
 
   const mergedTasks = [...pendingTasks]
@@ -887,7 +1002,7 @@ function getPendingTasksForToday(entities: HomeProjectionEntities, now = Date.no
   })
 
   const todayCompletedTasks = (entities.tasks || [])
-    .filter(task => !task.deleted_at && task.status === 'completed' && task.completed_at >= todayStartTs && task.completed_at <= todayEndTs)
+    .filter(task => !task.deleted_at && task.status === 'completed' && Number(task.completed_at || 0) >= todayStartTs && Number(task.completed_at || 0) <= todayEndTs)
     .map((task) => ({
       ...task,
       priority: 'today',
@@ -903,7 +1018,7 @@ export function buildLocalHomeCards(entities: HomeProjectionEntities, now = Date
   const activeIllnesses = getActiveIllnesses(scopedEntities)
   const activeMedications = getActiveMedicationTasks(scopedEntities)
   const medItems = computeMedItemsForDay(activeMedications, now) as GenericRow[]
-  const sectioned: any = buildSectionedCards(normalizedPendingTasks, todayCompletedTasks, activeIllnesses, medItems, now)
+  const sectioned = buildSectionedCards(normalizedPendingTasks, todayCompletedTasks, activeIllnesses, medItems, now)
 
   const dayOfWeek = getBeijingDateParts(todayStartTs).weekday
   const daysToSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek
@@ -911,8 +1026,8 @@ export function buildLocalHomeCards(entities: HomeProjectionEntities, now = Date
   const day30EndTs = todayStartTs + (30 * DAY_MS) + DAY_MS - 1
 
   const pendingTasks = dedupeBreedingMilestones(getPendingHomeTasks(scopedEntities))
-  const weekCount = pendingTasks.filter(task => task.due_date <= sundayEndTs).length
-  const month30Count = pendingTasks.filter(task => task.due_date <= day30EndTs).length
+  const weekCount = pendingTasks.filter(task => Number(task.due_date || 0) <= sundayEndTs).length
+  const month30Count = pendingTasks.filter(task => Number(task.due_date || 0) <= day30EndTs).length
 
   return {
     cards: sectioned.cards,
@@ -926,7 +1041,7 @@ export function buildLocalHomeCards(entities: HomeProjectionEntities, now = Date
       today: sectioned.cards.length,
       week: weekCount + sectioned.therapy.length,
       month30: month30Count + sectioned.therapy.length,
-      hasOverdue: sectioned.cards.some((card: any) => card.priority === 'overdue'),
+      hasOverdue: sectioned.cards.some(card => card.priority === 'overdue'),
     },
   }
 }
@@ -935,13 +1050,13 @@ export function buildLocalDateCounts(entities: HomeProjectionEntities, startDate
   const scopedEntities = filterEntitiesByFamily(entities, familyId)
   const tasks = dedupeBreedingMilestones(
     getPendingHomeTasks(scopedEntities)
-      .filter(task => task.due_date >= startDate && task.due_date <= endDate),
+      .filter(task => Number(task.due_date || 0) >= startDate && Number(task.due_date || 0) <= endDate),
   )
   const activeMedications = getActiveMedicationTasks(scopedEntities)
 
   const counts: Record<number, number> = {}
   for (const task of tasks) {
-    const key = startOfDay(task.due_date)
+    const key = startOfDay(Number(task.due_date || 0))
     counts[key] = (counts[key] || 0) + 1
   }
 
@@ -961,7 +1076,7 @@ export function buildLocalWeekCards(entities: HomeProjectionEntities, startDate:
   const scopedEntities = filterEntitiesByFamily(entities, familyId)
   const tasks = dedupeBreedingMilestones(
     getPendingHomeTasks(scopedEntities)
-      .filter(task => task.due_date >= startDate && task.due_date <= endDate),
+      .filter(task => Number(task.due_date || 0) >= startDate && Number(task.due_date || 0) <= endDate),
   )
   const activeIllnesses = getActiveIllnesses(scopedEntities)
   const activeMedications = getActiveMedicationTasks(scopedEntities)
@@ -970,7 +1085,7 @@ export function buildLocalWeekCards(entities: HomeProjectionEntities, startDate:
   const realTodayEnd = realTodayStart + DAY_MS - 1
   const dayGroups = new Map<number, GenericRow[]>()
   for (const task of tasks) {
-    const key = startOfDay(task.due_date)
+    const key = startOfDay(Number(task.due_date || 0))
     if (!dayGroups.has(key)) dayGroups.set(key, [])
     dayGroups.get(key)!.push({
       ...task,
@@ -986,7 +1101,7 @@ export function buildLocalWeekCards(entities: HomeProjectionEntities, startDate:
     const filteredIllnesses = dayTs < realTodayStart
       ? []
       : (medDogIds.size > 0 ? activeIllnesses.filter(illness => medDogIds.has(illness.dog_id)) : [])
-    const sectioned: any = buildSectionedCards(dayTasks, [], filteredIllnesses, dayMedItems, now)
+    const sectioned = buildSectionedCards(dayTasks, [], filteredIllnesses, dayMedItems, now)
     result[dayTs] = {
       cards: sectioned.cards,
       sections: {
@@ -1006,7 +1121,7 @@ export function buildLocalWeekCards(entities: HomeProjectionEntities, startDate:
     const filteredIllnesses = medDogIds.size > 0
       ? activeIllnesses.filter(illness => medDogIds.has(illness.dog_id))
       : []
-    const sectioned: any = buildSectionedCards([], [], filteredIllnesses, dayMedItems, now)
+    const sectioned = buildSectionedCards([], [], filteredIllnesses, dayMedItems, now)
     result[key] = {
       cards: sectioned.cards,
       sections: {
@@ -1031,7 +1146,7 @@ export function applyTouchedEntityVersions(entities: GenericRow[], touchedEntiti
   if (!touchedMap.size) return entities
 
   return entities.map((entity) => {
-    const touched = touchedMap.get(entity._id)
+    const touched = touchedMap.get(entity._id || '')
     if (!touched) return entity
     return {
       ...entity,

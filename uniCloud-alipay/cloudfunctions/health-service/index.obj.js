@@ -40,7 +40,6 @@ const {
 
 const db = uniCloud.database()
 const dbCmd = db.command
-const DAY_MS = 86400000
 
 const HEALTH_RECORD_LABEL_MAP = {
   vaccination: '疫苗记录',
@@ -102,7 +101,7 @@ function formatTimeHM(ts) {
 function normalizeMedicationTaskDetail(task, protocolName) {
   const durationDays = Number(task?.duration_days) || 1
   const startDate = startOfDay(task?.actual_start_date || task?.start_date || task?.created_at || Date.now())
-  const endDate = task?.end_date || (startDate + ((durationDays - 1) * DAY_MS))
+  const endDate = task?.end_date || (startDate + ((durationDays - 1) * 86400000))
   const frequency = Number(task?.frequency) || 1
   const completion = calculateMedicationCompletion(task)
   const completedDateSet = new Set()
@@ -122,7 +121,7 @@ function normalizeMedicationTaskDetail(task, protocolName) {
     const dosesGiven = Number(rawValue) || 0
     if (!dayNum || dosesGiven < frequency) return
 
-    const dayTs = startDate + ((dayNum - 1) * DAY_MS)
+    const dayTs = startDate + ((dayNum - 1) * 86400000)
     completedDateSet.add(dayTs)
     completedMap[dayTs] = {
       name: `已完成${Math.min(dosesGiven, frequency)}/${frequency}次`,
@@ -180,7 +179,7 @@ function calculateMedicationCompletion(task) {
 function getMedicationProgressInfo(task) {
   const startDate = startOfDay(task?.actual_start_date || task?.start_date || task?.created_at || Date.now())
   const targetDay = startOfDay(Date.now())
-  const currentDay = Math.max(1, Math.floor((targetDay - startDate) / DAY_MS) + 1)
+  const currentDay = Math.max(1, Math.floor((targetDay - startDate) / 86400000) + 1)
 
   return {
     day: currentDay,
@@ -369,7 +368,7 @@ function buildMedicationDailyDosePatch(task, nowTs) {
   const now = Number.isFinite(Number(nowTs)) ? Number(nowTs) : Date.now()
   const today = startOfDay(now)
   const startDate = startOfDay(task?.actual_start_date || task?.start_date || task?.created_at || now)
-  const currentDay = Math.floor((today - startDate) / DAY_MS) + 1
+  const currentDay = Math.floor((today - startDate) / 86400000) + 1
   const durationDays = Math.max(1, Number(task?.duration_days) || 1)
 
   if (currentDay < 1 || currentDay > durationDays) return null
@@ -581,14 +580,13 @@ function getHealthVariantKey(type, details = {}) {
  * 检查是否已有同类型的 pending 任务在 ±7 天内
  */
 async function hasDuplicateTask(familyId, dogId, taskType, dueDate, details) {
-  const WEEK = 7 * 86400000
   const { data: tasks } = await db.collection('tasks')
     .where({
       family_id: familyId,
       dog_id: dogId,
       type: taskType,
       status: 'pending',
-      due_date: dbCmd.gte(dueDate - WEEK).and(dbCmd.lte(dueDate + WEEK)),
+      due_date: dbCmd.gte(dueDate - (7 * 86400000)).and(dbCmd.lte(dueDate + (7 * 86400000))),
     })
     .get()
 
@@ -1560,7 +1558,7 @@ module.exports = {
       ? syncMeta.clientEntityIds.expenses
       : []
     const startDate = Number.isFinite(Number(data.actual_start_date)) ? Number(data.actual_start_date) : now
-    const endDate = startDate + ((durationDays - 1) * DAY_MS)
+    const endDate = startDate + ((durationDays - 1) * 86400000)
     const normalizedIllnessLinks = normalizeMedicationIllnessLinks(data.illness_links || data.illnessLinks)
     const illnessLinkMap = new Map(normalizedIllnessLinks.map(item => [item.dog_id, item.illness_record_id]))
     const singleIllnessRecordId = getIdArg(data, 'illnessRecordId', 'illness_record_id')
@@ -1752,7 +1750,7 @@ module.exports = {
     const dog = dogs[0]
 
     const startDate = Number.isFinite(Number(data.actual_start_date)) ? Number(data.actual_start_date) : now
-    const endDate = startDate + ((durationDays - 1) * DAY_MS)
+    const endDate = startDate + ((durationDays - 1) * 86400000)
 
     // 创建用药任务（单条记录，不预生成每日 task）
     const medicationData = {
@@ -1874,7 +1872,7 @@ module.exports = {
     // 计算今天是第几天
     const startDate = startOfDay(med.actual_start_date || med.start_date || med.created_at)
     const today = startOfDay(now)
-    const currentDay = Math.floor((today - startDate) / DAY_MS) + 1
+    const currentDay = Math.floor((today - startDate) / 86400000) + 1
     if (currentDay < 1 || currentDay > med.duration_days) {
       return { data: { completed: false, out_of_range: true } }
     }

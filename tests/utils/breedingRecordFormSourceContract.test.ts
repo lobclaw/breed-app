@@ -19,7 +19,7 @@ describe('breeding record form source contract', () => {
     expect(source).toContain("const ABANDON_MATING_TERMINATION = '放弃配种'")
     expect(source).toContain("if (terminationCycleStatus.value === '发情中') return [ABANDON_MATING_TERMINATION]")
     expect(source).toContain('return pregnancyTerminationTypes')
-    expect(source).toContain('visibleTerminationTypes.value.includes(details.termination_type)')
+    expect(source).toContain("visibleTerminationTypes.value.includes(typeof details.termination_type === 'string' ? details.termination_type : '')")
     expect(source).toContain('details.termination_type = \'\'')
   })
 
@@ -35,9 +35,9 @@ describe('breeding record form source contract', () => {
 
     expect(pregnancySection).toContain('<BImageUpload v-model="images" :max="6" />')
     expect(prenatalSection).toContain('<BImageUpload v-model="images" :max="6" />')
-    expect(source).toContain("if (breedingType.value === 'pregnancy_check') {\n    if (details.confirmed) built.confirmed = details.confirmed\n    if (details.puppy_count) built.puppy_count = parseInt(details.puppy_count)\n    if (images.value.length > 0) built.images = images.value\n  }")
+    expect(source).toContain("if (breedingType.value === 'pregnancy_check') {\n    if (details.confirmed) built.confirmed = details.confirmed\n    if (details.puppy_count) built.puppy_count = parseInt(String(details.puppy_count))\n    if (images.value.length > 0) built.images = images.value\n  }")
     expect(source).toContain("if (breedingType.value === 'prenatal_check') {\n    if (details.results) built.results = details.results\n    if (images.value.length > 0) built.images = images.value\n  }")
-    expect(source).toContain("if (record.type === 'pregnancy_check' || record.type === 'prenatal_check') {\n        images.value = [...(record.details?.images || [])]\n      }")
+    expect(source).toContain("if (record.type === 'pregnancy_check' || record.type === 'prenatal_check') {\n        images.value = toStringList(recordDetails.images)\n      }")
   })
 
   it('产检应要求检查结果或检查图片至少填写一项', () => {

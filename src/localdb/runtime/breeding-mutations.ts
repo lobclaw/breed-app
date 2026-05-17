@@ -53,7 +53,7 @@ export interface BreedingMutationPayload {
   notes?: string | null
   images?: string[]
   details?: BreedingDetailsPayload
-  extra_arrangement?: BreedingExtraArrangementPayload
+  extra_arrangement?: BreedingExtraArrangementPayload | null
 }
 
 export interface RuntimeMutationContext {
@@ -124,7 +124,7 @@ export async function addBreedingRecordLocally(ctx: RuntimeMutationContext, fami
             : existingCycle?.status || '发情中'
     const record = buildLocalBreedingRecord(familyId, dog, data, recordId, cycleId, now) as BreedingRecordRow
     const extraArrangementTask = data.extra_arrangement?.kind && data.extra_arrangement?.due_date
-      ? buildLocalBreedingExtraTask(familyId, dog, cycleId, recordId, data.extra_arrangement, createStableEntityId('task'), now) as unknown as TaskRow
+      ? buildLocalBreedingExtraTask(familyId, dog, cycleId, recordId, data.extra_arrangement, createStableEntityId('task'), now)
       : null
     const pendingMilestoneTasks = shouldClearLocalBreedingMilestones(data)
       ? await localDb.query<TaskRow>('tasks', row =>
@@ -139,7 +139,7 @@ export async function addBreedingRecordLocally(ctx: RuntimeMutationContext, fami
       ? createStableEntityId('expense')
       : ''
     const expenseRow = expenseId
-      ? buildLocalBreedingExpense(familyId, dog, data, cycleId, recordId, expenseId, now) as unknown as ExpenseRow
+      ? buildLocalBreedingExpense(familyId, dog, data, cycleId, recordId, expenseId, now)
       : null
     const cycle = existingCycle
       ? { ...existingCycle, status: nextStatus, updated_at: now }
@@ -274,7 +274,7 @@ export async function updateBreedingRecordLocally(ctx: RuntimeMutationContext, f
           nextExtraArrangement,
           existingExtraTask[0]?._id || createStableEntityId('task'),
           now,
-        ) as unknown as TaskRow
+        )
       : null
     const cycleRecords = await localDb.query<BreedingRecordRow>('breeding_records', row =>
       row.family_id === familyId
@@ -327,7 +327,7 @@ export async function updateBreedingRecordLocally(ctx: RuntimeMutationContext, f
               created_at: expense.created_at,
               updated_at: now,
               _local_pending: true,
-            } as unknown as ExpenseRow))
+            }))
           : [buildLocalBreedingExpense(
               familyId,
               dog,
@@ -341,7 +341,7 @@ export async function updateBreedingRecordLocally(ctx: RuntimeMutationContext, f
               recordId,
               createdExpenseId,
               now,
-            ) as unknown as ExpenseRow])
+            )])
       : []
     const linkedExpenseIds = new Set(linkedExpenses.map(expense => expense._id))
     const syncMeta = buildSyncMeta({

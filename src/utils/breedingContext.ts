@@ -6,6 +6,18 @@ export interface BreedingStageTag {
   tone: 'heat' | 'pregnant'
 }
 
+type BreedingStatusLike = {
+  type?: string
+  cycleId?: string
+  progress?: {
+    current?: number
+  }
+}
+
+type DogBreedingStageSource = {
+  statuses?: BreedingStatusLike[]
+}
+
 function formatDate(ts?: number | null) {
   if (!ts) return ''
   const parts = getBeijingDateParts(ts)
@@ -44,11 +56,11 @@ export function buildBreedingCycleMetaText(context?: BreedingCycleFormContext | 
   return context.status ? `${cycleText} · ${context.status}` : cycleText
 }
 
-export function buildBreedingStageTag(dog: Record<string, any> | null | undefined, cycleId = ''): BreedingStageTag | null {
+export function buildBreedingStageTag(dog: DogBreedingStageSource | null | undefined, cycleId = ''): BreedingStageTag | null {
   const statuses = dog && Array.isArray(dog.statuses) ? dog.statuses : []
-  const breedingStatuses = statuses.filter((status: any) => status?.type === '发情中' || status?.type === '怀孕中')
+  const breedingStatuses = statuses.filter(status => status?.type === '发情中' || status?.type === '怀孕中')
   const status = cycleId
-    ? breedingStatuses.find((item: any) => item?.cycleId === cycleId) || breedingStatuses[0]
+    ? breedingStatuses.find(item => item?.cycleId === cycleId) || breedingStatuses[0]
     : breedingStatuses[0]
   if (!status) return null
 

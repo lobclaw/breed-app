@@ -1,4 +1,5 @@
 import { hasPendingUploadImages } from '@/localdb/runtime/attachments'
+import type { LocalRowOf } from '@/localdb/types'
 
 const EXTRA_ARRANGEMENT_TITLE_MAP: Record<string, string> = {
   contact_doctor: '联系医生',
@@ -7,11 +8,58 @@ const EXTRA_ARRANGEMENT_TITLE_MAP: Record<string, string> = {
   other: '其他安排',
 }
 
-export function normalizeDogName(dog: Record<string, any> | null | undefined) {
+type BuilderRow = {
+  _id?: string
+  dog_id?: string
+  dog_name?: string
+  name?: string
+  role?: string
+}
+type BuilderDogRow = BuilderRow & { _id: string }
+interface BuilderPayload {
+  _id?: string
+  deleted_at?: number | null
+  updated_at?: number
+  created_at?: number
+  type?: string
+  title?: string
+  card_type?: string
+  details?: Record<string, unknown> | null
+  extra_arrangement?: unknown
+  images?: unknown
+  notes?: unknown
+  date?: number | string | null
+  due_date?: number | string | null
+  next_reminder_date?: number | string | null
+  cost?: number | string | null
+  dog_id?: string | null
+  name?: unknown
+  gender?: unknown
+  role?: unknown
+  disposition?: unknown
+  species?: unknown
+  breed?: unknown
+  birth_date?: unknown
+  purchase_date?: unknown
+  purchase_price?: unknown
+  latest_weight?: unknown
+  origin_litter_id?: unknown
+  owner_info?: unknown
+  adoption_fee?: unknown
+  adoptionFee?: unknown
+  disposition_notes?: unknown
+  drug_name?: unknown
+}
+
+function getPayloadType(data: BuilderPayload) {
+  return String(data.type || '')
+}
+
+export function normalizeDogName(dog: BuilderRow | null | undefined) {
   return dog?.name || dog?.dog_name || '未命名'
 }
 
-export function getHealthVariantKey(type: string, details: Record<string, any> = {}) {
+export function getHealthVariantKey(type: string, details: Record<string, unknown> = {}) {
   if (type === 'vaccination') {
     return `vaccination:${details.vaccine_type || ''}`
   }
@@ -28,12 +76,19 @@ export function shouldSkipDuplicateHealthRecord(type: string) {
   return type === 'vaccination' || type === 'deworming'
 }
 
-export function buildLocalTaskFromManualPayload(familyId: string, dog: Record<string, any>, data: Record<string, any>, taskId: string, now: number) {
+export function buildLocalTaskFromManualPayload(
+  familyId: string,
+  dog: BuilderRow,
+  data: BuilderPayload,
+  taskId: string,
+  now: number,
+): LocalRowOf<'tasks'> {
   const title = data.title
     || (data.type === 'vaccination' ? (data.details?.vaccine_type ? `疫苗 · ${data.details.vaccine_type}` : '疫苗') : '')
     || (data.type === 'deworming' ? (data.details?.drug_name ? `驱虫 · ${data.details.drug_name}` : '驱虫') : '')
     || data.type
 
+  const isOverdue = data.due_date != null && data.due_date <= now
   return {
     _id: taskId,
     card_type: data.card_type || 'individual',
@@ -43,7 +98,7 @@ export function buildLocalTaskFromManualPayload(familyId: string, dog: Record<st
     title,
     due_date: data.due_date,
     status: 'pending',
-    priority: data.due_date <= now ? 'overdue' : 'upcoming',
+    priority: isOverdue ? 'overdue' : 'upcoming',
     next_reminder_date: data.next_reminder_date || null,
     details: data.details || null,
     source_record_id: null,
@@ -57,7 +112,7 @@ export function buildLocalTaskFromManualPayload(familyId: string, dog: Record<st
   }
 }
 
-export function buildLocalHealthRecord(familyId: string, dog: Record<string, any>, data: Record<string, any>, recordId: string, now: number, cost: number | null = null) {
+export function buildLocalHealthRecord(familyId: string, dog: BuilderRow, data: BuilderPayload, recordId: string, now: number, cost: number | null = null) {
   const pendingUpload = hasPendingUploadImages(data.details?.images || data.images)
   return {
     _id: recordId,
@@ -78,7 +133,7 @@ export function buildLocalHealthRecord(familyId: string, dog: Record<string, any
   }
 }
 
-export function buildLocalBreedingRecord(familyId: string, dog: Record<string, any>, data: Record<string, any>, recordId: string, cycleId: string, now: number) {
+export function buildLocalBreedingRecord(familyId: string, dog: BuilderRow, data: BuilderPayload, recordId: string, cycleId: string, now: number) {
   const pendingUpload = hasPendingUploadImages(data.details?.images || data.images)
   return {
     _id: recordId,
@@ -101,32 +156,33 @@ export function buildLocalBreedingRecord(familyId: string, dog: Record<string, a
   }
 }
 
-export function isLocalPregnancyConfirmed(details: Record<string, any> = {}) {
+export function isLocalPregnancyConfirmed(details: Record<string, unknown> = {}) {
   return details.confirmed === '是' || details.confirmed === true
 }
 
-export function isLocalPregnancyRejected(details: Record<string, any> = {}) {
+export function isLocalPregnancyRejected(details: Record<string, unknown> = {}) {
   return details.confirmed === '否' || details.confirmed === false
 }
 
-export function isLocalAbandonMatingTermination(details: Record<string, any> = {}) {
+export function isLocalAbandonMatingTermination(details: Record<string, unknown> = {}) {
   return details.termination_type === '放弃配种'
 }
 
-export function hasLocalPrenatalCheckContent(details: Record<string, any> = {}) {
+export function hasLocalPrenatalCheckContent(details: Record<string, unknown> = {}) {
   return !!String(details.results || '').trim()
     || (Array.isArray(details.images) && details.images.some(item => String(item || '').trim()))
 }
 
-export function shouldClearLocalBreedingMilestones(data: Record<string, any>) {
-  if (['heat', 'follicle_check', 'mating', 'abnormal_termination'].includes(data.type)) return true
-  if (data.type === 'pregnancy_check') {
+export function shouldClearLocalBreedingMilestones(data: BuilderPayload) {
+  const type = getPayloadType(data)
+  if (['heat', 'follicle_check', 'mating', 'abnormal_termination'].includes(type)) return true
+  if (type === 'pregnancy_check') {
     return isLocalPregnancyConfirmed(data.details || {}) || isLocalPregnancyRejected(data.details || {})
   }
   return false
 }
 
-export function getLatestLocalBreedingRecord(records: Record<string, any>[], type: string) {
+export function getLatestLocalBreedingRecord(records: BuilderPayload[], type: string) {
   return records
     .filter(record => !record.deleted_at && record.type === type)
     .slice()
@@ -141,14 +197,15 @@ export function getLatestLocalBreedingRecord(records: Record<string, any>[], typ
 
 export function buildLocalBreedingExtraTask(
   familyId: string,
-  dog: Record<string, any>,
+  dog: BuilderDogRow,
   cycleId: string,
   recordId: string,
-  extraArrangement: Record<string, any>,
+  extraArrangement: Record<string, unknown>,
   taskId: string,
   now: number,
-) {
-  const title = EXTRA_ARRANGEMENT_TITLE_MAP[extraArrangement.kind] || EXTRA_ARRANGEMENT_TITLE_MAP.other
+): LocalRowOf<'tasks'> {
+  const arrangementKind = String(extraArrangement.kind || '')
+  const title = EXTRA_ARRANGEMENT_TITLE_MAP[arrangementKind] || EXTRA_ARRANGEMENT_TITLE_MAP.other
   const dueDate = Number(extraArrangement.due_date || 0)
   return {
     _id: taskId,
@@ -166,7 +223,7 @@ export function buildLocalBreedingExtraTask(
     family_id: familyId,
     postpone_count: 0,
     details: {
-      kind: extraArrangement.kind,
+      kind: arrangementKind,
       notes: extraArrangement.notes || null,
       anchor_type: extraArrangement.anchor_type || 'cycle',
       anchor_id: cycleId,
@@ -183,13 +240,13 @@ export function buildLocalBreedingExtraTask(
 
 export function buildLocalBreedingExpense(
   familyId: string,
-  dog: Record<string, any>,
-  data: Record<string, any>,
+  dog: BuilderDogRow,
+  data: BuilderPayload,
   cycleId: string,
   recordId: string,
   expenseId: string,
   now: number,
-) {
+): LocalRowOf<'expenses'> {
   const sourceLabels: Record<string, string> = {
     heat: '发情',
     heat_observation: '发情观察',
@@ -210,8 +267,9 @@ export function buildLocalBreedingExpense(
     birth: '生产育幼',
     abnormal_termination: '生产育幼',
   }
-  const sourceLabel = sourceLabels[data.type] || '繁育'
-  const category = categoryMap[data.type] || '其他'
+  const type = getPayloadType(data)
+  const sourceLabel = sourceLabels[type] || '繁育'
+  const category = categoryMap[type] || '其他'
   const noteText = typeof data.notes === 'string' ? data.notes.trim() : ''
 
   return {
@@ -245,11 +303,11 @@ export function buildLocalBreedingExpense(
 
 export function buildLocalDogPurchaseExpense(
   familyId: string,
-  data: Record<string, any>,
+  data: BuilderPayload,
   dogId: string,
   expenseId: string,
   now: number,
-) {
+): LocalRowOf<'expenses'> {
   const dogName = String(data.name || '').trim()
   return {
     _id: expenseId,
@@ -280,7 +338,7 @@ export function buildLocalDogPurchaseExpense(
 
 export function buildLocalDogPurchaseExpenseSnapshot(
   familyId: string,
-  dog: Record<string, any>,
+  dog: BuilderDogRow,
   amount: number,
   purchaseDate: number | null,
   expenseId: string,
@@ -289,7 +347,7 @@ export function buildLocalDogPurchaseExpenseSnapshot(
     version?: number
     createdAt?: number
   } = {},
-) {
+): LocalRowOf<'expenses'> {
   const dogName = normalizeDogName(dog)
   return {
     _id: expenseId,
@@ -320,13 +378,13 @@ export function buildLocalDogPurchaseExpenseSnapshot(
 
 export function buildLocalHealthExpense(
   familyId: string,
-  dog: Record<string, any>,
-  data: Record<string, any>,
+  dog: BuilderDogRow,
+  data: BuilderPayload,
   recordId: string,
   amount: number,
   expenseId: string,
   now: number,
-) {
+): LocalRowOf<'expenses'> {
   const sourceLabels: Record<string, string> = {
     vaccination: '疫苗',
     deworming: '驱虫',
@@ -337,8 +395,9 @@ export function buildLocalHealthExpense(
     deworming: '疫苗驱虫',
     illness: '医疗',
   }
-  const sourceLabel = sourceLabels[data.type] || '健康'
-  const category = categoryMap[data.type] || '其他'
+  const type = getPayloadType(data)
+  const sourceLabel = sourceLabels[type] || '健康'
+  const category = categoryMap[type] || '其他'
   const noteText = typeof data.notes === 'string' ? data.notes.trim() : ''
 
   return {
@@ -372,15 +431,15 @@ export function buildLocalHealthExpense(
 
 export function buildLocalMedicationExpense(
   familyId: string,
-  dog: Record<string, any>,
-  data: Record<string, any>,
+  dog: BuilderDogRow,
+  data: BuilderPayload,
   medicationTaskId: string,
   amount: number,
   durationDays: number,
   startDate: number,
   expenseId: string,
   now: number,
-) {
+): LocalRowOf<'expenses'> {
   return {
     _id: expenseId,
     family_id: familyId,
@@ -408,7 +467,7 @@ export function buildLocalMedicationExpense(
   }
 }
 
-export function parseAdoptionFeeAmount(data: Record<string, any>) {
+export function parseAdoptionFeeAmount(data: BuilderPayload) {
   const directAmount = Number(data.adoption_fee ?? data.adoptionFee)
   if (Number.isFinite(directAmount) && directAmount > 0) return directAmount
 
@@ -422,13 +481,13 @@ export function parseAdoptionFeeAmount(data: Record<string, any>) {
 
 export function buildLocalAdoptionIncome(
   familyId: string,
-  dog: Record<string, any>,
+  dog: BuilderDogRow,
   amount: number,
   date: number,
   notes: string | null,
   incomeId: string,
   now: number,
-) {
+): LocalRowOf<'incomes'> {
   return {
     _id: incomeId,
     family_id: familyId,
@@ -442,6 +501,7 @@ export function buildLocalAdoptionIncome(
     source_record_id: dog._id,
     notes: notes || null,
     images: [],
+    created_by: null,
     deleted_at: null,
     version: 0,
     created_at: now,
@@ -452,7 +512,7 @@ export function buildLocalAdoptionIncome(
   }
 }
 
-export function buildLocalDog(familyId: string, data: Record<string, any>, dogId: string, now: number) {
+export function buildLocalDog(familyId: string, data: BuilderPayload, dogId: string, now: number) {
   return {
     _id: dogId,
     name: data.name || '',

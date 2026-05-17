@@ -20,11 +20,13 @@ type FamilyRow = LocalRowOf<'families'> & {
 }
 type ExpenseRow = LocalRowOf<'expenses'>
 type MedicationProtocolRow = LocalRowOf<'medication_protocols'>
-type FamilySettingsPatch = Partial<FamilySettings> & Record<string, unknown>
-type CareRuleInput = Partial<CareRule> & Record<string, unknown>
+export type FamilySettingsPatch = Partial<FamilySettings> & {
+  custom_symptom_tags?: unknown
+}
+export type CareRuleInput = Partial<CareRule>
 type ExpenseCategoryGroup = NonNullable<FamilySettings['custom_expense_category_groups']>[number]
 type ExpenseCategory = NonNullable<FamilySettings['custom_expense_categories']>[number]
-type MedicationProtocolInput = {
+export interface MedicationProtocolInput {
   name?: unknown
   drug_name?: unknown
   dosage?: unknown
@@ -33,7 +35,7 @@ type MedicationProtocolInput = {
   frequency?: unknown
   duration_days?: unknown
   notes?: unknown
-} & Record<string, unknown>
+}
 
 export interface RuntimeMutationContext {
   enqueueMutation(
@@ -43,6 +45,17 @@ export interface RuntimeMutationContext {
     collectionScope: BusinessCollectionName[],
     syncMeta: SyncMetadata,
   ): Promise<void>
+}
+
+function toOptionalText(value: unknown) {
+  const normalized = String(value || '').trim()
+  return normalized || null
+}
+
+function toOptionalNumber(value: unknown) {
+  if (value === '' || value === null || value === undefined) return null
+  const normalized = Number(value)
+  return Number.isFinite(normalized) ? normalized : null
 }
 
 function createLocalExpenseCategoryGroupKey() {
@@ -486,18 +499,18 @@ export async function addMedicationProtocolLocally(ctx: RuntimeMutationContext, 
   if (!data?.drug_name) throw new Error('请填写药品名称')
   const now = getNow()
   const protocolId = createStableEntityId('medication_protocol')
-  const protocol = {
+  const protocol: MedicationProtocolRow = {
     _id: protocolId,
     name: String(data.name || '').trim(),
     target_condition: '',
     drugs: [],
-    drug_name: data.drug_name,
-    dosage: data.dosage || null,
-    dosage_unit: data.dosage_unit || null,
-    method: data.method || null,
-    frequency: data.frequency || null,
-    duration_days: data.duration_days ? Number(data.duration_days) : undefined,
-    notes: data.notes ? String(data.notes) : undefined,
+    drug_name: String(data.drug_name || '').trim(),
+    dosage: toOptionalText(data.dosage),
+    dosage_unit: toOptionalText(data.dosage_unit),
+    method: toOptionalText(data.method),
+    frequency: toOptionalText(data.frequency),
+    duration_days: toOptionalNumber(data.duration_days),
+    notes: toOptionalText(data.notes),
     family_id: familyId,
     created_by: '',
     deleted_at: null,
@@ -511,7 +524,7 @@ export async function addMedicationProtocolLocally(ctx: RuntimeMutationContext, 
     clientEntityIds: { medication_protocols: protocolId },
   })
   await localDb.transactRows('medication_protocols', async (rows) => {
-    await rows.upsertRow(protocol as unknown as MedicationProtocolRow)
+    await rows.upsertRow(protocol)
   })
   await ctx.enqueueMutation(LOCAL_MUTATION_TYPES.ADD_MEDICATION_PROTOCOL, familyId, { ...data, _sync: syncMeta }, ['medication_protocols'], syncMeta)
   return {
@@ -554,15 +567,15 @@ export async function updateMedicationProtocolLocally(ctx: RuntimeMutationContex
   if (!name) throw new Error('请填写方案名称')
   if (!drugName) throw new Error('请填写药品名称')
   const now = getNow()
-  const patch = {
+  const patch: Partial<MedicationProtocolRow> = {
     name,
     drug_name: drugName,
-    dosage: data.dosage || null,
-    dosage_unit: data.dosage_unit || null,
-    method: data.method || null,
-    frequency: data.frequency || null,
-    duration_days: data.duration_days || null,
-    notes: data.notes || null,
+    dosage: toOptionalText(data.dosage),
+    dosage_unit: toOptionalText(data.dosage_unit),
+    method: toOptionalText(data.method),
+    frequency: toOptionalText(data.frequency),
+    duration_days: toOptionalNumber(data.duration_days),
+    notes: toOptionalText(data.notes),
   }
   const syncMeta = buildSyncMeta({ [protocolId]: Number(protocol.version || 0) }, {
     clientMutationId: createClientMutationId(LOCAL_MUTATION_TYPES.UPDATE_MEDICATION_PROTOCOL),
@@ -575,7 +588,7 @@ export async function updateMedicationProtocolLocally(ctx: RuntimeMutationContex
       ...patch,
       updated_at: now,
       _local_pending: true,
-    } as unknown as MedicationProtocolRow))
+    }))
   })
   await ctx.enqueueMutation(
     LOCAL_MUTATION_TYPES.UPDATE_MEDICATION_PROTOCOL,

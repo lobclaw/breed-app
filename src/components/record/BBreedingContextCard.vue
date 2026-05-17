@@ -29,9 +29,16 @@
 
 <script setup lang="ts">
 import BEntityIcon from '@/components/base/BEntityIcon.vue'
+import type { DogRole } from '@/types/dog'
+
+interface BreedingContextDog {
+  _id?: string
+  name?: string
+  role?: DogRole | string
+}
 
 const props = withDefaults(defineProps<{
-  dog?: Record<string, any> | null
+  dog?: BreedingContextDog | null
   stageLabel?: string
   stageTone?: 'heat' | 'pregnant'
   metaText?: string

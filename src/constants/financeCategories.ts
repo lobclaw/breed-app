@@ -21,6 +21,14 @@ export interface ExpenseCategoryOption {
   parent_group: ExpenseCategoryGroupKey
   is_default?: boolean
 }
+type RawExpenseCategoryGroup = {
+  key?: unknown
+  label?: unknown
+}
+type RawExpenseCategory = string | {
+  name?: unknown
+  parent_group?: unknown
+}
 
 export const DEFAULT_EXPENSE_CATEGORIES: ExpenseCategoryOption[] = [
   { name: '食品', parent_group: 'feeding', is_default: true },
@@ -126,7 +134,7 @@ const EXPENSE_CATEGORY_GROUP_CUSTOM_COLORS = [
   '#87cfd2',
 ]
 
-export function normalizeExpenseCategoryGroups(rawGroups: any[] = []) {
+export function normalizeExpenseCategoryGroups(rawGroups: RawExpenseCategoryGroup[] = []) {
   return (rawGroups || [])
     .map((item): ExpenseCategoryGroupOption | null => {
       if (!item?.key || !item?.label) return null
@@ -143,7 +151,7 @@ export function normalizeExpenseCategoryGroups(rawGroups: any[] = []) {
     .filter((item, index, list) => list.findIndex(group => group.key === item.key) === index)
 }
 
-export function buildExpenseCategoryGroups(rawCustomGroups: any[] = []) {
+export function buildExpenseCategoryGroups(rawCustomGroups: RawExpenseCategoryGroup[] = []) {
   const presetKeys = new Set(PRESET_EXPENSE_CATEGORY_GROUPS.map(item => item.key))
   const customGroups = normalizeExpenseCategoryGroups(rawCustomGroups)
     .filter(item => !presetKeys.has(item.key))
@@ -190,7 +198,7 @@ export function getExpenseCategoryGroupKey(
 }
 
 export function normalizeExpenseCategories(
-  rawCategories: any[] = [],
+  rawCategories: RawExpenseCategory[] = [],
   groups: ExpenseCategoryGroupOption[] = PRESET_EXPENSE_CATEGORY_GROUPS,
 ) {
   const merged = new Map<string, ExpenseCategoryOption>()
@@ -207,7 +215,10 @@ export function normalizeExpenseCategories(
     if (!normalizedName) continue
     const parentGroup = typeof item === 'string'
       ? 'other'
-      : normalizeExpenseCategoryGroupKey(item.parent_group || getExpenseCategoryGroupKey(normalizedName), groups)
+      : normalizeExpenseCategoryGroupKey(
+          typeof item.parent_group === 'string' ? item.parent_group : getExpenseCategoryGroupKey(normalizedName),
+          groups,
+        )
     merged.set(normalizedName, {
       name: normalizedName,
       parent_group: parentGroup,

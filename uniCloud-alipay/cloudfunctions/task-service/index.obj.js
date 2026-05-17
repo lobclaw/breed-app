@@ -31,8 +31,6 @@ const {
 const db = uniCloud.database()
 const dbCmd = db.command
 
-// 一天的毫秒数
-const DAY_MS = 86400000
 const FOLLICLE_READY_RESULT = '已成熟'
 const FOLLICLE_ABNORMAL_RESULT = '发育不良'
 const DEFAULT_NOTIFICATION_SETTINGS = {
@@ -92,7 +90,7 @@ function startOfDay(ts) {
 
 function getOverdueDays(dueDate, now = Date.now()) {
   if (!dueDate) return 1
-  const diff = Math.floor((startOfDay(now) - startOfDay(dueDate)) / DAY_MS)
+  const diff = Math.floor((startOfDay(now) - startOfDay(dueDate)) / 86400000)
   return Math.max(1, diff)
 }
 
@@ -121,7 +119,7 @@ async function findDuplicateRecordedDogIdsForTask(familyId, dogIds = [], type, t
   if (!shouldSkipDuplicateHealthRecordTask(type) || !dogIds.length || !targetTs) return new Set()
 
   const dayStart = startOfDay(targetTs)
-  const dayEnd = dayStart + DAY_MS - 1
+  const dayEnd = dayStart + 86400000 - 1
   const expectedVariant = getTaskVariantKey({ type, details })
   const { data: records } = await db.collection('health_records')
     .where({
@@ -288,7 +286,7 @@ function getBeijingDayContext(now = Date.now()) {
 }
 
 function getBeijingDayDiff(laterTs, earlierTs) {
-  return Math.floor((startOfDay(laterTs) - startOfDay(earlierTs)) / DAY_MS)
+  return Math.floor((startOfDay(laterTs) - startOfDay(earlierTs)) / 86400000)
 }
 
 function computeMedItemsForBeijingDay(activeMedications, targetDate) {
@@ -459,7 +457,7 @@ async function ensureEstrusCycleMilestones(familyId, now = Date.now()) {
           }
         : {
             title: `${cycle.dam_name} · 建议卵泡检查`,
-            due_date: (latestFollicleRecord.date || now) + DAY_MS,
+            due_date: (latestFollicleRecord.date || now) + 86400000,
             details: {
               step_type: 'follicle_check',
               heat_date: heatDate,
@@ -471,7 +469,7 @@ async function ensureEstrusCycleMilestones(familyId, now = Date.now()) {
           })
       : {
           title: `${cycle.dam_name} · 建议卵泡检查`,
-          due_date: heatDate + 10 * DAY_MS,
+          due_date: heatDate + 10 * 86400000,
         details: {
           step_type: 'follicle_check',
           heat_date: heatDate,
@@ -1157,8 +1155,8 @@ module.exports = {
     const beijingToday = new Date(todayStartTs + (8 * 60 * 60 * 1000))
     const dayOfWeek = beijingToday.getUTCDay() // 0=日
     const daysToSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek
-    const sundayEndTs = todayStartTs + (daysToSunday * DAY_MS) + DAY_MS - 1
-    const day30EndTs = todayStartTs + (30 * DAY_MS) + DAY_MS - 1
+    const sundayEndTs = todayStartTs + (daysToSunday * 86400000) + 86400000 - 1
+    const day30EndTs = todayStartTs + (30 * 86400000) + 86400000 - 1
 
     // 并行查询 本周 和 30天 的 pending count
     const [weekRes, month30Res] = await Promise.all([
@@ -1218,7 +1216,7 @@ module.exports = {
 
     // 疗程状态也会出现在未来日期页：只要当天有用药卡，就给该天一个红点计数
     const seenMedicationDays = new Set()
-    for (let key = startOfDay(startDate); key <= endDate; key += DAY_MS) {
+    for (let key = startOfDay(startDate); key <= endDate; key += 86400000) {
       const dayMedItems = computeMedItemsForDay(activeMedications || [], key)
       if (dayMedItems.length > 0 && !seenMedicationDays.has(key)) {
         counts[key] = Math.max(counts[key] || 0, 1)
@@ -1266,7 +1264,7 @@ module.exports = {
 
     // 按天分组，正确标记 overdue
     const realTodayStart = startOfDay(Date.now())
-    const realTodayEnd = realTodayStart + DAY_MS - 1
+    const realTodayEnd = realTodayStart + 86400000 - 1
     const dayGroups = new Map()
     for (const task of tasks) {
       const key = startOfDay(task.due_date)
@@ -1312,7 +1310,7 @@ module.exports = {
     }
 
     // 补充没有其他任务但有用药的日期
-    for (let key = startOfDay(startDate); key <= endDate; key += DAY_MS) {
+    for (let key = startOfDay(startDate); key <= endDate; key += 86400000) {
       if (!result[key]) {
         const dayMedItems = computeMedItemsForDay(activeMedications, key)
         if (dayMedItems.length > 0) {
@@ -1747,14 +1745,13 @@ module.exports = {
 
     // 去重：同犬 + 同类型同子类型 + ±7天内已有 pending 任务则不创建
     if (data.dog_id && data.type) {
-      const WEEK = 7 * 86400000
       const { data: existingTasks } = await db.collection('tasks')
         .where({
           family_id: this.familyId,
           dog_id: data.dog_id,
           type: data.type,
           status: 'pending',
-          due_date: dbCmd.gte(data.due_date - WEEK).and(dbCmd.lte(data.due_date + WEEK)),
+          due_date: dbCmd.gte(data.due_date - (7 * 86400000)).and(dbCmd.lte(data.due_date + (7 * 86400000))),
         })
         .get()
       if ((existingTasks || []).some(task => getTaskVariantKey(task) === expectedVariant)) {
@@ -1852,7 +1849,6 @@ module.exports = {
       : []
 
     // ① 一次查询批量去重
-    const WEEK = 7 * DAY_MS
     const dogIds = data.dogs.map(d => d.dog_id)
     const { data: existingTasks } = await db.collection('tasks')
       .where({
@@ -1860,7 +1856,7 @@ module.exports = {
         dog_id: dbCmd.in(dogIds),
         type: data.type,
         status: 'pending',
-        due_date: dbCmd.gte(data.due_date - WEEK).and(dbCmd.lte(data.due_date + WEEK)),
+        due_date: dbCmd.gte(data.due_date - (7 * 86400000)).and(dbCmd.lte(data.due_date + (7 * 86400000))),
       })
       .get()
     const expectedVariant = getTaskVariantKey({ type: data.type, details: data.details || {} })
@@ -2050,7 +2046,7 @@ module.exports = {
             cycle_id: cycle._id,
             type: 'breeding_milestone',
             title: `${cycle.dam_name} · 建议孕检（审计补生成）`,
-            due_date: now + 3 * DAY_MS,
+            due_date: now + 3 * 86400000,
             status: 'pending',
             priority: 'upcoming',
             family_id: familyId,
@@ -2084,7 +2080,7 @@ module.exports = {
             litter_id: litter._id,
             type: 'breeding_milestone',
             title: `${litter.dam_name}窝 · 确认断奶（审计补生成）`,
-            due_date: now + 3 * DAY_MS,
+            due_date: now + 3 * 86400000,
             status: 'pending',
             priority: 'upcoming',
             family_id: familyId,
@@ -2107,7 +2103,7 @@ module.exports = {
    */
   async _timing_autoCloseCycles() {
     const now = Date.now()
-    const threshold = now - 21 * DAY_MS
+    const threshold = now - 21 * 86400000
 
     // 获取所有家庭的过期发情周期
     const { data: expiredCycles } = await db.collection('breeding_cycles')

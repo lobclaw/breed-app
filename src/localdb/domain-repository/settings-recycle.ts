@@ -9,6 +9,26 @@ import {
 } from '@/constants/financeCategories'
 import { getLocalFamilyRow } from './shared'
 
+type RecycleRow = {
+  _id: string
+  deleted_at?: number | null
+  name?: string | null
+  dog_name?: string | null
+  title?: string | null
+  protocol_name?: string | null
+  drug_name?: string | null
+  notes?: string | null
+  role?: string | null
+  gender?: string | null
+  category?: string | null
+  total_amount?: number | string | null
+  type?: string | null
+  amount?: number | string | null
+  contact_info?: string | null
+  phone?: string | null
+  wechat?: string | null
+}
+
 export async function getLocalFamilySettings(familyId: string): Promise<FamilySettings | null> {
   const family = await getLocalFamilyRow(familyId)
   return family?.settings || null
@@ -30,7 +50,7 @@ export async function getLocalExpenseCategories(familyId: string): Promise<Expen
   return normalizeExpenseCategories(settings?.custom_expense_categories || [], groups) as ExpenseCategory[]
 }
 
-function buildRecycleSummary(type: RecycleBinItem['type'], row: Record<string, any>) {
+function buildRecycleSummary(type: RecycleBinItem['type'], row: RecycleRow) {
   if (type === 'dog') {
     const role = row.role ? ` · ${row.role}` : ''
     return `${row.gender || '未知性别'}${role}`
@@ -50,7 +70,7 @@ function buildRecycleSummary(type: RecycleBinItem['type'], row: Record<string, a
   return ''
 }
 
-function buildRecycleItem(type: RecycleBinItem['type'], row: Record<string, any>): RecycleBinItem {
+function buildRecycleItem(type: RecycleBinItem['type'], row: RecycleRow): RecycleBinItem {
   const deletedAt = Number(row.deleted_at || 0)
   return {
     _id: row._id,
@@ -79,11 +99,11 @@ function buildRecycleItem(type: RecycleBinItem['type'], row: Record<string, any>
 export async function listLocalRecycleItems(familyId: string): Promise<RecycleBinItem[]> {
   if (!familyId) return []
   const [dogs, expenses, incomes, agents, protocols] = await Promise.all([
-    localDb.query<any>('dogs', row => row.family_id === familyId && !!row.deleted_at),
-    localDb.query<any>('expenses', row => row.family_id === familyId && !!row.deleted_at),
-    localDb.query<any>('incomes', row => row.family_id === familyId && !!row.deleted_at),
-    localDb.query<any>('agents', row => row.family_id === familyId && !!row.deleted_at),
-    localDb.query<any>('medication_protocols', row => row.family_id === familyId && !!row.deleted_at),
+    localDb.query('dogs', row => row.family_id === familyId && !!row.deleted_at),
+    localDb.query('expenses', row => row.family_id === familyId && !!row.deleted_at),
+    localDb.query('incomes', row => row.family_id === familyId && !!row.deleted_at),
+    localDb.query('agents', row => row.family_id === familyId && !!row.deleted_at),
+    localDb.query('medication_protocols', row => row.family_id === familyId && !!row.deleted_at),
   ])
 
   return [

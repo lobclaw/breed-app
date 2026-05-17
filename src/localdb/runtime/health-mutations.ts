@@ -14,6 +14,10 @@ import { buildLocalAck, buildSyncMeta, getFamilyId, getNow } from '@/localdb/run
 import type { BusinessCollectionName, LocalRowOf, SyncMetadata } from '@/localdb/types'
 import { getBeijingDayStart } from '@/utils/date'
 
+type HealthTaskRow = LocalRowOf<'tasks'> & {
+  type?: string | null
+}
+
 export interface RuntimeMutationContext {
   enqueueMutation(
     type: LocalMutationType,
@@ -25,6 +29,27 @@ export interface RuntimeMutationContext {
   ): Promise<void>
 }
 
+export interface BatchAddHealthRecordsPayload {
+  dog_ids?: string[]
+  type?: string
+  date?: number | null
+  cost?: number | string | null
+  notes?: string | null
+  details?: Record<string, unknown> | null
+  source_task_ids?: string[]
+  sourceTaskIds?: string[]
+  create_task?: boolean
+  skip_reminder?: boolean
+}
+
+export interface UpdateHealthRecordPayload {
+  id: string
+  date?: number | null
+  cost?: number | string | null
+  notes?: string | null
+  details?: Record<string, unknown> | null
+}
+
 function startOfDay(ts: number) {
   return getBeijingDayStart(ts)
 }
@@ -32,12 +57,12 @@ function startOfDay(ts: number) {
 async function getDogsByIds(dogIds: string[]) {
   const uniqueIds = [...new Set(dogIds.filter(Boolean))]
   if (!uniqueIds.length) return []
-  const dogs = await localDb.query<any>('dogs', dog => uniqueIds.includes(dog._id))
+  const dogs = await localDb.query('dogs', dog => uniqueIds.includes(dog._id))
   const dogMap = new Map(dogs.map(dog => [dog._id, dog]))
-  return uniqueIds.map(id => dogMap.get(id)).filter(Boolean)
+  return uniqueIds.map(id => dogMap.get(id)).filter((dog): dog is LocalRowOf<'dogs'> => Boolean(dog))
 }
 
-export async function batchAddHealthRecordsLocally(ctx: RuntimeMutationContext, familyIdInput: string, data: Record<string, any>) {
+export async function batchAddHealthRecordsLocally(ctx: RuntimeMutationContext, familyIdInput: string, data: BatchAddHealthRecordsPayload) {
   const familyId = getFamilyId(familyIdInput)
   if (!Array.isArray(data.dog_ids) || !data.dog_ids.length) throw new Error('请选择犬只')
   const uniqueDogIds = [...new Set(data.dog_ids)]
@@ -45,16 +70,17 @@ export async function batchAddHealthRecordsLocally(ctx: RuntimeMutationContext, 
   if (dogs.length !== [...new Set(data.dog_ids)].length) throw new Error('部分犬只未同步到本地，请联网刷新一次')
 
   const now = getNow()
-  const duplicateCandidates = shouldSkipDuplicateHealthRecord(data.type)
-    ? await localDb.query<any>('health_records', row =>
+  const recordType = String(data.type || '')
+  const duplicateCandidates = shouldSkipDuplicateHealthRecord(recordType)
+    ? await localDb.query('health_records', row =>
       row.family_id === familyId
       && !row.deleted_at
-      && row.type === data.type
+      && row.type === recordType
       && uniqueDogIds.includes(row.dog_id)
       && startOfDay(Number(row.date || 0)) === startOfDay(Number(data.date || 0)),
     )
     : []
-  const expectedVariant = getHealthVariantKey(data.type, data.details || {})
+  const expectedVariant = getHealthVariantKey(recordType, data.details || {})
   const duplicateDogIdSet = new Set(
     (duplicateCandidates || [])
       .filter(row => getHealthVariantKey(row.type, row.details || {}) === expectedVariant)
@@ -83,16 +109,16 @@ export async function batchAddHealthRecordsLocally(ctx: RuntimeMutationContext, 
   }
 
   const totalCost = data.cost || null
-  const perDogCost = totalCost && dogsToCreate.length > 1 ? Math.round(totalCost / dogsToCreate.length * 100) / 100 : totalCost
+  const perDogCost = totalCost && dogsToCreate.length > 1 ? Math.round(Number(totalCost) / dogsToCreate.length * 100) / 100 : totalCost
   const records = dogsToCreate.map(({ dog }) => buildLocalHealthRecord(
     familyId,
     dog,
     data,
     createStableEntityId('health_record'),
     now,
-    perDogCost && perDogCost > 0 ? perDogCost : null,
+    perDogCost && Number(perDogCost) > 0 ? Number(perDogCost) : null,
   ))
-  const expenseRows = perDogCost && perDogCost > 0
+  const expenseRows = perDogCost && Number(perDogCost) > 0
     ? dogsToCreate.map(({ dog }, index) => buildLocalHealthExpense(
       familyId,
       dog,
@@ -109,10 +135,10 @@ export async function batchAddHealthRecordsLocally(ctx: RuntimeMutationContext, 
       ? data.sourceTaskIds.filter(Boolean)
       : []
   const sourceTaskIdSet = new Set(sourceTaskIds)
-  const pendingTasks = await localDb.query<any>('tasks', task =>
+  const pendingTasks = await localDb.query<HealthTaskRow>('tasks', task =>
     task.family_id === familyId
     && task.status === 'pending'
-    && task.type === data.type
+    && task.type === recordType
     && dogsToCreate.some(({ dog }) => dog._id === task.dog_id)
     && (sourceTaskIdSet.size === 0 || sourceTaskIdSet.has(task._id)),
   )
@@ -134,10 +160,10 @@ export async function batchAddHealthRecordsLocally(ctx: RuntimeMutationContext, 
 
   await localDb.transactRows(['health_records', 'tasks', 'expenses'] as const, async (rows) => {
     for (const record of records) {
-      await rows.upsertRow('health_records', record as unknown as LocalRowOf<'health_records'>)
+      await rows.upsertRow('health_records', record as LocalRowOf<'health_records'>)
     }
     for (const expenseRow of expenseRows) {
-      await rows.upsertRow('expenses', expenseRow as unknown as LocalRowOf<'expenses'>)
+      await rows.upsertRow('expenses', expenseRow as LocalRowOf<'expenses'>)
     }
     for (const task of pendingTasks) {
       await rows.updateRow('tasks', task._id, row => ({
@@ -173,10 +199,10 @@ export async function batchAddHealthRecordsLocally(ctx: RuntimeMutationContext, 
   }
 }
 
-export async function updateHealthRecordLocally(ctx: RuntimeMutationContext, familyId: string, data: Record<string, any>) {
+export async function updateHealthRecordLocally(ctx: RuntimeMutationContext, familyId: string, data: UpdateHealthRecordPayload) {
   const recordId = String(data.id || '').trim()
   if (!recordId) throw new Error('缺少记录 ID')
-  const record = await findLocalRow<any>('health_records', recordId)
+  const record = await findLocalRow('health_records', recordId)
   if (!record || record.family_id !== familyId || record.deleted_at) throw new Error('记录不存在')
   const dog = (await getDogsByIds([record.dog_id]))[0] || { _id: record.dog_id, name: record.dog_name || '' }
 
@@ -192,7 +218,7 @@ export async function updateHealthRecordLocally(ctx: RuntimeMutationContext, fam
     _pending_upload: hasPendingUploadImages(data.details?.images || record.details?.images),
     pending_upload: hasPendingUploadImages(data.details?.images || record.details?.images),
   }
-  const linkedExpenses = await localDb.query<any>('expenses', row =>
+  const linkedExpenses = await localDb.query('expenses', row =>
     row.family_id === familyId
     && !row.deleted_at
     && row.source_type === 'auto'
@@ -249,14 +275,14 @@ export async function updateHealthRecordLocally(ctx: RuntimeMutationContext, fam
     clientEntityIds: createdExpenseId ? { expenses: createdExpenseId } : undefined,
   })
   await localDb.transactRows(['health_records', 'expenses'] as const, async (rows) => {
-    await rows.updateRow('health_records', recordId, nextRecord as unknown as LocalRowOf<'health_records'>)
+    await rows.updateRow('health_records', recordId, nextRecord as LocalRowOf<'health_records'>)
     for (const expense of linkedExpenses) {
       if (nextExpenseRows.every(nextRow => nextRow._id !== expense._id)) {
         await rows.deleteRow('expenses', expense._id)
       }
     }
     for (const expense of nextExpenseRows) {
-      await rows.upsertRow('expenses', expense as unknown as LocalRowOf<'expenses'>)
+      await rows.upsertRow('expenses', expense as LocalRowOf<'expenses'>)
     }
   })
   await ctx.enqueueMutation(
@@ -293,15 +319,15 @@ export async function updateHealthRecordLocally(ctx: RuntimeMutationContext, fam
 export async function deleteHealthRecordLocally(ctx: RuntimeMutationContext, familyId: string, recordIdInput: string) {
   const recordId = String(recordIdInput || '').trim()
   if (!recordId) throw new Error('缺少记录 ID')
-  const record = await findLocalRow<any>('health_records', recordId)
+  const record = await findLocalRow('health_records', recordId)
   if (!record || record.family_id !== familyId || record.deleted_at) throw new Error('记录不存在')
 
-  const linkedReminderTasks = await localDb.query<any>('tasks', row =>
+  const linkedReminderTasks = await localDb.query('tasks', row =>
     row.family_id === familyId
     && row.source_record_id === recordId
     && row.status === 'pending',
   )
-  const linkedExpenses = await localDb.query<any>('expenses', row =>
+  const linkedExpenses = await localDb.query('expenses', row =>
     row.family_id === familyId
     && !row.deleted_at
     && row.source_type === 'auto'
@@ -367,7 +393,7 @@ export async function deleteHealthRecordLocally(ctx: RuntimeMutationContext, fam
 }
 
 export async function updateIllnessStatusLocally(ctx: RuntimeMutationContext, familyId: string, illnessIds: string[], status: string) {
-  const rows = await localDb.query<any>('health_records', row => illnessIds.includes(row._id))
+  const rows = await localDb.query('health_records', row => illnessIds.includes(row._id))
   if (!rows.length) return null
 
   const now = getNow()
@@ -407,11 +433,11 @@ export async function updateIllnessStatusLocally(ctx: RuntimeMutationContext, fa
 }
 
 export async function recoverIllnessesLocally(ctx: RuntimeMutationContext, familyId: string, illnessIds: string[], medicationTaskIds: string[] = [], recoveryDate?: number) {
-  const illnessRows = await localDb.query<any>('health_records', row => illnessIds.includes(row._id))
+  const illnessRows = await localDb.query('health_records', row => illnessIds.includes(row._id))
   if (!illnessRows.length) return null
-  const linkedMedicationRows = await localDb.query<any>('medication_tasks', row =>
+  const linkedMedicationRows = await localDb.query('medication_tasks', row =>
     medicationTaskIds.includes(row._id)
-    || illnessIds.includes(row.source_record_id),
+    || (!!row.source_record_id && illnessIds.includes(row.source_record_id)),
   )
 
   const now = getNow()
@@ -469,14 +495,14 @@ export async function recoverIllnessesLocally(ctx: RuntimeMutationContext, famil
 }
 
 export async function cleanupDuplicateIllnessesLocally(ctx: RuntimeMutationContext, familyId: string, dogId?: string) {
-  const illnessRows = await localDb.query<any>('health_records', row =>
+  const illnessRows = await localDb.query('health_records', row =>
     row.family_id === familyId
     && row.type === 'illness'
     && !row.deleted_at
     && (!dogId || row.dog_id === dogId),
   )
   const activeRows = illnessRows.filter((row) => String(row.details?.treatment_status || '观察中') !== '已康复')
-  const groups = new Map<string, any[]>()
+  const groups = new Map<string, Array<LocalRowOf<'health_records'>>>()
 
   for (const row of activeRows) {
     const condition = String(row.details?.primary_condition || row.details?.condition || '').trim() || '生病中'
@@ -511,13 +537,14 @@ export async function cleanupDuplicateIllnessesLocally(ctx: RuntimeMutationConte
     return { data: { cleanedGroups: 0, cleanedRecords: 0 } }
   }
 
-  const affectedTasks = await localDb.query<any>('tasks', row =>
+  const affectedTasks = await localDb.query('tasks', row =>
     row.family_id === familyId
+    && !!row.source_record_id
     && duplicateIds.has(row.source_record_id),
   )
   await localDb.transactRows(['health_records', 'tasks'] as const, async (rows) => {
     for (const task of affectedTasks) {
-      const keeperId = duplicateToKeeper.get(task.source_record_id)
+      const keeperId = task.source_record_id ? duplicateToKeeper.get(task.source_record_id) : ''
       if (!keeperId) continue
       await rows.updateRow('tasks', task._id, row => ({
         ...row,

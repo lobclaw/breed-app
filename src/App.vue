@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { onLaunch, onShow } from "@dcloudio/uni-app";
-// @ts-ignore
 import uniIdPageInit from '@/uni_modules/uni-id-pages/init.js';
 import { useAuth } from '@/composables/useAuth';
 import { useTheme } from '@/composables/useTheme';

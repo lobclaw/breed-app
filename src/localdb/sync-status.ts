@@ -1,5 +1,5 @@
 import { localDb } from '@/localdb/db'
-import type { SyncIssueRow } from '@/localdb/types'
+import type { OutboxMutation, SyncConflictRow, SyncIssueRow, SyncStateRow } from '@/localdb/types'
 
 function toPendingUploadIssue(issue: SyncIssueRow) {
   return {
@@ -17,11 +17,11 @@ export async function getSyncStatus(options: { familyId?: string } = {}) {
   const familyId = String(options.familyId || '')
   const activeScopeMetaKey = familyId ? `sync:active-scope:${familyId}` : 'sync:active-scope'
   const [outbox, conflicts, syncStates, activeScope, issues] = await Promise.all([
-    localDb.queryReadonly<any>('outbox_mutations', undefined, {
+    localDb.queryReadonly<OutboxMutation>('outbox_mutations', undefined, {
       sort: (a, b) => a.created_at - b.created_at,
     }),
-    localDb.getReadonlyTable<any>('sync_conflicts'),
-    familyId ? localDb.getRowsByFamilyReadonly<any>('sync_state', familyId) : localDb.getReadonlyTable<any>('sync_state'),
+    localDb.getReadonlyTable<SyncConflictRow>('sync_conflicts'),
+    familyId ? localDb.getRowsByFamilyReadonly<SyncStateRow>('sync_state', familyId) : localDb.getReadonlyTable<SyncStateRow>('sync_state'),
     localDb.getLocalMeta<string>(activeScopeMetaKey),
     familyId ? localDb.getRowsByFamilyReadonly<SyncIssueRow>('sync_issues', familyId) : localDb.getReadonlyTable<SyncIssueRow>('sync_issues'),
   ])

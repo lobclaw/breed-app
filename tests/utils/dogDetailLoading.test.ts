@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 const testDir = dirname(fileURLToPath(import.meta.url))
 const source = readFileSync(resolve(testDir, '../../src/pages/dog/detail.vue'), 'utf8')
+const financeSource = readFileSync(resolve(testDir, '../../src/pages/dog/composables/useDogDetailFinance.ts'), 'utf8')
 
 describe('dog detail loading contract', () => {
   it('应将首屏整页骨架改为页面专属拟真骨架', () => {
@@ -26,7 +27,8 @@ describe('dog detail loading contract', () => {
     expect(source).toContain("pageLoadStage.value = 'ready'")
     expect(source).toContain('listLocalDogHealthHistory')
     expect(source).toContain('listLocalDogMedicationHistory')
-    expect(source).toContain('getLocalDogFinanceSummary')
+    expect(source).toContain('loadFinanceSummary({')
+    expect(financeSource).toContain('getLocalDogFinanceSummary')
   })
 
   it('应让出生当天的详情页年龄最低显示为 1 天', () => {
@@ -48,10 +50,11 @@ describe('dog detail loading contract', () => {
     expect(source).toContain('const recentHealthTimeline = computed(() => healthTimeline.value.slice(0, 3))')
     expect(source).toContain('v-if="!breedingTabLoaded" class="dog-detail__tab-loading"')
     expect(source).toContain('v-if="!healthTabLoaded" class="dog-detail__tab-loading"')
-    expect(source).toContain('v-if="!financeLoaded" class="dog-detail__tab-loading"')
+    expect(source).toContain('v-if="!financeTabLoaded" class="dog-detail__tab-loading"')
     expect(source).toContain('const externalSireMatingRecordsLoaded = ref(false)')
     expect(source).toContain('const breedingTabLoaded = computed(() => cyclesLoaded.value && littersLoaded.value && (!isExternalSireDetail.value || externalSireMatingRecordsLoaded.value))')
     expect(source).toContain('const healthTabLoaded = computed(() => healthRecordsLoaded.value && medicationHistoryLoaded.value)')
+    expect(financeSource).toContain('const financeTabLoaded = computed(() => financeLoaded.value && (!isDamFinanceDog.value || damFinanceRoiLoaded.value))')
   })
 
   it('应保留来源页返回静默刷新，不回退整页骨架', () => {

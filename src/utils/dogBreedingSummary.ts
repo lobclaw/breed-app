@@ -38,6 +38,13 @@ export interface HistoryCycleSummaryViewModel {
   statusIcon: string
 }
 
+type BreedingDetails = Record<string, unknown>
+type LitterWithPupStats = Litter & {
+  pupStats?: {
+    kept?: number | string | null
+  } | null
+}
+
 export function isUnweanedProducedCycle(cycle?: BreedingCycle | null, litter?: Litter | null) {
   return cycle?.status === '已生产' && !!litter && !litter.weaned_at
 }
@@ -76,14 +83,14 @@ function truncateText(text: string, maxLength = 18) {
   return `${text.slice(0, maxLength)}...`
 }
 
-function getPregnancyResult(details: Record<string, any> = {}) {
+function getPregnancyResult(details: BreedingDetails = {}) {
   if (details.result) return String(details.result)
   if (details.confirmed === '是' || details.confirmed === true) return '确认怀孕'
   if (details.confirmed === '否' || details.confirmed === false) return '未怀孕'
   return ''
 }
 
-function getPregnancyCount(details: Record<string, any> = {}) {
+function getPregnancyCount(details: BreedingDetails = {}) {
   const value = Number(details.fetus_count || details.puppy_count || details.count)
   return value > 0 ? value : null
 }
@@ -93,7 +100,7 @@ function getMatingSireName(record?: BreedingRecord | null) {
   return String(details.sire_name || details.male_name || '').trim()
 }
 
-function normalizePreLaborSymptoms(details: Record<string, any> = {}) {
+function normalizePreLaborSymptoms(details: BreedingDetails = {}) {
   const legacyLabelMap: Record<string, string> = {
     刨窝: '刨窝/做窝',
     焦躁: '焦躁不安',
@@ -102,7 +109,7 @@ function normalizePreLaborSymptoms(details: Record<string, any> = {}) {
     宫缩: '可见宫缩',
     乳汁: '乳汁分泌',
   }
-  const normalize = (item: any) => {
+  const normalize = (item: unknown) => {
     const label = String(item || '').trim()
     return legacyLabelMap[label] || label
   }
@@ -308,7 +315,7 @@ export function buildActiveCycleSummaryViewModel(
 
 export function buildHistoryCycleSummaryViewModel(
   cycle?: BreedingCycle | null,
-  litter?: Litter | null,
+  litter?: LitterWithPupStats | null,
   records: BreedingRecord[] = [],
 ): HistoryCycleSummaryViewModel {
   const title = cycle?.cycle_number ? `第${cycle.cycle_number}次周期` : '繁育周期'
@@ -325,7 +332,7 @@ export function buildHistoryCycleSummaryViewModel(
   if (cycle?.status === '已生产') {
     if (litter) {
       resultParts.push(`存活 ${litter.born_alive || 0}/${litter.total_born || 0}`)
-      const keptCount = Number((litter as any)?.pupStats?.kept)
+      const keptCount = Number(litter.pupStats?.kept)
       if (Number.isFinite(keptCount) && keptCount > 0) {
         resultParts.push(`在养 ${keptCount}`)
       }

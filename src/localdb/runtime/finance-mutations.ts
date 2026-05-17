@@ -9,36 +9,36 @@ import type { BusinessCollectionName, LocalRowOf, SyncMetadata } from '@/localdb
 type ExpenseRow = LocalRowOf<'expenses'>
 type IncomeRow = LocalRowOf<'incomes'> & {
   source_sale_id?: string | null
-  source_type?: string | null
 }
-type ExpenseMutationPayload = {
-  id?: unknown
-  total_amount?: unknown
-  category?: unknown
-  date?: unknown
-  linked_cycle_id?: unknown
-  linked_litter_id?: unknown
-  linked_dog_ids?: unknown
-  source_type?: unknown
-  images?: unknown
-  dam_name?: unknown
-  dog_names?: unknown
-  litter_number?: unknown
-  notes?: unknown
-} & Record<string, unknown>
-type IncomeMutationPayload = {
-  id?: unknown
-  dog_id?: unknown
-  dog_name?: unknown
-  type?: unknown
-  amount?: unknown
-  date?: unknown
-  source_sale_id?: unknown
-  source_type?: unknown
-  source_record_id?: unknown
-  notes?: unknown
-  images?: unknown
-} & Record<string, unknown>
+export interface ExpenseMutationPayload {
+  id?: string
+  total_amount?: number | string | null
+  category?: string | null
+  date?: number | string | null
+  linked_cycle_id?: string | null
+  linked_litter_id?: string | null
+  linked_dog_ids?: string[]
+  source_type?: 'manual' | 'auto' | string | null
+  images?: string[]
+  dam_name?: string | null
+  dog_names?: string[]
+  litter_number?: number | string | null
+  notes?: string | null
+}
+
+export interface IncomeMutationPayload {
+  id?: string
+  dog_id?: string | null
+  dog_name?: string | null
+  type?: string | null
+  amount?: number | string | null
+  date?: number | string | null
+  source_sale_id?: string | null
+  source_type?: 'manual' | 'auto' | string | null
+  source_record_id?: string | null
+  notes?: string | null
+  images?: string[]
+}
 
 export interface RuntimeMutationContext {
   enqueueMutation(
@@ -50,25 +50,48 @@ export interface RuntimeMutationContext {
   ): Promise<void>
 }
 
+function toFiniteNumber(value: number | string | null | undefined, fallback = 0) {
+  const normalized = Number(value ?? fallback)
+  return Number.isFinite(normalized) ? normalized : fallback
+}
+
+function toTimestamp(value: number | string | null | undefined, fallback: number) {
+  if (value === '' || value === null || value === undefined) return fallback
+  return toFiniteNumber(value, fallback)
+}
+
+function toExpenseSourceType(value: ExpenseMutationPayload['source_type']): ExpenseRow['source_type'] {
+  return value === 'auto' ? 'auto' : 'manual'
+}
+
+function toOptionalNumber(value: number | string | null | undefined) {
+  if (value === '' || value === null || value === undefined) return null
+  return toFiniteNumber(value)
+}
+
+function toIncomeType(value: IncomeMutationPayload['type']): IncomeRow['type'] {
+  return String(value || '其他') as IncomeRow['type']
+}
+
 export async function addExpenseLocally(ctx: RuntimeMutationContext, familyIdInput: string, data: ExpenseMutationPayload) {
   const familyId = getFamilyId(familyIdInput)
   const now = getNow()
   const pendingUpload = hasPendingUploadImages(data.images)
-  const expense = {
+  const expense: ExpenseRow = {
     _id: createStableEntityId('expense'),
     family_id: familyId,
-    total_amount: data.total_amount,
-    category: data.category,
-    date: data.date || now,
+    total_amount: toFiniteNumber(data.total_amount),
+    category: String(data.category || ''),
+    date: toTimestamp(data.date, now),
     linked_cycle_id: data.linked_cycle_id || null,
     linked_litter_id: data.linked_litter_id || null,
     linked_dog_ids: data.linked_dog_ids || [],
-    source_type: data.source_type || 'manual',
+    source_type: toExpenseSourceType(data.source_type),
     source_record_id: null,
     images: data.images || [],
     dam_name: data.dam_name || null,
     dog_names: data.dog_names || [],
-    litter_number: data.litter_number || null,
+    litter_number: toOptionalNumber(data.litter_number),
     notes: data.notes || null,
     created_by: '',
     deleted_at: null,
@@ -78,13 +101,13 @@ export async function addExpenseLocally(ctx: RuntimeMutationContext, familyIdInp
     _local_pending: true,
     _pending_upload: pendingUpload,
     pending_upload: pendingUpload,
-  } as unknown as ExpenseRow
+  }
   const syncMeta = buildSyncMeta({}, {
     clientMutationId: createClientMutationId(LOCAL_MUTATION_TYPES.CREATE_EXPENSE),
     clientEntityIds: { expenses: expense._id },
   })
   await localDb.transactRows('expenses', async (rows) => {
-    await rows.upsertRow(expense as ExpenseRow)
+    await rows.upsertRow(expense)
   })
   await ctx.enqueueMutation(LOCAL_MUTATION_TYPES.CREATE_EXPENSE, familyId, { ...data, _sync: syncMeta }, ['expenses'], syncMeta)
   return { data: { expenseId: expense._id }, ...buildLocalAck(syncMeta, [{ collection: 'expenses', id: expense._id, version: 0, updatedAt: now }]) }
@@ -94,14 +117,14 @@ export async function addIncomeLocally(ctx: RuntimeMutationContext, familyIdInpu
   const familyId = getFamilyId(familyIdInput)
   const now = getNow()
   const pendingUpload = hasPendingUploadImages(data.images)
-  const income = {
+  const income: IncomeRow = {
     _id: createStableEntityId('income'),
     family_id: familyId,
     dog_id: data.dog_id || null,
     dog_name: data.dog_name || null,
-    type: data.type,
-    amount: data.amount,
-    date: data.date || now,
+    type: toIncomeType(data.type),
+    amount: toFiniteNumber(data.amount),
+    date: toTimestamp(data.date, now),
     source_sale_id: data.source_sale_id || null,
     source_type: data.source_type || 'manual',
     source_record_id: data.source_record_id || null,
@@ -115,13 +138,13 @@ export async function addIncomeLocally(ctx: RuntimeMutationContext, familyIdInpu
     _local_pending: true,
     _pending_upload: pendingUpload,
     pending_upload: pendingUpload,
-  } as unknown as IncomeRow
+  }
   const syncMeta = buildSyncMeta({}, {
     clientMutationId: createClientMutationId(LOCAL_MUTATION_TYPES.CREATE_INCOME),
     clientEntityIds: { incomes: income._id },
   })
   await localDb.transactRows('incomes', async (rows) => {
-    await rows.upsertRow(income as IncomeRow)
+    await rows.upsertRow(income)
   })
   await ctx.enqueueMutation(LOCAL_MUTATION_TYPES.CREATE_INCOME, familyId, { ...data, _sync: syncMeta }, ['incomes'], syncMeta)
   return { data: { incomeId: income._id }, ...buildLocalAck(syncMeta, [{ collection: 'incomes', id: income._id, version: 0, updatedAt: now }]) }
@@ -137,24 +160,24 @@ export async function updateExpenseLocally(ctx: RuntimeMutationContext, familyId
 
   const now = getNow()
   const pendingUpload = hasPendingUploadImages(data.images)
-  const nextExpense = {
+  const nextExpense: ExpenseRow = {
     ...expense,
-    total_amount: data.total_amount,
-    category: data.category,
-    date: data.date || expense.date,
+    total_amount: toFiniteNumber(data.total_amount, Number(expense.total_amount || 0)),
+    category: String(data.category || ''),
+    date: toTimestamp(data.date, Number(expense.date || now)),
     linked_cycle_id: data.linked_cycle_id || null,
     linked_litter_id: data.linked_litter_id || null,
     linked_dog_ids: data.linked_dog_ids || [],
     dam_name: data.dam_name || null,
     dog_names: data.dog_names || [],
-    litter_number: data.litter_number || null,
+    litter_number: toOptionalNumber(data.litter_number),
     notes: data.notes || null,
     images: data.images || [],
     updated_at: now,
     _local_pending: true,
     _pending_upload: pendingUpload,
     pending_upload: pendingUpload,
-  } as unknown as ExpenseRow
+  }
   const syncMeta = buildSyncMeta({ [expenseId]: Number(expense.version || 0) }, {
     clientMutationId: createClientMutationId(LOCAL_MUTATION_TYPES.UPDATE_EXPENSE),
   })
@@ -187,20 +210,20 @@ export async function updateIncomeLocally(ctx: RuntimeMutationContext, familyIdI
 
   const now = getNow()
   const pendingUpload = hasPendingUploadImages(data.images)
-  const nextIncome = {
+  const nextIncome: IncomeRow = {
     ...income,
-    amount: data.amount,
-    type: data.type,
+    amount: toFiniteNumber(data.amount, Number(income.amount || 0)),
+    type: toIncomeType(data.type),
     dog_id: data.dog_id || null,
     dog_name: data.dog_name || null,
-    date: data.date || income.date,
+    date: toTimestamp(data.date, Number(income.date || now)),
     notes: data.notes || null,
     images: data.images || [],
     updated_at: now,
     _local_pending: true,
     _pending_upload: pendingUpload,
     pending_upload: pendingUpload,
-  } as unknown as IncomeRow
+  }
   const syncMeta = buildSyncMeta({ [incomeId]: Number(income.version || 0) }, {
     clientMutationId: createClientMutationId(LOCAL_MUTATION_TYPES.UPDATE_INCOME),
   })

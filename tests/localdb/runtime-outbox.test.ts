@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { localDb } from '../../src/localdb/db'
 import { localSyncRuntime } from '../../src/localdb/runtime'
+import { syncIssueService } from '../../src/localdb/sync-issues'
 import { createMockUniCloud } from '../helpers/mock-unicloud'
 
 function createDeferred<T = void>() {
@@ -19,6 +20,7 @@ describe('local sync runtime outbox diagnostics', () => {
     await localDb.replaceTable('sync_state', [])
     await localDb.replaceTable('local_meta', [])
     await localDb.replaceTable('image_cache_entries', [])
+    await localDb.replaceTable('sync_issues', [])
     await localDb.replaceTable('dogs', [])
     await localDb.replaceTable('tasks', [])
     await localDb.replaceTable('health_records', [])
@@ -32,6 +34,7 @@ describe('local sync runtime outbox diagnostics', () => {
   afterEach(() => {
     delete (globalThis as any).uniCloud
     vi.restoreAllMocks()
+    vi.useRealTimers()
   })
 
   it('应返回最近失败的 outbox 详情', async () => {
@@ -116,6 +119,19 @@ describe('local sync runtime outbox diagnostics', () => {
       created_at: 1000,
       updated_at: 1000,
     }])
+    await localDb.replaceTable('sync_issues', [{
+      _id: 'pending_upload:expenses:expense_upload_1',
+      family_id: 'fam_upload',
+      kind: 'pending_upload',
+      status: 'open',
+      collection: 'expenses',
+      record_id: 'expense_upload_1',
+      mutation_id: null,
+      title: '支出记录',
+      last_error: null,
+      created_at: 1000,
+      updated_at: 1000,
+    }])
 
     const result = await localSyncRuntime.uploadPendingAttachments('fam_upload')
     const [expense] = await localDb.getTable<any>('expenses')
@@ -136,6 +152,9 @@ describe('local sync runtime outbox diagnostics', () => {
       family_id: 'fam_upload',
       local_src: localImage,
     })])
+    expect(await localDb.findById<any>('sync_issues', 'pending_upload:expenses:expense_upload_1')).toMatchObject({
+      status: 'resolved',
+    })
   })
 
   it('待传标记遇到已上传图片时应自动清理', async () => {
@@ -205,6 +224,212 @@ describe('local sync runtime outbox diagnostics', () => {
     expect(expense.pending_upload).toBe(true)
     expect(expense._upload_error).toBe('upload denied')
     expect(mutation.payload.images).toEqual([localImage])
+    expect(await localDb.findById<any>('sync_issues', 'pending_upload:expenses:expense_upload_failed')).toMatchObject({
+      status: 'open',
+      last_error: 'upload denied',
+    })
+  })
+
+  it('无附件 mutation 入队也应只刷新 affected row 而不是 pending upload collection', async () => {
+    const runtimeState = localSyncRuntime as unknown as { online: boolean }
+    const previousOnline = runtimeState.online
+    runtimeState.online = false
+    const refreshCollectionsSpy = vi.spyOn(syncIssueService, 'refreshPendingUploadIssuesForCollections')
+    const refreshRowsSpy = vi.spyOn(syncIssueService, 'refreshPendingUploadIssuesForRows')
+
+    try {
+      const result = await localSyncRuntime.addExpenseLocally('fam_upload', {
+        total_amount: 120,
+        category: '医疗',
+      })
+      const expenseId = result.data.expenseId
+
+      expect(refreshCollectionsSpy).not.toHaveBeenCalled()
+      expect(refreshRowsSpy).toHaveBeenCalledWith('expenses', 'fam_upload', [expenseId])
+    } finally {
+      runtimeState.online = previousOnline
+    }
+  })
+
+  it('带附件 mutation 入队应只刷新 affected row 的 pending upload issue', async () => {
+    const runtimeState = localSyncRuntime as unknown as { online: boolean }
+    const previousOnline = runtimeState.online
+    runtimeState.online = false
+    const refreshCollectionsSpy = vi.spyOn(syncIssueService, 'refreshPendingUploadIssuesForCollections')
+    const refreshRowsSpy = vi.spyOn(syncIssueService, 'refreshPendingUploadIssuesForRows')
+    const localImage = 'wxfile://tmp/local-only.jpg'
+
+    try {
+      const result = await localSyncRuntime.addExpenseLocally('fam_upload', {
+        total_amount: 120,
+        category: '医疗',
+        images: [localImage],
+      })
+      const expenseId = result.data.expenseId
+
+      expect(refreshCollectionsSpy).not.toHaveBeenCalled()
+      expect(refreshRowsSpy).toHaveBeenCalledWith('expenses', 'fam_upload', [expenseId])
+      expect(await localDb.findById<any>('sync_issues', `pending_upload:expenses:${expenseId}`)).toMatchObject({
+        status: 'open',
+        collection: 'expenses',
+        record_id: expenseId,
+      })
+    } finally {
+      runtimeState.online = previousOnline
+    }
+  })
+
+  it('财务记录空日期应回退到当前时间或保留原日期', async () => {
+    const runtimeState = localSyncRuntime as unknown as { online: boolean }
+    const previousOnline = runtimeState.online
+    runtimeState.online = false
+    const now = new Date('2026-05-15T10:30:00+08:00')
+    vi.useFakeTimers()
+    vi.setSystemTime(now)
+
+    await localDb.replaceTable('expenses', [{
+      _id: 'expense_blank_date_update',
+      family_id: 'fam_finance_blank_date',
+      total_amount: 50,
+      category: '医疗',
+      date: 123456789,
+      source_type: 'manual',
+      source_record_id: null,
+      images: [],
+      linked_dog_ids: [],
+      deleted_at: null,
+      version: 0,
+      created_at: 1000,
+      updated_at: 1000,
+    }])
+    await localDb.replaceTable('incomes', [{
+      _id: 'income_blank_date_update',
+      family_id: 'fam_finance_blank_date',
+      type: '其他',
+      amount: 80,
+      date: 987654321,
+      source_type: 'manual',
+      source_sale_id: null,
+      source_record_id: null,
+      images: [],
+      deleted_at: null,
+      version: 0,
+      created_at: 1000,
+      updated_at: 1000,
+    }])
+
+    try {
+      const expenseResult = await localSyncRuntime.addExpenseLocally('fam_finance_blank_date', {
+        total_amount: 120,
+        category: '医疗',
+        date: '',
+      })
+      const incomeResult = await localSyncRuntime.addIncomeLocally('fam_finance_blank_date', {
+        type: '其他',
+        amount: 200,
+        date: '',
+      })
+
+      await localSyncRuntime.updateExpenseLocally('fam_finance_blank_date', {
+        id: 'expense_blank_date_update',
+        total_amount: 60,
+        category: '医疗',
+        date: '',
+      })
+      await localSyncRuntime.updateIncomeLocally('fam_finance_blank_date', {
+        id: 'income_blank_date_update',
+        type: '其他',
+        amount: 90,
+        date: '',
+      })
+
+      expect(await localDb.findById<any>('expenses', expenseResult.data.expenseId)).toMatchObject({
+        date: now.getTime(),
+      })
+      expect(await localDb.findById<any>('incomes', incomeResult.data.incomeId)).toMatchObject({
+        date: now.getTime(),
+      })
+      expect(await localDb.findById<any>('expenses', 'expense_blank_date_update')).toMatchObject({
+        date: 123456789,
+      })
+      expect(await localDb.findById<any>('incomes', 'income_blank_date_update')).toMatchObject({
+        date: 987654321,
+      })
+    } finally {
+      runtimeState.online = previousOnline
+    }
+  })
+
+  it('编辑清空最后一张繁育附件时应关闭旧 pending upload issue', async () => {
+    const runtimeState = localSyncRuntime as unknown as { online: boolean }
+    const previousOnline = runtimeState.online
+    runtimeState.online = false
+    const refreshCollectionsSpy = vi.spyOn(syncIssueService, 'refreshPendingUploadIssuesForCollections')
+    const localImage = 'wxfile://tmp/pregnancy.jpg'
+
+    await localDb.replaceTable('dogs', [{
+      _id: 'dog_breeding_image_clear',
+      family_id: 'fam_upload',
+      name: '奶糖',
+      role: '种狗',
+      gender: '母',
+      disposition: '在养',
+      version: 0,
+      created_at: 1000,
+      updated_at: 1000,
+    }])
+    await localDb.replaceTable('breeding_records', [{
+      _id: 'breeding_image_clear',
+      family_id: 'fam_upload',
+      dog_id: 'dog_breeding_image_clear',
+      dog_name: '奶糖',
+      cycle_id: 'cycle_image_clear',
+      type: 'pregnancy_check',
+      date: 1000,
+      cost: 0,
+      notes: null,
+      details: { confirmed: '是', images: [localImage] },
+      version: 0,
+      created_at: 1000,
+      updated_at: 1000,
+      _pending_upload: true,
+      pending_upload: true,
+    }])
+    await localDb.replaceTable('sync_issues', [{
+      _id: 'pending_upload:breeding_records:breeding_image_clear',
+      family_id: 'fam_upload',
+      kind: 'pending_upload',
+      status: 'open',
+      collection: 'breeding_records',
+      record_id: 'breeding_image_clear',
+      mutation_id: null,
+      title: '繁育记录',
+      last_error: '图片已缓存在本机，等待上传',
+      created_at: 1000,
+      updated_at: 1000,
+    }])
+
+    try {
+      await localSyncRuntime.updateBreedingRecordLocally('fam_upload', {
+        id: 'breeding_image_clear',
+        date: 1000,
+        cost: null,
+        notes: null,
+        details: { confirmed: '否' },
+      })
+
+      expect(refreshCollectionsSpy).not.toHaveBeenCalled()
+      expect(await localDb.findById<any>('breeding_records', 'breeding_image_clear')).toMatchObject({
+        _pending_upload: false,
+        pending_upload: false,
+        details: { confirmed: '否' },
+      })
+      expect(await localDb.findById<any>('sync_issues', 'pending_upload:breeding_records:breeding_image_clear')).toMatchObject({
+        status: 'resolved',
+      })
+    } finally {
+      runtimeState.online = previousOnline
+    }
   })
 
   it('并发触发附件上传时应复用同一个上传任务', async () => {

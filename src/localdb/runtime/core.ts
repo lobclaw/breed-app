@@ -29,6 +29,7 @@ import * as medicationMutations from '@/localdb/runtime/medication-mutations'
 import * as saleMutations from '@/localdb/runtime/sale-mutations'
 import * as settingsMutations from '@/localdb/runtime/settings-mutations'
 import * as taskMutations from '@/localdb/runtime/task-mutations'
+import type { AgentMutationPayload } from '@/localdb/runtime/agent-mutations'
 import type { BreedingMutationPayload } from '@/localdb/runtime/breeding-mutations'
 import type {
   CreateDogPayload,
@@ -36,6 +37,19 @@ import type {
   DogWeightPayload,
   UpdateDogPayload,
 } from '@/localdb/runtime/dog-mutations'
+import type { ExpenseMutationPayload, IncomeMutationPayload } from '@/localdb/runtime/finance-mutations'
+import type { BatchAddHealthRecordsPayload, UpdateHealthRecordPayload } from '@/localdb/runtime/health-mutations'
+import type { AddBirthRecordPayload, AddPuppyToLitterPayload, UpdateLitterPayload } from '@/localdb/runtime/litter-mutations'
+import type { BatchStartMedicationPayload, EndMedicationPayload } from '@/localdb/runtime/medication-mutations'
+import type {
+  CancelSalePayload,
+  CompleteSalePayload,
+  CreateSaleRecordPayload,
+  ReceiveSaleDepositPayload,
+  SettleSalePayload,
+  UpdateSaleModePayload,
+} from '@/localdb/runtime/sale-mutations'
+import type { CareRuleInput, FamilySettingsPatch, MedicationProtocolInput } from '@/localdb/runtime/settings-mutations'
 import type { BatchCreateManualTasksPayload } from '@/localdb/runtime/task-mutations'
 import { getFamilyId, getNow } from '@/localdb/runtime/mutation-helpers'
 import {
@@ -64,6 +78,7 @@ import type {
   LocalOperationLogRow,
   OutboxMutation,
   SyncAckPayload,
+  SyncConflictRow,
   SyncMetadata,
   SyncStateRow,
 } from '@/localdb/types'
@@ -85,17 +100,60 @@ const HOME_MUTATION_TYPES = LOCAL_MUTATION_TYPES
 type HomeMutationType = LocalMutationType
 type HomeMutationPayload = LocalMutationPayload
 const MAX_CONFLICT_REBASE_ATTEMPTS = 3
+const PENDING_UPLOAD_COLLECTIONS = ['expenses', 'incomes', 'health_records', 'breeding_records', 'dogs'] as const satisfies readonly BusinessCollectionName[]
+type PendingUploadCollectionName = typeof PENDING_UPLOAD_COLLECTIONS[number]
+const PENDING_UPLOAD_COLLECTION_SET = new Set<BusinessCollectionName>(PENDING_UPLOAD_COLLECTIONS)
+const PENDING_UPLOAD_ID_KEYS: Record<PendingUploadCollectionName, string[]> = {
+  expenses: ['id', 'expenseId', 'expense_id'],
+  incomes: ['id', 'incomeId', 'income_id'],
+  health_records: ['id', 'recordId', 'record_id', 'healthRecordId', 'health_record_id'],
+  breeding_records: ['id', 'recordId', 'record_id', 'breedingRecordId', 'breeding_record_id'],
+  dogs: ['id', 'dogId', 'dog_id'],
+}
+
+type RuntimeRouteQuery = Record<string, unknown>
+type NetworkTypeResult = { networkType?: string }
+type RuntimeGlobal = typeof globalThis & { __DEV__?: boolean }
+
+interface DirectCompleteSalePayload extends CreateSaleRecordPayload, CompleteSalePayload {
+  agent_id?: string | null
+  agent_name?: string | null
+}
 
 function isOnlineError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error || '')
   return /network|timeout|offline|fail/i.test(message)
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function normalizeIdList(value: unknown) {
+  const values = Array.isArray(value) ? value : [value]
+  return values
+    .map(item => String(item || '').trim())
+    .filter(Boolean)
+}
+
+function collectPendingUploadRecordIds(collection: PendingUploadCollectionName, payload: unknown, syncMeta: SyncMetadata) {
+  const ids = new Set<string>()
+  normalizeIdList(syncMeta.clientEntityIds?.[collection]).forEach(id => ids.add(id))
+
+  if (isRecord(payload)) {
+    for (const key of PENDING_UPLOAD_ID_KEYS[collection]) {
+      normalizeIdList(payload[key]).forEach(id => ids.add(id))
+    }
+  }
+
+  return [...ids]
+}
+
 async function detectOnline() {
   try {
-    const network = await new Promise<any>((resolve) => {
+    const network = await new Promise<NetworkTypeResult>((resolve) => {
       uni.getNetworkType({
-        success: resolve,
+        success: result => resolve(result as NetworkTypeResult),
         fail: () => resolve({ networkType: 'unknown' }),
       })
     })
@@ -146,8 +204,8 @@ class LocalSyncRuntime {
     await this.syncActiveScope()
   }
 
-  private logScope(scope: string, payload: Record<string, any>) {
-    const devFlag = typeof globalThis !== 'undefined' ? (globalThis as any).__DEV__ : undefined
+  private logScope(scope: string, payload: Record<string, unknown>) {
+    const devFlag = typeof globalThis !== 'undefined' ? (globalThis as RuntimeGlobal).__DEV__ : undefined
     if (devFlag !== true) return
     console.info('[local-sync]', scope, payload)
   }
@@ -187,7 +245,7 @@ class LocalSyncRuntime {
     this.currentFamilyId = nextFamilyId
   }
 
-  async setActiveScopeFromRoute(routePath: string, query: Record<string, any> = {}) {
+  async setActiveScopeFromRoute(routePath: string, query: RuntimeRouteQuery = {}) {
     const resolved = resolveSyncScopeForRoute(routePath, query)
     if (!resolved) return null
     await this.setActiveScope(resolved.key)
@@ -329,7 +387,7 @@ class LocalSyncRuntime {
     return this.syncScope(scopeKey, { force: true, skipTtl: true })
   }
 
-  async syncScopeFromRoute(routePath: string, query: Record<string, any> = {}, options: { force?: boolean } = {}) {
+  async syncScopeFromRoute(routePath: string, query: RuntimeRouteQuery = {}, options: { force?: boolean } = {}) {
     const resolved = resolveSyncScopeForRoute(routePath, query)
     if (!resolved) return null
     await this.setActiveScope(resolved.key)
@@ -434,7 +492,7 @@ class LocalSyncRuntime {
     const familyId = options.familyId || this.currentFamilyId
     const [outbox, conflicts] = await Promise.all([
       localDb.getOutbox(),
-      localDb.getTable<any>('sync_conflicts'),
+      localDb.getTable('sync_conflicts'),
     ])
     const conflictMap = new Map(
       conflicts
@@ -485,20 +543,25 @@ class LocalSyncRuntime {
     if (!this.online) throw new Error('当前网络不可用')
 
     const now = getNow()
-    await localDb.transact(['outbox_mutations', 'local_operation_logs', 'sync_conflicts'], (tables) => {
-      const conflictMap = new Map(
-        (tables.sync_conflicts as any[])
-          .filter(conflict => conflict.status === 'open')
-          .map(conflict => [String(conflict.client_mutation_id || ''), conflict]),
-      )
-      const retryingIds = new Set(
-        (tables.outbox_mutations as OutboxMutation[])
-          .filter(mutation => mutation.family_id === familyId && (mutation.status === 'failed' || mutation.status === 'conflict'))
-          .map(mutation => mutation.client_mutation_id),
-      )
+    const [outbox, conflicts, logs] = await Promise.all([
+      localDb.getOutbox(),
+      localDb.getReadonlyTable<SyncConflictRow>('sync_conflicts'),
+      localDb.getRowsByFamilyReadonly<LocalOperationLogRow>('local_operation_logs', familyId),
+    ])
+    const retryingMutations = outbox.filter(
+      mutation => mutation.family_id === familyId && (mutation.status === 'failed' || mutation.status === 'conflict'),
+    )
+    const retryingIds = new Set(retryingMutations.map(mutation => mutation.client_mutation_id).filter(Boolean))
+    const conflictMap = new Map(
+      conflicts
+        .filter(conflict => conflict.status === 'open')
+        .map(conflict => [String(conflict.client_mutation_id || ''), conflict]),
+    )
+    const retryingConflicts = conflicts.filter(conflict => retryingIds.has(String(conflict.client_mutation_id || '')))
+    const retryingLogs = logs.filter(log => retryingIds.has(log.client_mutation_id))
 
-      tables.outbox_mutations = (tables.outbox_mutations as OutboxMutation[]).map((mutation) => {
-        if (mutation.family_id !== familyId || (mutation.status !== 'failed' && mutation.status !== 'conflict')) return mutation
+    await localDb.transactRows(['outbox_mutations', 'local_operation_logs', 'sync_conflicts'] as const, async (rows) => {
+      for (const mutation of retryingMutations) {
         const conflict = conflictMap.get(mutation.client_mutation_id)
         const currentSyncMeta = (mutation.payload?._sync && typeof mutation.payload._sync === 'object'
           ? mutation.payload._sync
@@ -515,34 +578,32 @@ class LocalSyncRuntime {
               },
             }
           : mutation.payload
-        return {
-          ...mutation,
+        await rows.updateRow('outbox_mutations', mutation._id, row => ({
+          ...row,
           payload,
           status: 'pending',
           next_retry_at: 0,
           last_error: null,
           updated_at: now,
-        }
-      })
+        }))
+      }
 
-      tables.sync_conflicts = (tables.sync_conflicts as any[]).map((conflict) => {
-        if (!retryingIds.has(String(conflict.client_mutation_id || ''))) return conflict
-        return {
-          ...conflict,
+      for (const conflict of retryingConflicts) {
+        await rows.updateRow('sync_conflicts', conflict._id, row => ({
+          ...row,
           status: 'retrying',
           updated_at: now,
-        }
-      })
+        }))
+      }
 
-      tables.local_operation_logs = (tables.local_operation_logs as LocalOperationLogRow[]).map((log) => {
-        if (!retryingIds.has(log.client_mutation_id)) return log
-        return {
-          ...log,
+      for (const log of retryingLogs) {
+        await rows.updateRow('local_operation_logs', log._id, row => ({
+          ...row,
           status: 'pending',
           last_error: null,
           updated_at: now,
-        }
-      })
+        }))
+      }
     })
 
     await this.flushOutbox(familyId)
@@ -639,10 +700,27 @@ class LocalSyncRuntime {
     if (localOperationLog) {
       await localDb.upsertRows('local_operation_logs', [localOperationLog])
     }
-    await syncIssueService.refreshPendingUploadIssuesForCollections(collectionScope, familyId)
+    await this.refreshPendingUploadIssuesForMutation(collectionScope, familyId, payload, syncMeta)
     if (this.online && this.deferOutboxFlushDepth === 0) {
       void this.flushOutbox(familyId)
     }
+  }
+
+  private async refreshPendingUploadIssuesForMutation(
+    collectionScope: BusinessCollectionName[],
+    familyId: string,
+    payload: HomeMutationPayload,
+    syncMeta: SyncMetadata,
+  ) {
+    if (!familyId) return
+    const pendingCollections = collectionScope.filter(
+      (collection): collection is PendingUploadCollectionName => PENDING_UPLOAD_COLLECTION_SET.has(collection),
+    )
+    await Promise.all(pendingCollections.map((collection) => {
+      const recordIds = collectPendingUploadRecordIds(collection, payload, syncMeta)
+      if (!recordIds.length) return Promise.resolve()
+      return syncIssueService.refreshPendingUploadIssuesForRows(collection, familyId, recordIds)
+    }))
   }
 
   async getLocalOperationLogs(familyId: string, options: {
@@ -760,11 +838,11 @@ class LocalSyncRuntime {
     return taskMutations.batchCreateManualTasksLocally(this, familyIdInput, data)
   }
 
-  async batchAddHealthRecordsLocally(familyIdInput: string, data: Record<string, any>) {
+  async batchAddHealthRecordsLocally(familyIdInput: string, data: BatchAddHealthRecordsPayload) {
     return healthMutations.batchAddHealthRecordsLocally(this, familyIdInput, data)
   }
 
-  async batchStartMedicationLocally(familyIdInput: string, data: Record<string, any>) {
+  async batchStartMedicationLocally(familyIdInput: string, data: BatchStartMedicationPayload) {
     return medicationMutations.batchStartMedicationLocally(this, familyIdInput, data)
   }
 
@@ -777,7 +855,7 @@ class LocalSyncRuntime {
     return breedingMutations.batchAddBreedingRecordsLocally(this, familyId, data)
   }
 
-  async addBirthRecordLocally(familyIdInput: string, data: Record<string, any>) {
+  async addBirthRecordLocally(familyIdInput: string, data: AddBirthRecordPayload) {
     return litterMutations.addBirthRecordLocally(this, familyIdInput, data)
   }
 
@@ -793,11 +871,11 @@ class LocalSyncRuntime {
     return breedingMutations.closeBreedingCycleLocally(this, familyIdInput, cycleIdInput, reasonInput)
   }
 
-  async addPuppyToLitterLocally(familyIdInput: string, litterIdInput: string, puppyData: Record<string, any>) {
+  async addPuppyToLitterLocally(familyIdInput: string, litterIdInput: string, puppyData: AddPuppyToLitterPayload) {
     return litterMutations.addPuppyToLitterLocally(this, familyIdInput, litterIdInput, puppyData)
   }
 
-  async updateLitterLocally(familyIdInput: string, litterIdInput: string, data: Record<string, any>) {
+  async updateLitterLocally(familyIdInput: string, litterIdInput: string, data: UpdateLitterPayload) {
     return litterMutations.updateLitterLocally(this, familyIdInput, litterIdInput, data)
   }
 
@@ -809,19 +887,19 @@ class LocalSyncRuntime {
     return litterMutations.confirmWeaningLocally(this, familyIdInput, litterIdInput)
   }
 
-  async addExpenseLocally(familyIdInput: string, data: Record<string, any>) {
+  async addExpenseLocally(familyIdInput: string, data: ExpenseMutationPayload) {
     return financeMutations.addExpenseLocally(this, familyIdInput, data)
   }
 
-  async addIncomeLocally(familyIdInput: string, data: Record<string, any>) {
+  async addIncomeLocally(familyIdInput: string, data: IncomeMutationPayload) {
     return financeMutations.addIncomeLocally(this, familyIdInput, data)
   }
 
-  async updateExpenseLocally(familyIdInput: string, data: Record<string, any>) {
+  async updateExpenseLocally(familyIdInput: string, data: ExpenseMutationPayload) {
     return financeMutations.updateExpenseLocally(this, familyIdInput, data)
   }
 
-  async updateIncomeLocally(familyIdInput: string, data: Record<string, any>) {
+  async updateIncomeLocally(familyIdInput: string, data: IncomeMutationPayload) {
     return financeMutations.updateIncomeLocally(this, familyIdInput, data)
   }
 
@@ -833,11 +911,11 @@ class LocalSyncRuntime {
     return financeMutations.deleteIncomeLocally(this, familyIdInput, incomeIdInput)
   }
 
-  async createSaleRecordLocally(familyIdInput: string, data: Record<string, any>) {
+  async createSaleRecordLocally(familyIdInput: string, data: CreateSaleRecordPayload) {
     return saleMutations.createSaleRecordLocally(this, familyIdInput, data)
   }
 
-  async directCompleteSaleLocally(familyIdInput: string, data: Record<string, any>) {
+  async directCompleteSaleLocally(familyIdInput: string, data: DirectCompleteSalePayload) {
     const familyId = getFamilyId(familyIdInput)
     const hasReceivedAmount = data.received_amount !== '' && data.received_amount != null
     const receivedAmount = hasReceivedAmount ? Number(data.received_amount) : null
@@ -883,31 +961,31 @@ class LocalSyncRuntime {
     }
   }
 
-  async updateSaleModeLocally(familyIdInput: string, saleId: string, data: Record<string, any>) {
+  async updateSaleModeLocally(familyIdInput: string, saleId: string, data: UpdateSaleModePayload) {
     return saleMutations.updateSaleModeLocally(this, familyIdInput, saleId, data)
   }
 
-  async receiveSaleDepositLocally(familyIdInput: string, saleId: string, data: Record<string, any>) {
+  async receiveSaleDepositLocally(familyIdInput: string, saleId: string, data: ReceiveSaleDepositPayload) {
     return saleMutations.receiveSaleDepositLocally(this, familyIdInput, saleId, data)
   }
 
-  async completeSaleLocally(familyIdInput: string, saleId: string, data: Record<string, any>) {
+  async completeSaleLocally(familyIdInput: string, saleId: string, data: CompleteSalePayload) {
     return saleMutations.completeSaleLocally(this, familyIdInput, saleId, data)
   }
 
-  async settleSaleLocally(familyIdInput: string, saleId: string, data: Record<string, any>) {
+  async settleSaleLocally(familyIdInput: string, saleId: string, data: SettleSalePayload) {
     return saleMutations.settleSaleLocally(this, familyIdInput, saleId, data)
   }
 
-  async cancelSaleLocally(familyIdInput: string, saleId: string, data: Record<string, any>) {
+  async cancelSaleLocally(familyIdInput: string, saleId: string, data: CancelSalePayload) {
     return saleMutations.cancelSaleLocally(this, familyIdInput, saleId, data)
   }
 
-  async addAgentLocally(familyIdInput: string, data: Record<string, any>) {
+  async addAgentLocally(familyIdInput: string, data: AgentMutationPayload) {
     return agentMutations.addAgentLocally(this, familyIdInput, data)
   }
 
-  async updateAgentLocally(familyIdInput: string, agentId: string, data: Record<string, any>) {
+  async updateAgentLocally(familyIdInput: string, agentId: string, data: AgentMutationPayload) {
     return agentMutations.updateAgentLocally(this, familyIdInput, agentId, data)
   }
 
@@ -915,11 +993,11 @@ class LocalSyncRuntime {
     return agentMutations.removeAgentLocally(this, familyIdInput, agentId)
   }
 
-  async updateFamilySettingsLocally(familyIdInput: string, settings: Record<string, any>) {
+  async updateFamilySettingsLocally(familyIdInput: string, settings: FamilySettingsPatch) {
     return settingsMutations.updateFamilySettingsLocally(this, familyIdInput, settings)
   }
 
-  async addCareRuleLocally(familyIdInput: string, rule: Record<string, any>) {
+  async addCareRuleLocally(familyIdInput: string, rule: CareRuleInput) {
     return settingsMutations.addCareRuleLocally(this, familyIdInput, rule)
   }
 
@@ -955,7 +1033,7 @@ class LocalSyncRuntime {
     return settingsMutations.removeExpenseCategoryLocally(this, familyIdInput, nameInput)
   }
 
-  async addMedicationProtocolLocally(familyIdInput: string, data: Record<string, any>) {
+  async addMedicationProtocolLocally(familyIdInput: string, data: MedicationProtocolInput) {
     return settingsMutations.addMedicationProtocolLocally(this, familyIdInput, data)
   }
 
@@ -963,7 +1041,7 @@ class LocalSyncRuntime {
     return settingsMutations.removeMedicationProtocolLocally(this, familyIdInput, protocolId)
   }
 
-  async updateMedicationProtocolLocally(familyIdInput: string, protocolId: string, data: Record<string, any>) {
+  async updateMedicationProtocolLocally(familyIdInput: string, protocolId: string, data: MedicationProtocolInput) {
     return settingsMutations.updateMedicationProtocolLocally(this, familyIdInput, protocolId, data)
   }
 
@@ -992,7 +1070,7 @@ class LocalSyncRuntime {
     return medicationMutations.batchCompleteMedicationDayLocally(this, familyId, medicationTaskIds)
   }
 
-  async updateHealthRecordLocally(familyId: string, data: Record<string, any>) {
+  async updateHealthRecordLocally(familyId: string, data: UpdateHealthRecordPayload) {
     return healthMutations.updateHealthRecordLocally(this, familyId, data)
   }
 
@@ -1008,7 +1086,7 @@ class LocalSyncRuntime {
     return healthMutations.recoverIllnessesLocally(this, familyId, illnessIds, medicationTaskIds, recoveryDate)
   }
 
-  async endMedicationLocally(familyId: string, medicationTaskId: string, data: Record<string, any> = {}) {
+  async endMedicationLocally(familyId: string, medicationTaskId: string, data: EndMedicationPayload = {}) {
     return medicationMutations.endMedicationLocally(this, familyId, medicationTaskId, data)
   }
 

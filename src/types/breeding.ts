@@ -39,8 +39,8 @@ export interface BreedingRecord extends BaseDocument {
   date: number                // timestamp 毫秒数
   cost?: number               // 费用（触发自动记账）
   images?: string[]           // 云存储 fileID
-  notes?: string
-  details?: Record<string, any>  // 类型特有字段
+  notes?: string | null
+  details?: Record<string, unknown> // 类型特有字段
   created_by: string
 }
 
@@ -65,7 +65,7 @@ export interface Litter extends BaseDocument {
 export interface BreedingCycleExpense extends BaseDocument {
   total_amount: number
   category?: string
-  notes?: string
+  notes?: string | null
   date: number
   linked_cycle_id?: string | null
   source_type?: string | null

@@ -1,5 +1,12 @@
 type QueryValue = string | undefined
 type QueryLike = Record<string, QueryValue>
+type PrefillDetails = Record<string, unknown>
+
+interface RouteDog {
+  _id: string
+  name: string
+  [key: string]: unknown
+}
 
 const BREEDING_RECORD_EDIT_ROUTES: Record<string, string> = {
   heat: '/pages/record/breeding-heat',
@@ -85,7 +92,7 @@ export function buildHealthRecordEditUrl(type: string | undefined, recordId: str
 }
 
 export function resolveBatchDogs(query: QueryLike = {}) {
-  const batchDogs = parseJsonParam<any[]>(query.batchDogs || query.batch_dogs, [])
+  const batchDogs = parseJsonParam<RouteDog[]>(query.batchDogs || query.batch_dogs, [])
   if (batchDogs.length > 0) return batchDogs
 
   const dogId = getString(query.dogId || query.dog_id)
@@ -97,7 +104,7 @@ export function resolveBatchDogs(query: QueryLike = {}) {
   }]
 }
 
-export function resolvePrefillDetails<T extends Record<string, any>>(query: QueryLike = {}) {
+export function resolvePrefillDetails<T extends PrefillDetails = PrefillDetails>(query: QueryLike = {}) {
   return parseJsonParam<T>(query.details, {} as T)
 }
 

@@ -88,7 +88,7 @@ export async function createDogLocally(ctx: RuntimeMutationContext, familyIdInpu
     const dogId = createStableEntityId('dog')
     const dog = buildLocalDog(familyId, data, dogId, now) as DogRow
     const expenseId = Number(data.purchase_price || 0) > 0 ? createStableEntityId('expense') : ''
-    const expenseRow = expenseId ? buildLocalDogPurchaseExpense(familyId, data, dogId, expenseId, now) as unknown as ExpenseRow : null
+    const expenseRow = expenseId ? buildLocalDogPurchaseExpense(familyId, data, dogId, expenseId, now) : null
     const syncMeta = buildSyncMeta({}, {
       clientMutationId: createClientMutationId(LOCAL_MUTATION_TYPES.CREATE_DOG),
       clientEntityIds: {
@@ -175,7 +175,7 @@ export async function updateDogLocally(ctx: RuntimeMutationContext, familyIdInpu
               Number(nextPurchaseDate || 0) || null,
               createdExpenseId,
               now,
-            )]) as unknown as ExpenseRow[]
+            )])
       : []
 
     await localDb.transactRows(['dogs', 'expenses'] as const, async (rows) => {
@@ -414,7 +414,7 @@ export async function changeDogDispositionLocally(ctx: RuntimeMutationContext, f
           dispositionNotes,
           createdAdoptionIncomeId,
           now,
-        ) as unknown as IncomeRow
+        )
       : null
     const rollbackIncomeIds = new Set(rollbackAdoptionIncomes.map(row => row._id))
 

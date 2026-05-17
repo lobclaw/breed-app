@@ -32,6 +32,44 @@ const MEDICATION_METHOD_MAP: Record<string, string> = {
   other: '其他',
 }
 
+type HealthDetailsLike = {
+  primary_condition?: unknown
+  condition?: unknown
+  treatment_status?: unknown
+  symptom_tags?: unknown
+  drug_name?: unknown
+  start_date?: unknown
+}
+
+type IllnessStatusSource = {
+  _id?: string
+  date?: number
+  created_at?: number
+  updated_at?: number
+  details?: HealthDetailsLike | null
+}
+
+type MedicationTaskStatusSource = {
+  _id?: string
+  status?: string
+  source_record_id?: string | null
+  drug_name?: string | null
+  dosage?: string | number | null
+  dosage_unit?: string | null
+  method?: string | null
+  frequency?: string | number | null
+  duration_days?: number | null
+  actual_start_date?: number | null
+  start_date?: number | null
+  created_at?: number
+  updated_at?: number
+  completed_dates?: unknown
+  daily_doses?: Record<string, unknown> | null
+  details?: HealthDetailsLike | null
+}
+
+type MedicationRelationType = 'linked' | 'fallback' | 'standalone'
+
 export function sortListStatuses(statuses: DeriveStatus[] = []) {
   return [...statuses].sort((a, b) => {
     const left = LIST_STATUS_PRIORITY[a.type] ?? 99
@@ -65,7 +103,20 @@ function normalizeIllnessLabel(label: unknown) {
   return typeof label === 'string' && label.trim() ? label.trim() : '生病中'
 }
 
-export function getIllnessPrimaryCondition(source: Record<string, any> = {}) {
+function normalizeOptionalString(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : ''
+}
+
+function getMedicationDrugName(task: MedicationTaskStatusSource | null | undefined) {
+  return normalizeOptionalString(task?.drug_name) || normalizeOptionalString(task?.details?.drug_name) || '用药'
+}
+
+function toTimestamp(value: unknown) {
+  const ts = Number(value || 0)
+  return Number.isFinite(ts) ? ts : 0
+}
+
+export function getIllnessPrimaryCondition(source: HealthDetailsLike = {}) {
   return normalizeIllnessLabel(source.primary_condition || source.condition || '生病中')
 }
 
@@ -73,11 +124,11 @@ function getIllnessDayCount(startTs: number, nowTs = Date.now()) {
   return getBeijingOrdinalDay(startTs, nowTs)
 }
 
-export function isTreatingIllness(illness: any) {
+export function isTreatingIllness(illness: IllnessStatusSource | null | undefined) {
   return String(illness?.details?.treatment_status || '观察中').trim() === '治疗中'
 }
 
-function buildIllnessRelationType(illness: any, activeMedicationTasks: any[]) {
+function buildIllnessRelationType(illness: IllnessStatusSource | null | undefined, activeMedicationTasks: MedicationTaskStatusSource[]) {
   if (!isTreatingIllness(illness)) return 'standalone'
   const illnessId = illness?._id
   if (activeMedicationTasks.some(task => task?.source_record_id === illnessId)) return 'linked'
@@ -85,14 +136,14 @@ function buildIllnessRelationType(illness: any, activeMedicationTasks: any[]) {
   return 'standalone'
 }
 
-function getIllnessRelationLabel(relationType: 'linked' | 'fallback' | 'standalone') {
+function getIllnessRelationLabel(relationType: MedicationRelationType) {
   if (relationType === 'linked') return '关联用药'
   if (relationType === 'fallback') return '可能关联当前用药'
   return '未关联用药'
 }
 
-export function buildListIllnessStatuses(illnesses: any[] = [], activeMedicationTasks: any[] = []): DeriveStatus[] {
-  const sortedRecords = [...illnesses].sort((a, b) => (b.updated_at || b.date || b.created_at || 0) - (a.updated_at || a.date || a.created_at || 0))
+export function buildListIllnessStatuses(illnesses: IllnessStatusSource[] = [], activeMedicationTasks: MedicationTaskStatusSource[] = []): DeriveStatus[] {
+  const sortedRecords = [...illnesses].sort((a, b) => toTimestamp(b.updated_at || b.date || b.created_at) - toTimestamp(a.updated_at || a.date || a.created_at))
   const labels: string[] = []
   const seen = new Set<string>()
   let firstRecordId = ''
@@ -102,13 +153,13 @@ export function buildListIllnessStatuses(illnesses: any[] = [], activeMedication
     if (seen.has(label)) continue
     seen.add(label)
     labels.push(label)
-    if (!firstRecordId) firstRecordId = illness._id
+    if (!firstRecordId) firstRecordId = illness._id || ''
   }
 
   if (!labels.length) return []
 
   const latest = sortedRecords[0]
-  const illnessStartTs = latest?.details?.start_date || latest?.date || latest?.created_at || 0
+  const illnessStartTs = Number(latest?.details?.start_date || latest?.date || latest?.created_at || 0)
   const illnessDay = labels.length === 1 ? getIllnessDayCount(illnessStartTs) : null
   const relationType = buildIllnessRelationType(latest, activeMedicationTasks)
   const meta = [
@@ -127,17 +178,18 @@ export function buildListIllnessStatuses(illnesses: any[] = [], activeMedication
     count: labels.length,
     recordId: firstRecordId,
     relationType,
-    activityTs: latest?.updated_at || latest?.date || latest?.created_at || 0,
+    activityTs: toTimestamp(latest?.updated_at || latest?.date || latest?.created_at),
     meta,
   }]
 }
 
-export function buildDetailIllnessStatuses(illnesses: any[] = [], activeMedicationTasks: any[] = []): DeriveStatus[] {
-  const sortedRecords = [...illnesses].sort((a, b) => (b.updated_at || b.date || b.created_at || 0) - (a.updated_at || a.date || a.created_at || 0))
+export function buildDetailIllnessStatuses(illnesses: IllnessStatusSource[] = [], activeMedicationTasks: MedicationTaskStatusSource[] = []): DeriveStatus[] {
+  const sortedRecords = [...illnesses].sort((a, b) => toTimestamp(b.updated_at || b.date || b.created_at) - toTimestamp(a.updated_at || a.date || a.created_at))
 
   return sortedRecords.map((illness) => {
-    const symptomTags = Array.isArray(illness?.details?.symptom_tags)
-      ? illness.details.symptom_tags
+    const details = illness.details || {}
+    const symptomTags = Array.isArray(details.symptom_tags)
+      ? details.symptom_tags
         .map((item: unknown) => typeof item === 'string' ? item.trim() : '')
         .filter(Boolean)
       : []
@@ -149,11 +201,11 @@ export function buildDetailIllnessStatuses(illnesses: any[] = [], activeMedicati
 
     return {
       type: '生病中',
-      label: getIllnessPrimaryCondition(illness.details || {}),
+      label: getIllnessPrimaryCondition(details),
       count: 1,
       recordId: illness._id,
       relationType,
-      activityTs: illness?.updated_at || illness?.date || illness?.created_at || 0,
+      activityTs: toTimestamp(illness?.updated_at || illness?.date || illness?.created_at),
       detail: symptomSummary || treatmentStatus,
       meta: [
         ...(relationType === 'standalone' ? [] : [{ icon: 'link', text: getIllnessRelationLabel(relationType) }]),
@@ -162,7 +214,7 @@ export function buildDetailIllnessStatuses(illnesses: any[] = [], activeMedicati
   })
 }
 
-export function getMedicationTaskProgress(task: any, nowTs = Date.now()) {
+export function getMedicationTaskProgress(task: MedicationTaskStatusSource | null | undefined, nowTs = Date.now()) {
   const startTs = startOfDay(task?.actual_start_date || task?.start_date || task?.created_at || nowTs)
   const todayTs = startOfDay(nowTs)
   const totalDays = Math.max(1, Number(task?.duration_days) || 1)
@@ -174,13 +226,16 @@ export function getMedicationTaskProgress(task: any, nowTs = Date.now()) {
   }
 }
 
-export function isMedicationTaskActive(task: any, nowTs = Date.now()) {
+export function isMedicationTaskActive(task: MedicationTaskStatusSource | null | undefined, nowTs = Date.now()) {
   if (task?.status !== '进行中') return false
   const { currentDay, totalDays } = getMedicationTaskProgress(task, nowTs)
   return currentDay >= 1 && currentDay <= totalDays
 }
 
-function pickPreferredMedicationTask(currentTask: any, nextTask: any) {
+function pickPreferredMedicationTask(
+  currentTask: MedicationTaskStatusSource | null | undefined,
+  nextTask: MedicationTaskStatusSource,
+) {
   if (!currentTask) return nextTask
 
   const currentStartTs = currentTask?.actual_start_date || currentTask?.updated_at || currentTask?.created_at || 0
@@ -194,21 +249,22 @@ function pickPreferredMedicationTask(currentTask: any, nextTask: any) {
   return nextUpdatedTs > currentUpdatedTs ? nextTask : currentTask
 }
 
-function buildMedicationRelationType(task: any, illnesses: any[]) {
+function buildMedicationRelationType(task: MedicationTaskStatusSource | null | undefined, illnesses: IllnessStatusSource[]) {
   if (task?.source_record_id) return 'linked'
   if (illnesses.some(illness => isTreatingIllness(illness))) return 'fallback'
   return 'standalone'
 }
 
-function getMedicationRelationLabel(relationType: 'linked' | 'fallback' | 'standalone') {
+function getMedicationRelationLabel(relationType: MedicationRelationType) {
   if (relationType === 'linked') return '关联疾病'
   if (relationType === 'fallback') return '可能关联当前疾病'
   return '独立用药'
 }
 
-function formatMedicationDose(task: any) {
+function formatMedicationDose(task: MedicationTaskStatusSource) {
   if (task?.dosage === null || task?.dosage === undefined || task?.dosage === '') return ''
-  const unit = MEDICATION_DOSAGE_UNIT_MAP[task?.dosage_unit] || task?.dosage_unit || ''
+  const dosageUnit = task?.dosage_unit || ''
+  const unit = MEDICATION_DOSAGE_UNIT_MAP[dosageUnit] || dosageUnit
   return `${task.dosage}${unit}`
 }
 
@@ -222,12 +278,12 @@ function formatMedicationFrequencyLabel(frequency: unknown) {
   return `每日${count}次`
 }
 
-function getMedicationStartTs(task: any) {
+function getMedicationStartTs(task: MedicationTaskStatusSource) {
   const startTs = Number(task?.actual_start_date || task?.start_date || task?.created_at || 0)
   return Number.isFinite(startTs) && startTs > 0 ? startTs : null
 }
 
-function getMedicationStatusCompletionSummary(task: any) {
+function getMedicationStatusCompletionSummary(task: MedicationTaskStatusSource) {
   const frequency = Math.max(1, Number(task?.frequency) || 1)
   const durationDays = Math.max(1, Number(task?.duration_days) || 1)
   const dailyDoses = task?.daily_doses || {}
@@ -255,7 +311,7 @@ function getMedicationStatusCompletionSummary(task: any) {
   }
 }
 
-function getMedicationTodayDoseSummary(task: any, nowTs = Date.now()) {
+function getMedicationTodayDoseSummary(task: MedicationTaskStatusSource, nowTs = Date.now()) {
   const frequency = Math.max(1, Number(task?.frequency) || 1)
   const { currentDay } = getMedicationTaskProgress(task, nowTs)
   const todayTs = startOfDay(nowTs)
@@ -271,11 +327,11 @@ function getMedicationTodayDoseSummary(task: any, nowTs = Date.now()) {
   }
 }
 
-export function buildListMedicationStatus(tasks: any[] = [], nowTs = Date.now(), activeIllnesses: any[] = []): DeriveStatus[] {
+export function buildListMedicationStatus(tasks: MedicationTaskStatusSource[] = [], nowTs = Date.now(), activeIllnesses: IllnessStatusSource[] = []): DeriveStatus[] {
   if (!tasks.length) return []
-  const preferredTask = tasks.reduce((currentTask, nextTask) => pickPreferredMedicationTask(currentTask, nextTask), null)
+  const preferredTask = tasks.reduce<MedicationTaskStatusSource | null>((currentTask, nextTask) => pickPreferredMedicationTask(currentTask, nextTask), null)
   const { currentDay, totalDays } = getMedicationTaskProgress(preferredTask, nowTs)
-  const drugName = preferredTask?.drug_name || preferredTask?.details?.drug_name || '用药'
+  const drugName = getMedicationDrugName(preferredTask)
   const relationType = buildMedicationRelationType(preferredTask, activeIllnesses)
 
   return [{
@@ -287,15 +343,15 @@ export function buildListMedicationStatus(tasks: any[] = [], nowTs = Date.now(),
     relationType,
     progress: { current: Math.min(currentDay, totalDays), total: totalDays },
     meta: relationType === 'standalone' ? [] : [{ icon: 'link', text: getMedicationRelationLabel(relationType) }],
-    activityTs: preferredTask?.updated_at || preferredTask?.created_at || 0,
+    activityTs: toTimestamp(preferredTask?.updated_at || preferredTask?.created_at),
   }]
 }
 
-export function buildDetailMedicationStatuses(tasks: any[] = [], nowTs = Date.now(), activeIllnesses: any[] = []): DeriveStatus[] {
-  const taskByDrug = new Map<string, any>()
+export function buildDetailMedicationStatuses(tasks: MedicationTaskStatusSource[] = [], nowTs = Date.now(), activeIllnesses: IllnessStatusSource[] = []): DeriveStatus[] {
+  const taskByDrug = new Map<string, MedicationTaskStatusSource>()
 
   for (const task of tasks) {
-    const drugName = task?.drug_name || task?.details?.drug_name || '用药'
+    const drugName = getMedicationDrugName(task)
     taskByDrug.set(drugName, pickPreferredMedicationTask(taskByDrug.get(drugName), task))
   }
 
@@ -304,7 +360,7 @@ export function buildDetailMedicationStatuses(tasks: any[] = [], nowTs = Date.no
     const relationType = buildMedicationRelationType(task, activeIllnesses)
     const { frequency } = getMedicationStatusCompletionSummary(task)
     const todayDose = getMedicationTodayDoseSummary(task, nowTs)
-    const drugName = task?.drug_name || task?.details?.drug_name || '用药'
+    const drugName = getMedicationDrugName(task)
     const detail = [
       drugName,
       formatMedicationDose(task),

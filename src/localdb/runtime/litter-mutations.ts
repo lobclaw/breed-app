@@ -5,6 +5,38 @@ import { findLocal as findLocalRow } from '@/localdb/repository'
 import { buildLocalDog } from '@/localdb/runtime/local-builders'
 import { buildLocalAck, buildSyncMeta, getFamilyId, getNow } from '@/localdb/runtime/mutation-helpers'
 import type { BusinessCollectionName, LocalRowOf, SyncMetadata } from '@/localdb/types'
+import type { FamilySettings } from '@/types/family'
+
+type FamilyRow = LocalRowOf<'families'> & {
+  settings?: Partial<FamilySettings>
+}
+type LocalTaskDraft = {
+  _id: string
+  family_id: string
+  card_type: string
+  dog_id?: string | null
+  dog_name?: string | null
+  cycle_id?: string | null
+  litter_id?: string | null
+  title: string
+  due_date: number
+  status: string
+  type?: string
+  priority?: string
+  source_record_id?: string | null
+  source_collection?: string
+  details?: Record<string, unknown>
+  postpone_count?: number
+  target?: string
+  repeat?: string
+  version: number
+  created_at: number
+  updated_at: number
+  _local_pending?: boolean
+}
+type LitterTaskRow = LocalRowOf<'tasks'> & {
+  type?: string | null
+}
 
 export interface RuntimeMutationContext {
   enqueueMutation(
@@ -17,24 +49,54 @@ export interface RuntimeMutationContext {
   ): Promise<void>
 }
 
-export async function addBirthRecordLocally(ctx: RuntimeMutationContext, familyIdInput: string, data: Record<string, any>) {
+export interface BirthPuppyPayload {
+  name?: string
+  gender?: string
+  weight?: number | string | null
+  alive?: boolean
+}
+
+export interface AddBirthRecordPayload {
+  cycle_id?: string
+  cycleId?: string
+  birth_date?: number | null
+  puppies: BirthPuppyPayload[]
+  cost?: number | string | null
+  birth_notes?: string | null
+  birth_type?: string
+  create_first_deworming_task?: boolean
+  create_first_vaccination_task?: boolean
+}
+
+export interface AddPuppyToLitterPayload {
+  name?: string | number | null
+  gender?: string
+  weight?: number | string | null
+}
+
+export interface UpdateLitterPayload {
+  birth_notes?: string | number | null
+  notes?: string | number | null
+}
+
+export async function addBirthRecordLocally(ctx: RuntimeMutationContext, familyIdInput: string, data: AddBirthRecordPayload) {
     const familyId = getFamilyId(familyIdInput)
     const cycleId = String(data.cycle_id || data.cycleId || '').trim()
     if (!cycleId) throw new Error('缺少周期 ID')
     if (!data.birth_date) throw new Error('请选择生产日期')
     if (!Array.isArray(data.puppies) || data.puppies.length === 0) throw new Error('请至少录入一只幼崽')
 
-    const cycle = await findLocalRow<any>('breeding_cycles', cycleId)
+    const cycle = await findLocalRow('breeding_cycles', cycleId)
     if (!cycle || cycle.family_id !== familyId) throw new Error('周期不存在')
-    const damDog = cycle.dam_id ? await findLocalRow<any>('dogs', cycle.dam_id) : null
-    const family = await findLocalRow<any>('families', familyId)
-    const settings = family?.settings || {}
+    const damDog = cycle.dam_id ? await findLocalRow('dogs', cycle.dam_id) : null
+    const family = await findLocalRow<FamilyRow>('families', familyId)
+    const settings = (family?.settings || {}) as Partial<FamilySettings>
     const now = getNow()
     const birthDate = Number(data.birth_date)
     const breedingRecordId = createStableEntityId('breeding_record')
     const litterId = createStableEntityId('litter')
     const expenseId = data.cost && Number(data.cost) > 0 ? createStableEntityId('expense') : null
-    const existingOlderLitters = await localDb.query<any>('litters', row =>
+    const existingOlderLitters = await localDb.query('litters', row =>
       row.family_id === familyId
       && row.dam_id === cycle.dam_id
       && Number(row.birth_date || row.created_at || 0) < birthDate,
@@ -42,7 +104,7 @@ export async function addBirthRecordLocally(ctx: RuntimeMutationContext, familyI
     const litterNumber = existingOlderLitters.length + 1
     const damDisplayName = cycle.dam_name || '母犬'
 
-    const normalizedPuppies = data.puppies.map((puppy: Record<string, any>, index: number) => {
+    const normalizedPuppies = data.puppies.map((puppy, index: number) => {
       const alive = puppy.alive !== false
       const resolvedName = String(puppy.name || '').trim() || `${damDisplayName}${litterNumber}窝-${index + 1}号`
       return {
@@ -152,7 +214,7 @@ export async function addBirthRecordLocally(ctx: RuntimeMutationContext, familyI
     const dueWeaningDays = Number(settings.default_weaning_days || 45)
     const dueDewormingDays = Number(settings.default_deworming_interval_puppy || 14)
     const dueVaccinationDays = Number(settings.default_vaccine_interval_puppy || 21)
-    const createdTasks: any[] = []
+    const createdTasks: LocalTaskDraft[] = []
     createdTasks.push({
       _id: taskIds[0],
       card_type: 'individual',
@@ -261,7 +323,7 @@ export async function addBirthRecordLocally(ctx: RuntimeMutationContext, familyI
         }
       : null
 
-    const pendingMilestones = await localDb.query<any>('tasks', row =>
+    const pendingMilestones = await localDb.query<LitterTaskRow>('tasks', row =>
       row.family_id === familyId
       && row.cycle_id === cycleId
       && row.type === 'breeding_milestone'
@@ -364,13 +426,13 @@ export async function addBirthRecordLocally(ctx: RuntimeMutationContext, familyI
     }
   }
 
-export async function addPuppyToLitterLocally(ctx: RuntimeMutationContext, familyIdInput: string, litterIdInput: string, puppyData: Record<string, any>) {
+export async function addPuppyToLitterLocally(ctx: RuntimeMutationContext, familyIdInput: string, litterIdInput: string, puppyData: AddPuppyToLitterPayload) {
     const familyId = getFamilyId(familyIdInput)
     const litterId = String(litterIdInput || '').trim()
     if (!litterId) throw new Error('缺少窝 ID')
-    const litter = await findLocalRow<any>('litters', litterId)
+    const litter = await findLocalRow('litters', litterId)
     if (!litter || litter.family_id !== familyId) throw new Error('窝不存在')
-    const existingPuppyCount = (await localDb.query<any>('dogs', row =>
+    const existingPuppyCount = (await localDb.query('dogs', row =>
       row.family_id === familyId
       && row.origin_litter_id === litterId
       && !row.deleted_at,
@@ -400,8 +462,8 @@ export async function addPuppyToLitterLocally(ctx: RuntimeMutationContext, famil
       clientEntityIds: { dogs: puppyId },
     })
     await localDb.transactRows(['dogs', 'litters'] as const, async (rows) => {
-      await rows.upsertRow('dogs', puppy as unknown as LocalRowOf<'dogs'>)
-      await rows.upsertRow('litters', nextLitter as unknown as LocalRowOf<'litters'>)
+      await rows.upsertRow('dogs', puppy as LocalRowOf<'dogs'>)
+      await rows.upsertRow('litters', nextLitter as LocalRowOf<'litters'>)
     })
     await ctx.enqueueMutation(
       LOCAL_MUTATION_TYPES.ADD_PUPPY_TO_LITTER,
@@ -419,11 +481,11 @@ export async function addPuppyToLitterLocally(ctx: RuntimeMutationContext, famil
     }
   }
 
-export async function updateLitterLocally(ctx: RuntimeMutationContext, familyIdInput: string, litterIdInput: string, data: Record<string, any>) {
+export async function updateLitterLocally(ctx: RuntimeMutationContext, familyIdInput: string, litterIdInput: string, data: UpdateLitterPayload) {
     const familyId = getFamilyId(familyIdInput)
     const litterId = String(litterIdInput || '').trim()
     if (!litterId) throw new Error('缺少窝 ID')
-    const litter = await findLocalRow<any>('litters', litterId)
+    const litter = await findLocalRow('litters', litterId)
     if (!litter || litter.family_id !== familyId) throw new Error('窝不存在')
     const now = getNow()
     const nextLitter = {
@@ -437,7 +499,7 @@ export async function updateLitterLocally(ctx: RuntimeMutationContext, familyIdI
       clientMutationId: createClientMutationId(LOCAL_MUTATION_TYPES.UPDATE_LITTER),
     })
     await localDb.transactRows('litters', async (rows) => {
-      await rows.updateRow(litterId, nextLitter as unknown as LocalRowOf<'litters'>)
+      await rows.updateRow(litterId, nextLitter as LocalRowOf<'litters'>)
     })
     await ctx.enqueueMutation(
       LOCAL_MUTATION_TYPES.UPDATE_LITTER,
@@ -456,13 +518,13 @@ export async function updateLitterBirthDateLocally(ctx: RuntimeMutationContext, 
     const familyId = getFamilyId(familyIdInput)
     const litterId = String(litterIdInput || '').trim()
     if (!litterId) throw new Error('缺少窝 ID')
-    const litter = await findLocalRow<any>('litters', litterId)
+    const litter = await findLocalRow('litters', litterId)
     if (!litter || litter.family_id !== familyId) throw new Error('窝不存在')
     if (!birthDate) throw new Error('请选择新日期')
     const diffDays = Math.abs(Number(birthDate) - Number(litter.birth_date || 0)) / 86400000
     if (diffDays > 3) throw new Error('生产日期只能调整 ±3 天，超出范围会影响窝号和关联费用')
     const now = getNow()
-    const linkedExpenses = await localDb.query<any>('expenses', row =>
+    const linkedExpenses = await localDb.query('expenses', row =>
       row.family_id === familyId
       && !row.deleted_at
       && row.source_type === 'auto'
@@ -542,10 +604,10 @@ export async function confirmWeaningLocally(ctx: RuntimeMutationContext, familyI
     const familyId = getFamilyId(familyIdInput)
     const litterId = String(litterIdInput || '').trim()
     if (!litterId) throw new Error('缺少窝 ID')
-    const litter = await findLocalRow<any>('litters', litterId)
+    const litter = await findLocalRow('litters', litterId)
     if (!litter || litter.family_id !== familyId) throw new Error('窝不存在')
     const now = getNow()
-    const pendingTasks = await localDb.query<any>('tasks', row =>
+    const pendingTasks = await localDb.query<LitterTaskRow>('tasks', row =>
       row.family_id === familyId
       && row.litter_id === litterId
       && row.type === 'breeding_milestone'

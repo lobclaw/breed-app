@@ -18,7 +18,7 @@ export interface HealthRecord extends BaseDocument {
   cost?: number               // 费用（触发自动记账）
   images?: string[]
   notes?: string
-  details?: Record<string, any>  // 类型特有字段
+  details?: Record<string, unknown> // 类型特有字段
   created_by: string
 }
 
@@ -45,8 +45,14 @@ export interface MedicationProtocol extends BaseDocument {
   target_condition: string
   weight_range?: string
   drugs: MedicationProtocolDrug[]
-  duration_days?: number
-  notes?: string
+  drug_name?: string
+  dosage?: string | number | null
+  dosage_unit?: string | null
+  method?: string | null
+  frequency?: string | number | null
+  duration_days?: number | null
+  notes?: string | null
+  created_by?: string | null
 }
 
 export interface MedicationProtocolDrug {

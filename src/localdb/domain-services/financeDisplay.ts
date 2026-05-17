@@ -2,7 +2,14 @@ import { normalizeExpenseCategoryName } from '@/constants/financeCategories'
 import type { BreedingRecord } from '@/types/breeding'
 import type { HealthRecord } from '@/types/health'
 
-export type ExpenseSourceRecord = Partial<BreedingRecord | HealthRecord> & Record<string, any>
+export type ExpenseSourceRecord = Partial<BreedingRecord | HealthRecord> & {
+  details?: Record<string, unknown> | null
+}
+type ExpenseDisplaySource = {
+  notes?: unknown
+  category?: unknown
+  source_record_id?: unknown
+}
 
 export type ExpenseDisplayInfo = {
   title: string
@@ -32,8 +39,10 @@ const DEWORMING_TYPE_LABELS: Record<string, string> = {
   combo: '内外同驱',
 }
 
-function buildExpenseName(expense: Record<string, any>, fallback = '费用') {
-  return expense.notes || normalizeExpenseCategoryName(expense.category) || fallback
+function buildExpenseName(expense: ExpenseDisplaySource, fallback = '费用') {
+  return normalizeExpenseDisplayPart(expense.notes)
+    || normalizeExpenseCategoryName(normalizeExpenseDisplayPart(expense.category))
+    || fallback
 }
 
 function splitExpenseFallbackDisplayInfo(name: string): ExpenseDisplayInfo {
@@ -51,7 +60,7 @@ function normalizeExpenseDisplayPart(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : ''
 }
 
-function getPregnancyCheckResultText(details: Record<string, any> = {}) {
+function getPregnancyCheckResultText(details: Record<string, unknown> = {}) {
   if (normalizeExpenseDisplayPart(details.result)) return normalizeExpenseDisplayPart(details.result)
   if (details.confirmed === '是' || details.confirmed === true) return '确认怀孕'
   if (details.confirmed === '否' || details.confirmed === false) return '未怀孕'
@@ -88,7 +97,7 @@ function getExpenseSourceDetailText(record: ExpenseSourceRecord) {
 }
 
 export function buildExpenseDisplayName(
-  expense: Record<string, any>,
+  expense: ExpenseDisplaySource,
   sourceRecordMap: Map<string, ExpenseSourceRecord> = new Map(),
   fallback = '费用',
 ) {
@@ -96,13 +105,14 @@ export function buildExpenseDisplayName(
 }
 
 export function buildExpenseDisplayInfo(
-  expense: Record<string, any>,
+  expense: ExpenseDisplaySource,
   sourceRecordMap: Map<string, ExpenseSourceRecord> = new Map(),
   fallback = '费用',
 ): ExpenseDisplayInfo {
   const sourceRecordId = normalizeExpenseDisplayPart(expense.source_record_id)
   const sourceRecord = sourceRecordId ? sourceRecordMap.get(sourceRecordId) : null
-  const sourceLabel = sourceRecord?.type ? EXPENSE_SOURCE_TYPE_LABELS[sourceRecord.type] : ''
+  const sourceType = sourceRecord && typeof sourceRecord.type === 'string' ? sourceRecord.type : ''
+  const sourceLabel = sourceType ? EXPENSE_SOURCE_TYPE_LABELS[sourceType] : ''
   if (sourceRecord && sourceLabel) {
     const detailText = getExpenseSourceDetailText(sourceRecord)
     return {

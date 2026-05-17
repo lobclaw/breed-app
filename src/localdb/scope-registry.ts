@@ -270,7 +270,7 @@ export function matchSyncScopeForRoute(routePath: string) {
   ))) || null
 }
 
-function resolveDetailScopeKey(baseKey: string, query: Record<string, any>) {
+function resolveDetailScopeKey(baseKey: string, query: Record<string, unknown>) {
   if (baseKey === 'dog-detail') {
     return `${baseKey}:${query.id || query.dogId || query.dog_id || ''}`.replace(/:$/, '')
   }
@@ -297,7 +297,7 @@ function resolveDetailScopeKey(baseKey: string, query: Record<string, any>) {
   return baseKey
 }
 
-export function resolveSyncScopeForRoute(routePath: string, query: Record<string, any> = {}): ResolvedSyncScope | null {
+export function resolveSyncScopeForRoute(routePath: string, query: Record<string, unknown> = {}): ResolvedSyncScope | null {
   const matched = matchSyncScopeForRoute(routePath)
   if (!matched) return null
 

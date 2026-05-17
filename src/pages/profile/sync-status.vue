@@ -129,6 +129,20 @@ interface SyncIssue {
   recordId?: string
 }
 
+type RuntimeSyncStatus = Awaited<ReturnType<typeof localSyncRuntime.getSyncStatus>>
+type RuntimeOutboxIssue = Awaited<ReturnType<typeof localSyncRuntime.getOutboxIssues>>[number]
+type RuntimePendingUploadIssue = NonNullable<RuntimeSyncStatus['pendingUploadIssues']>[number]
+type RuntimeSyncIssue = RuntimeOutboxIssue | RuntimePendingUploadIssue
+type RuntimeSyncIssueMeta = {
+  title?: unknown
+  collection?: unknown
+  recordId?: unknown
+}
+type CloudUserInfoWithExpiry = ReturnType<typeof uniCloud.getCurrentUserInfo> & {
+  tokenExpired?: number
+  token_expired?: number
+}
+
 const { currentFamily, navigateToLogin } = useAuth()
 const loading = ref(false)
 const retryingIssues = ref(false)
@@ -189,7 +203,7 @@ const syncActionDisabled = computed(() => (
   || (!hasAuthExpiredIssue.value && !canRetryIssues.value && !syncStatus.activeScope && syncStatus.pendingUpload === 0)
 ))
 const isDevMode = computed(() => {
-  const devFlag = typeof globalThis !== 'undefined' ? (globalThis as any).__DEV__ : undefined
+  const devFlag = typeof globalThis !== 'undefined' ? (globalThis as { __DEV__?: boolean }).__DEV__ : undefined
   return devFlag === true || import.meta.env.DEV === true
 })
 const syncTone = computed(() => {
@@ -254,8 +268,8 @@ function getRemainingSyncToast() {
 
 function isCurrentLoginExpired() {
   try {
-    const info = uniCloud.getCurrentUserInfo()
-    const expiredAt = Number((info as any)?.tokenExpired ?? (info as any)?.token_expired ?? uni.getStorageSync('uni_id_token_expired') ?? 0)
+    const info = uniCloud.getCurrentUserInfo() as CloudUserInfoWithExpiry
+    const expiredAt = Number(info?.tokenExpired ?? info?.token_expired ?? uni.getStorageSync('uni_id_token_expired') ?? 0)
     return !info?.uid || (expiredAt > 0 && expiredAt <= Date.now())
   } catch {
     return false
@@ -312,16 +326,19 @@ function issueDescription(issue: SyncIssue) {
   return '等待网络恢复后自动同步。'
 }
 
-function normalizeIssues(items: Array<Record<string, any>> = []): SyncIssue[] {
-  return items.map(item => ({
-    _id: String(item._id || ''),
-    type: String(item.type || 'unknown'),
-    status: String(item.status || ''),
-    title: item.title ? String(item.title) : undefined,
-    lastError: String(item.lastError || ''),
-    collection: item.collection ? String(item.collection) : undefined,
-    recordId: item.recordId ? String(item.recordId) : undefined,
-  }))
+function normalizeIssues(items: RuntimeSyncIssue[] = []): SyncIssue[] {
+  return items.map((item) => {
+    const meta = item as RuntimeSyncIssueMeta
+    return {
+      _id: String(item._id || ''),
+      type: String(item.type || 'unknown'),
+      status: String(item.status || ''),
+      title: meta.title ? String(meta.title) : undefined,
+      lastError: String(item.lastError || ''),
+      collection: meta.collection ? String(meta.collection) : undefined,
+      recordId: meta.recordId ? String(meta.recordId) : undefined,
+    }
+  })
 }
 
 function isStaleImageIssue(issue: SyncIssue) {
@@ -395,8 +412,8 @@ async function loadStatus() {
     syncStatus.recentSyncAt = Number(currentStatus?.recentSyncAt || 0)
     syncStatus.lastPulledAt = Number(currentStatus?.lastPulledAt || 0)
     issues.value = [
-      ...normalizeIssues(currentStatus?.pendingUploadIssues as Array<Record<string, any>>),
-      ...normalizeIssues(currentIssues as Array<Record<string, any>>),
+      ...normalizeIssues(currentStatus?.pendingUploadIssues || []),
+      ...normalizeIssues(currentIssues),
     ]
     await resolveIssueActionUrls(issues.value)
 

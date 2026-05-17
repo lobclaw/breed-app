@@ -345,7 +345,7 @@ import {
   listLocalLatestDewormingDatesByDogIds,
   listLocalLatestVaccinationDatesByDogIds,
 } from '@/localdb/domain-repository'
-import { localSyncRuntime } from '@/localdb/runtime'
+import { localSyncRuntime, type BatchAddHealthRecordsPayload, type UpdateHealthRecordPayload } from '@/localdb/runtime'
 import { buildHealthRecordEditUrl, resolveHealthCreateRouteQuery, type MedicationRouteIllnessLink } from '@/utils/recordFormRoutes'
 import { useDogStore } from '@/stores/dogStore'
 import BDogPicker from '@/components/form/BDogPicker.vue'
@@ -353,10 +353,38 @@ import BFormOptions from '@/components/form/BFormOptions.vue'
 import BSubmitButton from '@/components/base/BSubmitButton.vue'
 import BPageHeader from '@/components/layout/BPageHeader.vue'
 import BModal from '@/components/layout/BModal.vue'
+import type { Dog } from '@/types/dog'
 
 type HealthRecordType = 'vaccination' | 'deworming' | 'illness'
 type CustomModalKind = 'vaccination' | 'deworming' | 'illness' | 'symptom' | ''
 type DewormSubtype = 'internal' | 'external' | 'combo'
+type HealthDetailsPayload = Record<string, unknown> & {
+  condition?: string | null
+  cost?: number | string | null
+  deworming_type?: DewormSubtype | string | null
+  drug_name?: string | null
+  next_reminder_date?: number | null
+  notes?: string | null
+  primary_condition?: string | null
+  severity?: string | null
+  start_date?: number | null
+  symptom_tags?: string[]
+  treatment_status?: string | null
+  vaccine_type?: string | null
+}
+type HealthFormDog = Dog
+type HealthFormRecord = NonNullable<Awaited<ReturnType<typeof getLocalHealthRecordDetail>>>
+type HealthTaskLike = NonNullable<Awaited<ReturnType<typeof getLocalTaskById>>>
+type CreatedHealthRecordLinkSource = {
+  recordId?: string
+  dog_id?: string
+}
+type CompletedTaskSource = {
+  _id?: string
+}
+type HealthFormFamilySettings = {
+  custom_symptom_tags?: string[]
+}
 
 const props = withDefaults(defineProps<{
   mode: 'create' | 'edit'
@@ -374,12 +402,12 @@ const dogStore = useDogStore()
 
 const isEdit = computed(() => props.mode === 'edit')
 const loading = ref(false)
-const currentRecord = ref<any>(null)
-const selectedDogs = ref<any[]>([])
+const currentRecord = ref<HealthFormRecord | null>(null)
+const selectedDogs = ref<HealthFormDog[]>([])
 const date = ref<number | null>(null)
 const notes = ref('')
 const costInput = ref('')
-const details = reactive<Record<string, any>>({})
+const details = reactive<HealthDetailsPayload>({})
 const fromTask = ref(false)
 const sourceTaskIds = ref<string[]>([])
 const isTodo = ref(false)
@@ -445,8 +473,8 @@ const reminderDays = computed(() => {
 
   if (selectedDogs.value.length === 0) return puppyDays
 
-  const hasAdult = selectedDogs.value.some((dog: any) => dog.role === '种狗' || dog.role === '外部种公')
-  const hasPuppy = selectedDogs.value.some((dog: any) => dog.role === '幼崽' || !dog.role)
+  const hasAdult = selectedDogs.value.some(dog => dog.role === '种狗' || dog.role === '外部种公')
+  const hasPuppy = selectedDogs.value.some(dog => dog.role === '幼崽' || !dog.role)
   if (hasAdult && !hasPuppy) return adultDays
   if (hasPuppy && !hasAdult) return puppyDays
   return Math.min(puppyDays, adultDays)
@@ -580,13 +608,73 @@ const conditionTypes = computed(() => {
 })
 
 const symptomTagOptions = computed(() => {
-  const settings = (currentFamily.value?.settings || {}) as Record<string, any>
+  const settings = (currentFamily.value?.settings || {}) as HealthFormFamilySettings
   const custom = (settings.custom_symptom_tags || [])
     .filter((value: string) => !deletedCustomSymptoms.value.includes(value))
   return [...new Set([...PRESET_SYMPTOM_TAGS, ...custom])]
 })
 
 const selectedSymptomTags = computed(() => Array.isArray(details.symptom_tags) ? details.symptom_tags : [])
+
+function toTimestampOrNull(value: unknown) {
+  const timestamp = Number(value || 0)
+  return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : null
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function normalizeHealthDetails(value: unknown): HealthDetailsPayload {
+  return isRecord(value) ? value : {}
+}
+
+function createHealthFormDog(input: { _id: string; name?: string; role?: unknown; gender?: unknown; breed?: unknown; species?: unknown }): HealthFormDog {
+  return {
+    _id: input._id,
+    family_id: currentFamily.value?._id || '',
+    name: input.name || '',
+    gender: input.gender === '公' ? '公' : '母',
+    role: input.role === '种狗' || input.role === '外部种公' ? input.role : '幼崽',
+    disposition: '在养',
+    species: typeof input.species === 'string' ? input.species : '',
+    breed: typeof input.breed === 'string' ? input.breed : '',
+    birth_date: null,
+    purchase_date: null,
+    purchase_price: null,
+    latest_weight: null,
+    origin_litter_id: null,
+    owner_info: null,
+    deleted_at: null,
+    created_at: 0,
+    updated_at: 0,
+  }
+}
+
+function normalizeHealthFormDogs(value: unknown): HealthFormDog[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((dog): HealthFormDog | null => {
+      if (!isRecord(dog)) return null
+      const id = typeof dog._id === 'string' ? dog._id.trim() : ''
+      if (!id) return null
+      return createHealthFormDog({
+        _id: id,
+        name: typeof dog.name === 'string' ? dog.name : '',
+        role: dog.role,
+        gender: dog.gender,
+        species: dog.species,
+        breed: dog.breed,
+      })
+    })
+    .filter((dog): dog is HealthFormDog => !!dog)
+}
+
+function getDogIds(rows: Array<{ _id?: string }>) {
+  return rows
+    .map(dog => dog._id)
+    .filter((id): id is string => !!id)
+}
 
 const canSubmit = computed(() => {
   if (!resolvedType.value || !date.value) return false
@@ -683,7 +771,7 @@ function resetFormState() {
   }
 }
 
-function applyPrefillDetails(prefill: Record<string, any>) {
+function applyPrefillDetails(prefill: HealthDetailsPayload | null | undefined) {
   if (!prefill) return
 
   if (resolvedType.value === 'vaccination' && prefill.vaccine_type) {
@@ -704,13 +792,13 @@ function applyPrefillDetails(prefill: Record<string, any>) {
   if (prefill.notes) notes.value = prefill.notes
 }
 
-function applyTaskDog(task: any) {
+function applyTaskDog(task: HealthTaskLike | null | undefined) {
   if (!task?.dog_id) return
   if (selectedDogs.value.length > 0) return
-  selectedDogs.value = [{
+  selectedDogs.value = [createHealthFormDog({
     _id: task.dog_id,
     name: task.dog_name || '',
-  }]
+  })]
 }
 
 function formatDateOnly(ts?: number | null) {
@@ -728,7 +816,7 @@ async function refreshLatestVaccinationDates() {
   }
 
   await dogStore.ensure().catch(() => {})
-  const dogIds = dogStore.list.map((dog: any) => dog._id).filter(Boolean)
+  const dogIds = getDogIds(dogStore.list)
   if (dogIds.length === 0) {
     latestVaccinationDates.value = {}
     return
@@ -748,7 +836,7 @@ async function refreshLatestDewormingDates() {
   }
 
   await dogStore.ensure().catch(() => {})
-  const dogIds = dogStore.list.map((dog: any) => dog._id).filter(Boolean)
+  const dogIds = getDogIds(dogStore.list)
   if (dogIds.length === 0) {
     latestDewormingDates.value = {}
     return
@@ -764,14 +852,14 @@ async function loadCreateQuery() {
   const routeQuery = resolveHealthCreateRouteQuery(props.query)
   fromTask.value = routeQuery.fromTask
   sourceTaskIds.value = routeQuery.sourceTaskIds
-  selectedDogs.value = routeQuery.selectedDogs
-  applyPrefillDetails(routeQuery.details)
+  selectedDogs.value = normalizeHealthFormDogs(routeQuery.selectedDogs)
+  applyPrefillDetails(normalizeHealthDetails(routeQuery.details))
 
   if (routeQuery.sourceTaskIds[0]) {
     const task = await getLocalTaskById(currentFamily.value?._id || '', routeQuery.sourceTaskIds[0])
     if (task) {
       applyTaskDog(task)
-      applyPrefillDetails((task as any).details || {})
+      applyPrefillDetails(normalizeHealthDetails(task.details))
     }
   }
 
@@ -795,13 +883,14 @@ async function loadEditRecord() {
     date.value = record.date || null
     notes.value = record.notes || ''
     costInput.value = record.cost ? String(record.cost) : ''
-    Object.assign(details, record.details || {})
+    const recordDetails = record.details || {}
+    Object.assign(details, recordDetails)
     if (record.type === 'illness') {
-      setPrimaryCondition(String(record.details?.primary_condition || record.details?.condition || '').trim())
-      details.symptom_tags = normalizeSymptomTags(record.details?.symptom_tags)
+      setPrimaryCondition(String(recordDetails.primary_condition || recordDetails.condition || '').trim())
+      details.symptom_tags = normalizeSymptomTags(recordDetails.symptom_tags)
     }
-    enableReminder.value = Boolean(record.details?.next_reminder_date)
-    reminderDate.value = record.details?.next_reminder_date || null
+    enableReminder.value = Boolean(recordDetails.next_reminder_date)
+    reminderDate.value = toTimestampOrNull(recordDetails.next_reminder_date)
 
     if (record.type === 'illness' && !details.treatment_status) {
       details.treatment_status = '观察中'
@@ -909,7 +998,7 @@ async function saveCustomValue(kind: CustomModalKind, value: string) {
   customSymptom.value = value
   toggleSymptomTag(value)
   if (!PRESET_SYMPTOM_TAGS.includes(value)) {
-    const settings = (currentFamily.value?.settings || {}) as Record<string, any>
+    const settings = (currentFamily.value?.settings || {}) as HealthFormFamilySettings
     const existing = settings.custom_symptom_tags || []
     if (!existing.includes(value)) {
       await localSyncRuntime.updateFamilySettingsLocally(currentFamily.value?._id || '', { custom_symptom_tags: [...existing, value] })
@@ -964,7 +1053,7 @@ async function deleteCustomValue(kind: CustomModalKind, value: string) {
       deletedCustomSymptoms.value.push(value)
       details.symptom_tags = ensureSymptomTags().filter(item => item !== value)
       if (customSymptom.value === value) customSymptom.value = ''
-      const settings = (currentFamily.value?.settings || {}) as Record<string, any>
+    const settings = (currentFamily.value?.settings || {}) as HealthFormFamilySettings
       const existing = settings.custom_symptom_tags || []
       await localSyncRuntime.updateFamilySettingsLocally(currentFamily.value?._id || '', { custom_symptom_tags: existing.filter((item: string) => item !== value) })
       await loadFamily()
@@ -1005,9 +1094,9 @@ function buildReminderDate() {
   return reminderDate.value || (date.value + reminderDays.value * 86400000)
 }
 
-function buildDetails() {
+function buildDetails(): HealthDetailsPayload {
   const nextReminderDate = buildReminderDate()
-  const built: Record<string, any> = {}
+  const built: HealthDetailsPayload = {}
 
   if (resolvedType.value === 'vaccination') {
     built.vaccine_type = details.vaccine_type
@@ -1034,7 +1123,7 @@ function buildDetails() {
   return built
 }
 
-function buildIllnessRouteLinks(records: any[], detailPayload: Record<string, any>) {
+function buildIllnessRouteLinks(records: CreatedHealthRecordLinkSource[], detailPayload: HealthDetailsPayload) {
   if (!Array.isArray(records) || records.length === 0) return []
 
   const primaryCondition = String(detailPayload.primary_condition || detailPayload.condition || '').trim()
@@ -1048,7 +1137,7 @@ function buildIllnessRouteLinks(records: any[], detailPayload: Record<string, an
     : `${symptomTags.slice(0, 2).join(' / ')} 等${symptomTags.length}项`
   const treatmentStatus = String(detailPayload.treatment_status || '观察中').trim()
 
-  return records.reduce<MedicationRouteIllnessLink[]>((list, record: any) => {
+  return records.reduce<MedicationRouteIllnessLink[]>((list, record) => {
       const illnessRecordId = typeof record?.recordId === 'string' ? record.recordId.trim() : ''
       const dogId = typeof record?.dog_id === 'string' ? record.dog_id.trim() : ''
       if (!illnessRecordId || !dogId) return list
@@ -1065,7 +1154,7 @@ function buildIllnessRouteLinks(records: any[], detailPayload: Record<string, an
     }, [])
 }
 
-function getHealthHomeAnchorKey(type: string, detailPayload: Record<string, any>, isTodo: boolean) {
+function getHealthHomeAnchorKey(type: string, detailPayload: HealthDetailsPayload, isTodo: boolean) {
   if (type === 'illness') return 'health-illness:observation'
   if (!isTodo) return ''
   if (type === 'vaccination') {
@@ -1106,8 +1195,8 @@ async function handleDuplicateIllnessIfNeeded() {
   if (!condition || treatmentStatus === '已康复') return false
 
   const dogIds = isEdit.value
-    ? [currentRecord.value?.dog_id].filter(Boolean)
-    : selectedDogs.value.map((dog: any) => dog._id)
+    ? [currentRecord.value?.dog_id].filter((id): id is string => !!id)
+    : selectedDogs.value.map(dog => dog._id)
   if (dogIds.length === 0) return false
 
   const duplicates = await findLocalDuplicateIllnesses(
@@ -1128,11 +1217,11 @@ async function handleDuplicateIllnessIfNeeded() {
       duplicateIllnessResolve = resolve
     })
   } else {
-    const nameMap = new Map(selectedDogs.value.map((dog: any) => [dog._id, dog.name]))
+    const nameMap = new Map(selectedDogs.value.map(dog => [dog._id, dog.name]))
     if (isEdit.value && currentRecord.value?.dog_id) {
       nameMap.set(currentRecord.value.dog_id, currentRecord.value.dog_name)
     }
-    const dogNames = [...new Set(duplicates.map((item: any) => nameMap.get(item.dogId)).filter(Boolean))]
+    const dogNames = [...new Set(duplicates.map(item => nameMap.get(item.dogId)).filter((name): name is string => !!name))]
     uni.showToast({
       title: `${dogNames.join('、')} 已有进行中的「${condition}」记录`,
       icon: 'none',
@@ -1173,7 +1262,7 @@ async function submitCreateRecord() {
 
   if (isTodo.value && resolvedType.value !== 'illness') {
     const result = await localSyncRuntime.batchCreateManualTasksLocally(currentFamily.value?._id || '', {
-      dogs: selectedDogs.value.map((dog: any) => ({ dog_id: dog._id, dog_name: dog.name })),
+      dogs: selectedDogs.value.map(dog => ({ dog_id: dog._id, dog_name: dog.name })),
       card_type: 'individual',
       type: resolvedType.value,
       title: resolvedType.value === 'vaccination'
@@ -1210,8 +1299,8 @@ async function submitCreateRecord() {
     return true
   }
 
-  const payload: Record<string, any> = {
-    dog_ids: selectedDogs.value.map((dog: any) => dog._id),
+  const payload: BatchAddHealthRecordsPayload = {
+    dog_ids: selectedDogs.value.map(dog => dog._id),
     type: resolvedType.value,
     date: date.value,
     cost: cost && cost > 0 ? cost : null,
@@ -1229,8 +1318,8 @@ async function submitCreateRecord() {
   const savedCount = result?.data?.count || 0
   const skippedCount = result?.data?.skipped || 0
   const skippedDogs = result?.data?.skippedDogs || []
-  const completedTasks = result?.data?.completedTasks || []
-  const completedTaskIds = completedTasks.map((task: any) => task._id).filter(Boolean)
+  const completedTasks: CompletedTaskSource[] = result?.data?.completedTasks || []
+  const completedTaskIds = completedTasks.map(task => task._id).filter((id): id is string => !!id)
   const suppressTaskIds = sourceTaskIds.value.length > 0 ? sourceTaskIds.value : completedTaskIds
   if (savedCount === 0 && skippedCount > 0) {
     showSkippedDuplicateToast(skippedDogs, 'record')
@@ -1264,13 +1353,14 @@ async function submitCreateRecord() {
 async function submitEditRecord() {
   const cost = costInput.value ? parseFloat(costInput.value) : null
   const detailPayload = buildDetails()
-  await localSyncRuntime.updateHealthRecordLocally(currentFamily.value?._id || '', {
+  const payload: UpdateHealthRecordPayload = {
     id: props.recordId,
     date: date.value,
     cost: cost && cost > 0 ? cost : null,
     notes: notes.value || null,
     details: detailPayload,
-  })
+  }
+  await localSyncRuntime.updateHealthRecordLocally(currentFamily.value?._id || '', payload)
   markSuccess()
   queueSubmitFeedback({
     message: '已更新健康记录',
@@ -1319,7 +1409,7 @@ async function submit() {
 
 function goToMedication() {
   showMedPrompt.value = false
-  const dogList = selectedDogs.value.map((dog: any) => ({ _id: dog._id, name: dog.name }))
+  const dogList = selectedDogs.value.map(dog => ({ _id: dog._id, name: dog.name }))
   const dogsParam = encodeURIComponent(JSON.stringify(dogList))
   const illnessParam = savedRecordId.value && selectedDogs.value.length === 1
     ? `&illnessRecordId=${savedRecordId.value}`
@@ -1350,7 +1440,7 @@ onMounted(async () => {
 })
 
 watch(
-  [shouldShowLatestVaccinationMeta, () => currentFamily.value?._id || '', () => dogStore.list.map((dog: any) => dog._id).join(',')],
+  [shouldShowLatestVaccinationMeta, () => currentFamily.value?._id || '', () => getDogIds(dogStore.list).join(',')],
   () => {
     void refreshLatestVaccinationDates()
   },
@@ -1358,7 +1448,7 @@ watch(
 )
 
 watch(
-  [shouldShowLatestDewormingMeta, () => currentFamily.value?._id || '', () => dogStore.list.map((dog: any) => dog._id).join(',')],
+  [shouldShowLatestDewormingMeta, () => currentFamily.value?._id || '', () => getDogIds(dogStore.list).join(',')],
   () => {
     void refreshLatestDewormingDates()
   },

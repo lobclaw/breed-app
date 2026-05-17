@@ -1,6 +1,6 @@
 import { localDb } from '@/localdb/db'
-import { LOCAL_MUTATION_TYPES, type LocalMutationType } from '@/localdb/mutation-registry'
-import type { LocalOperationLogRow, MutationStatus, SyncMetadata } from '@/localdb/types'
+import { LOCAL_MUTATION_TYPES, type LocalMutationPayload, type LocalMutationType } from '@/localdb/mutation-registry'
+import type { LocalOperationLogRow, LocalRowOf, MutationStatus, SyncMetadata } from '@/localdb/types'
 import { getFamilyCacheKey } from '@/utils/authScopedCache'
 
 const BREEDING_RECORD_LABEL_MAP: Record<string, string> = {
@@ -31,8 +31,38 @@ const LOCAL_OPERATION_STATUS_TEXT: Record<MutationStatus, string> = {
 
 const UNI_ID_USER_INFO_KEY = 'uni-id-pages-userInfo'
 
-function normalizeDogName(dog: Record<string, any> | null | undefined) {
-  return dog?.name || dog?.dog_name || '未命名犬只'
+type DogNameSource = {
+  dogName?: unknown
+  dog_name?: unknown
+  name?: unknown
+}
+
+type OperationLogPayload = LocalMutationPayload & {
+  _sync?: Pick<SyncMetadata, 'clientEntityIds' | 'clientMutationId'>
+  patch?: OperationLogPayload
+  dogs?: DogNameSource[]
+  tasks?: Array<{ title?: unknown }>
+}
+
+type OperationDescriptor = {
+  actionType: string
+  domain: string
+  targetType: string
+  targetId: string
+  targetName: string
+  summary: string
+  actorName?: string
+}
+
+type FamilyRow = LocalRowOf<'families'>
+type DogRow = LocalRowOf<'dogs'>
+type TaskRow = LocalRowOf<'tasks'>
+type MedicationTaskRow = LocalRowOf<'medication_tasks'> & { title?: string | null }
+type BreedingRecordRow = LocalRowOf<'breeding_records'> & { dog_name?: string | null }
+type OperationEntityCollection = 'expenses' | 'incomes' | 'agents' | 'medication_protocols'
+
+function normalizeDogName(dog: DogNameSource | null | undefined) {
+  return toCleanString(dog?.name || dog?.dog_name) || '未命名犬只'
 }
 
 type OperationLogSnapshot = Record<string, unknown>
@@ -44,6 +74,10 @@ function toCleanString(value: unknown) {
 function toCleanStringArray(value: unknown) {
   if (!Array.isArray(value)) return []
   return value.map(item => toCleanString(item)).filter(Boolean)
+}
+
+function getArrayLength(value: unknown) {
+  return Array.isArray(value) ? value.length : 0
 }
 
 function getSnapshotString(snapshot: OperationLogSnapshot, keys: string[]) {
@@ -62,7 +96,7 @@ function getSnapshotStringArray(snapshot: OperationLogSnapshot, keys: string[]) 
   return []
 }
 
-function getDogNameSnapshots(payload: Record<string, any>, snapshot: OperationLogSnapshot) {
+function getDogNameSnapshots(payload: OperationLogPayload, snapshot: OperationLogSnapshot) {
   const explicitNames = getSnapshotStringArray(snapshot, ['dogNames', 'dog_names'])
   if (explicitNames.length) return explicitNames
   const singleName = getSnapshotString(snapshot, ['dogName', 'dog_name', 'damName', 'dam_name'])
@@ -70,25 +104,25 @@ function getDogNameSnapshots(payload: Record<string, any>, snapshot: OperationLo
   if (singleName) return [singleName]
   if (Array.isArray(payload.dogs)) {
     return payload.dogs
-      .map((dog: any) => toCleanString(dog?.dog_name || dog?.dogName || dog?.name))
+      .map(dog => toCleanString(dog?.dog_name || dog?.dogName || dog?.name))
       .filter(Boolean)
   }
   return toCleanStringArray(payload.dog_names || payload.dogNames)
 }
 
-function getTaskTitleSnapshots(payload: Record<string, any>, snapshot: OperationLogSnapshot) {
+function getTaskTitleSnapshots(payload: OperationLogPayload, snapshot: OperationLogSnapshot) {
   const titles = getSnapshotStringArray(snapshot, ['taskTitles', 'task_titles'])
   if (titles.length) return titles
   const title = getSnapshotString(snapshot, ['taskTitle', 'task_title'])
     || toCleanString(payload.taskTitle || payload.task_title || payload.title)
   if (title) return [title]
   if (Array.isArray(payload.tasks)) {
-    return payload.tasks.map((task: any) => toCleanString(task?.title)).filter(Boolean)
+    return payload.tasks.map(task => toCleanString(task?.title)).filter(Boolean)
   }
   return toCleanStringArray(payload.taskTitles || payload.task_titles)
 }
 
-function getMedicationTitleSnapshots(payload: Record<string, any>, snapshot: OperationLogSnapshot) {
+function getMedicationTitleSnapshots(payload: OperationLogPayload, snapshot: OperationLogSnapshot) {
   const titles = getSnapshotStringArray(snapshot, ['medicationTitles', 'medication_titles'])
   if (titles.length) return titles
   const title = getSnapshotString(snapshot, ['medicationTitle', 'medication_title', 'drugName', 'drug_name'])
@@ -97,45 +131,50 @@ function getMedicationTitleSnapshots(payload: Record<string, any>, snapshot: Ope
   return toCleanStringArray(payload.medicationTitles || payload.medication_titles)
 }
 
-async function resolveDogNames(payload: Record<string, any>, snapshot: OperationLogSnapshot, dogIds: string[]) {
+async function resolveDogNames(payload: OperationLogPayload, snapshot: OperationLogSnapshot, dogIds: string[]) {
   const names = getDogNameSnapshots(payload, snapshot)
   if (names.length) return names
   return getDogNames(dogIds)
 }
 
-async function resolveDogName(payload: Record<string, any>, snapshot: OperationLogSnapshot, dogId: string, fallback = '未命名犬只') {
+async function resolveDogName(payload: OperationLogPayload, snapshot: OperationLogSnapshot, dogId: string, fallback = '未命名犬只') {
   const names = getDogNameSnapshots(payload, snapshot)
   if (names[0]) return names[0]
   if (!dogId) return fallback
   return getDogName(dogId)
 }
 
-async function resolveTaskTitles(payload: Record<string, any>, snapshot: OperationLogSnapshot, taskIds: string[]) {
+async function resolveTaskTitles(payload: OperationLogPayload, snapshot: OperationLogSnapshot, taskIds: string[]) {
   const titles = getTaskTitleSnapshots(payload, snapshot)
   if (titles.length) return titles
   return getTaskTitles(taskIds)
 }
 
-async function resolveMedicationTitles(payload: Record<string, any>, snapshot: OperationLogSnapshot, taskIds: string[]) {
+async function resolveMedicationTitles(payload: OperationLogPayload, snapshot: OperationLogSnapshot, taskIds: string[]) {
   const titles = getMedicationTitleSnapshots(payload, snapshot)
   if (titles.length) return titles
   return getMedicationTitles(taskIds)
 }
 
-function readStorageObject(key: string): Record<string, any> | null {
+function readStorageObject(key: string): Record<string, unknown> | null {
   try {
     const raw = uni.getStorageSync(key)
     if (!raw) return null
-    if (typeof raw === 'string') return JSON.parse(raw)
-    if (typeof raw === 'object') return raw as Record<string, any>
+    if (typeof raw === 'string') {
+      const parsed: unknown = JSON.parse(raw)
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null
+    }
+    if (typeof raw === 'object' && !Array.isArray(raw)) return raw as Record<string, unknown>
   } catch {
     return null
   }
   return null
 }
 
-function findActiveMemberName(family: Record<string, any> | null | undefined, actorUserId: string) {
-  const member = (family?.members || []).find((item: any) => item.user_id === actorUserId && item.status === 'active')
+function findActiveMemberName(family: { members?: unknown } | null | undefined, actorUserId: string) {
+  const rawMembers = family?.members
+  const members = Array.isArray(rawMembers) ? rawMembers as FamilyRow['members'] : []
+  const member = members.find(item => item.user_id === actorUserId && item.status === 'active')
   return String(member?.nickname || '').trim()
 }
 
@@ -152,7 +191,8 @@ function getCachedActorName(actorUserId: string) {
 
 function getCurrentUserId() {
   try {
-    return String((uniCloud as any)?.getCurrentUserInfo?.()?.uid || '').trim()
+    const cloudApi = uniCloud as { getCurrentUserInfo?: () => { uid?: unknown } | null }
+    return String(cloudApi.getCurrentUserInfo?.()?.uid || '').trim()
   } catch {
     return ''
   }
@@ -161,7 +201,7 @@ function getCurrentUserId() {
 async function resolveCurrentActor(familyId: string) {
   const actorUserId = getCurrentUserId()
   if (!actorUserId) return { actorUserId: '', actorName: '我' }
-  const family = await localDb.findById<any>('families', familyId)
+  const family = await localDb.findById<FamilyRow>('families', familyId)
   const localMemberName = findActiveMemberName(family, actorUserId)
   const cachedActorName = getCachedActorName(actorUserId)
   return {
@@ -173,7 +213,7 @@ async function resolveCurrentActor(familyId: string) {
 async function getTaskTitles(taskIds: string[]) {
   const uniqueIds = [...new Set(taskIds.filter(Boolean))]
   if (!uniqueIds.length) return []
-  const rows = await localDb.query<any>('tasks', row => uniqueIds.includes(row._id))
+  const rows = await localDb.query<TaskRow>('tasks', row => uniqueIds.includes(row._id))
   const rowMap = new Map(rows.map(row => [row._id, row]))
   return uniqueIds.map(id => String(rowMap.get(id)?.title || '').trim()).filter(Boolean)
 }
@@ -181,7 +221,7 @@ async function getTaskTitles(taskIds: string[]) {
 async function getMedicationTitles(taskIds: string[]) {
   const uniqueIds = [...new Set(taskIds.filter(Boolean))]
   if (!uniqueIds.length) return []
-  const rows = await localDb.query<any>('medication_tasks', row => uniqueIds.includes(row._id))
+  const rows = await localDb.query<MedicationTaskRow>('medication_tasks', row => uniqueIds.includes(row._id))
   const rowMap = new Map(rows.map(row => [row._id, row]))
   return uniqueIds.map((id) => {
     const row = rowMap.get(id)
@@ -193,19 +233,19 @@ async function getMedicationTitles(taskIds: string[]) {
 async function getDogNames(dogIds: string[]) {
   const uniqueIds = [...new Set(dogIds.filter(Boolean))]
   if (!uniqueIds.length) return []
-  const rows = await localDb.query<any>('dogs', row => uniqueIds.includes(row._id))
+  const rows = await localDb.query<DogRow>('dogs', row => uniqueIds.includes(row._id))
   const rowMap = new Map(rows.map(row => [row._id, row]))
   return uniqueIds.map(id => normalizeDogName(rowMap.get(id))).filter(Boolean)
 }
 
 async function getDogName(dogId: string) {
   if (!dogId) return '未命名犬只'
-  const dog = await localDb.findById<any>('dogs', dogId)
+  const dog = await localDb.findById<DogRow>('dogs', dogId)
   return normalizeDogName(dog)
 }
 
 async function getBreedingRecordLogContext(recordId: string) {
-  const record = recordId ? await localDb.findById<any>('breeding_records', recordId) : null
+  const record = recordId ? await localDb.findById<BreedingRecordRow>('breeding_records', recordId) : null
   const label = BREEDING_RECORD_LABEL_MAP[String(record?.type || '')] || '繁育记录'
   const dogName = String(record?.dog_name || '').trim() || await getDogName(String(record?.dog_id || ''))
   return {
@@ -214,20 +254,23 @@ async function getBreedingRecordLogContext(recordId: string) {
   }
 }
 
-async function getEntityName(collection: 'expenses' | 'incomes' | 'agents' | 'medication_protocols', id: string, fallback = '') {
+async function getEntityName(collection: OperationEntityCollection, id: string, fallback = '') {
   if (!id) return fallback
-  const entity = await localDb.findById<any>(collection, id)
+  const entity = await localDb.findById<LocalRowOf<OperationEntityCollection>>(collection, id)
   if (!entity) return fallback
-  if (collection === 'agents') return String(entity.name || fallback || '未命名代理人')
-  if (collection === 'medication_protocols') return String(entity.name || fallback || '未命名方案')
-  return String(entity.category || entity.type || fallback || '未命名记录')
+  if ('name' in entity) {
+    return String(entity.name || fallback || (collection === 'agents' ? '未命名代理人' : '未命名方案'))
+  }
+  if ('category' in entity) return String(entity.category || fallback || '未命名记录')
+  if ('type' in entity) return String(entity.type || fallback || '未命名记录')
+  return fallback
 }
 
 function toCountLabel(count: number, unit: string) {
   return count > 1 ? `${count}${unit}` : ''
 }
 
-async function buildOperationDescriptor(type: LocalMutationType, payload: Record<string, any>, snapshot: OperationLogSnapshot = {}) {
+async function buildOperationDescriptor(type: LocalMutationType, payload: OperationLogPayload, snapshot: OperationLogSnapshot = {}): Promise<OperationDescriptor> {
   switch (type) {
     case LOCAL_MUTATION_TYPES.CREATE_DOG: {
       return {
@@ -241,7 +284,8 @@ async function buildOperationDescriptor(type: LocalMutationType, payload: Record
     }
     case LOCAL_MUTATION_TYPES.UPDATE_DOG:
     case LOCAL_MUTATION_TYPES.UPDATE_DOG_NAME: {
-      const dogName = payload.name || payload.patch?.name || await resolveDogName(payload, snapshot, String(payload.id || payload.dogId || ''))
+      const dogName = toCleanString(payload.name || payload.patch?.name)
+        || await resolveDogName(payload, snapshot, String(payload.id || payload.dogId || ''))
       return {
         actionType: 'update',
         domain: 'dog',
@@ -339,8 +383,8 @@ async function buildOperationDescriptor(type: LocalMutationType, payload: Record
         domain: 'task',
         targetType: 'task_batch',
         targetId: String(payload._sync?.clientMutationId || ''),
-        targetName: toCountLabel(titles.length || (payload.taskIds || []).length, '个任务'),
-        summary: `批量完成了 ${titles.length || (payload.taskIds || []).length} 个任务`,
+        targetName: toCountLabel(titles.length || getArrayLength(payload.taskIds), '个任务'),
+        summary: `批量完成了 ${titles.length || getArrayLength(payload.taskIds)} 个任务`,
       }
     }
     case LOCAL_MUTATION_TYPES.POSTPONE_TASK:
@@ -424,8 +468,8 @@ async function buildOperationDescriptor(type: LocalMutationType, payload: Record
         domain: 'medication',
         targetType: 'medication_task_batch',
         targetId: String(payload._sync?.clientMutationId || ''),
-        targetName: `${titles.length || (payload.medicationTaskIds || []).length}个用药任务`,
-        summary: `完成了 ${titles.length || (payload.medicationTaskIds || []).length} 个用药任务的今日执行`,
+        targetName: `${titles.length || getArrayLength(payload.medicationTaskIds)}个用药任务`,
+        summary: `完成了 ${titles.length || getArrayLength(payload.medicationTaskIds)} 个用药任务的今日执行`,
       }
     }
     case LOCAL_MUTATION_TYPES.END_MEDICATION:
@@ -771,7 +815,7 @@ async function buildOperationDescriptor(type: LocalMutationType, payload: Record
 export async function createPendingLocalOperationLog(
   type: LocalMutationType,
   familyId: string,
-  payload: Record<string, any>,
+  payload: OperationLogPayload,
   syncMeta: SyncMetadata,
   logSnapshot: OperationLogSnapshot = {},
 ) {
@@ -786,7 +830,7 @@ export async function createPendingLocalOperationLog(
     client_mutation_id: syncMeta.clientMutationId,
     mutation_type: type,
     actor_user_id: actor.actorUserId || null,
-    actor_name: (descriptor as any).actorName || actor.actorName || '我',
+    actor_name: descriptor.actorName || actor.actorName || '我',
     action_type: descriptor.actionType,
     domain: descriptor.domain,
     target_type: descriptor.targetType,

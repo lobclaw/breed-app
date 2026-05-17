@@ -6,9 +6,15 @@ import {
   buildPendingBreedingMilestones,
   type HomeProjectionEntities,
 } from '@/localdb/home-projection'
+import type { LocalRowOf } from '@/localdb/types'
 import { getBeijingDayStart } from '@/utils/date'
 
 const HOME_PROJECTION_MEMO_LIMIT = 24
+
+type HomeTaskRow = LocalRowOf<'tasks'> & {
+  type?: string | null
+  _synthetic_local?: boolean
+}
 
 const homeEntitiesCache: {
   revisionKey: string
@@ -69,10 +75,10 @@ function memoizeHomeProjection<T>(key: string, build: () => T): T {
 async function getHomeEntitiesSnapshot(familyId = ''): Promise<HomeEntitiesSnapshot> {
   if (!familyId) {
     const [dogs, tasks, health_records, medication_tasks] = await Promise.all([
-      localDb.getReadonlyTable<any>('dogs'),
-      localDb.getReadonlyTable<any>('tasks'),
-      localDb.getReadonlyTable<any>('health_records'),
-      localDb.getReadonlyTable<any>('medication_tasks'),
+      localDb.getReadonlyTable('dogs'),
+      localDb.getReadonlyTable('tasks'),
+      localDb.getReadonlyTable('health_records'),
+      localDb.getReadonlyTable('medication_tasks'),
     ])
     return {
       revisionKey: await getHomeRevisionKey(familyId),
@@ -89,10 +95,10 @@ async function getHomeEntitiesSnapshot(familyId = ''): Promise<HomeEntitiesSnaps
   const promise = (async () => {
     try {
       const [dogs, tasks, health_records, medication_tasks] = await Promise.all([
-        localDb.getRowsByFamilyReadonly<any>('dogs', familyId),
-        localDb.getRowsByFamilyReadonly<any>('tasks', familyId),
-        localDb.getRowsByFamilyReadonly<any>('health_records', familyId),
-        localDb.getRowsByFamilyReadonly<any>('medication_tasks', familyId),
+        localDb.getRowsByFamilyReadonly('dogs', familyId),
+        localDb.getRowsByFamilyReadonly('tasks', familyId),
+        localDb.getRowsByFamilyReadonly('health_records', familyId),
+        localDb.getRowsByFamilyReadonly('medication_tasks', familyId),
       ])
 
       const entities = { dogs, tasks, health_records, medication_tasks }
@@ -145,34 +151,40 @@ export async function getMemoizedHomeWeekCards(familyId: string, startDate: numb
 
 export async function materializeBreedingMilestonesForFamily(familyId: string) {
   if (!familyId) return []
-  let materialized: any[] = []
-  await localDb.transact(['breeding_cycles', 'breeding_records', 'tasks'], (tables) => {
-    const entities = {
-      dogs: [],
-      health_records: [],
-      medication_tasks: [],
-      tasks: (tables.tasks as any[]).filter(row => row.family_id === familyId),
-      breeding_cycles: (tables.breeding_cycles as any[]).filter(row => row.family_id === familyId),
-      breeding_records: (tables.breeding_records as any[]).filter(row => row.family_id === familyId),
-    }
-    const nextTasks: any[] = buildPendingBreedingMilestones(entities).map((task) => {
-      const { _synthetic_local: _ignored, ...rest } = task
-      return {
-        ...rest,
-        version: Number(task.version || 0),
-        _local_pending: task._local_pending ?? true,
-      }
-    })
-    if (!nextTasks.length) return
-    const taskMap = new Map((tables.tasks as any[]).map(row => [row._id, row]))
-    nextTasks.forEach((task) => {
-      if (!taskMap.has(task._id)) taskMap.set(task._id, task)
-    })
-    tables.tasks = Array.from(taskMap.values())
-    materialized = nextTasks
+  const [tasks, breedingCycles, breedingRecords] = await Promise.all([
+    localDb.getRowsByFamilyReadonly('tasks', familyId),
+    localDb.getRowsByFamilyReadonly('breeding_cycles', familyId),
+    localDb.getRowsByFamilyReadonly('breeding_records', familyId),
+  ])
+  const entities = {
+    dogs: [],
+    health_records: [],
+    medication_tasks: [],
+    tasks,
+    breeding_cycles: breedingCycles,
+    breeding_records: breedingRecords,
+  }
+  const nextTasks: HomeTaskRow[] = buildPendingBreedingMilestones(entities).map((task) => {
+    const { _synthetic_local: _ignored, ...rest } = task
+    return {
+      ...rest,
+      version: Number(task.version || 0),
+      _local_pending: task._local_pending ?? true,
+    } as HomeTaskRow
   })
-  if (materialized.length) clearHomeEntitiesCache()
-  return materialized
+  if (!nextTasks.length) return []
+
+  const existingTaskIds = new Set(tasks.map(row => String(row._id || '')))
+  const tasksToUpsert = nextTasks.filter(task => !existingTaskIds.has(String(task._id || '')))
+  if (!tasksToUpsert.length) return []
+
+  await localDb.transactRows('tasks', async (rows) => {
+    for (const task of tasksToUpsert) {
+      await rows.upsertRow(task)
+    }
+  })
+  clearHomeEntitiesCache()
+  return tasksToUpsert
 }
 
 export async function buildHomeSnapshot(input: {

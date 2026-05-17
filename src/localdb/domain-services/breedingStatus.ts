@@ -1,6 +1,37 @@
 import type { DeriveStatus } from '@/types/dog'
 import { getBeijingDateParts, getBeijingElapsedDays, getBeijingOrdinalDay } from '@/utils/date'
 
+type BreedingCycleStatusRow = {
+  _id?: string
+  dam_id?: string
+  status?: string
+  start_date?: number | null
+  mated_at?: number | null
+  sire_name?: string | null
+  updated_at?: number | null
+  created_at?: number | null
+}
+type BreedingRecordStatusRow = {
+  cycle_id?: string
+  type?: string
+  date?: number | null
+  updated_at?: number | null
+  created_at?: number | null
+  deleted_at?: number | null
+  sire_name?: string | null
+  details?: Record<string, unknown> | null
+}
+type LitterStatusRow = {
+  cycle_id?: string
+  dam_id?: string
+  sire_name?: string | null
+  birth_date?: number | null
+  total_born?: number | null
+  born_alive?: number | null
+  updated_at?: number | null
+  created_at?: number | null
+}
+
 function formatDate(ts?: number): string {
   if (!ts) return '--'
   const date = getBeijingDateParts(ts)
@@ -10,56 +41,63 @@ function formatDate(ts?: number): string {
   return `${y}-${m}-${d}`
 }
 
-function getBreedingRecordTs(record: any) {
+function getBreedingRecordTs(record: BreedingRecordStatusRow) {
   return Number(record?.date || record?.updated_at || record?.created_at || 0)
 }
 
-export function getLatestMatingRecord(cycleId: string, breedingRecords: any[] = []) {
+export function getLatestMatingRecord(cycleId: string, breedingRecords: BreedingRecordStatusRow[] = []) {
   if (!cycleId) return null
   return [...breedingRecords]
     .filter(record => record?.cycle_id === cycleId && record?.type === 'mating' && !record?.deleted_at)
     .sort((left, right) => getBreedingRecordTs(right) - getBreedingRecordTs(left))[0] || null
 }
 
-function getLatestBreedingRecordByType(cycleId: string, breedingRecords: any[] = [], type: string) {
+function getLatestBreedingRecordByType(cycleId: string, breedingRecords: BreedingRecordStatusRow[] = [], type: string) {
   if (!cycleId) return null
   return [...breedingRecords]
     .filter(record => record?.cycle_id === cycleId && record?.type === type && !record?.deleted_at)
     .sort((left, right) => getBreedingRecordTs(right) - getBreedingRecordTs(left))[0] || null
 }
 
-export function getMatingSireName(record: any) {
+export function getMatingSireName(record?: BreedingRecordStatusRow | null) {
   const details = record?.details || {}
-  return details.sire_name || details.male_name || record?.sire_name || ''
+  return String(details.sire_name || details.male_name || record?.sire_name || '').trim()
 }
 
-function getMatingNumberText(record: any) {
+function getMatingNumberText(record?: BreedingRecordStatusRow | null) {
   const details = record?.details || {}
   const matingNumber = Number(details.mating_number || details.mating_count)
   return Number.isFinite(matingNumber) && matingNumber > 0 ? `配种${matingNumber}次` : ''
 }
 
-export function buildDetailBreedingStatuses(cycles: any[] = [], activeLitters: any[] = [], breedingRecords: any[] = [], now = Date.now()): DeriveStatus[] {
+export function buildDetailBreedingStatuses(
+  cycles: BreedingCycleStatusRow[] = [],
+  activeLitters: LitterStatusRow[] = [],
+  breedingRecords: BreedingRecordStatusRow[] = [],
+  now = Date.now(),
+): DeriveStatus[] {
   const activeCycle = [...cycles]
     .filter(cycle => cycle.status === '发情中' || cycle.status === '怀孕中')
     .sort((left, right) => Number(right.updated_at || right.created_at || 0) - Number(left.updated_at || left.created_at || 0))[0]
 
   if (activeCycle?.status === '发情中') {
-    const latestFollicle = getLatestBreedingRecordByType(activeCycle._id, breedingRecords, 'follicle_check')
-    const latestMating = getLatestMatingRecord(activeCycle._id, breedingRecords)
+    const activeCycleId = activeCycle._id || ''
+    const latestFollicle = getLatestBreedingRecordByType(activeCycleId, breedingRecords, 'follicle_check')
+    const latestMating = getLatestMatingRecord(activeCycleId, breedingRecords)
     const follicleDay = latestFollicle?.date && !latestMating
       ? getBeijingOrdinalDay(Number(latestFollicle.date), now)
       : null
     return [{
       type: '发情中',
-      cycleId: activeCycle._id,
+      cycleId: activeCycleId,
       activityTs: activeCycle.updated_at || activeCycle.created_at || 0,
       meta: follicleDay ? [{ icon: 'schedule', text: `卵检后第${follicleDay}天` }] : [],
     }]
   }
 
   if (activeCycle?.status === '怀孕中') {
-    const latestMating = getLatestMatingRecord(activeCycle._id, breedingRecords)
+    const activeCycleId = activeCycle._id || ''
+    const latestMating = getLatestMatingRecord(activeCycleId, breedingRecords)
     const startTs = activeCycle.mated_at || latestMating?.date || activeCycle.updated_at || activeCycle.created_at || now
     const sireName = activeCycle.sire_name || getMatingSireName(latestMating)
     const matingNumberText = getMatingNumberText(latestMating)
@@ -71,7 +109,7 @@ export function buildDetailBreedingStatuses(cycles: any[] = [], activeLitters: a
 
     return [{
       type: '怀孕中',
-      cycleId: activeCycle._id,
+      cycleId: activeCycleId,
       detail: [
         sireName ? `种公: ${sireName}` : '',
         matingNumberText,
@@ -118,7 +156,7 @@ export function buildDetailBreedingStatuses(cycles: any[] = [], activeLitters: a
   }]
 }
 
-export function buildBreedingStatusMap(cycles: any[] = [], activeLitters: any[] = [], now = Date.now()) {
+export function buildBreedingStatusMap(cycles: BreedingCycleStatusRow[] = [], activeLitters: LitterStatusRow[] = [], now = Date.now()) {
   const breedingStatusMap = new Map<string, DeriveStatus[]>()
 
   for (const cycle of cycles) {

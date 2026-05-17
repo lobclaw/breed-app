@@ -1,7 +1,13 @@
 import { localDb } from '@/localdb/db'
 import type { Family } from '@/types/family'
 
-export function sortByRecent(left: Record<string, any>, right: Record<string, any>) {
+type SortableRecentRow = {
+  updated_at?: number | string | null
+  date?: number | string | null
+  created_at?: number | string | null
+}
+
+export function sortByRecent(left: SortableRecentRow, right: SortableRecentRow) {
   return Number(right.updated_at || right.date || right.created_at || 0) - Number(left.updated_at || left.date || left.created_at || 0)
 }
 

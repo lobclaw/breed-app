@@ -1,4 +1,5 @@
 import { localDb } from '@/localdb/db'
+import type { LocalRowOf } from '@/localdb/types'
 import type { Agent, SaleRecord } from '@/types/finance'
 import type { DogWithStatus } from '@/types/dog'
 import { getBeijingOrdinalDay } from '@/utils/date'
@@ -11,6 +12,17 @@ import {
 } from '@/localdb/domain-services/sale'
 import { listLocalDogsWithStatus } from './dogs'
 import { sortByRecent } from './shared'
+
+type DogRow = LocalRowOf<'dogs'> & {
+  sex?: string | null
+}
+
+type AgentRow = LocalRowOf<'agents'>
+type SaleRow = LocalRowOf<'sale_records'>
+
+type SaleProjectionSource = SaleRow & {
+  agent_name?: string | null
+}
 
 export async function listLocalAgents(familyId: string): Promise<Agent[]> {
   if (!familyId) return []
@@ -41,13 +53,13 @@ export async function listLocalSales(
   const agentIds = [...new Set(sales.map(row => row.seller_agent_id).filter(Boolean))]
   const [dogs, agents, activeSales, cancelledSales] = await Promise.all([
     dogIds.length
-      ? localDb.query<any>('dogs', row => row.family_id === familyId && dogIds.includes(row._id))
+      ? localDb.query<DogRow>('dogs', row => row.family_id === familyId && dogIds.includes(row._id))
       : Promise.resolve([]),
     agentIds.length
-      ? localDb.query<any>('agents', row => row.family_id === familyId && agentIds.includes(row._id) && !row.deleted_at)
+      ? localDb.query<AgentRow>('agents', row => row.family_id === familyId && agentIds.includes(row._id) && !row.deleted_at)
       : Promise.resolve([]),
     dogIds.length
-      ? localDb.query<any>('sale_records', row =>
+      ? localDb.query<SaleRow>('sale_records', row =>
           row.family_id === familyId
           && dogIds.includes(row.dog_id)
           && !row.deleted_at
@@ -68,7 +80,7 @@ export async function listLocalSales(
   const activeSaleDogIds = new Set(activeSales.map(row => row.dog_id).filter(Boolean))
   const latestRestartSaleIds = buildLatestRestartSaleIds(cancelledSales)
   return sales.map(sale => normalizeSaleRecordProjection(
-    sale as SaleRecord & Record<string, any>,
+    sale,
     dogById.get(sale.dog_id),
     sale.seller_agent_id ? agentById.get(sale.seller_agent_id) : null,
     activeSaleDogIds,
@@ -80,7 +92,7 @@ export async function listLocalSaleCandidateDogs(familyId: string): Promise<DogW
   if (!familyId) return []
   const [dogs, activeSales] = await Promise.all([
     listLocalDogsWithStatus(familyId),
-    localDb.query<any>('sale_records', row =>
+    localDb.query<SaleRow>('sale_records', row =>
       row.family_id === familyId
       && !row.deleted_at
       && ['待售', '已预定'].includes(String(row.status || '')),
@@ -104,9 +116,9 @@ function formatDogAgeText(birthTs?: number | null) {
 }
 
 function normalizeSaleRecordProjection(
-  sale: SaleRecord & Record<string, any>,
-  dog?: Record<string, any> | null,
-  agent?: Record<string, any> | null,
+  sale: SaleProjectionSource,
+  dog?: DogRow | null,
+  agent?: AgentRow | null,
   activeSaleDogIds = new Set<string>(),
   latestRestartSaleIds = new Set<string>(),
 ) {
@@ -128,10 +140,10 @@ export async function getLocalSaleDetail(familyId: string, saleId: string) {
   if (!sale || sale.family_id !== familyId || sale.deleted_at) return null
 
   const [dog, agent, activeSales, cancelledSales] = await Promise.all([
-    sale.dog_id ? localDb.findById<any>('dogs', sale.dog_id) : Promise.resolve(null),
-    sale.seller_agent_id ? localDb.findById<any>('agents', sale.seller_agent_id) : Promise.resolve(null),
+    sale.dog_id ? localDb.findById<DogRow>('dogs', sale.dog_id) : Promise.resolve(null),
+    sale.seller_agent_id ? localDb.findById<AgentRow>('agents', sale.seller_agent_id) : Promise.resolve(null),
     sale.dog_id
-      ? localDb.query<any>('sale_records', row =>
+      ? localDb.query<SaleRow>('sale_records', row =>
           row.family_id === familyId
           && row.dog_id === sale.dog_id
           && !row.deleted_at
@@ -148,7 +160,7 @@ export async function getLocalSaleDetail(familyId: string, saleId: string) {
       : Promise.resolve([]),
   ])
   const activeSaleDogIds = new Set(activeSales.map(row => row.dog_id).filter(Boolean))
-  const latestRestartSaleIds = buildLatestRestartSaleIds(cancelledSales as Array<SaleRecord & Record<string, any>>)
+  const latestRestartSaleIds = buildLatestRestartSaleIds(cancelledSales)
 
-  return normalizeSaleRecordProjection(sale as SaleRecord & Record<string, any>, dog, agent, activeSaleDogIds, latestRestartSaleIds)
+  return normalizeSaleRecordProjection(sale, dog, agent, activeSaleDogIds, latestRestartSaleIds)
 }

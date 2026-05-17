@@ -5,6 +5,10 @@ type PickerCopy = {
   title: string
   description: string
 }
+type LegacyCycleStatus = DeriveStatus & { cycle_id?: string }
+type DogStatusSource = {
+  statuses?: LegacyCycleStatus[]
+}
 
 const BREEDING_STATUS_TYPES = new Set<DeriveStatus['type']>(['发情中', '怀孕中', '哺乳中'])
 const BLOCKED_HEAT_STATUSES = new Set<DeriveStatus['type']>(['发情中', '怀孕中', '哺乳中'])
@@ -16,8 +20,8 @@ function isBreedingDam(dog: DogWithStatus) {
   return dog.role === '种狗' && dog.gender === '母'
 }
 
-function getStatusCycleId(status: DeriveStatus | Record<string, any>) {
-  const legacyCycleId = (status as Record<string, any>)?.cycle_id
+function getStatusCycleId(status: LegacyCycleStatus) {
+  const legacyCycleId = status.cycle_id
   return typeof status?.cycleId === 'string'
     ? status.cycleId
     : typeof legacyCycleId === 'string'
@@ -37,22 +41,22 @@ function hasQualifiedCycleStatus(dog: DogWithStatus, allowedStatuses: DeriveStat
   return getBreedingStatuses(dog).some(status => allowedStatuses.includes(status.type) && !!getStatusCycleId(status))
 }
 
-function getQualifiedStatus(dog: DogWithStatus | Record<string, any>, statusType: DeriveStatus['type']) {
+function getQualifiedStatus(dog: DogStatusSource, statusType: DeriveStatus['type']) {
   const statuses = Array.isArray(dog?.statuses) ? dog.statuses : []
-  return statuses.find((status: any) => status?.type === statusType && !!getStatusCycleId(status))
+  return statuses.find(status => status?.type === statusType && !!getStatusCycleId(status))
 }
 
-function getStatusProgressCurrent(status: DeriveStatus | Record<string, any> | null | undefined) {
+function getStatusProgressCurrent(status: LegacyCycleStatus | null | undefined) {
   const current = Number(status?.progress?.current || 0)
   return Number.isFinite(current) && current > 0 ? current : 0
 }
 
-function getStatusActivityTs(status: DeriveStatus | Record<string, any> | null | undefined) {
+function getStatusActivityTs(status: LegacyCycleStatus | null | undefined) {
   const activityTs = Number(status?.activityTs || 0)
   return Number.isFinite(activityTs) && activityTs > 0 ? activityTs : 0
 }
 
-export function getBirthCycleIdFromDog(dog: DogWithStatus | Record<string, any> | null | undefined) {
+export function getBirthCycleIdFromDog(dog: DogStatusSource | null | undefined) {
   const pregnantStatus = getQualifiedStatus(dog || {}, '怀孕中')
   return pregnantStatus ? getStatusCycleId(pregnantStatus) : ''
 }

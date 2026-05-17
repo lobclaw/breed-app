@@ -8,7 +8,7 @@ interface HomeBreedingCardLike {
     type?: string
     cycle_id?: string
     due_date?: number
-    details?: Record<string, any> | null
+    details?: Record<string, unknown> | null
   }>
 }
 

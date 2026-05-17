@@ -41,10 +41,20 @@ function getTokenExpired(info: ReturnType<typeof uniCloud.getCurrentUserInfo>): 
 
 function getCurrentUid() {
   try {
-    return String((uniCloud as any)?.getCurrentUserInfo?.()?.uid || currentUser.value?.uid || '').trim()
+    return String(uniCloud.getCurrentUserInfo?.()?.uid || currentUser.value?.uid || '').trim()
   } catch {
     return currentUser.value?.uid || ''
   }
+}
+
+function getErrorLogValue(error: unknown) {
+  if (error instanceof Error && error.message) return error.message
+  if (error && typeof error === 'object') {
+    const source = error as { message?: unknown; errMsg?: unknown }
+    if (typeof source.message === 'string' && source.message) return source.message
+    if (typeof source.errMsg === 'string' && source.errMsg) return source.errMsg
+  }
+  return error
 }
 
 function isStaleAuthRequest(uid: string, version: number) {
@@ -208,7 +218,7 @@ export function useAuth() {
       clearCurrentSession()
       isFamilyVerified.value = true
       return 'no_family'
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (isStaleAuthRequest(requestUid, requestVersion)) return 'error'
       const code = getCloudErrorCode(e)
       if (code === 'NO_FAMILY') {
@@ -222,14 +232,14 @@ export function useAuth() {
         bumpAuthSessionVersion()
         currentUser.value = null
         clearCurrentSession()
-        console.warn('加载家庭信息失败:', e.message || e)
+        console.warn('加载家庭信息失败:', getErrorLogValue(e))
         return 'error'
       }
 
       if (isCloudConnectTimeout(e)) {
-        console.warn('加载家庭信息失败，本地云函数连接超时:', e.message || e)
+        console.warn('加载家庭信息失败，本地云函数连接超时:', getErrorLogValue(e))
       } else {
-        console.warn('加载家庭信息失败:', e.message || e)
+        console.warn('加载家庭信息失败:', getErrorLogValue(e))
       }
       return 'error'
     }
@@ -282,7 +292,6 @@ export function useAuth() {
    * 退出登录（调用 uni-id-pages 的 logout）
    */
   async function logout() {
-    // @ts-ignore
     const { mutations } = await import('@/uni_modules/uni-id-pages/common/store.js')
     mutations.logout()
   }

@@ -32,7 +32,7 @@ export function buildScopeMetaKey(scopeKey: string, familyId = '') {
   return familyId ? `sync:scope:${familyId}:${scopeKey}` : `sync:scope:${scopeKey}`
 }
 
-function rowBelongsToFamily(row: Record<string, any>, familyId: string) {
+function rowBelongsToFamily(row: { family_id?: unknown, _id?: unknown }, familyId: string) {
   if (!familyId) return true
   return row?.family_id === familyId || row?._id === familyId
 }
@@ -74,6 +74,6 @@ export function toScopeFreshness(scope: ResolvedSyncScope, current?: Partial<Sto
 
 export async function hasCollectionsData(collections: BusinessCollectionName[], familyId = '') {
   const uniqueCollections = [...new Set(collections)]
-  const rows = await Promise.all(uniqueCollections.map(collection => localDb.getTable<any>(collection)))
+  const rows = await Promise.all(uniqueCollections.map(collection => localDb.getReadonlyTable(collection)))
   return rows.some(items => items.some(row => rowBelongsToFamily(row, familyId)))
 }

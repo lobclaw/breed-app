@@ -49,6 +49,7 @@ describe('local-first source contract', () => {
     const repositorySource = readWorkspaceFile('src/localdb/repository.ts')
     const dbSource = readWorkspaceFile('src/localdb/db.ts')
     const homeSnapshotSource = readWorkspaceFile('src/localdb/runtime/home-snapshot.ts')
+    const scopeSyncSource = readWorkspaceFile('src/localdb/runtime/scope-sync.ts')
     const syncStatusSource = readWorkspaceFile('src/localdb/sync-status.ts')
 
     expect(repositorySource).toContain('localDb.queryReadonly')
@@ -67,9 +68,14 @@ describe('local-first source contract', () => {
     expect(syncStatusSource).not.toContain('getOutbox()')
     expect(syncStatusSource).not.toContain('getTable<any>')
 
+    const hasCollectionsDataSource = scopeSyncSource.slice(scopeSyncSource.indexOf('export async function hasCollectionsData'))
+    expect(hasCollectionsDataSource).toContain('localDb.getReadonlyTable(collection)')
+    expect(hasCollectionsDataSource).not.toContain('localDb.getTable')
+    expect(hasCollectionsDataSource).not.toContain('getTable<any>')
+
     const transactSource = dbSource.slice(dbSource.indexOf('async transact'), dbSource.indexOf('private async commitV2Diff'))
     expect(transactSource).toContain('createTransactionTables')
-    expect(transactSource).toContain('getReadonlyTable<any>')
+    expect(transactSource).toContain('getReadonlyTable<StoredLocalRow>')
     expect(transactSource).not.toContain('this.getTable<any>')
     expect(transactSource).not.toContain('cloneRows(tables[collection])')
 
@@ -80,6 +86,19 @@ describe('local-first source contract', () => {
     expect(rowTransactionSource).toContain('adapter.getRow(collection, id)')
     expect(rowTransactionSource).not.toContain('createTransactionTables')
     expect(rowTransactionSource).not.toContain('getReadonlyTable<any>')
+  })
+
+  it('LocalDB 存储边界不应保留裸 any 或 Record<string, any>', () => {
+    const dbSource = readWorkspaceFile('src/localdb/db.ts')
+    const adapterSource = readWorkspaceFile('src/localdb/adapter.ts')
+
+    for (const [file, source] of [
+      ['src/localdb/db.ts', dbSource],
+      ['src/localdb/adapter.ts', adapterSource],
+    ] as const) {
+      expect(source, `${file} should parse dynamic storage through explicit boundary types`).not.toMatch(/\bany\b|Record<string, any>|as unknown as/)
+      expect(source, `${file} should not use any-specific LocalDB helpers`).not.toMatch(/query<any>|findById<any>|getTable<any>|getReadonlyTable<any>/)
+    }
   })
 
   it('至少一个低风险 runtime mutation 应使用行级事务 API', () => {
@@ -165,6 +184,99 @@ describe('local-first source contract', () => {
     }
   })
 
+  it('mutation 入队后 pending upload issue 刷新应收窄到附件相关行', () => {
+    const runtimeSource = readWorkspaceFile('src/localdb/runtime/core.ts')
+    const syncIssuesSource = readWorkspaceFile('src/localdb/sync-issues.ts')
+    const enqueueMutationSource = runtimeSource.slice(
+      runtimeSource.indexOf('async enqueueMutation'),
+      runtimeSource.indexOf('async getLocalOperationLogs'),
+    )
+    const issueRefreshSource = runtimeSource.slice(
+      runtimeSource.indexOf('private async refreshPendingUploadIssuesForMutation'),
+      runtimeSource.indexOf('async getLocalOperationLogs'),
+    )
+
+    expect(enqueueMutationSource).toContain('this.refreshPendingUploadIssuesForMutation')
+    expect(enqueueMutationSource).not.toContain('refreshPendingUploadIssuesForCollections(collectionScope, familyId)')
+    expect(issueRefreshSource).toContain('collectPendingUploadRecordIds(collection, payload, syncMeta)')
+    expect(issueRefreshSource).toContain('syncIssueService.refreshPendingUploadIssuesForRows(collection, familyId, recordIds)')
+    expect(issueRefreshSource).not.toContain('refreshPendingUploadIssuesForCollections')
+    expect(syncIssuesSource).toContain('async refreshPendingUploadIssuesForRows')
+  })
+
+  it('手动重试 outbox 应使用行级事务', () => {
+    const runtimeSource = readWorkspaceFile('src/localdb/runtime/core.ts')
+    const retrySource = runtimeSource.slice(
+      runtimeSource.indexOf('async retryFailedOutboxNow'),
+      runtimeSource.indexOf('async syncPendingAttachmentsNow'),
+    )
+
+    expect(retrySource).toContain("localDb.transactRows(['outbox_mutations', 'local_operation_logs', 'sync_conflicts'] as const")
+    expect(retrySource).toContain("rows.updateRow('outbox_mutations'")
+    expect(retrySource).toContain("rows.updateRow('sync_conflicts'")
+    expect(retrySource).toContain("rows.updateRow('local_operation_logs'")
+    expect(retrySource).not.toContain('localDb.transact(')
+    expect(retrySource).not.toContain('tables.')
+  })
+
+  it('附件上传成功后的本地引用替换应使用行级事务', () => {
+    const attachmentsSource = readWorkspaceFile('src/localdb/runtime/attachments.ts')
+    const uploadSource = attachmentsSource.slice(
+      attachmentsSource.indexOf('export async function uploadPendingAttachmentsForFamily'),
+    )
+
+    expect(uploadSource).toContain("localDb.transactRows([...uploadCollections, 'outbox_mutations'] as const")
+    expect(uploadSource).toContain('localDb.getRowsByFamilyReadonly<AttachmentRow>(collection, familyId)')
+    expect(uploadSource).toContain("rows.getRow(collection, sourceRow._id)")
+    expect(uploadSource).toContain("rows.updateRow('outbox_mutations', mutation._id")
+    expect(uploadSource).not.toContain('localDb.transact(')
+    expect(uploadSource).not.toContain('localDb.query<AttachmentRow>')
+    expect(uploadSource).not.toContain('tables.')
+  })
+
+  it('恢复 processing outbox 应使用行级事务', () => {
+    const outboxSource = readWorkspaceFile('src/localdb/runtime/outbox.ts')
+    const recoverSource = outboxSource.slice(
+      outboxSource.indexOf('export async function recoverStaleProcessingOutbox'),
+      outboxSource.indexOf('export function rebaseMutationForConflict'),
+    )
+
+    expect(recoverSource).toContain("localDb.transactRows(['outbox_mutations', 'local_operation_logs'] as const")
+    expect(recoverSource).toContain('localDb.getRowsByFamilyReadonly')
+    expect(recoverSource).toContain("rows.updateRow('outbox_mutations'")
+    expect(recoverSource).toContain("rows.updateRow('local_operation_logs'")
+    expect(recoverSource).not.toContain('localDb.transact(')
+    expect(recoverSource).not.toContain('tables.')
+  })
+
+  it('更新 outbox 状态应使用行级事务', () => {
+    const outboxSource = readWorkspaceFile('src/localdb/runtime/outbox.ts')
+    const statusSource = outboxSource.slice(
+      outboxSource.indexOf('export async function updateOutboxStatus'),
+      outboxSource.indexOf('export async function recoverStaleProcessingOutbox'),
+    )
+
+    expect(statusSource).toContain("localDb.transactRows(['outbox_mutations', 'local_operation_logs', 'sync_conflicts'] as const")
+    expect(statusSource).toContain("rows.updateRow('outbox_mutations'")
+    expect(statusSource).toContain("rows.deleteRow('local_operation_logs', logId)")
+    expect(statusSource).toContain("rows.updateRow('sync_conflicts'")
+    expect(statusSource).not.toContain('localDb.transact(')
+    expect(statusSource).not.toContain('tables.')
+  })
+
+  it('同步 ack touched entity 应使用行级事务', () => {
+    const outboxSource = readWorkspaceFile('src/localdb/runtime/outbox.ts')
+    const ackSource = outboxSource.slice(
+      outboxSource.indexOf('export async function applySyncAck'),
+    )
+
+    expect(ackSource).toContain('localDb.transactRows(touchedCollections')
+    expect(ackSource).toContain('rows.updateRow(touched.collection, touched.id')
+    expect(ackSource).not.toContain('localDb.transact(')
+    expect(ackSource).not.toContain('applyTouchedEntityVersions')
+    expect(ackSource).not.toContain('tables.')
+  })
+
   it('首页 snapshot 应按 family/date/revision memo 投影并保持实体快照一致', () => {
     const homeSnapshotSource = readWorkspaceFile('src/localdb/runtime/home-snapshot.ts')
     const runtimeSource = readWorkspaceFile('src/localdb/runtime/core.ts')
@@ -195,6 +307,22 @@ describe('local-first source contract', () => {
     expect(runtimeSource).not.toContain('buildLocalHomeCards')
     expect(runtimeSource).not.toContain('buildLocalDateCounts')
     expect(runtimeSource).not.toContain('buildLocalWeekCards')
+  })
+
+  it('繁育 milestone 物化应使用 readonly 读取与行级事务写入', () => {
+    const homeSnapshotSource = readWorkspaceFile('src/localdb/runtime/home-snapshot.ts')
+    const materializeSource = homeSnapshotSource.slice(
+      homeSnapshotSource.indexOf('export async function materializeBreedingMilestonesForFamily'),
+      homeSnapshotSource.indexOf('export async function buildHomeSnapshot'),
+    )
+
+    expect(materializeSource).toContain("localDb.getRowsByFamilyReadonly('tasks', familyId)")
+    expect(materializeSource).toContain("localDb.getRowsByFamilyReadonly('breeding_cycles', familyId)")
+    expect(materializeSource).toContain("localDb.getRowsByFamilyReadonly('breeding_records', familyId)")
+    expect(materializeSource).toContain("localDb.transactRows('tasks'")
+    expect(materializeSource).toContain('await rows.upsertRow(task)')
+    expect(materializeSource).not.toContain('localDb.transact(')
+    expect(materializeSource).not.toContain('tables.tasks')
   })
 
   it('健康与用药本地 mutation 应从 runtime core 下沉到领域模块', () => {
@@ -293,10 +421,21 @@ describe('local-first source contract', () => {
 
   it('已收敛的 runtime 领域模块不应重新引入裸 any', () => {
     const typedRuntimeModules = [
+      'src/localdb/runtime/attachments.ts',
       'src/localdb/runtime/agent-mutations.ts',
       'src/localdb/runtime/breeding-mutations.ts',
+      'src/localdb/runtime/core.ts',
       'src/localdb/runtime/dog-mutations.ts',
       'src/localdb/runtime/finance-mutations.ts',
+      'src/localdb/runtime/health-mutations.ts',
+      'src/localdb/runtime/home-snapshot.ts',
+      'src/localdb/runtime/local-builders.ts',
+      'src/localdb/runtime/litter-mutations.ts',
+      'src/localdb/runtime/medication-mutations.ts',
+      'src/localdb/runtime/outbox.ts',
+      'src/localdb/runtime/pull.ts',
+      'src/localdb/runtime/sale-mutations.ts',
+      'src/localdb/runtime/scope-sync.ts',
       'src/localdb/runtime/settings-mutations.ts',
       'src/localdb/runtime/task-mutations.ts',
     ]
@@ -304,13 +443,47 @@ describe('local-first source contract', () => {
     for (const file of typedRuntimeModules) {
       const source = readWorkspaceFile(file)
       expect(source, `${file} should keep typed rows/payloads`).not.toMatch(/\bany\b|Record<string, any>/)
+      expect(source, `${file} should not hide row shape mismatches behind double casts`).not.toContain('as unknown as')
+    }
+  })
+
+  it('任务类型应兼容当前本地 priority/postpone_count 行结构', () => {
+    const taskTypeSource = readWorkspaceFile('src/types/task.ts')
+
+    expect(taskTypeSource).toContain("export type TaskPriority = 'overdue' | 'today' | 'upcoming'")
+    expect(taskTypeSource).toContain('priority?: TaskPriority')
+    expect(taskTypeSource).toContain('postpone_count?: number')
+    expect(taskTypeSource).toContain('source_collection?: string | null')
+    expect(taskTypeSource).toContain('details?: Record<string, unknown> | null')
+  })
+
+  it('Local-First 对齐的领域类型不应保留裸 any', () => {
+    const typeFiles = [
+      'src/types/breeding.ts',
+      'src/types/finance.ts',
+      'src/types/health.ts',
+      'src/types/task.ts',
+      'src/types/index.ts',
+    ]
+
+    for (const file of typeFiles) {
+      const source = readWorkspaceFile(file)
+      expect(source, `${file} should not weaken domain contracts with any`).not.toMatch(/\bany\b|Record<string, any>/)
     }
   })
 
   it('高频 runtime mutation 顶层 payload 不得退回泛化 Record', () => {
     const coreSource = readWorkspaceFile('src/localdb/runtime/core.ts')
+    const mutationRegistrySource = readWorkspaceFile('src/localdb/mutation-registry.ts')
+    const agentSource = readWorkspaceFile('src/localdb/runtime/agent-mutations.ts')
     const dogSource = readWorkspaceFile('src/localdb/runtime/dog-mutations.ts')
     const breedingSource = readWorkspaceFile('src/localdb/runtime/breeding-mutations.ts')
+    const healthSource = readWorkspaceFile('src/localdb/runtime/health-mutations.ts')
+    const medicationSource = readWorkspaceFile('src/localdb/runtime/medication-mutations.ts')
+    const litterSource = readWorkspaceFile('src/localdb/runtime/litter-mutations.ts')
+    const financeSource = readWorkspaceFile('src/localdb/runtime/finance-mutations.ts')
+    const saleSource = readWorkspaceFile('src/localdb/runtime/sale-mutations.ts')
+    const settingsSource = readWorkspaceFile('src/localdb/runtime/settings-mutations.ts')
     const taskSource = readWorkspaceFile('src/localdb/runtime/task-mutations.ts')
 
     expect(dogSource).toContain('export interface CreateDogPayload')
@@ -329,19 +502,104 @@ describe('local-first source contract', () => {
     expect(taskSource).toContain('export interface BatchCreateManualTasksPayload')
     expect(taskSource).not.toContain('type BatchCreateManualTasksPayload = Record<string, unknown>')
     expect(taskSource).not.toContain('export interface BatchCreateManualTasksPayload {\n  [key: string]: unknown')
+    expect(mutationRegistrySource).toContain('export type LocalMutationPayload = Record<string, unknown>')
+    expect(mutationRegistrySource).not.toContain('export type LocalMutationPayload = Record<string, any>')
+
+    expect(agentSource).toContain('export interface AgentMutationPayload')
+    expect(healthSource).toContain('export interface BatchAddHealthRecordsPayload')
+    expect(healthSource).toContain('export interface UpdateHealthRecordPayload')
+    expect(medicationSource).toContain('export interface BatchStartMedicationPayload')
+    expect(medicationSource).toContain('export interface EndMedicationPayload')
+    expect(litterSource).toContain('export interface AddBirthRecordPayload')
+    expect(litterSource).toContain('export interface AddPuppyToLitterPayload')
+    expect(litterSource).toContain('export interface UpdateLitterPayload')
+    expect(financeSource).toContain('export interface ExpenseMutationPayload')
+    expect(financeSource).toContain('export interface IncomeMutationPayload')
+    expect(saleSource).toContain('export interface CreateSaleRecordPayload')
+    expect(saleSource).toContain('export interface CompleteSalePayload')
+    expect(settingsSource).toContain('export interface MedicationProtocolInput')
+    expect(healthSource).toContain('data: BatchAddHealthRecordsPayload')
+    expect(healthSource).toContain('data: UpdateHealthRecordPayload')
+    expect(medicationSource).toContain('data: BatchStartMedicationPayload')
+    expect(medicationSource).toContain('data: EndMedicationPayload')
+    expect(litterSource).toContain('data: AddBirthRecordPayload')
+    expect(litterSource).toContain('puppyData: AddPuppyToLitterPayload')
+    expect(litterSource).toContain('data: UpdateLitterPayload')
+    expect(saleSource).toContain('data: CreateSaleRecordPayload')
+    expect(saleSource).toContain('data: UpdateSaleModePayload')
+    expect(saleSource).toContain('data: ReceiveSaleDepositPayload')
+    expect(saleSource).toContain('data: CompleteSalePayload')
+    expect(saleSource).toContain('data: SettleSalePayload')
+    expect(saleSource).toContain('data: CancelSalePayload')
+    for (const source of [healthSource, medicationSource, litterSource, financeSource, saleSource, settingsSource]) {
+      expect(source).not.toMatch(/export async function \w+\([^)]*(data|puppyData): Record<string, any>/)
+      expect(source).not.toContain('as unknown as')
+    }
 
     expect(coreSource).toContain('async createDogLocally(familyIdInput: string, data: CreateDogPayload)')
     expect(coreSource).toContain('async updateDogLocally(familyIdInput: string, dogId: string, data: UpdateDogPayload)')
     expect(coreSource).toContain('async changeDogDispositionLocally(familyIdInput: string, dogId: string, newDisposition: string, data: DogDispositionPayload')
     expect(coreSource).toContain('async batchCreateManualTasksLocally(familyIdInput: string, data: BatchCreateManualTasksPayload)')
+    expect(coreSource).toContain('async batchAddHealthRecordsLocally(familyIdInput: string, data: BatchAddHealthRecordsPayload)')
+    expect(coreSource).toContain('async batchStartMedicationLocally(familyIdInput: string, data: BatchStartMedicationPayload)')
     expect(coreSource).toContain('async addBreedingRecordLocally(familyIdInput: string, data: BreedingMutationPayload)')
     expect(coreSource).toContain('async updateBreedingRecordLocally(familyIdInput: string, data: BreedingMutationPayload)')
+    expect(coreSource).toContain('async addBirthRecordLocally(familyIdInput: string, data: AddBirthRecordPayload)')
+    expect(coreSource).toContain('async addExpenseLocally(familyIdInput: string, data: ExpenseMutationPayload)')
+    expect(coreSource).toContain('async createSaleRecordLocally(familyIdInput: string, data: CreateSaleRecordPayload)')
+    expect(coreSource).toContain('async addAgentLocally(familyIdInput: string, data: AgentMutationPayload)')
+    expect(coreSource).toContain('async updateFamilySettingsLocally(familyIdInput: string, settings: FamilySettingsPatch)')
     expect(coreSource).toContain('async addWeightRecordLocally(familyIdInput: string, data: DogWeightPayload)')
-    expect(coreSource).not.toContain('async createDogLocally(familyIdInput: string, data: Record<string, any>)')
-    expect(coreSource).not.toContain('async updateDogLocally(familyIdInput: string, dogId: string, data: Record<string, any>)')
-    expect(coreSource).not.toContain('async batchCreateManualTasksLocally(familyIdInput: string, data: Record<string, any>)')
-    expect(coreSource).not.toContain('async addBreedingRecordLocally(familyIdInput: string, data: Record<string, any>)')
-    expect(coreSource).not.toContain('async addWeightRecordLocally(familyIdInput: string, data: Record<string, any>)')
+
+    const mutationFacadeSource = coreSource.slice(
+      coreSource.indexOf('async batchCreateManualTasksLocally'),
+      coreSource.indexOf('async ensureHomeData'),
+    )
+    expect(mutationFacadeSource).not.toMatch(/async \w+\([^)]*(data|settings|rule|puppyData): Record<string, any>/)
+    expect(mutationFacadeSource).not.toMatch(/as \w+Payload/)
+  })
+
+  it('高频记录表单提交 payload 应使用 runtime 门面的具体类型', () => {
+    const healthFormSource = readWorkspaceFile('src/components/record/HealthRecordForm.vue')
+    const breedingFormSource = readWorkspaceFile('src/components/record/BreedingRecordForm.vue')
+    const medicationFormSource = readWorkspaceFile('src/components/record/MedicationTaskForm.vue')
+    const breedingContextCardSource = readWorkspaceFile('src/components/record/BBreedingContextCard.vue')
+
+    expect(healthFormSource).toContain('type BatchAddHealthRecordsPayload')
+    expect(healthFormSource).toContain('type UpdateHealthRecordPayload')
+    expect(healthFormSource).toContain('const payload: BatchAddHealthRecordsPayload')
+    expect(healthFormSource).toContain('const payload: UpdateHealthRecordPayload')
+    expect(healthFormSource).not.toContain('const payload: Record<string, any>')
+    expect(healthFormSource).not.toMatch(/\bany\b|Record<string, any>|as any/)
+
+    expect(breedingFormSource).toContain('type BreedingMutationPayload')
+    expect(breedingFormSource).toContain('const payload: BreedingMutationPayload')
+    expect(breedingFormSource).not.toContain('const payload: Record<string, any>')
+    expect(breedingFormSource).not.toMatch(/\bany\b|Record<string, any>|as any/)
+
+    expect(medicationFormSource).toContain('type MedicationFormDog = Dog')
+    expect(medicationFormSource).not.toMatch(/\bany\b|Record<string, any>|as any/)
+    expect(breedingContextCardSource).not.toMatch(/\bany\b|Record<string, any>|as any/)
+  })
+
+  it('类型收口不得改变代理联系方式与犬只去向边界', () => {
+    const agentSource = readWorkspaceFile('src/localdb/runtime/agent-mutations.ts')
+    const dogSource = readWorkspaceFile('src/localdb/runtime/dog-mutations.ts')
+    const localBuildersSource = readWorkspaceFile('src/localdb/runtime/local-builders.ts')
+
+    expect(agentSource).toContain('contact_info: data.contact_info || null')
+    expect(agentSource).not.toContain('notes: data.contact_info')
+    expect(localBuildersSource).toContain('data.due_date != null && data.due_date <= now')
+    expect(localBuildersSource).not.toContain('Number(data.due_date || 0) <= now')
+
+    const updateDogSource = dogSource.slice(
+      dogSource.indexOf('export async function updateDogLocally'),
+      dogSource.indexOf('export async function updateDogNameLocally'),
+    )
+    expect(updateDogSource).toContain('role: dog.role')
+    expect(updateDogSource).toContain('disposition: dog.disposition')
+    expect(updateDogSource).not.toContain('role: data.role')
+    expect(updateDogSource).not.toContain('disposition: data.disposition')
   })
 
   it('本地读模型应按领域拆分，core 只保留兼容导出', () => {
@@ -370,12 +628,26 @@ describe('local-first source contract', () => {
 
     expect(dogSource).toContain('export async function listLocalDogsWithStatus')
     expect(dogSource).toContain('export async function getLocalDogDetail')
+    expect(dogSource).not.toMatch(/\bany\b|Record<string, any>|query<any>|findById<any>|as any/)
     expect(breedingSource).toContain('export async function listLocalBreedingCycles')
     expect(breedingSource).toContain('export async function getLocalLitterDetail')
     expect(healthSource).toContain('export async function getLocalMedicationTaskDetail')
     expect(financeSource).toContain('export async function getLocalTransactionList')
     expect(saleSource).toContain('export async function listLocalSales')
     expect(settingsSource).toContain('export async function listLocalRecycleItems')
+    expect(settingsSource).not.toMatch(/\bany\b|Record<string, any>|query<any>|findById<any>|as any/)
+  })
+
+  it('母犬 ROI 不应按窝重复调用单窝利润全量查询', () => {
+    const breedingSource = readWorkspaceFile('src/localdb/domain-repository/breeding.ts')
+    const damRoiSource = breedingSource.slice(
+      breedingSource.indexOf('export async function getLocalDamRoi'),
+      breedingSource.indexOf('function attachCycleNumbers'),
+    )
+
+    expect(damRoiSource).not.toContain('getLocalLitterProfit(')
+    expect(damRoiSource).toContain('buildLitterProfitContext(')
+    expect(damRoiSource).toContain('buildLocalLitterProfitFromRows(')
   })
 
   it('首页页面应只保留编排，核心模板下沉到组件', () => {

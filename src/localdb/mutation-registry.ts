@@ -69,7 +69,7 @@ export const LOCAL_MUTATION_TYPES = {
 } as const
 
 export type LocalMutationType = typeof LOCAL_MUTATION_TYPES[keyof typeof LOCAL_MUTATION_TYPES]
-export type LocalMutationPayload = Record<string, any>
+export type LocalMutationPayload = Record<string, unknown>
 
 export interface LocalMutationDefinition {
   service: string

@@ -19,17 +19,17 @@ export interface Expense extends BaseDocument, SoftDeletable {
   category: string
   category_group_label?: string
   date: number
-  linked_cycle_id?: string
-  linked_litter_id?: string
+  linked_cycle_id?: string | null
+  linked_litter_id?: string | null
   linked_dog_ids?: string[]
   source_type: ExpenseSourceType
-  source_record_id?: string
+  source_record_id?: string | null
   images?: string[]
-  dam_name?: string           // 冗余
+  dam_name?: string | null    // 冗余
   dog_names?: string[]        // 冗余
-  litter_number?: number      // 冗余
-  notes?: string
-  created_by: string
+  litter_number?: number | null // 冗余
+  notes?: string | null
+  created_by: string | null
   created_by_name?: string
 }
 
@@ -43,11 +43,15 @@ export interface Income extends BaseDocument, SoftDeletable {
   type: IncomeType
   amount: number
   date: number
-  sale_record_id?: string
-  dog_id?: string
-  dog_name?: string           // 冗余
-  notes?: string
-  created_by: string
+  sale_record_id?: string | null
+  source_sale_id?: string | null
+  source_type?: string | null
+  source_record_id?: string | null
+  dog_id?: string | null
+  dog_name?: string | null    // 冗余
+  notes?: string | null
+  images?: string[]
+  created_by: string | null
   created_by_name?: string
 }
 

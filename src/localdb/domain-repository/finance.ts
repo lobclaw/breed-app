@@ -1,6 +1,7 @@
 import { localDb } from '@/localdb/db'
+import type { LocalRowOf } from '@/localdb/types'
 import type { Expense, ExpenseCategory, ExpenseCategoryGroup, Income, SaleRecord } from '@/types/finance'
-import type { Family } from '@/types/family'
+import type { Family, FamilyMember } from '@/types/family'
 import type { BreedingRecord, BreedingCycle, Litter } from '@/types/breeding'
 import type { HealthRecord } from '@/types/health'
 import { getBeijingDateParts, getBeijingDayStart, getBeijingMonthRange, getBeijingQuarterRange, getBeijingYearRange } from '@/utils/date'
@@ -23,18 +24,71 @@ const LEGACY_LOCAL_INCOME_TYPE_MAP: Record<string, string> = {
   配种费收入: '其他',
 }
 
+type DogRow = LocalRowOf<'dogs'>
+type ExpenseRow = LocalRowOf<'expenses'>
+type IncomeRow = LocalRowOf<'incomes'>
+type LitterRow = LocalRowOf<'litters'>
+
+type LinkedDogSummary = Pick<DogRow, '_id' | 'name'>
+
+type LocalFinanceDateRangeFilter = {
+  value?: unknown
+  kind?: unknown
+  startDate?: unknown
+  endDate?: unknown
+}
+
+type LocalFinanceFiltersInput = {
+  category?: unknown
+  customEndDate?: unknown
+  customStartDate?: unknown
+  cycleId?: unknown
+  cycleIds?: unknown
+  dateRange?: string | LocalFinanceDateRangeFilter
+  dogId?: unknown
+  dogIds?: unknown
+  endDate?: unknown
+  expenseCategories?: unknown
+  expenseCategoryGroups?: unknown
+  incomeTypes?: unknown
+  litterId?: unknown
+  litterIds?: unknown
+  month?: unknown
+  period?: unknown
+  sort?: unknown
+  startDate?: unknown
+  subCategory?: unknown
+  type?: unknown
+  unlinkedOnly?: unknown
+  year?: unknown
+}
+
+type LocalExpenseTransaction = Omit<ExpenseRow, 'category'> & {
+  _txType: 'expense'
+  category: string
+  category_group_label?: string
+}
+
+type LocalIncomeTransaction = Omit<IncomeRow, 'type'> & {
+  _txType: 'income'
+  type: string
+  type_label: string
+}
+
+type LocalTransaction = LocalExpenseTransaction | LocalIncomeTransaction
+
 export async function getLocalDogFinanceSummary(familyId: string, dogId: string) {
   if (!familyId || !dogId) return null
 
   const [dog, expenses, incomes] = await Promise.all([
-    localDb.findById<any>('dogs', dogId),
-    localDb.query<Expense>('expenses', row =>
+    localDb.findById<DogRow>('dogs', dogId),
+    localDb.query<ExpenseRow>('expenses', row =>
       row.family_id === familyId
       && !row.deleted_at
       && Array.isArray(row.linked_dog_ids)
       && row.linked_dog_ids.includes(dogId),
     ),
-    localDb.query<Income>('incomes', row =>
+    localDb.query<IncomeRow>('incomes', row =>
       row.family_id === familyId
       && !row.deleted_at
       && row.dog_id === dogId,
@@ -72,7 +126,7 @@ export async function getLocalDogFinanceSummary(familyId: string, dogId: string)
   }
 }
 
-function getCreatorDisplayName(members: Array<Record<string, any>> = [], createdBy?: string | null) {
+function getCreatorDisplayName(members: FamilyMember[] = [], createdBy?: string | null) {
   if (!createdBy) return ''
   const member = members.find(item => item.user_id === createdBy && item.status === 'active')
   return member?.nickname || createdBy
@@ -82,10 +136,10 @@ function normalizeIncomeTypeLabel(type?: string | null) {
   const normalized = String(type || '').trim()
   if (!normalized) return '其他'
   const mapped = LEGACY_LOCAL_INCOME_TYPE_MAP[normalized] || normalized
-  return INCOME_FILTER_TYPES.includes(mapped as any) ? mapped : '其他'
+  return (INCOME_FILTER_TYPES as readonly string[]).includes(mapped) ? mapped : '其他'
 }
 
-function buildExpenseLinkedRef(expense: Expense & Record<string, any>, linkedDogs: Array<Record<string, any>>) {
+function buildExpenseLinkedRef(expense: ExpenseRow, linkedDogs: LinkedDogSummary[]) {
   if (expense.linked_litter_id) {
     return expense.dam_name
       ? `${expense.dam_name}${expense.litter_number ? ` · 第${expense.litter_number}窝` : ' · 关联窝'}`
@@ -104,7 +158,7 @@ export async function getLocalExpenseDetail(familyId: string, expenseId: string)
   if (!familyId || !expenseId) return null
 
   const [expense, family] = await Promise.all([
-    localDb.findById<Expense>('expenses', expenseId),
+    localDb.findById<ExpenseRow>('expenses', expenseId),
     localDb.findById<Family>('families', familyId),
   ])
 
@@ -113,9 +167,9 @@ export async function getLocalExpenseDetail(familyId: string, expenseId: string)
   const groups = buildExpenseCategoryGroups(family?.settings?.custom_expense_category_groups || [])
   const categories = normalizeExpenseCategories(family?.settings?.custom_expense_categories || [], groups)
   const linkedDogs = (await Promise.all(
-    (expense.linked_dog_ids || []).map((dogId: string) => localDb.findById<any>('dogs', dogId)),
+    (expense.linked_dog_ids || []).map((dogId: string) => localDb.findById<DogRow>('dogs', dogId)),
   ))
-    .filter((dog): dog is Record<string, any> => !!dog && dog.family_id === familyId && !dog.deleted_at)
+    .filter((dog): dog is DogRow => !!dog && dog.family_id === familyId && !dog.deleted_at)
     .map(dog => ({ _id: dog._id, name: dog.name }))
 
   return {
@@ -129,7 +183,7 @@ export async function getLocalExpenseDetail(familyId: string, expenseId: string)
     ),
     created_by_name: getCreatorDisplayName(family?.members || [], expense.created_by),
     linked_dogs: linkedDogs,
-    linked_ref: buildExpenseLinkedRef(expense as Expense & Record<string, any>, linkedDogs),
+    linked_ref: buildExpenseLinkedRef(expense, linkedDogs),
   }
 }
 
@@ -137,7 +191,7 @@ export async function getLocalIncomeDetail(familyId: string, incomeId: string) {
   if (!familyId || !incomeId) return null
 
   const [income, family] = await Promise.all([
-    localDb.findById<Income>('incomes', incomeId),
+    localDb.findById<IncomeRow>('incomes', incomeId),
     localDb.findById<Family>('families', familyId),
   ])
 
@@ -150,8 +204,8 @@ export async function getLocalIncomeDetail(familyId: string, incomeId: string) {
     created_by_name: getCreatorDisplayName(family?.members || [], income.created_by),
     type_label: typeLabel,
     linked_dog_name: income.dog_name || '',
-    sale_id: (income as any).source_sale_id || '',
-    source: (income as any).source_sale_id || (income as any).source_type === 'auto' ? 'auto' : 'manual',
+    sale_id: income.source_sale_id || '',
+    source: income.source_sale_id || income.source_type === 'auto' ? 'auto' : 'manual',
   }
 }
 
@@ -236,7 +290,7 @@ export async function getLocalFinancialSummary(
   }
 }
 
-function normalizeLocalFinanceFilters(filters: Record<string, any> = {}) {
+function normalizeLocalFinanceFilters(filters: LocalFinanceFiltersInput = {}) {
   const normalizeStringArray = (rawValue: unknown) => {
     if (!rawValue) return []
     const values = Array.isArray(rawValue) ? rawValue : [rawValue]
@@ -280,7 +334,7 @@ function normalizeLocalFinanceFilters(filters: Record<string, any> = {}) {
   return normalized
 }
 
-function resolveLocalFinanceDateRange(filters: Record<string, any> = {}) {
+function resolveLocalFinanceDateRange(filters: LocalFinanceFiltersInput = {}) {
   if (filters.startDate != null && filters.endDate != null) {
     return {
       startDate: Number(filters.startDate),
@@ -293,8 +347,9 @@ function resolveLocalFinanceDateRange(filters: Record<string, any> = {}) {
     : (filters.dateRange?.value || filters.dateRange?.kind || '')
 
   if (rangeValue === 'custom') {
-    const startDate = Number(filters.dateRange?.startDate || filters.customStartDate || 0)
-    const endDate = Number(filters.dateRange?.endDate || filters.customEndDate || 0)
+    const dateRange = typeof filters.dateRange === 'object' ? filters.dateRange : null
+    const startDate = Number(dateRange?.startDate || filters.customStartDate || 0)
+    const endDate = Number(dateRange?.endDate || filters.customEndDate || 0)
     if (startDate && endDate) {
       return { startDate: getBeijingDayStart(startDate), endDate: getBeijingDayStart(endDate) + 86400000 }
     }
@@ -326,17 +381,17 @@ function hasIntersection(left: string[] = [], right: string[] = []) {
   return left.some(item => rightSet.has(item))
 }
 
-function isExpenseUnlinked(expense: Partial<Expense> & Record<string, any>) {
+function isExpenseUnlinked(expense: Pick<ExpenseRow, 'linked_cycle_id' | 'linked_dog_ids' | 'linked_litter_id'>) {
   return (!expense.linked_dog_ids || expense.linked_dog_ids.length === 0)
     && !expense.linked_litter_id
     && !expense.linked_cycle_id
 }
 
-function isIncomeUnlinked(income: Partial<Income> & Record<string, any>) {
+function isIncomeUnlinked(income: Pick<IncomeRow, 'dog_id'>) {
   return !income.dog_id
 }
 
-export async function getLocalTransactionList(familyId: string, filters: Record<string, any> = {}) {
+export async function getLocalTransactionList(familyId: string, filters: LocalFinanceFiltersInput = {}) {
   if (!familyId) return []
 
   const family = await getLocalFamilyRow(familyId)
@@ -346,21 +401,21 @@ export async function getLocalTransactionList(familyId: string, filters: Record<
   const normalizedFilters = normalizeLocalFinanceFilters(filters)
   const [expenses, incomes] = await Promise.all([
     (!normalizedFilters.type || normalizedFilters.type === 'expense')
-      ? localDb.query<Expense>('expenses', row => (
+      ? localDb.query<ExpenseRow>('expenses', row => (
         row.family_id === familyId
         && !row.deleted_at
         && Number(row.date || 0) >= startDate
         && Number(row.date || 0) < endDate
       ))
-      : Promise.resolve([] as Expense[]),
+      : Promise.resolve([] as ExpenseRow[]),
     (!normalizedFilters.type || normalizedFilters.type === 'income')
-      ? localDb.query<Income>('incomes', row => (
+      ? localDb.query<IncomeRow>('incomes', row => (
         row.family_id === familyId
         && !row.deleted_at
         && Number(row.date || 0) >= startDate
         && Number(row.date || 0) < endDate
       ))
-      : Promise.resolve([] as Income[]),
+      : Promise.resolve([] as IncomeRow[]),
   ])
 
   const expenseItems = expenses
@@ -385,7 +440,7 @@ export async function getLocalTransactionList(familyId: string, filters: Record<
     .map(expense => ({
       ...expense,
       category: normalizeExpenseCategoryName(expense.category, categories),
-      _txType: 'expense',
+      _txType: 'expense' as const,
       category_group_label: getExpenseCategoryGroupLabel(
         getExpenseCategoryGroupKey(expense.category, categories),
         groups,
@@ -402,13 +457,13 @@ export async function getLocalTransactionList(familyId: string, filters: Record<
     })
     .map(income => ({
       ...income,
-      _txType: 'income',
+      _txType: 'income' as const,
       type: normalizeIncomeTypeLabel(income.type),
       type_label: normalizeIncomeTypeLabel(income.type),
     }))
 
-  const transactions = [...expenseItems, ...incomeItems]
-  transactions.sort((left: any, right: any) => {
+  const transactions: LocalTransaction[] = [...expenseItems, ...incomeItems]
+  transactions.sort((left, right) => {
     const leftAmount = left._txType === 'expense' ? Number(left.total_amount || 0) : Math.abs(Number(left.amount || 0))
     const rightAmount = right._txType === 'expense' ? Number(right.total_amount || 0) : Math.abs(Number(right.amount || 0))
     if (normalizedFilters.sort === 'amount_desc') return rightAmount - leftAmount
@@ -433,9 +488,9 @@ export async function getLocalProjectionParams(familyId: string) {
   const now = Date.now()
   const last180Days = now - (180 * 86400000)
   const [dogs, litters, expenses] = await Promise.all([
-    localDb.query<any>('dogs', row => row.family_id === familyId && !row.deleted_at),
-    localDb.query<Litter>('litters', row => row.family_id === familyId),
-    localDb.query<Expense>('expenses', row => (
+    localDb.query<DogRow>('dogs', row => row.family_id === familyId && !row.deleted_at),
+    localDb.query<LitterRow>('litters', row => row.family_id === familyId),
+    localDb.query<ExpenseRow>('expenses', row => (
       row.family_id === familyId
       && !row.deleted_at
       && Number(row.date || 0) >= last180Days

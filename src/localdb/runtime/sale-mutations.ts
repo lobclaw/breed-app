@@ -5,6 +5,12 @@ import { findLocal as findLocalRow } from '@/localdb/repository'
 import { buildLocalAck, buildSyncMeta, getFamilyId, getNow } from '@/localdb/runtime/mutation-helpers'
 import type { BusinessCollectionName, LocalRowOf, SyncMetadata } from '@/localdb/types'
 
+type SaleIncomeRow = LocalRowOf<'incomes'> & {
+  source_sale_id?: string | null
+  source_type?: string | null
+  source_record_id?: string | null
+}
+
 export interface RuntimeMutationContext {
   enqueueMutation(
     type: LocalMutationType,
@@ -18,11 +24,65 @@ export interface RuntimeMutationContext {
 
 type SaleModeValue = '自售' | '代理' | '代卖' | null
 
-function hasOwnField(data: Record<string, any>, key: string) {
+export interface CreateSaleRecordPayload {
+  dog_id?: string
+  dogId?: string
+  sale_mode?: SaleModeValue
+  saleMode?: SaleModeValue
+  floor_price?: number | string | null
+  buyer_info?: string | null
+  notes?: string | null
+}
+
+export interface UpdateSaleModePayload {
+  sale_mode?: SaleModeValue
+  saleMode?: SaleModeValue
+}
+
+export interface ReceiveSaleDepositPayload extends UpdateSaleModePayload {
+  deposit_amount?: number | string | null
+  deposit_date?: number | string | null
+  agreed_price?: number | string | null
+  buyer_info?: string | null
+  seller_agent_id?: string | null
+  seller_agent_name?: string | null
+  agent_id?: string | null
+  agent_name?: string | null
+  platform?: string | null
+}
+
+export interface CompleteSalePayload extends UpdateSaleModePayload {
+  received_amount?: number | string | null
+  date?: number | string | null
+  agreed_price?: number | string | null
+  delivery_date?: number | string | null
+  seller_agent_id?: string | null
+  seller_agent_name?: string | null
+  agent_id?: string | null
+  agent_name?: string | null
+  platform?: string | null
+  buyer_info?: string | null
+}
+
+export interface SettleSalePayload {
+  received_amount?: number | string | null
+  date?: number | string | null
+  agreed_price?: number | string | null
+  settlement_status?: '未结算' | '部分结算' | '已结算' | string | null
+}
+
+export interface CancelSalePayload {
+  refund_amount?: number | string | null
+  refund_reason?: string | null
+  refund_date?: number | string | null
+  deposit_kept_amount?: number | string | null
+}
+
+function hasOwnField(data: object, key: string) {
   return Object.prototype.hasOwnProperty.call(data, key)
 }
 
-function parseSaleModePatch(data: Record<string, any>): { provided: boolean; value: SaleModeValue } {
+function parseSaleModePatch(data: UpdateSaleModePayload): { provided: boolean; value: SaleModeValue } {
   const hasSnakeKey = hasOwnField(data, 'sale_mode')
   const hasCamelKey = hasOwnField(data, 'saleMode')
   if (!hasSnakeKey && !hasCamelKey) return { provided: false, value: null }
@@ -37,18 +97,18 @@ function parseSaleModePatch(data: Record<string, any>): { provided: boolean; val
   throw new Error('销售方式不合法')
 }
 
-export async function createSaleRecordLocally(ctx: RuntimeMutationContext, familyIdInput: string, data: Record<string, any>) {
+export async function createSaleRecordLocally(ctx: RuntimeMutationContext, familyIdInput: string, data: CreateSaleRecordPayload) {
   const familyId = getFamilyId(familyIdInput)
   const dogId = String(data.dog_id || data.dogId || '').trim()
   if (!dogId) throw new Error('请选择犬只')
   const saleModePatch = parseSaleModePatch(data)
 
-  const dog = await findLocalRow<any>('dogs', dogId)
+  const dog = await findLocalRow('dogs', dogId)
   if (!dog || dog.family_id !== familyId || dog.deleted_at) throw new Error('犬只未同步到本地，请联网刷新一次')
   if (dog.role !== '幼崽') throw new Error('只有幼崽可以开始销售')
   if (!['在养', '自留', '待售'].includes(String(dog.disposition || ''))) throw new Error('当前犬只状态不可开始销售')
 
-  const activeSale = await localDb.query<any>('sale_records', row =>
+  const activeSale = await localDb.query('sale_records', row =>
     row.family_id === familyId
     && row.dog_id === dogId
     && !row.deleted_at
@@ -95,7 +155,7 @@ export async function createSaleRecordLocally(ctx: RuntimeMutationContext, famil
   })
 
   await localDb.transactRows(['sale_records', 'dogs'] as const, async (rows) => {
-    await rows.upsertRow('sale_records', sale as unknown as LocalRowOf<'sale_records'>)
+    await rows.upsertRow('sale_records', sale as LocalRowOf<'sale_records'>)
     await rows.updateRow('dogs', dogId, row => ({
       ...row,
       disposition: '待售',
@@ -120,9 +180,9 @@ export async function createSaleRecordLocally(ctx: RuntimeMutationContext, famil
   }
 }
 
-export async function updateSaleModeLocally(ctx: RuntimeMutationContext, familyIdInput: string, saleId: string, data: Record<string, any>) {
+export async function updateSaleModeLocally(ctx: RuntimeMutationContext, familyIdInput: string, saleId: string, data: UpdateSaleModePayload) {
   const familyId = getFamilyId(familyIdInput)
-  const sale = await findLocalRow<any>('sale_records', saleId)
+  const sale = await findLocalRow('sale_records', saleId)
   if (!sale || sale.family_id !== familyId || sale.deleted_at) throw new Error('记录不存在')
   if (!['待售', '已预定', '已成交'].includes(String(sale.status || ''))) {
     throw new Error('当前状态不可修改销售方式')
@@ -158,12 +218,12 @@ export async function updateSaleModeLocally(ctx: RuntimeMutationContext, familyI
   }
 }
 
-export async function receiveSaleDepositLocally(ctx: RuntimeMutationContext, familyIdInput: string, saleId: string, data: Record<string, any>) {
+export async function receiveSaleDepositLocally(ctx: RuntimeMutationContext, familyIdInput: string, saleId: string, data: ReceiveSaleDepositPayload) {
   const familyId = getFamilyId(familyIdInput)
-  const sale = await findLocalRow<any>('sale_records', saleId)
+  const sale = await findLocalRow('sale_records', saleId)
   if (!sale || sale.family_id !== familyId || sale.deleted_at) throw new Error('记录不存在')
   if (sale.status !== '待售') throw new Error('只有待售状态可以收定金')
-  const dog = await findLocalRow<any>('dogs', sale.dog_id)
+  const dog = await findLocalRow('dogs', sale.dog_id)
   if (!dog) throw new Error('犬只未同步到本地，请联网刷新一次')
   const amount = Number(data.deposit_amount)
   if (!Number.isFinite(amount) || amount <= 0) throw new Error('请填写定金金额')
@@ -215,12 +275,12 @@ export async function receiveSaleDepositLocally(ctx: RuntimeMutationContext, fam
   }
 }
 
-export async function completeSaleLocally(ctx: RuntimeMutationContext, familyIdInput: string, saleId: string, data: Record<string, any>) {
+export async function completeSaleLocally(ctx: RuntimeMutationContext, familyIdInput: string, saleId: string, data: CompleteSalePayload) {
   const familyId = getFamilyId(familyIdInput)
-  const sale = await findLocalRow<any>('sale_records', saleId)
+  const sale = await findLocalRow('sale_records', saleId)
   if (!sale || sale.family_id !== familyId || sale.deleted_at) throw new Error('记录不存在')
   if (!['待售', '已预定'].includes(String(sale.status || ''))) throw new Error('当前状态不可完成交易')
-  const dog = await findLocalRow<any>('dogs', sale.dog_id)
+  const dog = await findLocalRow('dogs', sale.dog_id)
   if (!dog) throw new Error('犬只未同步到本地，请联网刷新一次')
 
   const hasReceivedAmount = data.received_amount !== '' && data.received_amount != null
@@ -230,7 +290,7 @@ export async function completeSaleLocally(ctx: RuntimeMutationContext, familyIdI
   }
   const saleModePatch = parseSaleModePatch(data)
 
-  const incomes = await localDb.query<any>('incomes', row =>
+  const incomes = await localDb.query<SaleIncomeRow>('incomes', row =>
     row.family_id === familyId
     && !row.deleted_at
     && row.source_sale_id === saleId
@@ -297,7 +357,7 @@ export async function completeSaleLocally(ctx: RuntimeMutationContext, familyIdI
             updated_at: now,
             _local_pending: true,
           }
-      await rows.upsertRow('incomes', nextIncome as unknown as LocalRowOf<'incomes'>)
+      await rows.upsertRow('incomes', nextIncome as LocalRowOf<'incomes'>)
     }
     await rows.updateRow('dogs', sale.dog_id, row => ({
       ...row,
@@ -325,16 +385,16 @@ export async function completeSaleLocally(ctx: RuntimeMutationContext, familyIdI
   }
 }
 
-export async function settleSaleLocally(ctx: RuntimeMutationContext, familyIdInput: string, saleId: string, data: Record<string, any>) {
+export async function settleSaleLocally(ctx: RuntimeMutationContext, familyIdInput: string, saleId: string, data: SettleSalePayload) {
   const familyId = getFamilyId(familyIdInput)
-  const sale = await findLocalRow<any>('sale_records', saleId)
+  const sale = await findLocalRow('sale_records', saleId)
   if (!sale || sale.family_id !== familyId || sale.deleted_at) throw new Error('记录不存在')
   if (sale.status !== '已成交') throw new Error('只有已成交状态可以补录结算')
   if (data.received_amount === '' || data.received_amount == null) throw new Error('请填写到手价')
   const receivedAmount = Number(data.received_amount)
   if (!Number.isFinite(receivedAmount) || receivedAmount <= 0) throw new Error('请填写有效的到手价')
 
-  const incomes = await localDb.query<any>('incomes', row =>
+  const incomes = await localDb.query<SaleIncomeRow>('incomes', row =>
     row.family_id === familyId
     && !row.deleted_at
     && row.source_sale_id === saleId
@@ -390,7 +450,7 @@ export async function settleSaleLocally(ctx: RuntimeMutationContext, familyIdInp
           updated_at: now,
           _local_pending: true,
         }
-    await rows.upsertRow('incomes', nextIncome as unknown as LocalRowOf<'incomes'>)
+    await rows.upsertRow('incomes', nextIncome as LocalRowOf<'incomes'>)
   })
   await ctx.enqueueMutation(
     LOCAL_MUTATION_TYPES.SETTLE_SALE,
@@ -408,11 +468,11 @@ export async function settleSaleLocally(ctx: RuntimeMutationContext, familyIdInp
   }
 }
 
-export async function cancelSaleLocally(ctx: RuntimeMutationContext, familyIdInput: string, saleId: string, data: Record<string, any>) {
+export async function cancelSaleLocally(ctx: RuntimeMutationContext, familyIdInput: string, saleId: string, data: CancelSalePayload) {
   const familyId = getFamilyId(familyIdInput)
-  const sale = await findLocalRow<any>('sale_records', saleId)
+  const sale = await findLocalRow('sale_records', saleId)
   if (!sale || sale.family_id !== familyId || sale.deleted_at) throw new Error('记录不存在')
-  const dog = await findLocalRow<any>('dogs', sale.dog_id)
+  const dog = await findLocalRow('dogs', sale.dog_id)
   if (!dog) throw new Error('犬只未同步到本地，请联网刷新一次')
 
   const now = getNow()
@@ -465,7 +525,7 @@ export async function cancelSaleLocally(ctx: RuntimeMutationContext, familyIdInp
         created_at: now,
         updated_at: now,
         _local_pending: true,
-      } as unknown as LocalRowOf<'incomes'>)
+      } as LocalRowOf<'incomes'>)
       if (isFullRefund) {
         await rows.updateRow('dogs', sale.dog_id, row => ({
           ...row,
@@ -512,7 +572,7 @@ export async function cancelSaleLocally(ctx: RuntimeMutationContext, familyIdInp
           created_at: now,
           updated_at: now,
           _local_pending: true,
-        } as unknown as LocalRowOf<'incomes'>)
+        } as LocalRowOf<'incomes'>)
       }
       await rows.updateRow('dogs', sale.dog_id, row => ({
         ...row,

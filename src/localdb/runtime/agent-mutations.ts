@@ -8,10 +8,10 @@ import type { BusinessCollectionName, LocalRowOf, SyncMetadata } from '@/localdb
 type AgentRow = LocalRowOf<'agents'> & {
   contact_info?: unknown
 }
-type AgentMutationPayload = {
+export interface AgentMutationPayload {
   name?: unknown
   contact_info?: unknown
-} & Record<string, unknown>
+}
 
 export interface RuntimeMutationContext {
   enqueueMutation(
